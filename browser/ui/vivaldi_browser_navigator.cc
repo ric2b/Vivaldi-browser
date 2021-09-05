@@ -1,8 +1,8 @@
 // Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved
 
 #include "chrome/browser/ui/browser_navigator_params.h"
-#include "content/browser/frame_host/navigation_controller_impl.h"
-#include "content/browser/frame_host/navigation_entry_impl.h"
+#include "content/browser/renderer_host/navigation_controller_impl.h"
+#include "content/browser/renderer_host/navigation_entry_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 
 using content::WebContents;
@@ -25,8 +25,8 @@ void LoadURLAsPendingEntry(WebContents* target_contents,
               params->is_renderer_initiated, params->extra_headers,
               controller->GetBrowserContext(),
               nullptr /* blob_url_loader_factory */,
-              false /*should_replace_entry*/
-              ));
+              false /*should_replace_entry*/,
+              target_contents /* web_contents */));
 
   controller->SetPendingEntry(std::move(entry));
   controller->SetNeedsReload();

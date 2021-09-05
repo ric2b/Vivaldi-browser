@@ -213,7 +213,7 @@ base::Optional<arc::UserInteractionType> GetUserInterationType(
 
 arc::mojom::IntentInfoPtr CreateArcIntent(apps::mojom::IntentPtr intent) {
   arc::mojom::IntentInfoPtr arc_intent;
-  if (!intent->url.has_value()) {
+  if (!intent->url.has_value() && !intent->share_text.has_value()) {
     return arc_intent;
   }
   arc_intent = arc::mojom::IntentInfo::New();
@@ -230,7 +230,14 @@ arc::mojom::IntentInfoPtr CreateArcIntent(apps::mojom::IntentPtr intent) {
   } else {
     arc_intent->action = arc::kIntentActionView;
   }
-  arc_intent->data = intent->url->spec();
+  if (intent->url.has_value()) {
+    arc_intent->data = intent->url->spec();
+  }
+  if (intent->share_text.has_value()) {
+    arc_intent->extras = base::flat_map<std::string, std::string>();
+    arc_intent->extras.value().insert(std::make_pair(
+        "android.intent.extra.TEXT", intent->share_text.value()));
+  }
   return arc_intent;
 }
 
@@ -760,14 +767,8 @@ void ArcApps::LaunchAppWithIntent(const std::string& app_id,
         !intent->activity_name.value().empty()) {
       activity->activity_name = intent->activity_name.value();
     }
-    // At the moment, the only case we have mime_type field set is to share
-    // files, in this case, convert the file urls to content urls and use
-    // arc file system instance to launch the app with files.
-    if (intent->mime_type.has_value()) {
-      if (!intent->file_urls.has_value()) {
-        LOG(ERROR) << "Share files failed, share intent is not valid";
-        return;
-      }
+
+    if (intent->mime_type.has_value() && intent->file_urls.has_value()) {
       file_manager::util::ConvertToContentUrls(
           apps::GetFileSystemURL(profile_, intent->file_urls.value()),
           base::BindOnce(&OnContentUrlResolved, std::move(intent),
@@ -1192,6 +1193,13 @@ void ArcApps::OnPreferredAppsChanged() {
     // activity info.
     std::string app_id =
         prefs->GetAppIdByPackageName(added_preferred_app.package_name());
+
+    if (app_id.empty()) {
+      LOG(ERROR) << "Cannot get app id for package "
+                 << added_preferred_app.package_name()
+                 << " to add preferred app.";
+      continue;
+    }
     app_service->AddPreferredApp(apps::mojom::AppType::kArc, app_id,
                                  ConvertArcIntentFilter(added_preferred_app),
                                  /*intent=*/nullptr, kFromPublisher);
@@ -1214,6 +1222,12 @@ void ArcApps::OnPreferredAppsChanged() {
     // activity info.
     std::string app_id =
         prefs->GetAppIdByPackageName(deleted_preferred_app.package_name());
+    if (app_id.empty()) {
+      LOG(ERROR) << "Cannot get app id by package "
+                 << deleted_preferred_app.package_name()
+                 << " to delete preferred app.";
+      continue;
+    }
     app_service->RemovePreferredAppForFilter(
         apps::mojom::AppType::kArc, app_id,
         ConvertArcIntentFilter(deleted_preferred_app));

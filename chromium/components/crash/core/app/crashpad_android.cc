@@ -35,8 +35,8 @@
 #include "build/build_config.h"
 #include "components/crash/android/jni_headers/PackagePaths_jni.h"
 #include "components/crash/core/app/crash_reporter_client.h"
+#include "content/public/common/content_descriptors.h"
 #include "sandbox/linux/services/syscall_wrappers.h"
-#include "services/service_manager/embedder/descriptors.h"
 #include "third_party/crashpad/crashpad/client/annotation.h"
 #include "third_party/crashpad/crashpad/client/client_argv_handling.h"
 #include "third_party/crashpad/crashpad/client/crashpad_client.h"
@@ -142,8 +142,7 @@ class SandboxedHandler {
 
     SetSanitizationInfo(crash_reporter::GetCrashReporterClient(),
                         &sanitization_);
-    server_fd_ = base::GlobalDescriptors::GetInstance()->Get(
-        service_manager::kCrashDumpSignal);
+    server_fd_ = base::GlobalDescriptors::GetInstance()->Get(kCrashDumpSignal);
 
     // Android's debuggerd handler on JB MR2 until OREO displays a dialog which
     // is a bad user experience for child process crashes. Disable the debuggerd
@@ -521,6 +520,11 @@ class HandlerStarter {
     if (GetCrashReporterClient()->GetBrowserProcessType(&browser_ptype)) {
       process_annotations["ptype"] = browser_ptype;
     }
+
+    // Don't handle SIGQUIT in the browser process on Android; the system masks
+    // this and uses it for generating ART stack traces, and if it gets unmasked
+    // (e.g. by a WebView app) we don't want to treat this as a crash.
+    GetCrashpadClient().SetUnhandledSignals({SIGQUIT});
 
     if (!base::PathExists(handler_path)) {
       use_java_handler_ =

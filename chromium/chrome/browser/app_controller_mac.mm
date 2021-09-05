@@ -118,10 +118,14 @@
 #include "app/vivaldi_constants.h"
 #include "app/vivaldi_resources.h"
 #include "browser/vivaldi_app_observer.h"
+#include "chrome/browser/ui/startup/launch_mode_recorder.h"
 #include "extensions/api/menubar/menubar_api.h"
 #include "prefs/vivaldi_gen_prefs.h"
-#import  "thirdparty/macsparkle/Sparkle/SUUpdater.h"
 #include "ui/vivaldi_bookmark_menu_mac.h"
+
+#ifndef VIVALDI_SPARKLE_DISABLED
+#import  "thirdparty/macsparkle/Sparkle/SUUpdater.h"
+#endif
 
 using apps::AppShimManager;
 using base::UserMetricsAction;
@@ -147,7 +151,7 @@ bool g_is_opening_new_window = false;
 // there are only minimized windows), it will unminimize it.
 Browser* ActivateBrowser(Profile* profile) {
   Browser* browser = chrome::FindLastActiveWithProfile(
-      profile->IsGuestSession() ? profile->GetOffTheRecordProfile() : profile);
+      profile->IsGuestSession() ? profile->GetPrimaryOTRProfile() : profile);
   if (browser)
     browser->window()->Activate();
   return browser;
@@ -350,10 +354,12 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 @synthesize startupComplete = _startupComplete;
 
 - (void)dealloc {
+#ifndef VIVALDI_SPARKLE_DISABLED
   if (vivaldi::IsVivaldiRunning()) {
     [[SUUpdater sharedUpdater] setDelegate:nil];
     [_sparkle_updater_delegate release];
   }
+#endif
   [[_closeTabMenuItem menu] setDelegate:nil];
   [super dealloc];
 }
@@ -765,10 +771,12 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
     return;
   }
 
+#ifndef VIVALDI_SPARKLE_DISABLED
   if (vivaldi::IsVivaldiRunning()) {
     _sparkle_updater_delegate = [[SparkleUpdaterDelegate alloc] init];
     [[SUUpdater sharedUpdater] setDelegate:_sparkle_updater_delegate];
   }
+#endif
 
   MacStartupProfiler::GetInstance()->Profile(
       MacStartupProfiler::DID_FINISH_LAUNCHING);
@@ -892,8 +900,8 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 
   std::vector<Profile*> added_profiles;
   for (Profile* p : profiles) {
-    if (p->HasOffTheRecordProfile())
-      added_profiles.push_back(p->GetOffTheRecordProfile());
+    for (Profile* otr : p->GetAllOffTheRecordProfiles())
+      added_profiles.push_back(otr);
   }
   profiles.insert(profiles.end(), added_profiles.begin(), added_profiles.end());
 
@@ -988,7 +996,8 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
       if (vivaldi::IsVivaldiRunning()) {
         bool state;
         if (vivaldi::GetIsEnabledWithNoWindows(tag, &state)) {
-          return state ? YES : !![NSApp keyWindow];
+          return state ? YES : (!![NSApp keyWindow] ||
+              vivaldi::HasActiveWindow());
         }
       }
 
@@ -1151,7 +1160,8 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
            ![key isEqual:@" "])) {
         Browser* browser = chrome::FindLastActiveWithProfile(
             lastProfile->IsGuestSession() ?
-                lastProfile->GetOffTheRecordProfile() : lastProfile);
+                lastProfile->GetOffTheRecordProfile(Profile::OTRProfileID::PrimaryID()) :
+                  lastProfile);
         if (browser) {
           // The window will not receive regular shortcuts in JS when minimzed.
           // So allow the menu drive action continue in that case.
@@ -1165,17 +1175,19 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 
   if (vivaldi::IsVivaldiRunning()) {
     Browser* browser = chrome::FindLastActiveWithProfile(
-        lastProfile->IsGuestSession() ? lastProfile->GetOffTheRecordProfile()
-                                      : lastProfile);
+        lastProfile->IsGuestSession() ?
+          lastProfile->GetOffTheRecordProfile(Profile::OTRProfileID::PrimaryID()) :
+          lastProfile);
     if (!browser)
       browser = chrome::FindLastActiveWithProfile(
-          lastProfile->GetOffTheRecordProfile());
+          lastProfile->GetOffTheRecordProfile(Profile::OTRProfileID::PrimaryID()));
 
     if (browser && browser->window()->IsMinimized()) {
       // NOTE(tomas@vivaldi.com): For minimized windows we don't want to
       // unminimize any open windows for these commands, so we handle them here.
       if (tag == IDC_VIV_NEW_PRIVATE_WINDOW) {
-        CreateBrowser(lastProfile->GetOffTheRecordProfile());
+        CreateBrowser(lastProfile->GetOffTheRecordProfile(
+                        Profile::OTRProfileID::PrimaryID()));
         return;
       } else if (tag == IDC_VIV_NEW_WINDOW) {
         CreateBrowser(lastProfile);
@@ -1197,7 +1209,8 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
         return;
 
       if (tag == IDC_VIV_NEW_PRIVATE_WINDOW) {
-        browser = CreateBrowser(lastProfile->GetOffTheRecordProfile());
+        browser = CreateBrowser(lastProfile->GetOffTheRecordProfile(
+                                  Profile::OTRProfileID::PrimaryID()));
         return;
       }
 
@@ -1243,7 +1256,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
                              IDC_FOCUS_SEARCH);
       break;
     case IDC_NEW_INCOGNITO_WINDOW:
-      CreateBrowser(lastProfile->GetOffTheRecordProfile());
+      CreateBrowser(lastProfile->GetPrimaryOTRProfile());
       break;
     case IDC_RESTORE_TAB:
       chrome::OpenWindowWithRestoredTabs(lastProfile);
@@ -1654,7 +1667,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 
   // Guest sessions must always be OffTheRecord. Use that when opening windows.
   if (profile->IsGuestSession())
-    return profile->GetOffTheRecordProfile();
+    return profile->GetPrimaryOTRProfile();
 
   return profile;
 }
@@ -1691,7 +1704,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
                                      dummy, //*base::CommandLine::ForCurrentProcess(),
                                      first_run);
 
-    launch.Launch(profile, urls, first_run);
+    launch.Launch(profile, urls, first_run, std::make_unique<LaunchModeRecorder>());
     return;
   }
 

@@ -7,6 +7,8 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
+class SubresourceFilterProfileContext;
+
 namespace content {
 class NavigationThrottle;
 }
@@ -53,6 +55,12 @@ class VivaldiSubresourceFilterClient
   }
   AdverseAdFilterListService* adblock_list() { return adblock_list_; }
 
+  void OnAdsViolationTriggered(content::RenderFrameHost* rfh,
+      subresource_filter::mojom::AdsViolation triggered_violation) override;
+
+  const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
+  GetSafeBrowsingDatabaseManager() override;
+
  private:
   friend class content::WebContentsUserData<VivaldiSubresourceFilterClient>;
 
@@ -63,6 +71,8 @@ class VivaldiSubresourceFilterClient
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
 
   AdverseAdFilterListService* adblock_list_ = nullptr;  // owned by the profile.
+
+  SubresourceFilterProfileContext* profile_context_ = nullptr;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 

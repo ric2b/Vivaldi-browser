@@ -15,6 +15,10 @@
 #include "third_party/blink/renderer/core/frame/frame_types.h"
 #include "third_party/blink/renderer/platform/graphics/touch_action.h"
 
+namespace viz {
+class FrameSinkId;
+}
+
 namespace blink {
 class AssociatedInterfaceProvider;
 class IntRect;
@@ -52,10 +56,20 @@ class RemoteFrameClient : public FrameClient {
 
   virtual void DidChangeScreenInfo(const ScreenInfo& original_screen_info) = 0;
 
+  virtual void DidChangeRootWindowSegments(
+      const std::vector<gfx::Rect>& root_widget_window_segments) = 0;
+
+  virtual void DidChangeVisibleViewportSize(
+      const gfx::Size& visible_viewport_size) = 0;
+
   virtual void UpdateRemoteViewportIntersection(
       const ViewportIntersectionState& intersection_state) = 0;
 
   virtual AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces() = 0;
+
+  virtual viz::FrameSinkId GetFrameSinkId() = 0;
+
+  virtual void WasEvicted() = 0;
 };
 
 }  // namespace blink

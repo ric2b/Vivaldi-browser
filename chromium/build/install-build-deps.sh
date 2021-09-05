@@ -52,8 +52,8 @@ package_exists() {
     echo "Call build_apt_package_list() prior to calling package_exists()" >&2
     apt_package_list=$(build_apt_package_list)
   fi
-  # 'apt-cache search' takes a regex string, so eg. the +'s in packages like
-  # "libstdc++" need to be escaped.
+  # `grep` takes a regex string, so the +'s in package names, e.g. "libstdc++",
+  # need to be escaped.
   local escaped="$(echo $1 | sed 's/[\~\+\.\:-]/\\&/g')"
   [ ! -z "$(grep "^${escaped}$" <<< "${apt_package_list}")" ]
 }
@@ -225,7 +225,14 @@ dev_list="\
 # 64-bit systems need a minimum set of 32-bit compat packages for the pre-built
 # NaCl binaries.
 if file -L /sbin/init | grep -q 'ELF 64-bit'; then
-  dev_list="${dev_list} libc6-i386 lib32gcc1 lib32stdc++6"
+  dev_list="${dev_list} libc6-i386 lib32stdc++6"
+
+  # lib32gcc-s1 used to be called lib32gcc1 in older distros.
+  if package_exists lib32gcc-s1; then
+    dev_list="${dev_list} lib32gcc-s1"
+  elif package_exists lib32gcc1; then
+    dev_list="${dev_list} lib32gcc1"
+  fi
 fi
 
 # Run-time libraries required by chromeos only
@@ -463,6 +470,9 @@ elif package_exists libssl1.0.2; then
   nacl_list="${nacl_list} libssl1.0.2:i386"
 else
   nacl_list="${nacl_list} libssl1.0.0:i386"
+fi
+if package_exists libtinfo5; then
+  nacl_list="${nacl_list} libtinfo5"
 fi
 if package_exists libpng16-16; then
   lib_list="${lib_list} libpng16-16"

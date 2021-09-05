@@ -12,6 +12,7 @@
 #include "app/vivaldi_constants.h"
 #include "browser/startup_vivaldi_browser.h"
 #include "browser/vivaldi_browser_finder.h"
+#include "browser/vivaldi_webcontents_util.h"
 #include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
@@ -547,7 +548,8 @@ void WebViewGuest::ParseNewWindowUserInput(const std::string& user_input,
 
 void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
                                            int windowId,
-                                           bool activePage) {
+                                           bool activePage,
+                                           bool inherit_opener) {
   Browser* browser =
       chrome::FindBrowserWithID(SessionID::FromSerializedValue(windowId));
 
@@ -583,9 +585,12 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
 
   int add_types = active ? TabStripModel::ADD_ACTIVE : TabStripModel::ADD_NONE;
   add_types |=
-      TabStripModel::ADD_FORCE_INDEX | TabStripModel::ADD_INHERIT_OPENER;
+      TabStripModel::ADD_FORCE_INDEX;
   if (pinned)
     add_types |= TabStripModel::ADD_PINNED;
+  if (inherit_opener) {
+    add_types |= TabStripModel::ADD_INHERIT_OPENER;
+  }
 
   NavigateParams navigate_params(browser,
       std::unique_ptr<WebContents>(guest->web_contents()));
@@ -803,6 +808,9 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
   return content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
+void WebViewGuest::SetIsNavigatingAwayFromVivaldiUI(bool away) {
+  is_navigating_away_from_vivaldi_ui_ = away;
+}
 
 }  // namespace extensions
 

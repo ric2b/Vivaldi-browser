@@ -78,6 +78,10 @@ const char kEnableProtectedVideoBuffers[] = "enable-protected-video-buffers";
 const char kForceProtectedVideoOutputBuffers[] =
     "force-protected-video-output-buffers";
 
+const char kDisableAudioInput[] = "disable-audio-input";
+
+// Present video content as overlays.
+const char kUseOverlaysForVideo[] = "use-overlays-for-video";
 #endif  // defined(OS_FUCHSIA)
 
 #if defined(USE_CRAS)
@@ -183,13 +187,16 @@ const char kOverrideEnabledCdmInterfaceVersion[] =
 const char kOverrideHardwareSecureCodecsForTesting[] =
     "override-hardware-secure-codecs-for-testing";
 
+// Sets the default value for the kLiveCaptionEnabled preference to true.
+const char kEnableLiveCaptionPrefForTesting[] =
+    "enable-live-caption-pref-for-testing";
+
 #if defined(OS_CHROMEOS)
 // ChromeOS uses one of two VideoDecoder implementations based on SoC/board
 // specific configurations that are signalled via this command line flag.
 // TODO(b/159825227): remove when the "old" video decoder is fully launched.
 const char kPlatformDisallowsChromeOSDirectVideoDecoder[] =
-    // TODO(mcasas): Rename the flag string when crrev.com/c/2268600 lands.
-    "force-disable-new-accelerated-video-decoder";
+    "platform-disallows-chromeos-direct-video-decoder";
 #endif
 
 namespace autoplay {
@@ -370,6 +377,10 @@ const base::Feature kGlobalMediaControlsAutoDismiss{
 const base::Feature kGlobalMediaControlsForCast{
     "GlobalMediaControlsForCast", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Allow Global Media Controls in system tray of CrOS.
+const base::Feature kGlobalMediaControlsForChromeOS{
+    "GlobalMediaControlsForChromeOS", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Allow global media controls notifications to be dragged out into overlay
 // notifications. It is no-op if kGlobalMediaControls is not enabled.
 const base::Feature kGlobalMediaControlsOverlayControls{
@@ -387,15 +398,12 @@ const base::Feature kGlobalMediaControlsPictureInPicture {
 };
 
 // Enable selection of audio output device in Global Media Controls.
-const base::Feature kGlobalMediaControlsSeamlessTransfer {
-  "GlobalMediaControlsSeamlessTransfer", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kGlobalMediaControlsSeamlessTransfer{
+    "GlobalMediaControlsSeamlessTransfer", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enable new cpu load estimator. Intended for evaluation in local
-// testing and origin-trial.
-// TODO(nisse): Delete once we have switched over to always using the
-// new estimator.
-const base::Feature kNewEncodeCpuLoadEstimator{
-    "NewEncodeCpuLoadEstimator", base::FEATURE_DISABLED_BY_DEFAULT};
+// Enable an updated version of the Global Media Controls UI.
+const base::Feature kGlobalMediaControlsModernUI{
+    "GlobalMediaControlsModernUI", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // CanPlayThrough issued according to standard.
 const base::Feature kSpecCompliantCanPlayThrough{
@@ -405,10 +413,6 @@ const base::Feature kSpecCompliantCanPlayThrough{
 // for too long. Should save quite a bit of power in the muted video case.
 const base::Feature kSuspendMutedAudio{"SuspendMutedAudio",
                                        base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Use shared block-based buffering for media.
-const base::Feature kUseNewMediaCache{"use-new-media-cache",
-                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables using the media history store to store media engagement metrics.
 const base::Feature kUseMediaHistoryStore{"UseMediaHistoryStore",
@@ -433,7 +437,7 @@ const base::Feature kVaapiVP8Encoder{"VaapiVP8Encoder",
 
 // Enable VA-API hardware encode acceleration for VP9.
 const base::Feature kVaapiVP9Encoder{"VaapiVP9Encoder",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if defined(ARCH_CPU_X86_FAMILY) && defined(OS_CHROMEOS)
 // Enable VP9 k-SVC decoding with HW decoder for webrtc use case on ChromeOS.
@@ -451,9 +455,14 @@ const base::Feature kVideoBlitColorAccuracy{"video-blit-color-accuracy",
 const base::Feature kExternalClearKeyForTesting{
     "ExternalClearKeyForTesting", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables the LiveCaption feature.
+// Enables the Live Caption feature.
 const base::Feature kLiveCaption{"LiveCaption",
                                  base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Use the Speech On-Device API (SODA) to power the Live Caption feature instead
+// of the Cloud-based Open Speech API.
+const base::Feature kUseSodaForLiveCaption{"UseSodaForLiveCaption",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Prevents UrlProvisionFetcher from making a provisioning request. If
 // specified, any provisioning request made will not be sent to the provisioning
@@ -500,6 +509,16 @@ const base::Feature kHardwareMediaKeyHandling {
 // decoders over software decoders or vice-versa.
 const base::Feature kResolutionBasedDecoderPriority{
     "ResolutionBasedDecoderPriority", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Forces use of hardware (platform) video decoders in
+// `media::DecoderSelector`.
+const base::Feature kForceHardwareVideoDecoders{
+    "ForceHardwareVideoDecoders", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Forces use of hardware (platform) audio decoders in
+// `media::DecoderSelector`.
+const base::Feature kForceHardwareAudioDecoders{
+    "ForceHardwareAudioDecoders", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables low-delay video rendering in media pipeline on "live" stream.
 const base::Feature kLowDelayVideoRenderingOnLiveStream{
@@ -636,9 +655,28 @@ const base::Feature kMediaFoundationVideoCapture{
 const base::Feature MEDIA_EXPORT kMediaFoundationVP8Decoding{
     "MediaFoundationVP8Decoding", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Use the AUDCLNT_STREAMOPTIONS_RAW option on WASAPI input audio streams in
+// combination with  the IAudioClient2::SetClientProperties() API.
+// The audio stream is a 'raw' stream that bypasses all signal processing except
+// for endpoint specific, always-on processing in the Audio Processing Object
+// (APO), driver, and hardware.
+// https://docs.microsoft.com/en-us/windows/win32/api/audioclient/ne-audioclient-audclnt_streamoptions
+const base::Feature MEDIA_EXPORT kWasapiRawAudioCapture{
+    "WASAPIRawAudioCapture", base::FEATURE_DISABLED_BY_DEFAULT};
+
 #endif  // defined(OS_WIN)
 
 #if defined(OS_MAC)
+// Controls whether the next version mac capturer, including power improvements,
+// zero copy operation, and other improvements, is active.
+const base::Feature MEDIA_EXPORT kAVFoundationCaptureV2{
+    "AVFoundationCaptureV2", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Controls whether or not the V2 capturer exports IOSurfaces for zero-copy.
+// This feature only has any effect if kAVFoundationCaptureV2 is also enabled.
+const base::Feature MEDIA_EXPORT kAVFoundationCaptureV2ZeroCopy{
+    "AVFoundationCaptureV2ZeroCopy", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature MEDIA_EXPORT kVideoToolboxVp9Decoding{
     "VideoToolboxVp9Decoding", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_MAC)
@@ -658,11 +696,6 @@ std::string GetEffectiveAutoplayPolicy(const base::CommandLine& command_line) {
   return switches::autoplay::kNoUserGestureRequiredPolicy;
 #endif
 }
-
-// Adds icons to the overflow menu on the native media controls.
-// TODO(steimel): Remove this.
-const base::Feature kOverflowIconsForMediaControls{
-    "OverflowIconsForMediaControls", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables Media Engagement Index recording. This data will be used to determine
 // when to bypass autoplay policies. This is recorded on all platforms.
@@ -773,6 +806,9 @@ const base::Feature kKaleidoscopeForceShowFirstRunExperience{
 
 const base::Feature kKaleidoscopeModule{"KaleidoscopeModule",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kKaleidoscopeModuleCacheOnly{
+    "KaleidoscopeModuleCacheOnly", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kUseFakeDeviceForMediaStream{
     "use-fake-device-for-media-stream", base::FEATURE_DISABLED_BY_DEFAULT};

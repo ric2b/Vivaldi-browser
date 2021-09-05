@@ -30,7 +30,7 @@
 #include "base/time/default_tick_clock.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
-#include "content/browser/frame_host/back_forward_cache_can_store_document_result.h"
+#include "content/browser/renderer_host/back_forward_cache_can_store_document_result.h"
 #include "content/browser/service_worker/payment_handler_support.h"
 #include "content/browser/service_worker/service_worker_consts.h"
 #include "content/browser/service_worker/service_worker_container_host.h"
@@ -55,7 +55,6 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
 #include "third_party/blink/public/common/service_worker/service_worker_type_converters.h"
-#include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 
 namespace content {
 namespace {
@@ -89,9 +88,10 @@ const char kForceUpdateInfoMessage[] =
     "checked in the DevTools Application panel.";
 
 void RunSoon(base::OnceClosure callback) {
-  if (!callback.is_null())
+  if (callback) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
                                                   std::move(callback));
+  }
 }
 
 template <typename CallbackArray, typename Arg>
@@ -254,9 +254,7 @@ ServiceWorkerVersion::ServiceWorkerVersion(
     : version_id_(version_id),
       registration_id_(registration->id()),
       script_url_(script_url),
-      // Safe to convert GURL to Origin because service workers are restricted
-      // to secure contexts.
-      script_origin_(url::Origin::Create(script_url_)),
+      origin_(registration->origin()),
       scope_(registration->scope()),
       script_type_(script_type),
       fetch_handler_existence_(FetchHandlerExistence::UNKNOWN),
@@ -389,7 +387,7 @@ ServiceWorkerVersionInfo ServiceWorkerVersion::GetInfo() {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   ServiceWorkerVersionInfo info(
       running_status(), status(), fetch_handler_existence(), script_url(),
-      script_origin(), registration_id(), version_id(),
+      origin(), registration_id(), version_id(),
       embedded_worker()->process_id(), embedded_worker()->thread_id(),
       embedded_worker()->worker_devtools_agent_route_id());
   for (const auto& controllee : controllee_map_) {
@@ -464,7 +462,7 @@ void ServiceWorkerVersion::StartWorker(ServiceWorkerMetrics::EventType purpose,
   // get associated with it in
   // ServiceWorkerHost::CompleteStartWorkerPreparation.
   context_->registry()->FindRegistrationForId(
-      registration_id_, scope_.GetOrigin(),
+      registration_id_, origin_,
       base::BindOnce(
           &ServiceWorkerVersion::DidEnsureLiveRegistrationForStartWorker,
           weak_factory_.GetWeakPtr(), purpose, status_,
@@ -575,7 +573,7 @@ void ServiceWorkerVersion::StartUpdate() {
   if (!context_)
     return;
   context_->registry()->FindRegistrationForId(
-      registration_id_, scope_.GetOrigin(),
+      registration_id_, origin_,
       base::BindOnce(&ServiceWorkerVersion::FoundRegistrationForUpdate,
                      weak_factory_.GetWeakPtr()));
 }
@@ -664,7 +662,7 @@ ServiceWorkerExternalRequestResult ServiceWorkerVersion::StartExternalRequest(
     return ServiceWorkerExternalRequestResult::kWorkerNotRunning;
   }
 
-  if (external_request_uuid_to_request_id_.count(request_uuid) > 0u)
+  if (base::Contains(external_request_uuid_to_request_id_, request_uuid))
     return ServiceWorkerExternalRequestResult::kBadRequestId;
 
   int request_id =
@@ -676,12 +674,19 @@ ServiceWorkerExternalRequestResult ServiceWorkerVersion::StartExternalRequest(
 }
 
 bool ServiceWorkerVersion::FinishRequest(int request_id, bool was_handled) {
+  return FinishRequestWithFetchCount(request_id, was_handled,
+                                     /*fetch_count=*/0);
+}
+
+bool ServiceWorkerVersion::FinishRequestWithFetchCount(int request_id,
+                                                       bool was_handled,
+                                                       uint32_t fetch_count) {
   InflightRequest* request = inflight_requests_.Lookup(request_id);
   if (!request)
     return false;
   ServiceWorkerMetrics::RecordEventDuration(
       request->event_type, tick_clock_->NowTicks() - request->start_time_ticks,
-      was_handled);
+      was_handled, fetch_count);
 
   TRACE_EVENT_ASYNC_END1("ServiceWorker", "ServiceWorkerVersion::Request",
                          request, "Handled", was_handled);
@@ -695,10 +700,11 @@ bool ServiceWorkerVersion::FinishRequest(int request_id, bool was_handled) {
 
 ServiceWorkerExternalRequestResult ServiceWorkerVersion::FinishExternalRequest(
     const std::string& request_uuid) {
-  if (running_status() == EmbeddedWorkerStatus::STARTING)
+  if (running_status() == EmbeddedWorkerStatus::STARTING) {
     return pending_external_requests_.erase(request_uuid) > 0u
                ? ServiceWorkerExternalRequestResult::kOk
                : ServiceWorkerExternalRequestResult::kBadRequestId;
+  }
 
   // If it's STOPPED, there is no request to finish. We could just consider this
   // a success, but the caller may want to know about it. (If it's STOPPING,
@@ -710,7 +716,7 @@ ServiceWorkerExternalRequestResult ServiceWorkerVersion::FinishExternalRequest(
   if (iter != external_request_uuid_to_request_id_.end()) {
     int request_id = iter->second;
     external_request_uuid_to_request_id_.erase(iter);
-    return FinishRequest(request_id, true)
+    return FinishRequest(request_id, /*was_handled=*/true)
                ? ServiceWorkerExternalRequestResult::kOk
                : ServiceWorkerExternalRequestResult::kBadRequestId;
   }
@@ -756,13 +762,6 @@ void ServiceWorkerVersion::AddControllee(
   // TODO(crbug.com/1021718): Change to DCHECK once we figure out the cause of
   // crash.
   CHECK(!base::Contains(controllee_map_, uuid));
-
-  // TODO(yuzus, crbug.com/951571): Remove these CHECKs once we figure out the
-  // cause of crash.
-  CHECK_NE(status_, NEW);
-  CHECK_NE(status_, INSTALLING);
-  CHECK_NE(status_, INSTALLED);
-  CHECK_NE(status_, REDUNDANT);
 
   // Set the idle timeout to the default value if there's no controllee and the
   // worker is running because the worker's idle delay has been set to a shorter
@@ -1117,10 +1116,6 @@ void ServiceWorkerVersion::SetTickClockForTesting(
   tick_clock_ = tick_clock;
 }
 
-void ServiceWorkerVersion::SetClockForTesting(base::Clock* clock) {
-  clock_ = clock;
-}
-
 bool ServiceWorkerVersion::HasNoWork() const {
   return !HasWorkInBrowser() && worker_is_idle_on_renderer_;
 }
@@ -1187,10 +1182,11 @@ void ServiceWorkerVersion::OnStarted(
       mojo::ConvertTo<blink::ServiceWorkerStatusCode>(start_status);
 
   if (status == blink::ServiceWorkerStatusCode::kOk &&
-      fetch_handler_existence_ == FetchHandlerExistence::UNKNOWN)
+      fetch_handler_existence_ == FetchHandlerExistence::UNKNOWN) {
     set_fetch_handler_existence(has_fetch_handler
                                     ? FetchHandlerExistence::EXISTS
                                     : FetchHandlerExistence::DOES_NOT_EXIST);
+  }
 
   // Fire all start callbacks.
   scoped_refptr<ServiceWorkerVersion> protect(this);
@@ -1395,8 +1391,7 @@ void ServiceWorkerVersion::OpenPaymentHandlerWindow(
     return;
   }
 
-  if (!url.is_valid() ||
-      !url::Origin::Create(url).IsSameOriginWith(script_origin_)) {
+  if (!url.is_valid() || !url::Origin::Create(url).IsSameOriginWith(origin_)) {
     mojo::ReportBadMessage(
         "Received PaymentRequestEvent#openWindow() request for a cross-origin "
         "URL.");

@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">končna opomba</translation>
 <translation id="1281252709823657822">pogovorno okno</translation>
 <translation id="1306460908038601864">Izklopljeno</translation>
+<translation id="1311894908970423688">Vrednost mora biti <ph name="VALUE_DATE_OR_TIME" />.</translation>
 <translation id="1335095011850992622">seznam sodelujočih</translation>
 <translation id="1342835525016946179">člnk</translation>
 <translation id="1359897965706325498">pasica</translation>
+<translation id="145015347812617860">Št. elementov: <ph name="COUNT" /></translation>
 <translation id="1480676835519562650">Izbrati je mogoče več otrok, izbranih je toliko: <ph name="SELECTED" /> od <ph name="COUNT" />.</translation>
 <translation id="1589122976691792535">območje</translation>
 <translation id="1591562245178063882">Ta mesec</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033"><ph name="WEEKNUMBER" />. teden, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">Besedilni posnetek <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">potrditveno polje</translation>
+<translation id="2307576640803031502">na seznamu, element <ph name="INDEX" /> od <ph name="COUNT" /></translation>
 <translation id="2311842470354187719">prelom strani</translation>
 <translation id="2335594187091864976">izbirnik datuma in ure</translation>
 <translation id="2393030564806080191">Šestnajstiška barvna vrednost</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">več možnosti</translation>
 <translation id="576709008726043716">uvod</translation>
 <translation id="57838592816432529">Izklopi zvok</translation>
+<translation id="5860033963881614850">Izklopljeno</translation>
 <translation id="588258955323874662">Celozaslonsko</translation>
 <translation id="5888666972993069672">Predvajanje v napravi <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">iskalno polje</translation>
+<translation id="5916664084637901428">Vklopljeno</translation>
 <translation id="5939518447894949180">Ponastavi</translation>
 <translation id="5966707198760109579">Teden</translation>
 <translation id="5987525920412732405">pomikalnik</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">Izbriši</translation>
 <translation id="668171684555832681">Drugo ...</translation>
 <translation id="6692633176391053278">kontrolnik</translation>
+<translation id="6709093583001123835">Vrednost mora biti <ph name="VALUE" />.</translation>
 <translation id="6709570249143506788">Slaba kakovost predvajanja</translation>
 <translation id="6755330956360078551">opis orodja</translation>
 <translation id="6790428901817661496">Predvajanje</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, začne se <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Slika v sliki</translation>
 <translation id="9168329111483466115">sprotna opomba</translation>
+<translation id="945780513535800434">Delno označeno</translation>
 <translation id="954003015749068518">odpiranje načina slike v sliki</translation>
 <translation id="966787709310836684">meni</translation>
 </translationbundle>

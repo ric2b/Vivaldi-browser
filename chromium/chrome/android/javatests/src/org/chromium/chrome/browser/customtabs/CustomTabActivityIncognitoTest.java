@@ -11,6 +11,9 @@ import static org.junit.Assert.assertTrue;
 import static org.chromium.chrome.browser.customtabs.CustomTabsTestUtils.addActionButtonToIntent;
 import static org.chromium.chrome.browser.customtabs.CustomTabsTestUtils.createTestBitmap;
 
+import android.annotation.SuppressLint;
+import android.annotation.TargetApi;
+import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
@@ -18,6 +21,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.support.test.InstrumentationRegistry;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -37,19 +41,17 @@ import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils.OnFinishedForTest;
+import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbar;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.incognito.IncognitoDataTestUtils;
-import org.chromium.chrome.browser.incognito.IncognitoNotificationService;
-import org.chromium.chrome.browser.toolbar.top.CustomTabToolbar;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.styles.ChromeColors;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServerRule;
 
@@ -138,7 +140,7 @@ public class CustomTabActivityIncognitoTest {
         assertTrue(item == null || !item.isVisible());
     }
 
-    private void testTopActionIconsIsVisible(String screenshotName) throws Exception {
+    private void testTopActionIconsIsVisible() throws Exception {
         Menu menu = mCustomTabActivityTestRule.getMenu();
         MenuItem iconRow = menu.findItem(R.id.icon_row_menu_id);
 
@@ -194,16 +196,22 @@ public class CustomTabActivityIncognitoTest {
     @Test
     @MediumTest
     @Features.EnableFeatures({ChromeFeatureList.CCT_INCOGNITO})
-    @DisabledTest
-    // TODO(crbug.com/1023759) : The test is flaky on marshmallow.
-    // Need to investigate.
-    public void incognitoNotificationClosesIncognitoCustomTab() throws Exception {
+    @TargetApi(Build.VERSION_CODES.M)
+    @SuppressLint("NewApi")
+    public void closeAllIncognitoNotificationIsNotDisplayed() throws Exception {
+        // It may happen that some previous incognito notification from tabbed activity may be
+        // already be lying around. So, we test the delta instead to be 0.
+        Context context = ContextUtils.getApplicationContext();
+        NotificationManager nm =
+                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        int startCount = nm.getActiveNotifications().length;
+
+        // Launch incognito CCT
         Intent intent = createMinimalIncognitoCustomTabIntent();
         CustomTabActivity activity = launchIncognitoCustomTab(intent);
-        IncognitoNotificationService.getRemoveAllIncognitoTabsIntent(activity)
-                .getPendingIntent()
-                .send();
-        CriteriaHelper.pollUiThread(activity::isFinishing);
+
+        int endCount = nm.getActiveNotifications().length;
+        assertEquals(0, endCount - startCount);
     }
 
     @Test
@@ -261,7 +269,7 @@ public class CustomTabActivityIncognitoTest {
     @Features.EnableFeatures({ChromeFeatureList.CCT_INCOGNITO})
     public void ensureOnlyFourTopIconsAreVisible() throws Exception {
         launchMenuItem();
-        testTopActionIconsIsVisible("Forward, info, bookmark and reload is visible");
+        testTopActionIconsIsVisible();
     }
 
     @Test
@@ -281,7 +289,26 @@ public class CustomTabActivityIncognitoTest {
         assertTrue(menu.findItem(R.id.request_desktop_site_row_menu_id).isVisible());
 
         // Check top icons are still the same.
-        testTopActionIconsIsVisible("Custom menu items not visible");
+        testTopActionIconsIsVisible();
+    }
+
+    @Test
+    @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.CCT_INCOGNITO})
+    public void ensureAddCustomMenuItemIsEnabledForReaderMode() throws Exception {
+        Intent intent = createMinimalIncognitoCustomTabIntent();
+        CustomTabIntentDataProvider.addReaderModeUIExtras(intent);
+        CustomTabActivity activity = launchIncognitoCustomTab(intent);
+        CustomTabsTestUtils.openAppMenuAndAssertMenuShown(activity);
+
+        Menu menu = mCustomTabActivityTestRule.getMenu();
+        // Check the menu items have only 2 items visible "not" including the top icon row menu.
+        assertEquals(2, CustomTabsTestUtils.getVisibleMenuSize(menu));
+        assertTrue(menu.findItem(R.id.reader_mode_prefs_id).isVisible());
+        assertTrue(menu.findItem(R.id.find_in_page_id).isVisible());
+
+        assertFalse(menu.findItem(R.id.icon_row_menu_id).isVisible());
+        assertFalse(menu.findItem(R.id.request_desktop_site_row_menu_id).isVisible());
     }
 
     @Test

@@ -64,8 +64,9 @@ class TextVectorImageButton : public views::MdTextButton {
     views::MdTextButton::OnThemeChanged();
 
     // Use the text color for the associated vector image.
-    SetImage(views::Button::ButtonState::STATE_NORMAL,
-             gfx::CreateVectorIcon(icon_, label()->GetEnabledColor()));
+    SetImageModel(
+        views::Button::ButtonState::STATE_NORMAL,
+        ui::ImageModel::FromVectorIcon(icon_, label()->GetEnabledColor()));
   }
 
  private:
@@ -79,6 +80,7 @@ ColoredDialog::ColoredDialog(AcceptCallback accept_callback) {
       },
       base::Unretained(this), std::move(accept_callback)));
 
+  SetModalType(ui::MODAL_TYPE_WINDOW);
   SetTitle(l10n_util::GetStringUTF16(IDS_COLORED_DIALOG_TITLE));
 
   SetLayoutManager(std::make_unique<views::FillLayout>());
@@ -98,10 +100,6 @@ ColoredDialog::ColoredDialog(AcceptCallback accept_callback) {
 }
 
 ColoredDialog::~ColoredDialog() = default;
-
-ui::ModalType ColoredDialog::GetModalType() const {
-  return ui::MODAL_TYPE_WINDOW;
-}
 
 bool ColoredDialog::ShouldShowCloseButton() const {
   return false;

@@ -72,7 +72,7 @@ void PendingAppManager::SynchronizeInstalledApps(
 
   std::vector<GURL> desired_urls;
   for (const auto& info : desired_apps_install_options)
-    desired_urls.push_back(info.url);
+    desired_urls.push_back(info.install_url);
 
   std::sort(desired_urls.begin(), desired_urls.end());
 
@@ -113,10 +113,15 @@ void PendingAppManager::ClearRegistrationCallbackForTesting() {
   registration_callback_ = RegistrationCallback();
 }
 
-void PendingAppManager::OnRegistrationFinished(const GURL& launch_url,
+void PendingAppManager::SetRegistrationsCompleteCallbackForTesting(
+    base::OnceClosure callback) {
+  registrations_complete_callback_ = std::move(callback);
+}
+
+void PendingAppManager::OnRegistrationFinished(const GURL& install_url,
                                                RegistrationResultCode result) {
   if (registration_callback_)
-    registration_callback_.Run(launch_url, result);
+    registration_callback_.Run(install_url, result);
 }
 
 void PendingAppManager::InstallForSynchronizeCallback(

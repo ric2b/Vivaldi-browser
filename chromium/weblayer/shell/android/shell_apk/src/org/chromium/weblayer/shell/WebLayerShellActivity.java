@@ -12,8 +12,11 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.view.ContextMenu;
 import android.view.KeyEvent;
@@ -23,6 +26,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup.LayoutParams;
 import android.view.WindowManager;
+import android.webkit.ValueCallback;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -34,8 +38,9 @@ import android.widget.Toast;
 import android.widget.ViewSwitcher;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
 
@@ -49,6 +54,7 @@ import org.chromium.weblayer.FaviconCallback;
 import org.chromium.weblayer.FaviconFetcher;
 import org.chromium.weblayer.FindInPageCallback;
 import org.chromium.weblayer.FullscreenCallback;
+import org.chromium.weblayer.NavigateParams;
 import org.chromium.weblayer.NavigationCallback;
 import org.chromium.weblayer.NavigationController;
 import org.chromium.weblayer.NewTabCallback;
@@ -61,6 +67,7 @@ import org.chromium.weblayer.TabCallback;
 import org.chromium.weblayer.TabListCallback;
 import org.chromium.weblayer.UnsupportedVersionException;
 import org.chromium.weblayer.UrlBarOptions;
+import org.chromium.weblayer.UserIdentityCallback;
 import org.chromium.weblayer.WebLayer;
 
 import java.util.ArrayList;
@@ -73,7 +80,12 @@ import java.util.Map;
  */
 // This isn't part of Chrome, so using explicit colors/sizes is ok.
 @SuppressWarnings("checkstyle:SetTextColorAndSetTextSizeCheck")
-public class WebLayerShellActivity extends FragmentActivity {
+public class WebLayerShellActivity extends AppCompatActivity {
+    public static void setDarkMode(boolean enabled) {
+        AppCompatDelegate.setDefaultNightMode(
+                enabled ? AppCompatDelegate.MODE_NIGHT_YES : AppCompatDelegate.MODE_NIGHT_NO);
+    }
+
     private static final String NON_INCOGNITO_PROFILE_NAME = "DefaultProfile";
     private static final String EXTRA_WEBVIEW_COMPAT = "EXTRA_WEBVIEW_COMPAT";
 
@@ -153,6 +165,7 @@ public class WebLayerShellActivity extends FragmentActivity {
     private int mTopViewMinHeight;
     private boolean mTopViewPinnedToContentTop;
     private boolean mAnimateControlsChanges;
+    private boolean mSetDarkMode;
     private boolean mInIncognitoMode;
     private boolean mEnableWebViewCompat;
     private boolean mEnableAltTopView;
@@ -160,6 +173,8 @@ public class WebLayerShellActivity extends FragmentActivity {
     @Override
     protected void onCreate(final Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        mSetDarkMode = AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES;
         mEnableWebViewCompat = getIntent().getBooleanExtra(EXTRA_WEBVIEW_COMPAT, false);
         if (mEnableWebViewCompat) {
             WebLayer.initializeWebViewCompatibilityMode(getApplicationContext());
@@ -293,6 +308,8 @@ public class WebLayerShellActivity extends FragmentActivity {
         popup.getMenu()
                 .findItem(R.id.toggle_controls_animations_id)
                 .setChecked(mAnimateControlsChanges);
+        popup.getMenu().findItem(R.id.toggle_dark_mode).setChecked(mSetDarkMode);
+
         popup.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.toggle_top_view_id) {
                 mIsTopViewVisible = !mIsTopViewVisible;
@@ -331,6 +348,12 @@ public class WebLayerShellActivity extends FragmentActivity {
             if (item.getItemId() == R.id.toggle_controls_animations_id) {
                 mAnimateControlsChanges = !mAnimateControlsChanges;
                 updateTopView();
+                return true;
+            }
+
+            if (item.getItemId() == R.id.toggle_dark_mode) {
+                mSetDarkMode = !mSetDarkMode;
+                setDarkMode(mSetDarkMode);
                 return true;
             }
 
@@ -373,6 +396,28 @@ public class WebLayerShellActivity extends FragmentActivity {
         mBrowser = Browser.fromFragment(fragment);
         mProfile = mBrowser.getProfile();
         mProfile.setBooleanSetting(SettingType.UKM_ENABLED, true);
+        mProfile.setUserIdentityCallback(new UserIdentityCallback() {
+            @Override
+            public String getEmail() {
+                return "user@example.com";
+            }
+
+            @Override
+            public String getFullName() {
+                return "Jill Doe";
+            }
+
+            @Override
+            public void getAvatar(int desiredSize, ValueCallback<Bitmap> avatarLoadedCallback) {
+                // Simulate a delayed load.
+                final Handler handler = new Handler(Looper.getMainLooper());
+                handler.postDelayed(() -> {
+                    avatarLoadedCallback.onReceiveValue(BitmapFactory.decodeResource(
+                            getApplicationContext().getResources(), R.drawable.avatar_sunglasses));
+                }, 3000);
+            }
+        });
+
         setTabCallbacks(mBrowser.getActiveTab(), fragment);
 
         updateTopView();
@@ -451,11 +496,6 @@ public class WebLayerShellActivity extends FragmentActivity {
                 setTabCallbacks(newTab, fragment);
                 mPreviousTabList.add(mBrowser.getActiveTab());
                 mBrowser.setActiveTab(newTab);
-            }
-            @Override
-            public void onCloseTab() {
-                // This callback is deprecated and no longer sent.
-                assert false;
             }
         });
         tab.setFullscreenCallback(new FullscreenCallback() {
@@ -588,7 +628,13 @@ public class WebLayerShellActivity extends FragmentActivity {
     }
 
     public void loadUrl(String input) {
-        mBrowser.getActiveTab().getNavigationController().navigate(getUriFromInput(input));
+        // Disable intent processing for urls typed in. This way the user can navigate to urls that
+        // match apps (this is similar to what Chrome does).
+        NavigateParams.Builder navigateParamsBuilder =
+                new NavigateParams.Builder().disableIntentProcessing();
+
+        mBrowser.getActiveTab().getNavigationController().navigate(
+                getUriFromInput(input), navigateParamsBuilder.build());
     }
 
     private static String getUrlFromIntent(Intent intent) {
@@ -604,6 +650,16 @@ public class WebLayerShellActivity extends FragmentActivity {
     public static Uri getUriFromInput(String input) {
         if (TextUtils.isEmpty(input)) {
             return Uri.parse("https://google.com");
+        }
+
+        // WEB_URL doesn't match port numbers. Special case "localhost:" to aid
+        // testing where a port is remapped.
+        // Use WEB_URL first to ensure this matches urls such as 'https.'
+        if (WEB_URL.matcher(input).matches() || input.startsWith("http://localhost:")) {
+            // WEB_URL matches relative urls (relative meaning no scheme), but this branch is only
+            // interested in absolute urls. Fall through if no scheme is supplied.
+            Uri uri = Uri.parse(input);
+            if (!uri.isRelative()) return uri;
         }
 
         if (input.startsWith("www.") || input.indexOf(":") == -1) {

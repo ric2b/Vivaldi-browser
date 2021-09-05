@@ -4,6 +4,8 @@
 
 #include "weblayer/browser/insecure_form_controller_client.h"
 
+#include "components/security_interstitials/content/insecure_form_tab_storage.h"
+#include "components/security_interstitials/content/settings_page_helper.h"
 #include "content/public/browser/web_contents.h"
 #include "weblayer/browser/i18n_util.h"
 
@@ -18,6 +20,14 @@ InsecureFormControllerClient::GetMetricsHelper(const GURL& url) {
                                                                  nullptr);
 }
 
+// static
+std::unique_ptr<security_interstitials::SettingsPageHelper>
+InsecureFormControllerClient::GetSettingsPageHelper() {
+  // Return nullptr since there is no enhanced protection message in insecure
+  // form interstitials.
+  return nullptr;
+}
+
 InsecureFormControllerClient::InsecureFormControllerClient(
     content::WebContents* web_contents,
     const GURL& form_target_url)
@@ -26,7 +36,8 @@ InsecureFormControllerClient::InsecureFormControllerClient(
           GetMetricsHelper(form_target_url),
           nullptr, /* prefs */
           i18n::GetApplicationLocale(),
-          GURL("about:blank") /* default_safe_page */),
+          GURL("about:blank") /* default_safe_page */,
+          GetSettingsPageHelper()),
       web_contents_(web_contents) {}
 
 InsecureFormControllerClient::~InsecureFormControllerClient() = default;
@@ -36,9 +47,12 @@ void InsecureFormControllerClient::GoBack() {
 }
 
 void InsecureFormControllerClient::Proceed() {
-  // TODO(crbug.com/1093955): The simple reload logic means the interstitial is
-  // bypassed with any reload (e.g. F5), ideally this shouldn't be the case.
-
+  // Set the is_proceeding flag on the tab storage so reload doesn't trigger
+  // another interstitial.
+  security_interstitials::InsecureFormTabStorage* tab_storage =
+      security_interstitials::InsecureFormTabStorage::GetOrCreate(
+          web_contents_);
+  tab_storage->SetIsProceeding(true);
   // We don't check for repost on the proceed reload since the interstitial
   // explains this will submit the form.
   web_contents_->GetController().Reload(content::ReloadType::NORMAL, false);

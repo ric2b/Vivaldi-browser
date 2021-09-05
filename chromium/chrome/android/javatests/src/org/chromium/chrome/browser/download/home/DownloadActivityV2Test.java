@@ -30,10 +30,15 @@ import static org.mockito.Mockito.when;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.View;
 
+import androidx.recyclerview.widget.RecyclerView.ViewHolder;
 import androidx.test.espresso.action.ViewActions;
+import androidx.test.espresso.contrib.RecyclerViewActions;
+import androidx.test.espresso.matcher.BoundedMatcher;
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.junit.Rule;
 import org.junit.Test;
@@ -45,12 +50,12 @@ import org.chromium.base.Callback;
 import org.chromium.base.DiscardableReferencePool;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.task.PostTask;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.download.DownloadLaterPromptStatus;
 import org.chromium.chrome.browser.download.R;
+import org.chromium.chrome.browser.download.home.list.holder.ListItemViewHolder;
 import org.chromium.chrome.browser.download.home.rename.RenameUtils;
 import org.chromium.chrome.browser.download.home.toolbar.DownloadHomeToolbar;
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
@@ -58,7 +63,6 @@ import org.chromium.chrome.browser.download.ui.StubbedProvider;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
-import org.chromium.chrome.browser.vr.VrModeProviderImpl;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -78,6 +82,7 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.test.util.DummyUiActivityTestCase;
 import org.chromium.ui.test.util.UiRestriction;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -107,6 +112,27 @@ public class DownloadActivityV2Test extends DummyUiActivityTestCase {
 
     private DiscardableReferencePool mDiscardableReferencePool;
 
+    /**
+     * Returns a Matcher to find a particular {@link ViewHolder} that contains certain text.
+     * @param text The text that the view holder has in its view hierarchy.
+     */
+    private static Matcher<ViewHolder> hasTextInViewHolder(String text) {
+        return new BoundedMatcher<ViewHolder, ListItemViewHolder>(ListItemViewHolder.class) {
+            @Override
+            public void describeTo(Description description) {
+                description.appendText("has text: " + text);
+            }
+
+            @Override
+            protected boolean matchesSafely(ListItemViewHolder listItemViewHolder) {
+                ArrayList<View> outViews = new ArrayList<>();
+                listItemViewHolder.itemView.findViewsWithText(
+                        outViews, text, View.FIND_VIEWS_WITH_TEXT);
+                return !outViews.isEmpty();
+            }
+        };
+    }
+
     @Override
     public void setUpTest() throws Exception {
         super.setUpTest();
@@ -124,7 +150,6 @@ public class DownloadActivityV2Test extends DummyUiActivityTestCase {
         features.put(ChromeFeatureList.OFFLINE_PAGES_PREFETCHING, true);
         features.put(ChromeFeatureList.OVERSCROLL_HISTORY_NAVIGATION, false);
         features.put(ChromeFeatureList.DOWNLOAD_OFFLINE_CONTENT_PROVIDER, false);
-        features.put(ChromeFeatureList.CONTENT_INDEXING_DOWNLOAD_HOME, false);
         ChromeFeatureList.setTestFeatures(features);
 
         mStubbedOfflineContentProvider = new StubbedOfflineContentProvider() {
@@ -176,8 +201,7 @@ public class DownloadActivityV2Test extends DummyUiActivityTestCase {
         mDownloadCoordinator = new DownloadManagerCoordinatorImpl(getActivity(), config,
                 isPrefetchEnabledSupplier, settingsLauncher, mSnackbarManager, mModalDialogManager,
                 mPrefService, mTracker, faviconProvider, OfflineContentAggregatorFactory.get(),
-                /* LegacyDownloadProvider */ null, mDiscardableReferencePool,
-                new VrModeProviderImpl());
+                /* LegacyDownloadProvider */ null, mDiscardableReferencePool);
         getActivity().setContentView(mDownloadCoordinator.getView());
 
         mDownloadCoordinator.updateForUrl(UrlConstants.DOWNLOADS_URL);
@@ -185,7 +209,6 @@ public class DownloadActivityV2Test extends DummyUiActivityTestCase {
 
     @Test
     @MediumTest
-    @DisabledTest(message = "https://crbug.com/1039491")
     public void testLaunchingActivity() {
         TestThreadUtils.runOnUiThreadBlocking(() -> { setUpUi(); });
 
@@ -193,10 +216,15 @@ public class DownloadActivityV2Test extends DummyUiActivityTestCase {
         onView(withText("Downloads")).check(matches(isDisplayed()));
 
         // Shows the list items.
-        onView(withText("page 1")).check(matches(isDisplayed()));
         onView(withText("page 2")).check(matches(isDisplayed()));
         onView(withText("page 3")).check(matches(isDisplayed()));
         onView(withText("page 4")).check(matches(isDisplayed()));
+
+        // The last item may be outside the view port, that recycler view won't create the view
+        // holder, so scroll to that view holder first.
+        onView(withId(R.id.download_home_recycler_view))
+                .perform(RecyclerViewActions.scrollToHolder(hasTextInViewHolder("page 1")));
+        onView(withText("page 1")).check(matches(isDisplayed()));
     }
 
     @Test
@@ -466,6 +494,10 @@ public class DownloadActivityV2Test extends DummyUiActivityTestCase {
     }
 
     private void checkItemsDisplayed(boolean item0, boolean item1, boolean item2, boolean item3) {
+        // TODO(xingliu): Fix this properly. Some items may be outside the view port, that the
+        // recycler view won't create the view holder, and isDisplayed() will not check those items
+        // as well.
+        // See https://crbug.com/1039491.
         onView(withText("page 1")).check(item0 ? matches(isDisplayed()) : doesNotExist());
         onView(withText("page 2")).check(item1 ? matches(isDisplayed()) : doesNotExist());
         onView(withText("page 3")).check(item2 ? matches(isDisplayed()) : doesNotExist());

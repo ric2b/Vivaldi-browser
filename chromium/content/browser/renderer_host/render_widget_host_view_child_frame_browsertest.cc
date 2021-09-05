@@ -13,8 +13,8 @@
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
 #include "components/viz/common/surfaces/surface_id.h"
-#include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/portal/portal.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/frame_messages.h"
@@ -393,11 +393,12 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
   // Hide the frame and make it visible again, to force it to record the
   // tab-switch time, which is generated from presentation-feedback.
   child_rwh_impl->WasHidden();
-  child_rwh_impl->WasShown(RecordContentToVisibleTimeRequest{
-      base::TimeTicks::Now(), /* destination_is_loaded */ true,
+  child_rwh_impl->WasShown(blink::mojom::RecordContentToVisibleTimeRequest::New(
+      base::TimeTicks::Now(),
+      /* destination_is_loaded */ true,
       /* show_reason_tab_switching */ true,
       /* show_reason_unoccluded */ false,
-      /* show_reason_bfcache_restore */ false});
+      /* show_reason_bfcache_restore */ false));
   // Force the child to submit a new frame.
   ASSERT_TRUE(ExecuteScript(root->child_at(0)->current_frame_host(),
                             "document.write('Force a new frame.');"));
@@ -430,7 +431,7 @@ class DisplayModeControllingWebContentsDelegate : public WebContentsDelegate {
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
                        VisualPropertiesPropagation_DisplayMode) {
   GURL main_url(embedded_test_server()->GetURL(
-      "a.com", "/cross_site_iframe_factory.html?a(a,b)"));
+      "a.com", "/cross_site_iframe_factory.html?a(b(a))"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
 
   auto* web_contents = static_cast<WebContentsImpl*>(shell()->web_contents());
@@ -442,14 +443,15 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
   FrameTreeNode* root = web_contents->GetFrameTree()->root();
   RenderWidgetHostImpl* root_widget =
       root->current_frame_host()->GetRenderWidgetHost();
-  // In-process frame.
-  FrameTreeNode* ipchild = root->child_at(0);
-  RenderWidgetHostImpl* ipchild_widget =
-      ipchild->current_frame_host()->GetRenderWidgetHost();
   // Out-of-process frame.
-  FrameTreeNode* oopchild = root->child_at(1);
+  FrameTreeNode* oopchild = root->child_at(0);
   RenderWidgetHostImpl* oopchild_widget =
       oopchild->current_frame_host()->GetRenderWidgetHost();
+  // In-process frame.
+  FrameTreeNode* ipchild = oopchild->child_at(0);
+  RenderWidgetHostImpl* ipchild_widget =
+      ipchild->current_frame_host()->GetRenderWidgetHost();
+  EXPECT_NE(root_widget, ipchild_widget);
 
   // Check all frames for the initial value.
   EXPECT_EQ(
@@ -457,10 +459,10 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
       EvalJs(root, "window.matchMedia('(display-mode: browser)').matches"));
   EXPECT_EQ(
       true,
-      EvalJs(ipchild, "window.matchMedia('(display-mode: browser)').matches"));
+      EvalJs(oopchild, "window.matchMedia('(display-mode: browser)').matches"));
   EXPECT_EQ(
       true,
-      EvalJs(oopchild, "window.matchMedia('(display-mode: browser)').matches"));
+      EvalJs(ipchild, "window.matchMedia('(display-mode: browser)').matches"));
 
   // The display mode changes.
   display_mode_delegate.set_display_mode(
@@ -468,9 +470,11 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
   // Each RenderWidgetHost would need to hear about that by having
   // SynchronizeVisualProperties() called. It's not clear what triggers that but
   // the place that changes the DisplayMode would be responsible.
-  root_widget->SynchronizeVisualProperties();
-  ipchild_widget->SynchronizeVisualProperties();
-  oopchild_widget->SynchronizeVisualProperties();
+  //
+  // We ignore the pending ack to ensure this IPC is sent immediately.
+  EXPECT_TRUE(root_widget->SynchronizeVisualPropertiesIgnoringPendingAck());
+  EXPECT_TRUE(oopchild_widget->SynchronizeVisualPropertiesIgnoringPendingAck());
+  EXPECT_TRUE(ipchild_widget->SynchronizeVisualPropertiesIgnoringPendingAck());
 
   // Check all frames for the changed value.
   EXPECT_EQ(
@@ -479,11 +483,11 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
           root, "", "window.matchMedia('(display-mode: standalone)').matches"));
   EXPECT_EQ(true,
             EvalJsAfterLifecycleUpdate(
-                ipchild, "",
+                oopchild, "",
                 "window.matchMedia('(display-mode: standalone)').matches"));
   EXPECT_EQ(true,
             EvalJsAfterLifecycleUpdate(
-                oopchild, "",
+                ipchild, "",
                 "window.matchMedia('(display-mode: standalone)').matches"));
 
   // Navigate a frame to b.com, which we already have a process for.
@@ -534,9 +538,28 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
   std::vector<gfx::Rect> expected_segments;
   expected_segments.emplace_back(0, 0, emulated_display_feature.offset,
                                  root_view_size.height());
-  expected_segments.emplace_back(
-      emulated_display_feature.offset + emulated_display_feature.mask_length, 0,
-      emulated_display_feature.offset, root_view_size.height());
+  const int second_segment_offset =
+      emulated_display_feature.offset + emulated_display_feature.mask_length;
+  expected_segments.emplace_back(second_segment_offset, 0,
+                                 root_view_size.width() - second_segment_offset,
+                                 root_view_size.height());
+
+  base::Optional<blink::VisualProperties> properties =
+      oopchild->current_frame_host()
+          ->GetRenderWidgetHost()
+          ->GetLastVisualPropertiesSentToRendererForTesting();
+  EXPECT_TRUE(properties);
+  EXPECT_TRUE(properties->local_surface_id);
+  viz::LocalSurfaceId oopchild_initial_lsid =
+      properties->local_surface_id.value();
+
+  properties = oopdescendant->current_frame_host()
+                   ->GetRenderWidgetHost()
+                   ->GetLastVisualPropertiesSentToRendererForTesting();
+  EXPECT_TRUE(properties);
+  EXPECT_TRUE(properties->local_surface_id);
+  viz::LocalSurfaceId oopdescendant_initial_lsid =
+      properties->local_surface_id.value();
 
   {
     // Watch for visual properties changes, first to the child oop-iframe, then
@@ -551,9 +574,11 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
           oopchild->current_frame_host()
               ->GetRenderWidgetHost()
               ->GetLastVisualPropertiesSentToRendererForTesting();
-      if (properties &&
-          properties->root_widget_window_segments == expected_segments)
+      if (properties && properties->local_surface_id &&
+          oopchild_initial_lsid < properties->local_surface_id) {
+        EXPECT_EQ(properties->root_widget_window_segments, expected_segments);
         break;
+      }
       base::RunLoop().RunUntilIdle();
     }
     while (true) {
@@ -561,9 +586,11 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
           oopdescendant->current_frame_host()
               ->GetRenderWidgetHost()
               ->GetLastVisualPropertiesSentToRendererForTesting();
-      if (properties &&
-          properties->root_widget_window_segments == expected_segments)
+      if (properties && properties->local_surface_id &&
+          oopdescendant_initial_lsid < properties->local_surface_id) {
+        EXPECT_EQ(properties->root_widget_window_segments, expected_segments);
         break;
+      }
       base::RunLoop().RunUntilIdle();
     }
   }

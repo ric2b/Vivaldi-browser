@@ -207,7 +207,7 @@ class NoCompositingRenderWidgetHostViewBrowserTest
 // Simply invalidating can lead to displaying blank screens.
 // (https://crbug.com/909903)
 IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
-                       ValidLocalSurfaceIdAllocationAfterInitialNavigation) {
+                       ValidLocalSurfaceIdAfterInitialNavigation) {
   ASSERT_TRUE(embedded_test_server()->Start());
   // Creates the initial RenderWidgetHostViewBase, and connects to a
   // CompositorFrameSink. This will trigger frame eviction.
@@ -222,7 +222,7 @@ IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
 #if !defined(OS_MAC)
   EXPECT_TRUE(rwhvb->IsShowing());
 #endif
-  EXPECT_TRUE(rwhvb->GetLocalSurfaceIdAllocation().IsValid());
+  EXPECT_TRUE(rwhvb->GetLocalSurfaceId().is_valid());
   // TODO(jonross): Unify FrameEvictor into RenderWidgetHostViewBase so that we
   // can generically test all eviction paths. However this should only be for
   // top level renderers. Currently the FrameEvict implementations are platform
@@ -236,7 +236,7 @@ IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
 // should invalidate it's viz::LocalSurfaceId. When subsequently being shown,
 // a new surface should be generated with a new viz::LocalSurfaceId
 IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
-                       ValidLocalSurfaceIdAllocationAfterHiddenNavigation) {
+                       ValidLocalSurfaceIdAfterHiddenNavigation) {
   ASSERT_TRUE(embedded_test_server()->Start());
   // Creates the initial RenderWidgetHostViewBase, and connects to a
   // CompositorFrameSink.
@@ -244,8 +244,7 @@ IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
       shell(), embedded_test_server()->GetURL("/page_with_animation.html")));
   RenderWidgetHostViewBase* rwhvb = GetRenderWidgetHostView();
   EXPECT_TRUE(rwhvb);
-  viz::LocalSurfaceId rwhvb_local_surface_id =
-      rwhvb->GetLocalSurfaceIdAllocation().local_surface_id();
+  viz::LocalSurfaceId rwhvb_local_surface_id = rwhvb->GetLocalSurfaceId();
   EXPECT_TRUE(rwhvb_local_surface_id.is_valid());
 
   // Hide the view before performing the next navigation.
@@ -268,7 +267,7 @@ IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
   // existing RenderWidgetHostViewBase.
   EXPECT_TRUE(NavigateToURL(
       shell(), embedded_test_server()->GetURL("/page_with_animation.html")));
-  EXPECT_FALSE(rwhvb->GetLocalSurfaceIdAllocation().IsValid());
+  EXPECT_FALSE(rwhvb->GetLocalSurfaceId().is_valid());
 
 #if defined(OS_ANDROID)
   // Navigating while hidden should not generate a new surface. As the old one
@@ -280,8 +279,7 @@ IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
 
   // Showing the view should lead to a new surface being embedded.
   shell()->web_contents()->WasShown();
-  viz::LocalSurfaceId new_rwhvb_local_surface_id =
-      rwhvb->GetLocalSurfaceIdAllocation().local_surface_id();
+  viz::LocalSurfaceId new_rwhvb_local_surface_id = rwhvb->GetLocalSurfaceId();
   EXPECT_TRUE(new_rwhvb_local_surface_id.is_valid());
   EXPECT_NE(rwhvb_local_surface_id, new_rwhvb_local_surface_id);
 #if defined(OS_ANDROID)
@@ -812,74 +810,6 @@ IN_PROC_BROWSER_TEST_P(
   PerformTestWithLeftRightRects(html_rect_size, copy_rect, output_size);
 }
 
-class CompositingRenderWidgetHostViewBrowserTestHiDPI
-    : public CompositingRenderWidgetHostViewBrowserTest {
- public:
-  CompositingRenderWidgetHostViewBrowserTestHiDPI() {}
-
- protected:
-  GURL TestUrl() override { return GURL(test_url_); }
-
-  void SetTestUrl(const std::string& url) { test_url_ = url; }
-
-  bool ShouldContinueAfterTestURLLoad() {
-    // Short-circuit a pass for platforms where setting up high-DPI fails.
-    const float actual_scale_factor =
-        GetScaleFactorForView(GetRenderWidgetHostView());
-    if (actual_scale_factor != scale()) {
-      LOG(WARNING) << "Blindly passing this test; unable to force device scale "
-                   << "factor: seems to be " << actual_scale_factor
-                   << " but expected " << scale();
-      return false;
-    }
-    VLOG(1)
-        << ("Successfully forced device scale factor.  Moving forward with "
-            "this test!  :-)");
-    return true;
-  }
-
-  float scale() const override { return 2.0f; }
-
- private:
-  std::string test_url_;
-
-  DISALLOW_COPY_AND_ASSIGN(CompositingRenderWidgetHostViewBrowserTestHiDPI);
-};
-
-IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTestHiDPI,
-                       ScrollOffset) {
-  const int kContentHeight = 2000;
-  const int kScrollAmount = 100;
-
-  SetTestUrl(
-      base::StringPrintf("data:text/html,<!doctype html>"
-                         "<div class='box'></div>"
-                         "<style>"
-                         "body { padding: 0; margin: 0; }"
-                         ".box { position: absolute;"
-                         "        background: %%230ff;"
-                         "        width: 100%%;"
-                         "        height: %dpx;"
-                         "}"
-                         "</style>"
-                         "<script>"
-                         "  addEventListener(\"scroll\", function() {"
-                         "      domAutomationController.send(\"DONE\"); });"
-                         "  window.scrollTo(0, %d);"
-                         "</script>",
-                         kContentHeight, kScrollAmount));
-
-  SET_UP_SURFACE_OR_PASS_TEST("\"DONE\"");
-  RenderFrameSubmissionObserver observer_(
-      GetRenderWidgetHost()->render_frame_metadata_provider());
-  observer_.WaitForScrollOffsetAtTop(false);
-
-  if (!ShouldContinueAfterTestURLLoad())
-    return;
-
-  EXPECT_FALSE(GetRenderWidgetHostView()->IsScrollOffsetAtTop());
-}
-
 #if defined(OS_CHROMEOS)
 // On ChromeOS there is no software compositing.
 static const auto kTestCompositingModes = testing::Values(GL_COMPOSITING);
@@ -898,9 +828,6 @@ INSTANTIATE_TEST_SUITE_P(
     GLAndSoftwareCompositing,
     CompositingRenderWidgetHostViewBrowserTestTabCaptureHighDPI,
     kTestCompositingModes);
-INSTANTIATE_TEST_SUITE_P(GLAndSoftwareCompositing,
-                         CompositingRenderWidgetHostViewBrowserTestHiDPI,
-                         kTestCompositingModes);
 
 #endif  // !defined(OS_ANDROID)
 

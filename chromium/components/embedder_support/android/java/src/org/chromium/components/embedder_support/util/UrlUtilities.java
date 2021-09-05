@@ -8,7 +8,6 @@ import android.net.Uri;
 import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.CollectionUtil;
 import org.chromium.base.annotations.JNINamespace;
@@ -102,6 +101,15 @@ public class UrlUtilities {
      *
      * @return Whether the URL's scheme is HTTP or HTTPS.
      */
+    public static boolean isHttpOrHttps(@NonNull GURL url) {
+        return isSchemeHttpOrHttps(url.getScheme());
+    }
+
+    /**
+     * @param url A URL.
+     *
+     * @return Whether the URL's scheme is HTTP or HTTPS.
+     */
     public static boolean isHttpOrHttps(@NonNull String url) {
         // URI#getScheme would throw URISyntaxException if the other parts contain invalid
         // characters. For example, "http://foo.bar/has[square].html" has [] in the path, which
@@ -110,7 +118,10 @@ public class UrlUtilities {
         //
         // URL().getProtocol() throws MalformedURLException if the scheme is "invalid",
         // including common ones like "about:", "javascript:", "data:", etc.
-        String scheme = Uri.parse(url).getScheme();
+        return isSchemeHttpOrHttps(Uri.parse(url).getScheme());
+    }
+
+    private static boolean isSchemeHttpOrHttps(String scheme) {
         return UrlConstants.HTTP_SCHEME.equals(scheme) || UrlConstants.HTTPS_SCHEME.equals(scheme);
     }
 
@@ -158,20 +169,17 @@ public class UrlUtilities {
     }
 
     /** Returns whether a URL is within another URL's scope. */
-    @VisibleForTesting
     public static boolean isUrlWithinScope(String url, String scopeUrl) {
         return UrlUtilitiesJni.get().isUrlWithinScope(url, scopeUrl);
     }
 
     /** @return whether two URLs match, ignoring the #fragment. */
-    @VisibleForTesting
     public static boolean urlsMatchIgnoringFragments(String url, String url2) {
         if (TextUtils.equals(url, url2)) return true;
         return UrlUtilitiesJni.get().urlsMatchIgnoringFragments(url, url2);
     }
 
     /** @return whether the #fragmant differs in two URLs. */
-    @VisibleForTesting
     public static boolean urlsFragmentsDiffer(String url, String url2) {
         if (TextUtils.equals(url, url2)) return false;
         return UrlUtilitiesJni.get().urlsFragmentsDiffer(url, url2);

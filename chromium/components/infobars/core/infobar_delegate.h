@@ -168,6 +168,8 @@ class InfoBarDelegate {
     MIXED_CONTENT_DOWNLOAD_INFOBAR_DELEGATE_ANDROID = 98,
     CONDITIONAL_TAB_STRIP_INFOBAR_ANDROID = 99,
     LITE_MODE_HTTPS_IMAGE_COMPRESSION_INFOBAR_ANDROID = 100,
+    SYSTEM_INFOBAR_DELEGATE_MAC = 101,
+    ROSETTA_REQUIRED_INFOBAR_DELEGATE = 103,
   };
 
   // Describes navigation events, used to decide whether infobars should be
@@ -279,10 +281,10 @@ class InfoBarDelegate {
 
  private:
   // The InfoBar associated with us.
-  InfoBar* infobar_;
+  InfoBar* infobar_ = nullptr;
 
   // The ID of the active navigation entry at the time we became owned.
-  int nav_entry_id_;
+  int nav_entry_id_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(InfoBarDelegate);
 };

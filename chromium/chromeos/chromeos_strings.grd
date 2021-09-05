@@ -176,6 +176,11 @@ Try tapping the mic to ask me anything.
         This <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> is managed by <ph name="ENROLLMENT_DOMAIN">$2<ex>example.com</ex></ph>. Administrators may remotely configure the device.
       </message>
 
+      <!-- Pop-up secondary login screen. -->
+      <message name="IDS_ASH_LOGIN_USER_ADDING_BANNER" desc="Text shown on a banner in user adding screen.">
+        Add an account to multiple sign-in. All signed-in accounts can be accessed without a password, so this feature should only be used with trusted accounts.
+      </message>
+
       <!-- Status tray enterprise management. -->
       <message name="IDS_ASH_ENTERPRISE_DEVICE_MANAGED_BY" desc="Text for notifications showing that this device is enterpise managed. Used when the organization's domain name is available.">
         This device is managed by <ph name="DOMAIN">$1<ex>acmecorp.com</ex></ph>.
@@ -360,8 +365,14 @@ Try tapping the mic to ask me anything.
       <message name="IDS_PRINT_MANAGEMENT_HISTORY_HEADER_LABEL" desc="The header label that indicates that print jobs below this header are the user's print history.">
         History
       </message>
-      <message name="IDS_PRINT_MANAGEMENT_HISTORY_TOOL_TIP" desc="The tooltip that states that the user's print jobs are automatically deleted after 90 days.">
-        Print jobs older than 90 days will be removed
+      <message name="IDS_PRINT_MANAGEMENT_HISTORY_TOOL_TIP_INDEFINITE" desc="The tooltip that states that the user's print jobs are stored indefinitely.">
+        Print jobs will appear in history unless they are removed manually
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_HISTORY_TOOL_TIP_MULTIPLE_DAYS_EXPIRATION" desc="The tooltip that states that the user's print jobs are automatically deleted after a variable amount of days.">
+        Print jobs older than <ph name="NUMBER_OF_DAYS">$1<ex>45</ex></ph> days will be removed
+      </message>
+      <message name="IDS_PRINT_MANAGEMENT_HISTORY_TOOL_TIP_SINGLE_DAY_EXPIRATION" desc="The tooltip that states that the user's print jobs are automatically deleted after one day.">
+        Print jobs older than 1 day will be removed
       </message>
       <message name="IDS_PRINT_MANAGEMENT_PRINTED_PAGES_ARIA_LABEL" desc="The aria label that describes the current page printed printed versus the total number of pages.">
         Printed page <ph name="PRINTED_PAGES">$1<ex>1</ex></ph> out of <ph name="TOTAL_PAGES">$2<ex>2</ex></ph>.
@@ -447,6 +458,36 @@ Try tapping the mic to ask me anything.
       <message name="IDS_PRINT_MANAGEMENT_COLLAPSE_PRINTING_STATUS" desc="A text that indicates to the user that the print job is currently printing. This text only appears if the width of the app's window is small and cannot display the entire ongoing printing status.">
         Printing
       </message>
+
+      <!-- Scanning App -->
+      <message name="IDS_SCANNING_APP_TITLE" desc="The title of the scanning app.">
+        Scan
+      </message>
+      <message name="IDS_SCANNING_APP_SCANNER_DROPDOWN_LABEL" desc="The label for the dropdown that displays connected scanners.">
+        Scanner
+      </message>
+      <message name="IDS_SCANNING_APP_NO_SCANNERS_TEXT" desc="The text displayed in the scanner dropdown when no scanners are available.">
+        No available scanners
+      </message>
+      <message name="IDS_SCANNING_APP_SOURCE_DROPDOWN_LABEL" desc="The label for the dropdown that displays available scan sources (e.g. flatbed, document feeder, etc.).">
+        Source
+      </message>
+
+      <!-- Diagnostics App -->
+      <!-- TODO(michaelcheco): Update with finalized copies of the strings -->
+      <message name="IDS_DIAGNOSTICS_TITLE" desc="The title of the diagnostics app." translateable="false">
+        Diagnostics
+      </message>
+      <message name="IDS_DIAGNOSTICS_MEMORY_TITLE" desc="The title of the diagnostics memory section which shows users' information about their computer memory." translateable="false">
+        Memory
+      </message>
+      <message name="IDS_DIAGNOSTICS_BATTERY_TITLE" desc="The title of the diagnostics battery section which shows users' information about their computer battery." translateable="false">
+        Battery
+      </message>
+      <message name="IDS_DIAGNOSTICS_CPU_TITLE" desc="The title of the diagnostics CPU section which shows users' information about their computer CPU usage." translateable="false">
+        CPU
+      </message>
+
     </messages>
   </release>
 </grit>

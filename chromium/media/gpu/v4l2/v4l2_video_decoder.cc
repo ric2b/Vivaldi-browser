@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/task/post_task.h"
+#include "media/base/limits.h"
 #include "media/base/video_types.h"
 #include "media/base/video_util.h"
 #include "media/gpu/chromeos/dmabuf_video_frame_pool.h"
@@ -37,6 +38,11 @@ constexpr uint32_t kSupportedInputFourccs[] = {
     V4L2_PIX_FMT_H264_SLICE, V4L2_PIX_FMT_VP8_FRAME, V4L2_PIX_FMT_VP9_FRAME,
     V4L2_PIX_FMT_H264,       V4L2_PIX_FMT_VP8,       V4L2_PIX_FMT_VP9,
 };
+
+// Number of output buffers to use for each VD stage above what's required by
+// the decoder (e.g. DPB size, in H264).  We need limits::kMaxVideoFrames to
+// fill up the GpuVideoDecode pipeline, and +1 for a frame in transit.
+constexpr size_t kDpbOutputBufferExtraCount = limits::kMaxVideoFrames + 1;
 
 }  // namespace
 
@@ -292,34 +298,36 @@ bool V4L2VideoDecoder::SetupOutputFormat(const gfx::Size& size,
     }
 
     base::Optional<struct v4l2_format> format =
-        output_queue_->SetFormat(pixfmt, size, 0);
+        output_queue_->TryFormat(pixfmt, size, 0);
     if (!format)
       continue;
 
     gfx::Size adjusted_size(format->fmt.pix_mp.width,
                             format->fmt.pix_mp.height);
-    candidates.push_back(std::make_pair(*candidate, adjusted_size));
+    candidates.emplace_back(*candidate, adjusted_size);
   }
 
   // Ask the pipeline to pick the output format.
-  const base::Optional<Fourcc> fourcc =
+  const base::Optional<std::pair<Fourcc, gfx::Size>> output_format =
       client_->PickDecoderOutputFormat(candidates, visible_rect);
-  if (!fourcc) {
-    VLOGF(1) << "Failed to pick a output format.";
+  if (!output_format) {
+    VLOGF(1) << "Failed to pick an output format.";
     return false;
   }
+  Fourcc fourcc = std::move(output_format->first);
+  gfx::Size picked_size = std::move(output_format->second);
 
   // We successfully picked the output format. Now setup output format again.
   base::Optional<struct v4l2_format> format =
-      output_queue_->SetFormat(fourcc->ToV4L2PixFmt(), size, 0);
+      output_queue_->SetFormat(fourcc.ToV4L2PixFmt(), picked_size, 0);
   DCHECK(format);
   gfx::Size adjusted_size(format->fmt.pix_mp.width, format->fmt.pix_mp.height);
   DCHECK_EQ(adjusted_size.width() % 16, 0);
   DCHECK_EQ(adjusted_size.height() % 16, 0);
-  if (!gfx::Rect(adjusted_size).Contains(gfx::Rect(size))) {
+  if (!gfx::Rect(adjusted_size).Contains(gfx::Rect(picked_size))) {
     VLOGF(1) << "The adjusted coded size (" << adjusted_size.ToString()
-             << ") should contains the original coded size(" << size.ToString()
-             << ").";
+             << ") should contains the original coded size("
+             << picked_size.ToString() << ").";
     return false;
   }
 
@@ -331,7 +339,7 @@ bool V4L2VideoDecoder::SetupOutputFormat(const gfx::Size& size,
   DmabufVideoFramePool* pool = client_->GetVideoFramePool();
   if (pool) {
     base::Optional<GpuBufferLayout> layout = pool->Initialize(
-        *fourcc, adjusted_size, visible_rect,
+        fourcc, adjusted_size, visible_rect,
         GetNaturalSize(visible_rect, pixel_aspect_ratio_), num_output_frames_);
     if (!layout) {
       VLOGF(1) << "Failed to setup format to VFPool";
@@ -339,10 +347,28 @@ bool V4L2VideoDecoder::SetupOutputFormat(const gfx::Size& size,
     }
     if (layout->size() != adjusted_size) {
       VLOGF(1) << "The size adjusted by VFPool is different from one "
-               << "adjusted by a video driver. fourcc: " << fourcc->ToString()
+               << "adjusted by a video driver. fourcc: " << fourcc.ToString()
                << ", (video driver v.s. VFPool) " << adjusted_size.ToString()
                << " != " << layout->size().ToString();
       return false;
+    }
+
+    if (layout->modifier() &&
+        layout->modifier() != gfx::NativePixmapHandle::kNoModifier) {
+      base::Optional<struct v4l2_format> modifier_format =
+          output_queue_->SetModifierFormat(layout->modifier(), picked_size);
+      if (!modifier_format)
+        return false;
+
+      gfx::Size size_for_modifier_format(format->fmt.pix_mp.width,
+                                         format->fmt.pix_mp.height);
+      if (size_for_modifier_format != adjusted_size) {
+        VLOGF(1)
+            << "Buffers were allocated for " << adjusted_size.ToString()
+            << " but modifier format is expecting buffers to be allocated for "
+            << size_for_modifier_format.ToString();
+        return false;
+      }
     }
   }
 
@@ -482,7 +508,6 @@ void V4L2VideoDecoder::ContinueChangeResolution(
     const size_t num_output_frames) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(decoder_sequence_checker_);
   DVLOGF(3);
-  DCHECK_EQ(output_queue_->QueuedBuffersCount(), 0u);
 
   // If we already reset, then skip it.
   if (state_ == State::kDecoding)
@@ -495,7 +520,8 @@ void V4L2VideoDecoder::ContinueChangeResolution(
       base::BindOnce(&V4L2VideoDecoderBackend::OnChangeResolutionDone,
                      base::Unretained(backend_.get()), false));
 
-  num_output_frames_ = num_output_frames;
+  DCHECK_GT(num_output_frames, 0u);
+  num_output_frames_ = num_output_frames + kDpbOutputBufferExtraCount;
 
   // Stateful decoders require the input queue to keep running during resolution
   // changes, but stateless ones require it to be stopped.
@@ -506,9 +532,8 @@ void V4L2VideoDecoder::ContinueChangeResolution(
     SetState(State::kError);
     return;
   }
-  DCHECK_GT(num_output_frames, 0u);
 
-  if (!backend_->ApplyResolution(pic_size, visible_rect, num_output_frames)) {
+  if (!backend_->ApplyResolution(pic_size, visible_rect, num_output_frames_)) {
     SetState(State::kError);
     return;
   }
@@ -519,14 +544,17 @@ void V4L2VideoDecoder::ContinueChangeResolution(
     return;
   }
 
-  v4l2_memory type =
+  const v4l2_memory type =
       client_->GetVideoFramePool() ? V4L2_MEMORY_DMABUF : V4L2_MEMORY_MMAP;
-  if (output_queue_->AllocateBuffers(num_output_frames_, type) == 0) {
+  const size_t v4l2_num_buffers =
+      (type == V4L2_MEMORY_DMABUF) ? VIDEO_MAX_FRAME : num_output_frames_;
+
+  if (output_queue_->AllocateBuffers(v4l2_num_buffers, type) == 0) {
     VLOGF(1) << "Failed to request output buffers.";
     SetState(State::kError);
     return;
   }
-  if (output_queue_->AllocatedBuffersCount() != num_output_frames_) {
+  if (output_queue_->AllocatedBuffersCount() < num_output_frames_) {
     VLOGF(1) << "Could not allocate requested number of output buffers.";
     SetState(State::kError);
     return;
@@ -550,6 +578,8 @@ void V4L2VideoDecoder::ServiceDeviceTask(bool event) {
             << input_queue_->QueuedBuffersCount()
             << ", Number of queued output buffers: "
             << output_queue_->QueuedBuffersCount();
+
+  backend_->OnServiceDeviceTask(event);
 
   // Dequeue V4L2 output buffer first to reduce output latency.
   bool success;
@@ -579,8 +609,6 @@ void V4L2VideoDecoder::ServiceDeviceTask(bool event) {
     if (!dequeued_buffer)
       break;
   }
-
-  backend_->OnServiceDeviceTask(event);
 }
 
 void V4L2VideoDecoder::OutputFrame(scoped_refptr<VideoFrame> frame,

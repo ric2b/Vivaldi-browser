@@ -263,12 +263,12 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
                        pipe_reader->AsWeakPtr()));
   }
 
-  void BackupArcBugReport(const std::string& userhash,
+  void BackupArcBugReport(const cryptohome::AccountIdentifier& id,
                           VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(debugd::kDebugdInterface,
                                  debugd::kBackupArcBugReport);
     dbus::MessageWriter writer(&method_call);
-    writer.AppendString(userhash);
+    writer.AppendString(id.account_id());
 
     DVLOG(1) << "Backing up ARC bug report";
     debugdaemon_proxy_->CallMethod(
@@ -529,16 +529,6 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
         base::BindOnce(&DebugDaemonClientImpl::OnPrinterRemoved,
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback),
                        std::move(error_callback)));
-  }
-
-  void StartConcierge(ConciergeCallback callback) override {
-    dbus::MethodCall method_call(debugd::kDebugdInterface,
-                                 debugd::kStartVmConcierge);
-    dbus::MessageWriter writer(&method_call);
-    debugdaemon_proxy_->CallMethod(
-        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::BindOnce(&DebugDaemonClientImpl::OnStartConcierge,
-                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
   void StartPluginVmDispatcher(const std::string& owner_id,
@@ -868,15 +858,6 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
       std::move(callback).Run(result);
     else
       std::move(error_callback).Run();
-  }
-
-  void OnStartConcierge(ConciergeCallback callback, dbus::Response* response) {
-    bool result = false;
-    if (response) {
-      dbus::MessageReader reader(response);
-      reader.PopBool(&result);
-    }
-    std::move(callback).Run(result);
   }
 
   void OnStartPluginVmDispatcher(PluginVmDispatcherCallback callback,

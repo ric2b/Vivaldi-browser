@@ -179,6 +179,9 @@ cr.define('settings', function() {
       r.APP_MANAGEMENT_PLUGIN_VM_SHARED_PATHS = createSubpage(
           r.APP_MANAGEMENT, mojom.PLUGIN_VM_SHARED_PATHS_SUBPAGE_PATH,
           Subpage.kPluginVmSharedPaths);
+      r.APP_MANAGEMENT_PLUGIN_VM_SHARED_USB_DEVICES = createSubpage(
+          r.APP_MANAGEMENT, mojom.PLUGIN_VM_USB_PREFERENCES_SUBPAGE_PATH,
+          Subpage.kPluginVmUsbPreferences);
     }
 
     // Crostini section.
@@ -229,6 +232,12 @@ cr.define('settings', function() {
           r.OS_LANGUAGES, mojom.LANGUAGES_SUBPAGE_PATH, Subpage.kLanguages);
       r.OS_LANGUAGES_INPUT = createSubpage(
           r.OS_LANGUAGES, mojom.INPUT_SUBPAGE_PATH, Subpage.kInput);
+      r.OS_LANGUAGES_INPUT_METHOD_OPTIONS = createSubpage(
+          r.OS_LANGUAGES_INPUT, mojom.INPUT_METHOD_OPTIONS_SUBPAGE_PATH,
+          Subpage.kInputMethodOptions);
+      r.OS_LANGUAGES_EDIT_DICTIONARY = createSubpage(
+          r.OS_LANGUAGES_INPUT, mojom.EDIT_DICTIONARY_SUBPAGE_PATH,
+          Subpage.kEditDictionary);
     } else {
       r.OS_LANGUAGES_DETAILS = createSubpage(
           r.OS_LANGUAGES, mojom.LANGUAGES_AND_INPUT_DETAILS_SUBPAGE_PATH,
@@ -269,11 +278,9 @@ cr.define('settings', function() {
     r.MANAGE_TTS_SETTINGS = createSubpage(
         r.MANAGE_ACCESSIBILITY, mojom.TEXT_TO_SPEECH_SUBPAGE_PATH,
         Subpage.kTextToSpeech);
-    if (loadTimeData.getBoolean('showExperimentalAccessibilitySwitchAccess')) {
-      r.MANAGE_SWITCH_ACCESS_SETTINGS = createSubpage(
-          r.MANAGE_ACCESSIBILITY, mojom.SWITCH_ACCESS_OPTIONS_SUBPAGE_PATH,
-          Subpage.kSwitchAccessOptions);
-    }
+    r.MANAGE_SWITCH_ACCESS_SETTINGS = createSubpage(
+        r.MANAGE_ACCESSIBILITY, mojom.SWITCH_ACCESS_OPTIONS_SUBPAGE_PATH,
+        Subpage.kSwitchAccessOptions);
     r.MANAGE_CAPTION_SETTINGS = createSubpage(
         r.MANAGE_ACCESSIBILITY, mojom.CAPTIONS_SUBPAGE_PATH, Subpage.kCaptions);
 

@@ -94,6 +94,11 @@ class CompositingTest : public PaintTestConfigurations, public testing::Test {
     return LayerTreeHost()->property_trees();
   }
 
+  cc::TransformNode* GetTransformNode(const cc::Layer* layer) {
+    return GetPropertyTrees()->transform_tree.Node(
+        layer->transform_tree_index());
+  }
+
  private:
   PaintArtifactCompositor* paint_artifact_compositor() {
     return GetLocalFrameView()->GetPaintArtifactCompositor();
@@ -223,7 +228,8 @@ TEST_P(CompositingTest, WillChangeTransformHint) {
   )HTML");
   UpdateAllLifecyclePhases();
   auto* layer = CcLayerByDOMElementId("willChange");
-  EXPECT_TRUE(layer->has_will_change_transform_hint());
+  auto* transform_node = GetTransformNode(layer);
+  EXPECT_TRUE(transform_node->will_change_transform);
 }
 
 TEST_P(CompositingTest, WillChangeTransformHintInSVG) {
@@ -243,7 +249,8 @@ TEST_P(CompositingTest, WillChangeTransformHintInSVG) {
   )HTML");
   UpdateAllLifecyclePhases();
   auto* layer = CcLayerByDOMElementId("willChange");
-  EXPECT_TRUE(layer->has_will_change_transform_hint());
+  auto* transform_node = GetTransformNode(layer);
+  EXPECT_TRUE(transform_node->will_change_transform);
 }
 
 TEST_P(CompositingTest, PaintPropertiesWhenCompositingSVG) {
@@ -409,6 +416,20 @@ TEST_P(CompositingTest, BackgroundColorInGraphicsLayer) {
       RootCcLayer(), scrollable_area->GetScrollElementId());
   EXPECT_EQ(layer->background_color(), SK_ColorTRANSPARENT);
   EXPECT_EQ(layer->SafeOpaqueBackgroundColor(), SK_ColorTRANSPARENT);
+}
+
+TEST_P(CompositingTest, ContainPaintLayerBounds) {
+  InitializeWithHTML(*WebView()->MainFrameImpl()->GetFrame(), R"HTML(
+    <div id="target" style="will-change: transform; contain: paint;
+                            width: 200px; height: 100px">
+      <div style="width: 300px; height: 400px"></div>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhases();
+  auto* layer = CcLayersByDOMElementId(RootCcLayer(), "target")[0];
+  ASSERT_TRUE(layer);
+  EXPECT_EQ(gfx::Size(200, 100), layer->bounds());
 }
 
 class CompositingSimTest : public PaintTestConfigurations, public SimTest {

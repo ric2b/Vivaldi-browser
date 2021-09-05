@@ -27,9 +27,7 @@
 #include "chrome/browser/dom_distiller/tab_utils.h"
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
-#include "chrome/browser/media/router/media_router_dialog_controller.h"  // nogncheck
 #include "chrome/browser/media/router/media_router_feature.h"
-#include "chrome/browser/media/router/media_router_metrics.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_service_factory.h"
@@ -57,6 +55,7 @@
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
+#include "chrome/browser/ui/read_later/reading_list_model_factory.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_bubble_controller.h"
 #include "chrome/browser/ui/status_bubble.h"
@@ -85,8 +84,12 @@
 #include "components/find_in_page/find_tab_helper.h"
 #include "components/find_in_page/find_types.h"
 #include "components/google/core/common/google_util.h"
+#include "components/media_router/browser/media_router_dialog_controller.h"  // nogncheck
+#include "components/media_router/browser/media_router_metrics.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/prefs/pref_service.h"
+#include "components/reading_list/core/reading_list_entry.h"
+#include "components/reading_list/core/reading_list_model.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/sessions/core/live_tab_context.h"
 #include "components/sessions/core/tab_restore_service.h"
@@ -148,6 +151,7 @@
 
 #include "app/vivaldi_constants.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace {
 
@@ -209,6 +213,27 @@ void CreateAndShowNewWindowWithContents(
   new_browser->tab_strip_model()->AddWebContents(std::move(contents), -1,
                                                  ui::PAGE_TRANSITION_LINK,
                                                  TabStripModel::ADD_ACTIVE);
+}
+
+bool GetActiveTabURLAndTitleToSave(Browser* browser,
+                                   GURL* url,
+                                   base::string16* title) {
+  content::WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  // |web_contents| can be nullptr if the last tab in the browser was closed
+  // but the browser wasn't closed yet. https://crbug.com/799668
+  if (!web_contents)
+    return false;
+  chrome::GetURLAndTitleToBookmark(web_contents, url, title);
+  return true;
+}
+
+ReadingListModel* GetReadingListModel(Browser* browser) {
+  ReadingListModel* model =
+      ReadingListModelFactory::GetForBrowserContext(browser->profile());
+  if (!model || !model->loaded())
+    return nullptr;  // Ignore requests until model has loaded.
+  return model;
 }
 
 }  // namespace
@@ -832,6 +857,16 @@ WebContents* DuplicateTabAt(Browser* browser, int index) {
     int add_types = TabStripModel::ADD_ACTIVE |
                     TabStripModel::ADD_INHERIT_OPENER |
                     (pinned ? TabStripModel::ADD_PINNED : 0);
+    if (browser->is_vivaldi()) {
+      // Open in background if user wants that.
+      Profile* profile =
+        Profile::FromBrowserContext(contents->GetBrowserContext());
+      bool open_in_background =
+        profile->GetPrefs()->GetBoolean(vivaldiprefs::kTabsOpenNewInBackground);
+      if (open_in_background) {
+        add_types &= ~(TabStripModel::ADD_ACTIVE);
+      }
+    }
     const auto old_group = tab_strip_model->GetTabGroupForTab(index);
     tab_strip_model->InsertWebContentsAt(index + 1, std::move(contents_dupe),
                                          add_types, old_group);
@@ -1021,6 +1056,54 @@ void BookmarkAllTabs(Browser* browser) {
 bool CanBookmarkAllTabs(const Browser* browser) {
   return browser->tab_strip_model()->count() > 1 &&
          CanBookmarkCurrentTab(browser);
+}
+
+bool CanMoveActiveTabToReadLater(Browser* browser) {
+  GURL url =
+      GetURLToBookmark(browser->tab_strip_model()->GetActiveWebContents());
+  ReadingListModel* model = GetReadingListModel(browser);
+  if (!model)
+    return false;
+  return model->IsUrlSupported(url);
+}
+
+bool MoveCurrentTabToReadLater(Browser* browser) {
+  GURL url;
+  base::string16 title;
+  ReadingListModel* model = GetReadingListModel(browser);
+  if (!model || !GetActiveTabURLAndTitleToSave(browser, &url, &title))
+    return false;
+  model->AddEntry(url, base::UTF16ToUTF8(title),
+                  reading_list::EntrySource::ADDED_VIA_CURRENT_APP);
+  // Close current tab.
+  int index = browser->tab_strip_model()->active_index();
+  browser->tab_strip_model()->CloseWebContentsAt(
+      index, TabStripModel::CLOSE_CREATE_HISTORICAL_TAB |
+                 TabStripModel::CLOSE_USER_GESTURE);
+  return true;
+}
+
+bool MarkCurrentTabAsReadInReadLater(Browser* browser) {
+  GURL url;
+  base::string16 title;
+  ReadingListModel* model = GetReadingListModel(browser);
+  if (!model || !GetActiveTabURLAndTitleToSave(browser, &url, &title))
+    return false;
+  const ReadingListEntry* entry = model->GetEntryByURL(url);
+  // Mark current tab as read.
+  if (entry && !entry->IsRead())
+    model->SetReadStatus(url, true);
+  return entry != nullptr;
+}
+
+bool IsCurrentTabUnreadInReadLater(Browser* browser) {
+  GURL url;
+  base::string16 title;
+  ReadingListModel* model = GetReadingListModel(browser);
+  if (!model || !GetActiveTabURLAndTitleToSave(browser, &url, &title))
+    return false;
+  const ReadingListEntry* entry = model->GetEntryByURL(url);
+  return entry && !entry->IsRead();
 }
 
 void SaveCreditCard(Browser* browser) {
@@ -1501,7 +1584,27 @@ bool CanViewSource(const Browser* browser) {
                                              .CanViewSource();
 }
 
+bool CanToggleCaretBrowsing(Browser* browser) {
+#if defined(OS_MAC)
+  // On Mac, ignore the keyboard shortcut unless web contents is focused,
+  // because the keyboard shortcut interferes with a Japenese IME when the
+  // omnibox is focused.  See https://crbug.com/1138475
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  if (!web_contents)
+    return false;
+
+  content::RenderWidgetHostView* rwhv = web_contents->GetRenderWidgetHostView();
+  return rwhv && rwhv->HasFocus();
+#else
+  return true;
+#endif  // defined(OS_MAC)
+}
+
 void ToggleCaretBrowsing(Browser* browser) {
+  if (!CanToggleCaretBrowsing(browser))
+    return;
+
   PrefService* prefService = browser->profile()->GetPrefs();
   bool enabled = prefService->GetBoolean(prefs::kCaretBrowsingEnabled);
 
@@ -1524,6 +1627,10 @@ void ToggleCaretBrowsing(Browser* browser) {
         "Accessibility.CaretBrowsing.EnableWithKeyboard"));
     prefService->SetBoolean(prefs::kCaretBrowsingEnabled, true);
   }
+}
+
+void PromptToNameWindow(Browser* browser) {
+  chrome::ShowWindowNamePrompt(browser);
 }
 
 #if !defined(TOOLKIT_VIEWS)

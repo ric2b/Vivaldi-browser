@@ -218,6 +218,8 @@ RenderWidgetHostViewMac::RenderWidgetHostViewMac(RenderWidgetHost* widget)
 
   if (GetTextInputManager())
     GetTextInputManager()->AddObserver(this);
+
+  host()->render_frame_metadata_provider()->AddObserver(this);
 }
 
 RenderWidgetHostViewMac::~RenderWidgetHostViewMac() {
@@ -459,18 +461,19 @@ void RenderWidgetHostViewMac::WasUnOccluded() {
 
   const bool renderer_should_record_presentation_time = !has_saved_frame;
   host()->WasShown(renderer_should_record_presentation_time
-                       ? tab_switch_start_state
-                       : base::nullopt);
+                       ? tab_switch_start_state.Clone()
+                       : blink::mojom::RecordContentToVisibleTimeRequestPtr());
 
   if (delegated_frame_host) {
     // If the frame for the renderer is already available, then the
     // tab-switching time is the presentation time for the browser-compositor.
     const bool record_presentation_time = has_saved_frame;
     delegated_frame_host->WasShown(
-        browser_compositor_->GetRendererLocalSurfaceIdAllocation()
-            .local_surface_id(),
+        browser_compositor_->GetRendererLocalSurfaceId(),
         browser_compositor_->GetRendererSize(),
-        record_presentation_time ? tab_switch_start_state : base::nullopt);
+        record_presentation_time
+            ? std::move(tab_switch_start_state)
+            : blink::mojom::RecordContentToVisibleTimeRequestPtr());
   }
 }
 
@@ -680,7 +683,6 @@ void RenderWidgetHostViewMac::OnRenderFrameMetadataChangedAfterActivation() {
                                           ->render_frame_metadata_provider()
                                           ->LastRenderFrameMetadata()
                                           .root_background_color;
-  RenderWidgetHostViewBase::OnRenderFrameMetadataChangedAfterActivation();
 }
 
 void RenderWidgetHostViewMac::RenderProcessGone() {
@@ -688,6 +690,8 @@ void RenderWidgetHostViewMac::RenderProcessGone() {
 }
 
 void RenderWidgetHostViewMac::Destroy() {
+  host()->render_frame_metadata_provider()->RemoveObserver(this);
+
   // Unlock the mouse in the NSView's process before destroying our bridge to
   // it.
   if (mouse_locked_) {
@@ -867,8 +871,7 @@ void RenderWidgetHostViewMac::OnDidUpdateVisualPropertiesComplete(
   browser_compositor_->UpdateSurfaceFromChild(
       host()->auto_resize_enabled(), metadata.device_scale_factor,
       metadata.viewport_size_in_pixels,
-      metadata.local_surface_id_allocation.value_or(
-          viz::LocalSurfaceIdAllocation()));
+      metadata.local_surface_id.value_or(viz::LocalSurfaceId()));
 }
 
 void RenderWidgetHostViewMac::TakeFallbackContentFrom(
@@ -1233,9 +1236,8 @@ RenderWidgetHostViewMac::CreateSyntheticGestureTarget() {
       new SyntheticGestureTargetMac(host, GetInProcessNSView()));
 }
 
-const viz::LocalSurfaceIdAllocation&
-RenderWidgetHostViewMac::GetLocalSurfaceIdAllocation() const {
-  return browser_compositor_->GetRendererLocalSurfaceIdAllocation();
+const viz::LocalSurfaceId& RenderWidgetHostViewMac::GetLocalSurfaceId() const {
+  return browser_compositor_->GetRendererLocalSurfaceId();
 }
 
 const viz::FrameSinkId& RenderWidgetHostViewMac::GetFrameSinkId() const {

@@ -107,12 +107,12 @@ class ArCoreImpl : public ArCore {
   ~ArCoreImpl() override;
 
   bool Initialize(
-      base::android::ScopedJavaLocalRef<jobject> application_context) override;
+      base::android::ScopedJavaLocalRef<jobject> application_context,
+      const std::unordered_set<device::mojom::XRSessionFeature>&
+          enabled_features) override;
   void SetDisplayGeometry(const gfx::Size& frame_size,
                           display::Display::Rotation display_rotation) override;
   void SetCameraTexture(uint32_t camera_texture_id) override;
-  std::vector<float> TransformDisplayUvCoords(
-      const base::span<const float> uvs) override;
   gfx::Transform GetProjectionMatrix(float near, float far) override;
   mojom::VRPosePtr Update(bool* camera_updated) override;
   base::TimeDelta GetFrameTimestamp() override;
@@ -170,8 +170,14 @@ class ArCoreImpl : public ArCore {
 
   void DetachAnchor(uint64_t anchor_id) override;
 
+  mojom::XRDepthDataPtr GetDepthData() override;
+
+ protected:
+  std::vector<float> TransformDisplayUvCoords(
+      const base::span<const float> uvs) const override;
+
  private:
-  bool IsOnGlThread();
+  bool IsOnGlThread() const;
   base::WeakPtr<ArCoreImpl> GetWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();
   }
@@ -202,6 +208,11 @@ class ArCoreImpl : public ArCore {
   std::vector<CreateAnchorRequest> create_anchor_requests_;
   std::vector<CreatePlaneAttachedAnchorRequest>
       create_plane_attached_anchor_requests_;
+
+  // The time delta (relative to ARCore's depth data time base) of the last
+  // retrieved depth API data. Used to ensure that we do not return same data to
+  // the renderer if there were no changes.
+  base::TimeDelta previous_depth_data_time_;
 
   HitTestSubscriptionId CreateHitTestSubscriptionId();
 

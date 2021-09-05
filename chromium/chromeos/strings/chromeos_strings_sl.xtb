@@ -5,6 +5,7 @@
 <translation id="1195447618553298278">Neznana napaka.</translation>
 <translation id="1413240736185167732">Napaka – napaka filtra</translation>
 <translation id="1468664791493211953">Ponudbe</translation>
+<translation id="1478594628797167447">Optični bralniki</translation>
 <translation id="1482734542997480527"><ph name="ENROLLMENT_DOMAIN" /> upravlja to napravo in morda nadzira vašo dejavnost.</translation>
 <translation id="150962533380566081">Neveljavna koda PUK.</translation>
 <translation id="1510238584712386396">Zaganjalnik</translation>
@@ -19,10 +20,12 @@
 <translation id="2161394479394250669">Preklic tiskalnega opravila</translation>
 <translation id="2338501278241028356">Vklopite Bluetooth, če želite odkriti naprave v bližini</translation>
 <translation id="2375079107209812402">Na voljo imate še toliko poskusov: <ph name="ATTEMPTS_LEFT" /></translation>
+<translation id="2517472476991765520">Išči</translation>
 <translation id="2805756323405976993">Aplikacije</translation>
 <translation id="2872961005593481000">Zaustavitev</translation>
 <translation id="3008341117444806826">OSVEŽI</translation>
 <translation id="3091839911843451378">Napaka – ustavljeno</translation>
+<translation id="3246869037381808805">Izbrisana bodo tiskalna opravila, starejša od 1 dneva</translation>
 <translation id="3268178239013324452">Napaka – vrata so odprta</translation>
 <translation id="3369013195428705271">Ali ste prepričani, da želite izbrisati vso zgodovino tiskanja? Tiskalna opravila, ki potekajo, ne bodo izbrisana.</translation>
 <translation id="3456078764689556234">Natisnjena <ph name="PRINTED_PAGES" />. stran od <ph name="TOTAL_PAGES" />.</translation>
@@ -33,13 +36,13 @@
 <translation id="38114475217616659">Izbriši celotno zgodovino</translation>
 <translation id="3820172043799983114">Neveljavna koda PIN.</translation>
 <translation id="3838338534323494292">Novo geslo</translation>
+<translation id="39823212440917567">Odstranjena bodo tiskalna opravila, starejša od toliko dni: <ph name="NUMBER_OF_DAYS" /></translation>
 <translation id="4003259559679196451"><ph name="ENROLLMENT_DOMAIN" /> upravlja to napravo in ima dostop do vse dejavnosti uporabnika, vključno z obiskanimi spletnimi mesti, gesli in e-pošto.</translation>
 <translation id="4003384961948020559">Napaka – izhodni pladenj je poln</translation>
 <translation id="4027485274696301677">To napravo <ph name="DEVICE_TYPE" /> upravlja <ph name="ENROLLMENT_DOMAIN" />. Skrbniki lahko napravo konfigurirajo na daljavo.</translation>
 <translation id="4034824040120875894">Tiskalnik</translation>
 <translation id="4227825898293920515">Geslo poteče čez toliko časa: <ph name="TIME" /></translation>
 <translation id="4238516577297848345">Nobeno tiskalno opravilo ne poteka</translation>
-<translation id="428217921675623177">Tiskalna opravila, starejša od 90 dni, bodo odstranjena</translation>
 <translation id="4297501883039923494">Ustavljeno – neznana napaka</translation>
 <translation id="4429881212383817840">Kartonček za Kerberos kmalu poteče</translation>
 <translation id="445059817448385655">Staro geslo</translation>
@@ -52,6 +55,7 @@
 <translation id="4890353053343094602">Takoj izberite novo</translation>
 <translation id="4917889632206600977">Ustavljeno – zmanjkalo je papirja</translation>
 <translation id="4932733599132424254">Datum</translation>
+<translation id="520299634122159966">Ni razpoložljivih optičnih bralnikov</translation>
 <translation id="5212543919916444558">Na zaslonu ni ničesar uporabnega.
 Poskusite vprašati tako, da se dotaknete mikrofona.</translation>
 <translation id="5222676887888702881">Odjava</translation>
@@ -71,6 +75,7 @@ Poskusite vprašati tako, da se dotaknete mikrofona.</translation>
 <translation id="649050271426829538">Ustavljeno – zastoj papirja</translation>
 <translation id="6517239166834772319">Raziskovanje</translation>
 <translation id="6564646048574748301">Napaka – tiskalnik je nedosegljiv</translation>
+<translation id="6620487321149975369">Tiskalna opravila bodo prikazana v zgodovini, razen če jih ročno odstranite</translation>
 <translation id="6643016212128521049">Izbriši</translation>
 <translation id="6747215703636344499">Ustavljeno – izhodni pladenj je poln</translation>
 <translation id="7162487448488904999">Galerija</translation>
@@ -81,7 +86,9 @@ Poskusite vprašati tako, da se dotaknete mikrofona.</translation>
 <translation id="7805768142964895445">Stanje</translation>
 <translation id="808894953321890993">Sprememba gesla</translation>
 <translation id="8208861521865154048">Ugodnosti</translation>
+<translation id="8294431847097064396">Vir</translation>
 <translation id="8347227221149377169">Tiskalna opravila</translation>
+<translation id="8352772353338965963">Dodajte račun za prijavo z več računi. Do vseh prijavljenih računov je mogoče dostopati brez gesla, zato to funkcijo uporabljajte samo z zaupanja vrednimi računi.</translation>
 <translation id="8701136875688985581">Domena <ph name="ENROLLMENT_DOMAIN" /> upravlja tega uporabnika. Na daljavo lahko upravlja nastavitve in nadzira dejavnost uporabnika.</translation>
 <translation id="871560550817059752">Napaka – zmanjkalo je črnila</translation>
 <translation id="8726019395068607495">Ustavljeno – vrata so odprta</translation>

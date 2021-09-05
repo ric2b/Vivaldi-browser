@@ -113,6 +113,7 @@ android_library("junit") {
     "//chrome/browser/settings:java",
     "//chrome/browser/signin/android:java",
     "//chrome/test/android:chrome_java_test_support",
+    "//third_party/android_deps:robolectric_all_java",
     "//third_party/junit:junit",
     "//third_party/mockito:mockito_java",
     "//ui/android:ui_full_java",
@@ -131,7 +132,6 @@ android_resources("java_resources") {
     "//components/browser_ui/settings/android:java_resources",
     "//components/browser_ui/styles/android:java_resources",
   ]
-  create_srcjar = false
 }
 
 java_cpp_enum("safety_check_enums") {

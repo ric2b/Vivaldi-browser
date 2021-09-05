@@ -21,6 +21,7 @@
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/invalidation/public/invalidation_service.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/identity_manager/account_info.h"
@@ -45,6 +46,8 @@
 #include "components/sync/engine/net/http_post_provider_factory.h"
 #include "components/sync/engine/polling_constants.h"
 #include "components/sync/engine/sync_encryption_handler.h"
+#include "components/sync/invalidations/switches.h"
+#include "components/sync/invalidations/sync_invalidations_service.h"
 #include "components/sync/model/sync_error.h"
 #include "components/version_info/version_info_values.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -252,7 +255,12 @@ ProfileSyncService::ProfileSyncService(InitParams init_params)
       start_behavior_(init_params.start_behavior),
       passphrase_prompt_triggered_by_version_(false),
       is_stopping_and_clearing_(false),
-      should_record_trusted_vault_error_shown_on_startup_(true) {
+      should_record_trusted_vault_error_shown_on_startup_(true),
+#if defined(OS_ANDROID)
+      sessions_invalidations_enabled_(false) {
+#else
+      sessions_invalidations_enabled_(true) {
+#endif
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(sync_client_);
   DCHECK(IsLocalSyncEnabled() || identity_manager_ != nullptr);
@@ -317,6 +325,12 @@ void ProfileSyncService::Initialize() {
     if (invalidations_identity_provider_) {
       invalidations_identity_provider_->SetActiveAccountId(
           GetAuthenticatedAccountInfo().account_id);
+    }
+
+    SyncInvalidationsService* sync_invalidations_service =
+        sync_client_->GetSyncInvalidationsService();
+    if (sync_invalidations_service) {
+      sync_invalidations_service->SetActive(IsSignedIn());
     }
   }
 
@@ -403,6 +417,12 @@ void ProfileSyncService::AccountStateChanged() {
   if (invalidations_identity_provider_) {
     invalidations_identity_provider_->SetActiveAccountId(
         GetAuthenticatedAccountInfo().account_id);
+  }
+
+  SyncInvalidationsService* sync_invalidations_service =
+      sync_client_->GetSyncInvalidationsService();
+  if (sync_invalidations_service) {
+    sync_invalidations_service->SetActive(IsSignedIn());
   }
 }
 
@@ -598,7 +618,7 @@ void ProfileSyncService::StartUpSlowEngineComponents() {
   params.engine_components_factory =
       std::make_unique<EngineComponentsFactoryImpl>(
           EngineSwitchesFromCommandLine());
-  sync_prefs_.GetInvalidationVersions(&params.invalidation_versions);
+  params.invalidation_versions = sync_prefs_.GetInvalidationVersions();
   params.poll_interval = sync_prefs_.GetPollInterval();
   if (params.poll_interval.is_zero()) {
     params.poll_interval =
@@ -635,13 +655,13 @@ void ProfileSyncService::Shutdown() {
 void ProfileSyncService::ShutdownImpl(ShutdownReason reason) {
   if (!engine_) {
     // If the engine hasn't started or is already shut down when a DISABLE_SYNC
-    // happens, the data directory needs to be cleaned up here.
+    // happens, the Directory needs to be cleaned up here.
     if (reason == ShutdownReason::DISABLE_SYNC) {
-      // Clearing the Directory via Directory::DeleteDirectoryFiles() means
-      // there's IO involved which may we considerable overhead if triggered
-      // consistently upon browser startup (which is the case for certain
-      // codepaths such as the user being signed out). To avoid that, SyncPrefs
-      // is used to determine whether it's worth it.
+      // Clearing the Directory via DeleteLegacyDirectoryFilesAndNigoriStorage()
+      // means there's IO involved which may we considerable overhead if
+      // triggered consistently upon browser startup (which is the case for
+      // certain codepaths such as the user being signed out). To avoid that,
+      // SyncPrefs is used to determine whether it's worth it.
       if (!sync_prefs_.GetCacheGuid().empty()) {
         backend_task_runner_->PostTask(
             FROM_HERE,
@@ -1133,7 +1153,7 @@ void ProfileSyncService::OnConfigureDone(
     return;
   }
 
-  RecordMemoryUsageHistograms();
+  RecordMemoryUsageAndCountsHistograms();
 
   StartSyncingWithServer();
 }
@@ -1337,18 +1357,14 @@ void ProfileSyncService::ConfigureDataTypeManager(ConfigureReason reason) {
   DCHECK(!configure_context.cache_guid.empty());
   DCHECK_NE(configure_context.reason, CONFIGURE_REASON_UNKNOWN);
 
-  // Note: When local Sync is enabled, then we want full-sync mode (not just
-  // transport), even though Sync-the-feature is not considered enabled.
-  bool use_transport_only_mode =
-      !IsSyncFeatureEnabled() && !IsLocalSyncEnabled();
+  const bool use_transport_only_mode = UseTransportOnlyMode();
 
-  ModelTypeSet types = GetPreferredDataTypes();
-  // In transport-only mode, only a subset of data types is supported.
   if (use_transport_only_mode) {
-    types = Intersection(types, GetModelTypesForTransportOnlyMode());
     configure_context.sync_mode = SyncMode::kTransportOnly;
   }
-  data_type_manager_->Configure(types, configure_context);
+  data_type_manager_->Configure(GetDataTypesToConfigure(), configure_context);
+
+  UpdateDataTypesForInvalidations();
 
   // Record in UMA whether we're configuring the full Sync feature or only the
   // transport.
@@ -1378,8 +1394,15 @@ void ProfileSyncService::ConfigureDataTypeManager(ConfigureReason reason) {
   }
 }
 
+bool ProfileSyncService::UseTransportOnlyMode() const {
+  // Note: When local Sync is enabled, then we want full-sync mode (not just
+  // transport), even though Sync-the-feature is not considered enabled.
+  return !IsSyncFeatureEnabled() && !IsLocalSyncEnabled();
+}
+
 ModelTypeSet ProfileSyncService::GetModelTypesForTransportOnlyMode() const {
   ModelTypeSet allowed_types = {
+      DEVICE_INFO,
       SECURITY_EVENTS,
       SHARING_MESSAGE,
       SUPERVISED_USER_SETTINGS,
@@ -1401,10 +1424,6 @@ ModelTypeSet ProfileSyncService::GetModelTypesForTransportOnlyMode() const {
     allowed_types.Put(PASSWORDS);
   }
 
-  if (base::FeatureList::IsEnabled(switches::kSyncDeviceInfoInTransportMode)) {
-    allowed_types.Put(DEVICE_INFO);
-  }
-
   // Outside the #if so non-Chrome OS developers will hit it before uploading.
   static_assert(41 + 1 /* Notes */ == ModelType::NUM_ENTRIES,
                 "If a new ModelType is Chrome OS-only and uses OS sync "
@@ -1419,6 +1438,38 @@ ModelTypeSet ProfileSyncService::GetModelTypesForTransportOnlyMode() const {
 #endif  // defined(OS_CHROMEOS)
 
   return allowed_types;
+}
+
+ModelTypeSet ProfileSyncService::GetDataTypesToConfigure() const {
+  ModelTypeSet types = GetPreferredDataTypes();
+  // In transport-only mode, only a subset of data types is supported.
+  if (UseTransportOnlyMode()) {
+    types = Intersection(types, GetModelTypesForTransportOnlyMode());
+  }
+  return types;
+}
+
+void ProfileSyncService::UpdateDataTypesForInvalidations() {
+  SyncInvalidationsService* invalidations_service =
+      sync_client_->GetSyncInvalidationsService();
+  if (!invalidations_service) {
+    return;
+  }
+
+  // No need to register invalidations for non-protocol or commit-only types.
+  ModelTypeSet types = Intersection(GetDataTypesToConfigure(), ProtocolTypes());
+  types.RemoveAll(CommitOnlyTypes());
+  if (!sessions_invalidations_enabled_) {
+    types.Remove(SESSIONS);
+  }
+  if (!(base::FeatureList::IsEnabled(switches::kUseSyncInvalidations) &&
+        base::FeatureList::IsEnabled(
+            switches::kUseSyncInvalidationsForWalletAndOffer))) {
+    types.RemoveAll({AUTOFILL_WALLET_DATA, AUTOFILL_WALLET_OFFER});
+  }
+  invalidations_service->SetInterestedDataTypes(
+      types, base::BindRepeating(&ProfileSyncService::TriggerRefresh,
+                                 sync_enabled_weak_factory_.GetWeakPtr()));
 }
 
 SyncCycleSnapshot ProfileSyncService::GetLastCycleSnapshotForDebugging() const {
@@ -1781,6 +1832,9 @@ void ProfileSyncService::SetInvalidationsForSessionsEnabled(bool enabled) {
   if (engine_ && engine_->IsInitialized()) {
     engine_->SetInvalidationsForSessionsEnabled(enabled);
   }
+
+  sessions_invalidations_enabled_ = enabled;
+  UpdateDataTypesForInvalidations();
 }
 
 void ProfileSyncService::AddTrustedVaultDecryptionKeysFromWeb(
@@ -1837,8 +1891,6 @@ void ProfileSyncService::StopAndClear() {
 void ProfileSyncService::ReconfigureDatatypeManager(
     bool bypass_setup_in_progress_check) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  // If we haven't initialized yet, don't configure the DTM as it could cause
-  // association to start before a Directory has even been created.
   if (engine_ && engine_->IsInitialized()) {
     DCHECK(engine_);
     // Don't configure datatypes if the setup UI is still on the screen - this
@@ -1923,6 +1975,18 @@ void ProfileSyncService::SetPassphrasePrompted(bool prompted) {
   sync_prefs_.SetPassphrasePrompted(prompted);
 }
 
+#if defined(OS_ANDROID)
+void ProfileSyncService::SetDecoupledFromAndroidMasterSync() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  sync_prefs_.SetDecoupledFromAndroidMasterSync();
+}
+
+bool ProfileSyncService::GetDecoupledFromAndroidMasterSync() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return sync_prefs_.GetDecoupledFromAndroidMasterSync();
+}
+#endif  // defined(OS_ANDROID)
+
 SyncEncryptionHandler::Observer*
 ProfileSyncService::GetEncryptionObserverForTest() {
   return &crypto_;
@@ -1942,7 +2006,7 @@ void ProfileSyncService::RemoveClientFromServer() const {
   }
 }
 
-void ProfileSyncService::RecordMemoryUsageHistograms() {
+void ProfileSyncService::RecordMemoryUsageAndCountsHistograms() {
   ModelTypeSet active_types = GetActiveDataTypes();
   for (ModelType type : active_types) {
     auto dtc_it = data_type_controllers_.find(type);

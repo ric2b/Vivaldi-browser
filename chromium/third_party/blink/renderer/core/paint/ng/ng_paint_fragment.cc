@@ -5,8 +5,8 @@
 #include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
 
 #include "third_party/blink/renderer/core/dom/pseudo_element.h"
+#include "third_party/blink/renderer/core/editing/bidi_adjustment.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
-#include "third_party/blink/renderer/core/editing/inline_box_traversal.h"
 #include "third_party/blink/renderer/core/editing/position_with_affinity.h"
 #include "third_party/blink/renderer/core/editing/text_affinity.h"
 #include "third_party/blink/renderer/core/layout/geometry/logical_rect.h"
@@ -345,10 +345,11 @@ bool NGPaintFragment::HasSelfPaintingLayer() const {
   return PhysicalFragment().HasSelfPaintingLayer();
 }
 
-bool NGPaintFragment::ShouldClipOverflow() const {
+bool NGPaintFragment::ShouldClipOverflowAlongEitherAxis() const {
   auto* box_physical_fragment =
       DynamicTo<NGPhysicalBoxFragment>(&PhysicalFragment());
-  return box_physical_fragment && box_physical_fragment->ShouldClipOverflow();
+  return box_physical_fragment &&
+         box_physical_fragment->ShouldClipOverflowAlongEitherAxis();
 }
 
 // Populate descendants from NGPhysicalFragment tree.
@@ -533,7 +534,7 @@ PhysicalRect NGPaintFragment::InkOverflow() const {
   if (!ink_overflow_)
     return fragment.LocalRect();
 
-  if (HasOverflowClip())
+  if (HasNonVisibleOverflow())
     return ink_overflow_->ink_overflow;
 
   PhysicalRect rect = ink_overflow_->ink_overflow;

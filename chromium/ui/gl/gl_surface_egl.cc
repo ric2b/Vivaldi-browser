@@ -52,6 +52,10 @@
 #define EGL_OPENGL_ES3_BIT 0x00000040
 #endif
 
+#if defined(USE_X11)
+#include "ui/base/x/x11_util.h"
+#endif
+
 // Not present egl/eglext.h yet.
 
 #ifndef EGL_EXT_gl_colorspace_display_p3
@@ -179,6 +183,7 @@ EGLDisplayPlatform g_native_display(EGL_DEFAULT_DISPLAY);
 
 const char* g_egl_extensions = nullptr;
 bool g_egl_create_context_robustness_supported = false;
+bool g_egl_robustness_video_memory_purge_supported = false;
 bool g_egl_create_context_bind_generates_resource_supported = false;
 bool g_egl_create_context_webgl_compatability_supported = false;
 bool g_egl_sync_control_supported = false;
@@ -347,6 +352,7 @@ EGLDisplay GetPlatformANGLEDisplay(
   // TODO(dbehr) Add an attrib to Angle to pass EGL platform.
 
   display_attribs.push_back(EGL_NONE);
+
   // This is an EGL 1.5 function that we know ANGLE supports. It's used to pass
   // EGLAttribs (pointers) instead of EGLints into the display
   return eglGetPlatformDisplay(
@@ -811,6 +817,11 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
     AddInitDisplay(init_displays, ANGLE_OPENGLES);
   }
 
+  if (supports_angle_metal && use_angle_default &&
+      base::FeatureList::IsEnabled(features::kDefaultANGLEMetal)) {
+    AddInitDisplay(init_displays, ANGLE_METAL);
+  }
+
   if (supports_angle_d3d) {
     if (use_angle_default) {
       // Default mode for ANGLE - try D3D11, else try D3D9
@@ -945,6 +956,8 @@ bool GLSurfaceEGL::InitializeOneOffCommon() {
 
   g_egl_create_context_robustness_supported =
       HasEGLExtension("EGL_EXT_create_context_robustness");
+  g_egl_robustness_video_memory_purge_supported =
+      HasEGLExtension("EGL_NV_robustness_video_memory_purge");
   g_egl_create_context_bind_generates_resource_supported =
       HasEGLExtension("EGL_CHROMIUM_create_context_bind_generates_resource");
   g_egl_create_context_webgl_compatability_supported =
@@ -1085,6 +1098,7 @@ void GLSurfaceEGL::ShutdownOneOff() {
 
   g_egl_extensions = nullptr;
   g_egl_create_context_robustness_supported = false;
+  g_egl_robustness_video_memory_purge_supported = false;
   g_egl_create_context_bind_generates_resource_supported = false;
   g_egl_create_context_webgl_compatability_supported = false;
   g_egl_sync_control_supported = false;
@@ -1123,6 +1137,11 @@ bool GLSurfaceEGL::HasEGLExtension(const char* name) {
 // static
 bool GLSurfaceEGL::IsCreateContextRobustnessSupported() {
   return g_egl_create_context_robustness_supported;
+}
+
+// static
+bool GLSurfaceEGL::IsRobustnessVideoMemoryPurgeSupported() {
+  return g_egl_robustness_video_memory_purge_supported;
 }
 
 bool GLSurfaceEGL::IsCreateContextBindGeneratesResourceSupported() {
@@ -1288,6 +1307,14 @@ EGLDisplay GLSurfaceEGL::InitializeDisplay(EGLDisplayPlatform native_display) {
       SetANGLEImplementation(
           GetANGLEImplementationFromDisplayType(display_type));
     }
+
+#if defined(USE_X11)
+    // Unset DISPLAY env, so the vulkan can be initialized successfully, if the
+    // X server doesn't support Vulkan surface.
+    base::Optional<ui::ScopedUnsetDisplay> unset_display;
+    if (display_type == ANGLE_VULKAN && !ui::IsVulkanSurfaceSupported())
+      unset_display.emplace();
+#endif  // defined(USE_X11)
 
     if (!eglInitialize(display, nullptr, nullptr)) {
       bool is_last = disp_index == init_displays.size() - 1;

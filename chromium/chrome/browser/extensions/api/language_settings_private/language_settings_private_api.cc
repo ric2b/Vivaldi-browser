@@ -47,6 +47,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "ui/base/ime/chromeos/component_extension_ime_manager.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -133,6 +134,12 @@ std::vector<std::string> GetSortedComponentIMEs(
       }
     }
   }
+  if (base::FeatureList::IsEnabled(
+          chromeos::features::kLanguageSettingsUpdate)) {
+    for (const auto& input_method_id : available_component_imes) {
+      component_ime_list.push_back(input_method_id);
+    }
+  }
 
   return component_ime_list;
 }
@@ -181,6 +188,17 @@ std::vector<std::string> GetSortedThirdPartyIMEs(
   }
 
   return ime_list;
+}
+
+std::vector<std::string> GetInputMethodTags(
+    language_settings_private::InputMethod* input_method) {
+  std::vector<std::string> tags = {input_method->display_name};
+  const std::string app_locale = g_browser_process->GetApplicationLocale();
+  for (const auto& language_code : input_method->language_codes) {
+    tags.push_back(base::UTF16ToUTF8(l10n_util::GetDisplayNameForLocale(
+        language_code, app_locale, /*is_for_ui=*/true)));
+  }
+  return tags;
 }
 
 }  // namespace
@@ -608,11 +626,27 @@ void PopulateInputMethodListFromDescriptors(
 
   const std::unordered_set<std::string> active_ids(GetEnabledIMEs(ime_state));
   const std::unordered_set<std::string> allowed_ids(GetAllowedIMEs(ime_state));
+
+  // Collator used to sort display names in the given locale.
+  UErrorCode error = U_ZERO_ERROR;
+  const std::string app_locale = g_browser_process->GetApplicationLocale();
+  std::unique_ptr<icu::Collator> collator(
+      icu::Collator::createInstance(icu::Locale(app_locale.c_str()), error));
+  if (U_FAILURE(error)) {
+    collator.reset();
+  }
+
+  // Map of sorted [display name -> input methods].
+  std::map<base::string16, language_settings_private::InputMethod,
+           l10n_util::StringComparator<base::string16>>
+      input_map(l10n_util::StringComparator<base::string16>(collator.get()));
+
   for (const auto& descriptor : descriptors) {
     language_settings_private::InputMethod input_method;
     input_method.id = descriptor.id();
     input_method.display_name = util->GetLocalizedDisplayName(descriptor);
     input_method.language_codes = descriptor.language_codes();
+    input_method.tags = GetInputMethodTags(&input_method);
     if (active_ids.count(input_method.id) > 0)
       input_method.enabled.reset(new bool(true));
     if (descriptor.options_page_url().is_valid())
@@ -623,7 +657,12 @@ void PopulateInputMethodListFromDescriptors(
         allowed_ids.count(input_method.id) == 0) {
       input_method.is_prohibited_by_policy.reset(new bool(true));
     }
-    input_methods->push_back(std::move(input_method));
+    input_map[base::UTF8ToUTF16(util->GetLocalizedDisplayName(descriptor))] =
+        std::move(input_method);
+  }
+
+  for (auto& entry : input_map) {
+    input_methods->push_back(std::move(entry.second));
   }
 }
 #endif

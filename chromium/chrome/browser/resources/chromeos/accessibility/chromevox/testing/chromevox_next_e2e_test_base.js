@@ -4,6 +4,7 @@
 
 // Include test fixture.
 GEN_INCLUDE(['chromevox_e2e_test_base.js']);
+GEN_INCLUDE(['mock_feedback.js']);
 
 /**
  * Base test fixture for ChromeVox Next end to end tests.
@@ -32,6 +33,25 @@ ChromeVoxNextE2ETest = class extends ChromeVoxE2ETest {
       this.originalOutputContextValues_[role] =
           Output.ROLE_INFO_[role]['outputContextFirst'];
     }
+  }
+
+  /** @return {!MockFeedback} */
+  createMockFeedback() {
+    const mockFeedback =
+        new MockFeedback(this.newCallback(), this.newCallback.bind(this));
+    mockFeedback.install();
+    return mockFeedback;
+  }
+
+  /**
+   * Create a function which performs the command |cmd|.
+   * @param {string} cmd
+   * @return {function(): void}
+   */
+  doCmd(cmd) {
+    return () => {
+      CommandHandler.onCommand(cmd);
+    };
   }
 
   /**

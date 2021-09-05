@@ -324,12 +324,11 @@ void CaptionBubble::Init() {
   // set the truncate_length to 0 to ensure that it never truncates.
   label->SetTruncateLength(0);
 
-  auto wait_text = std::make_unique<views::Label>();
-  wait_text->SetEnabledColor(gfx::kGoogleGrey500);
-  wait_text->SetBackgroundColor(SK_ColorTRANSPARENT);
-  wait_text->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
-  wait_text->SetText(
-      l10n_util::GetStringUTF16(IDS_LIVE_CAPTION_BUBBLE_WAIT_TEXT));
+  auto title = std::make_unique<views::Label>();
+  title->SetEnabledColor(gfx::kGoogleGrey500);
+  title->SetBackgroundColor(SK_ColorTRANSPARENT);
+  title->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
+  title->SetText(l10n_util::GetStringUTF16(IDS_LIVE_CAPTION_BUBBLE_TITLE));
 
   auto error_text = std::make_unique<views::Label>();
   error_text->SetEnabledColor(SK_ColorWHITE);
@@ -360,7 +359,7 @@ void CaptionBubble::Init() {
   auto close_button = BuildImageButton(vector_icons::kCloseRoundedIcon,
                                        IDS_LIVE_CAPTION_BUBBLE_CLOSE);
 
-  wait_text_ = content_container->AddChildView(std::move(wait_text));
+  title_ = content_container->AddChildView(std::move(title));
   label_ = content_container->AddChildView(std::move(label));
 
   error_icon_ = error_message->AddChildView(std::move(error_icon));
@@ -384,7 +383,7 @@ std::unique_ptr<views::ImageButton> CaptionBubble::BuildImageButton(
   auto button = views::CreateVectorImageButton(this);
   views::SetImageFromVectorIcon(button.get(), icon, kButtonDip, SK_ColorWHITE);
   button->SetTooltipText(l10n_util::GetStringUTF16(tooltip_text_id));
-  button->set_ink_drop_base_color(SkColor(gfx::kGoogleGrey600));
+  button->SetInkDropBaseColor(SkColor(gfx::kGoogleGrey600));
   button->SizeToPreferredSize();
   button->SetFocusForPlatform();
   views::InstallCircleHighlightPathGenerator(
@@ -470,14 +469,14 @@ void CaptionBubble::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   if (model_ && model_->HasError()) {
     node_data->SetName(error_text_->GetText());
     node_data->SetNameFrom(ax::mojom::NameFrom::kContents);
-  } else if (label_->GetText().size()) {
-    node_data->SetName(label_->GetText());
+  } else if (model_ && !model_->GetFullText().empty()) {
+    node_data->SetName(model_->GetFullText());
     node_data->SetNameFrom(ax::mojom::NameFrom::kContents);
   } else {
-    node_data->SetName(wait_text_->GetText());
+    node_data->SetName(title_->GetText());
     node_data->SetNameFrom(ax::mojom::NameFrom::kContents);
   }
-  node_data->SetDescription(wait_text_->GetText());
+  node_data->SetDescription(title_->GetText());
   node_data->role = ax::mojom::Role::kCaption;
 }
 
@@ -499,7 +498,7 @@ void CaptionBubble::ButtonPressed(views::Button* sender,
     // bucket, but it will eventually be extended to report session starts and
     // natural session ends (when the audio stream ends).
     UMA_HISTOGRAM_ENUMERATION(
-        "Accessibility.LiveCaptions.Session",
+        "Accessibility.LiveCaption.Session",
         CaptionController::SessionEvent::kCloseButtonClicked);
     if (model_)
       model_->Close();
@@ -526,7 +525,7 @@ void CaptionBubble::SetModel(CaptionBubbleModel* model) {
 void CaptionBubble::OnTextChanged() {
   DCHECK(model_);
   label_->SetText(base::UTF8ToUTF16(model_->GetFullText()));
-  UpdateBubbleAndWaitTextVisibility();
+  UpdateBubbleAndTitleVisibility();
 }
 
 void CaptionBubble::OnErrorChanged() {
@@ -539,19 +538,6 @@ void CaptionBubble::OnErrorChanged() {
   Redraw();
 }
 
-void CaptionBubble::OnReadyChanged() {
-  DCHECK(model_);
-  // There is a bug in RenderText in which the label text must not be empty when
-  // it is displayed, or otherwise subsequent calculation of the number of lines
-  // (CaptionBubble::GetNumLinesInLabel) will be incorrect. The label text here
-  // is set to a space character.
-  // TODO(1055150): Fix the bug in RenderText and then remove this workaround.
-  if (model_->IsReady()) {
-    label_->SetText(base::ASCIIToUTF16("\u0020"));
-    UpdateBubbleAndWaitTextVisibility();
-  }
-}
-
 void CaptionBubble::OnIsExpandedChanged() {
   expand_button_->SetVisible(!is_expanded_);
   collapse_button_->SetVisible(is_expanded_);
@@ -561,11 +547,11 @@ void CaptionBubble::OnIsExpandedChanged() {
   Redraw();
 }
 
-void CaptionBubble::UpdateBubbleAndWaitTextVisibility() {
-  // Show the wait text if there is room for it and no error.
-  wait_text_->SetVisible(model_ && !model_->HasError() &&
-                         GetNumLinesInLabel() <
-                             static_cast<size_t>(GetNumLinesVisible()));
+void CaptionBubble::UpdateBubbleAndTitleVisibility() {
+  // Show the title if there is room for it and no error.
+  title_->SetVisible(model_ && !model_->HasError() &&
+                     GetNumLinesInLabel() <
+                         static_cast<size_t>(GetNumLinesVisible()));
   UpdateBubbleVisibility();
 }
 
@@ -579,14 +565,14 @@ void CaptionBubble::UpdateBubbleVisibility() {
     // Hide the widget if there is no room for it or the model is closed.
     if (GetWidget()->IsVisible())
       GetWidget()->Hide();
-  } else if (model_->IsReady() || model_->HasError()) {
-    // Show the widget if it is ready to receive transcriptions or it has an
-    // error to display. Only show the widget if it isn't already visible.
-    // Always calling Widget::Show() will mean the widget gets focus each time.
+  } else if (!model_->GetFullText().empty() || model_->HasError()) {
+    // Show the widget if it has text or an error to display. Only show the
+    // widget if it isn't already visible. Always calling Widget::Show() will
+    // mean the widget gets focus each time.
     if (!GetWidget()->IsVisible())
       GetWidget()->Show();
   } else if (GetWidget()->IsVisible()) {
-    // Not ready and no error. Hide it.
+    // No text and no error. Hide it.
     GetWidget()->Hide();
   }
 }
@@ -630,11 +616,11 @@ void CaptionBubble::UpdateTextSize() {
                     gfx::Font::FontStyle::NORMAL, kFontSizePx * textScaleFactor,
                     gfx::Font::Weight::NORMAL);
   label_->SetFontList(font_list);
-  wait_text_->SetFontList(font_list);
+  title_->SetFontList(font_list);
   error_text_->SetFontList(font_list);
 
   label_->SetLineHeight(kLineHeightDip * textScaleFactor);
-  wait_text_->SetLineHeight(kLineHeightDip * textScaleFactor);
+  title_->SetLineHeight(kLineHeightDip * textScaleFactor);
   error_text_->SetLineHeight(kLineHeightDip * textScaleFactor);
   error_icon_->SetImageSize(gfx::Size(kErrorImageSizeDip * textScaleFactor,
                                       kErrorImageSizeDip * textScaleFactor));
@@ -646,8 +632,8 @@ void CaptionBubble::UpdateContentSize() {
       (model_ && model_->HasError())
           ? kLineHeightDip * text_scale_factor
           : kLineHeightDip * GetNumLinesVisible() * text_scale_factor;
-  // The wait text takes up 1 line.
-  int label_height = wait_text_->GetVisible()
+  // The title takes up 1 line.
+  int label_height = title_->GetVisible()
                          ? content_height - kLineHeightDip * text_scale_factor
                          : content_height;
   label_->SetPreferredSize(
@@ -660,7 +646,7 @@ void CaptionBubble::UpdateContentSize() {
 }
 
 void CaptionBubble::Redraw() {
-  UpdateBubbleAndWaitTextVisibility();
+  UpdateBubbleAndTitleVisibility();
   UpdateContentSize();
   SizeToContents();
 }

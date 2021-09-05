@@ -1222,7 +1222,8 @@ EmbeddedWorkerInstance::CreateFactoryBundleOnUI(
           net::IsolationInfo::Create(
               net::IsolationInfo::RedirectMode::kUpdateNothing, origin, origin,
               net::SiteForCookies::FromOrigin(origin)),
-          std::move(coep_reporter));
+          std::move(coep_reporter),
+          "EmbeddedWorkerInstance::CreateFactoryBundlesOnUI");
   bool bypass_redirect_checks = false;
 
   DCHECK(factory_type ==
@@ -1234,9 +1235,9 @@ EmbeddedWorkerInstance::CreateFactoryBundleOnUI(
   GetContentClient()->browser()->WillCreateURLLoaderFactory(
       rph->GetBrowserContext(), nullptr /* frame_host */, rph->GetID(),
       factory_type, origin, base::nullopt /* navigation_id */,
-      &default_factory_receiver, &factory_params->header_client,
-      &bypass_redirect_checks, nullptr /* disable_secure_dns */,
-      &factory_params->factory_override);
+      base::kInvalidUkmSourceId, &default_factory_receiver,
+      &factory_params->header_client, &bypass_redirect_checks,
+      nullptr /* disable_secure_dns */, &factory_params->factory_override);
   devtools_instrumentation::WillCreateURLLoaderFactoryForServiceWorker(
       rph, routing_id, &factory_params->factory_override);
 
@@ -1256,15 +1257,17 @@ EmbeddedWorkerInstance::CreateFactoryBundleOnUI(
 
   factory_bundle->set_bypass_redirect_checks(bypass_redirect_checks);
 
+  ContentBrowserClient::NonNetworkURLLoaderFactoryDeprecatedMap
+      non_network_uniquely_owned_factories;
   ContentBrowserClient::NonNetworkURLLoaderFactoryMap non_network_factories;
-  non_network_factories[url::kDataScheme] =
-      std::make_unique<DataURLLoaderFactory>();
+  non_network_factories[url::kDataScheme] = DataURLLoaderFactory::Create();
   GetContentClient()
       ->browser()
       ->RegisterNonNetworkSubresourceURLLoaderFactories(
-          rph->GetID(), MSG_ROUTING_NONE, &non_network_factories);
+          rph->GetID(), MSG_ROUTING_NONE, &non_network_uniquely_owned_factories,
+          &non_network_factories);
 
-  for (auto& pair : non_network_factories) {
+  for (auto& pair : non_network_uniquely_owned_factories) {
     const std::string& scheme = pair.first;
     std::unique_ptr<network::mojom::URLLoaderFactory> factory =
         std::move(pair.second);
@@ -1280,6 +1283,22 @@ EmbeddedWorkerInstance::CreateFactoryBundleOnUI(
     factory_bundle->pending_scheme_specific_factories().emplace(
         scheme, std::move(factory_remote));
   }
+
+  for (auto& pair : non_network_factories) {
+    const std::string& scheme = pair.first;
+    mojo::PendingRemote<network::mojom::URLLoaderFactory>& pending_remote =
+        pair.second;
+
+    // To be safe, ignore schemes that aren't allowed to register service
+    // workers. We assume that importScripts and fetch() should fail on such
+    // schemes.
+    if (!base::Contains(GetServiceWorkerSchemes(), scheme))
+      continue;
+
+    factory_bundle->pending_scheme_specific_factories().emplace(
+        scheme, std::move(pending_remote));
+  }
+
   return factory_bundle;
 }
 
@@ -1506,7 +1525,7 @@ void EmbeddedWorkerInstance::BindCacheStorageInternal() {
     RunOrPostTaskOnThread(
         FROM_HERE, BrowserThread::UI,
         base::BindOnce(content::BindCacheStorageOnUIThread, process_id(),
-                       owner_version_->script_origin(), coep,
+                       owner_version_->origin(), coep,
                        std::move(coep_reporter_remote), std::move(receiver)));
   }
   pending_cache_storage_receivers_.clear();

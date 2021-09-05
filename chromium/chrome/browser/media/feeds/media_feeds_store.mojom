@@ -83,6 +83,9 @@ struct MediaFeed {
 
   // The result of safe search checking this media feed.
   SafeSearchResult safe_search_result;
+
+  // The aggregate watchtime for the media feed.
+  mojo_base.mojom.TimeDelta? aggregate_watchtime;
 };
 
 // Contains details about the user signed into the website.
@@ -145,6 +148,9 @@ enum FeedUserStatus {
 
   // The user has opted out of seeing the feed.
   kDisabled = 1,
+
+  // The user has opted into seeing the feed.
+  kEnabled = 2,
 };
 
 // The type of the feed item. This enum is committed to storage so do not

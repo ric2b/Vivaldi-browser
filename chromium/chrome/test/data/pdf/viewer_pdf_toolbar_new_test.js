@@ -26,6 +26,16 @@ function getCrIconButtons(toolbar, parentId) {
       toolbar.shadowRoot.querySelectorAll(`#${parentId} cr-icon-button`));
 }
 
+/**
+ * @param {!HTMLElement} button
+ * @param {boolean} enabled
+ */
+function assertCheckboxMenuButton(button, enabled) {
+  chrome.test.assertEq(
+      enabled ? 'true' : 'false', button.getAttribute('aria-checked'));
+  chrome.test.assertEq(enabled, !button.querySelector('iron-icon').hidden);
+}
+
 // Unit tests for the viewer-pdf-toolbar-new element.
 const tests = [
   /**
@@ -131,6 +141,7 @@ const tests = [
   function testZoomField() {
     const toolbar = createToolbar();
     toolbar.viewportZoom = .8;
+    toolbar.zoomBounds = {min: 25, max: 500};
     const zoomField = toolbar.shadowRoot.querySelector('#zoom-controls input');
     chrome.test.assertEq('80%', zoomField.value);
 
@@ -138,87 +149,137 @@ const tests = [
     toolbar.viewportZoom = .533;
     chrome.test.assertEq('53%', zoomField.value);
 
-    // Setting a new value sends the value in a zoom-changed event.
-    let sentValue = -1;
-    toolbar.addEventListener('zoom-changed', e => {
-      sentValue = e.detail;
-      chrome.test.assertEq(110, sentValue);
-      chrome.test.succeed();
-    });
-    zoomField.value = '110%';
-    zoomField.dispatchEvent(new CustomEvent('input'));
+    // Setting a non-number value resets to viewport zoom.
+    zoomField.value = 'abc';
+    zoomField.dispatchEvent(new CustomEvent('change'));
+    chrome.test.assertEq('53%', zoomField.value);
+
+    // Setting a value that is over the max zoom clips to the max value.
+    const whenSent = eventToPromise('zoom-changed', toolbar);
+    zoomField.value = '90000%';
+    zoomField.dispatchEvent(new CustomEvent('change'));
+    whenSent
+        .then(e => {
+          chrome.test.assertEq(500, e.detail);
+
+          // This happens in the parent.
+          toolbar.viewportZoom = 5;
+          chrome.test.assertEq('500%', zoomField.value);
+
+          // Setting a value that is over the maximum again restores the max
+          // value, even though no event is sent.
+          zoomField.value = '80000%';
+          zoomField.dispatchEvent(new CustomEvent('change'));
+          chrome.test.assertEq('500%', zoomField.value);
+
+          // Setting a new value sends the value in a zoom-changed event.
+          const whenSentNew = eventToPromise('zoom-changed', toolbar);
+          zoomField.value = '110%';
+          zoomField.dispatchEvent(new CustomEvent('change'));
+          return whenSentNew;
+        })
+        .then(e => {
+          chrome.test.assertEq(110, e.detail);
+
+          // Setting a new value and blurring sends the value in a zoom-changed
+          // event. If the value is below the minimum, this sends the minimum
+          // zoom.
+          const whenSentFromBlur = eventToPromise('zoom-changed', toolbar);
+          zoomField.value = '18%';
+          zoomField.dispatchEvent(new CustomEvent('blur'));
+          return whenSentFromBlur;
+        })
+        .then(e => {
+          chrome.test.assertEq(25, e.detail);
+          chrome.test.succeed();
+        });
   },
 
-  function testSinglePageView() {
+  // Test that the overflow menu closes when an action is triggered.
+  function testOverflowMenuCloses() {
     const toolbar = createToolbar();
-    const singlePageViewButton =
-        toolbar.shadowRoot.querySelector('#single-page-view-button');
-    const twoPageViewButton =
-        toolbar.shadowRoot.querySelector('#two-page-view-button');
+    const menu = toolbar.shadowRoot.querySelector('cr-action-menu');
+    chrome.test.assertFalse(menu.open);
 
-    toolbar.addEventListener('two-up-view-changed', function(e) {
-      chrome.test.assertEq(false, e.detail);
-      chrome.test.assertEq(
-          'true', singlePageViewButton.getAttribute('aria-checked'));
-      chrome.test.assertFalse(
-          singlePageViewButton.querySelector('iron-icon').hidden);
-      chrome.test.assertEq(
-          'false', twoPageViewButton.getAttribute('aria-checked'));
-      chrome.test.assertTrue(
-          twoPageViewButton.querySelector('iron-icon').hidden);
-      chrome.test.succeed();
-    });
-    singlePageViewButton.click();
+    const more = toolbar.shadowRoot.querySelector('#more');
+    const buttons = menu.querySelectorAll('.dropdown-item');
+    chrome.test.assertTrue(buttons.length > 0);
+
+    for (const button of buttons) {
+      // Open overflow menu.
+      more.click();
+      chrome.test.assertTrue(menu.open);
+      button.click();
+      chrome.test.assertFalse(menu.open);
+    }
+    chrome.test.succeed();
   },
 
-  function testTwoPageView() {
+  function testTwoPageViewToggle() {
     const toolbar = createToolbar();
-    const singlePageViewButton =
-        toolbar.shadowRoot.querySelector('#single-page-view-button');
-    const twoPageViewButton =
-        toolbar.shadowRoot.querySelector('#two-page-view-button');
+    toolbar.twoUpViewEnabled = false;
+    const button = /** @type {!HTMLElement} */ (
+        toolbar.shadowRoot.querySelector('#two-page-view-button'));
+    assertCheckboxMenuButton(button, false);
 
-    toolbar.addEventListener('two-up-view-changed', function(e) {
-      chrome.test.assertEq(true, e.detail);
-      chrome.test.assertEq(
-          'true', twoPageViewButton.getAttribute('aria-checked'));
-      chrome.test.assertFalse(
-          twoPageViewButton.querySelector('iron-icon').hidden);
-      chrome.test.assertEq(
-          'false', singlePageViewButton.getAttribute('aria-checked'));
-      chrome.test.assertTrue(
-          singlePageViewButton.querySelector('iron-icon').hidden);
-      chrome.test.succeed();
-    });
-    twoPageViewButton.click();
+    let whenChanged = eventToPromise('two-up-view-changed', toolbar);
+    button.click();
+    whenChanged
+        .then(e => {
+          // Happens in the parent.
+          toolbar.twoUpViewEnabled = true;
+          chrome.test.assertEq(true, e.detail);
+          assertCheckboxMenuButton(button, true);
+          whenChanged = eventToPromise('two-up-view-changed', toolbar);
+          button.click();
+          return whenChanged;
+        })
+        .then(e => {
+          // Happens in the parent.
+          toolbar.twoUpViewEnabled = false;
+          chrome.test.assertEq(false, e.detail);
+          assertCheckboxMenuButton(button, false);
+          chrome.test.succeed();
+        });
   },
 
   function testShowAnnotationsToggle() {
     const toolbar = createToolbar();
+    const button = /** @type {!HTMLElement} */ (
+        toolbar.shadowRoot.querySelector('#show-annotations-button'));
+    assertCheckboxMenuButton(button, true);
 
-    const showAnnotationsButton =
-        toolbar.shadowRoot.querySelector('#show-annotations-button');
-    chrome.test.assertEq(
-        'true', showAnnotationsButton.getAttribute('aria-checked'));
-    chrome.test.assertFalse(
-        showAnnotationsButton.querySelector('iron-icon').hidden);
-
-    toolbar.addEventListener('display-annotations-changed', (e) => {
-      chrome.test.assertEq(false, e.detail);
-      chrome.test.assertEq(
-          'false', showAnnotationsButton.getAttribute('aria-checked'));
-      chrome.test.assertTrue(
-          showAnnotationsButton.querySelector('iron-icon').hidden);
-      chrome.test.succeed();
-    });
-    showAnnotationsButton.click();
+    let whenChanged = eventToPromise('display-annotations-changed', toolbar);
+    button.click();
+    whenChanged
+        .then(e => {
+          chrome.test.assertEq(false, e.detail);
+          assertCheckboxMenuButton(button, false);
+          whenChanged = eventToPromise('display-annotations-changed', toolbar);
+          button.click();
+          return whenChanged;
+        })
+        .then(e => {
+          chrome.test.assertEq(true, e.detail);
+          assertCheckboxMenuButton(button, true);
+          chrome.test.succeed();
+        });
   },
 
   function testSidenavToggleButton() {
     const toolbar = createToolbar();
+    chrome.test.assertFalse(toolbar.sidenavCollapsed);
+
+    const toggleButton = toolbar.shadowRoot.querySelector('#sidenavToggle');
+    chrome.test.assertTrue(toggleButton.hasAttribute('aria-label'));
+    chrome.test.assertTrue(toggleButton.hasAttribute('title'));
+    chrome.test.assertEq('true', toggleButton.getAttribute('aria-expanded'));
+
+    toolbar.sidenavCollapsed = true;
+    chrome.test.assertEq('false', toggleButton.getAttribute('aria-expanded'));
+
     toolbar.addEventListener(
         'sidenav-toggle-click', () => chrome.test.succeed());
-    const toggleButton = toolbar.shadowRoot.querySelector('#sidenavToggle');
     toggleButton.click();
   },
 ];

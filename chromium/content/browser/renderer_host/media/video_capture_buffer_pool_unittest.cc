@@ -62,7 +62,6 @@ class VideoCaptureBufferPoolTest
   VideoCaptureBufferPoolTest()
       : expected_dropped_id_(0),
         pool_(new media::VideoCaptureBufferPoolImpl(
-            std::make_unique<media::VideoCaptureBufferTrackerFactoryImpl>(),
             media::VideoCaptureBufferType::kSharedMemory,
             kTestBufferPoolSize)) {}
 
@@ -264,6 +263,47 @@ TEST_P(VideoCaptureBufferPoolTest, BufferPool) {
   if (buffer4->data() != nullptr)
     memset(buffer4->data(), 0x77, buffer4->mapped_size());
   buffer4.reset();
+}
+
+TEST_P(VideoCaptureBufferPoolTest, BufferPoolExternal) {
+  constexpr int kInvalidId = -1;
+  std::vector<int> buffer_ids_to_drop;
+
+  int buffer_id0 = pool_->ReserveIdForExternalBuffer(&buffer_ids_to_drop);
+  EXPECT_NE(buffer_id0, kInvalidId);
+  EXPECT_TRUE(buffer_ids_to_drop.empty());
+
+  int buffer_id1 = pool_->ReserveIdForExternalBuffer(&buffer_ids_to_drop);
+  EXPECT_NE(buffer_id1, kInvalidId);
+  EXPECT_TRUE(buffer_ids_to_drop.empty());
+
+  int buffer_id2 = pool_->ReserveIdForExternalBuffer(&buffer_ids_to_drop);
+  EXPECT_NE(buffer_id2, kInvalidId);
+  EXPECT_TRUE(buffer_ids_to_drop.empty());
+
+  buffer_ids_to_drop.clear();
+  pool_->RelinquishExternalBufferReservation(buffer_id1);
+  int buffer_id3 = pool_->ReserveIdForExternalBuffer(&buffer_ids_to_drop);
+  EXPECT_NE(buffer_id3, kInvalidId);
+  EXPECT_EQ(buffer_ids_to_drop.size(), 1u);
+  EXPECT_EQ(buffer_ids_to_drop[0], buffer_id1);
+
+  buffer_ids_to_drop.clear();
+  pool_->RelinquishExternalBufferReservation(buffer_id0);
+  pool_->RelinquishExternalBufferReservation(buffer_id2);
+  pool_->RelinquishExternalBufferReservation(buffer_id3);
+  int buffer_id4 = pool_->ReserveIdForExternalBuffer(&buffer_ids_to_drop);
+  EXPECT_NE(buffer_id4, kInvalidId);
+  EXPECT_EQ(buffer_ids_to_drop.size(), 3u);
+  auto found0 = std::find(buffer_ids_to_drop.begin(), buffer_ids_to_drop.end(),
+                          buffer_id0);
+  EXPECT_FALSE(found0 == buffer_ids_to_drop.end());
+  auto found2 = std::find(buffer_ids_to_drop.begin(), buffer_ids_to_drop.end(),
+                          buffer_id2);
+  EXPECT_FALSE(found2 == buffer_ids_to_drop.end());
+  auto found3 = std::find(buffer_ids_to_drop.begin(), buffer_ids_to_drop.end(),
+                          buffer_id3);
+  EXPECT_FALSE(found3 == buffer_ids_to_drop.end());
 }
 
 INSTANTIATE_TEST_SUITE_P(All,

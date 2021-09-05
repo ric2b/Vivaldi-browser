@@ -5,19 +5,22 @@
 #ifndef PDF_PDF_VIEW_WEB_PLUGIN_H_
 #define PDF_PDF_VIEW_WEB_PLUGIN_H_
 
+#include "base/memory/weak_ptr.h"
 #include "pdf/pdf_view_plugin_base.h"
+#include "pdf/ppapi_migration/url_loader.h"
 #include "third_party/blink/public/web/web_plugin.h"
+#include "third_party/blink/public/web/web_plugin_params.h"
 
 namespace blink {
 class WebPluginContainer;
-struct WebPluginParams;
 }  // namespace blink
 
 namespace chrome_pdf {
 
 // Skeleton for a `blink::WebPlugin` to replace `OutOfProcessInstance`.
 class PdfViewWebPlugin final : public PdfViewPluginBase,
-                               public blink::WebPlugin {
+                               public blink::WebPlugin,
+                               public BlinkUrlLoader::Client {
  public:
   explicit PdfViewWebPlugin(const blink::WebPluginParams& params);
   PdfViewWebPlugin(const PdfViewWebPlugin& other) = delete;
@@ -45,7 +48,7 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
 
   // PdfViewPluginBase:
   void ProposeDocumentLayout(const DocumentLayout& layout) override;
-  void Invalidate(const pp::Rect& rect) override;
+  void Invalidate(const gfx::Rect& rect) override;
   void DidScroll(const gfx::Vector2d& offset) override;
   void ScrollToX(int x_in_screen_coords) override;
   void ScrollToY(int y_in_screen_coords, bool compensate_for_toolbar) override;
@@ -58,7 +61,7 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
                              const float* y,
                              const float* zoom) override;
   void UpdateCursor(PP_CursorType_Dev cursor) override;
-  void UpdateTickMarks(const std::vector<pp::Rect>& tickmarks) override;
+  void UpdateTickMarks(const std::vector<gfx::Rect>& tickmarks) override;
   void NotifyNumberOfFindResultsChanged(int total, bool final_result) override;
   void NotifySelectedFindResultChanged(int current_find_index) override;
   void NotifyTouchSelectionOccurred() override;
@@ -79,7 +82,7 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
   void SubmitForm(const std::string& url,
                   const void* data,
                   int length) override;
-  pp::URLLoader CreateURLLoader() override;
+  std::unique_ptr<UrlLoader> CreateUrlLoader() override;
   std::vector<SearchStringResult> SearchString(const base::char16* string,
                                                const base::char16* term,
                                                bool case_sensitive) override;
@@ -93,16 +96,36 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
   bool IsPrintPreview() override;
   uint32_t GetBackgroundColor() override;
   void IsSelectingChanged(bool is_selecting) override;
-  void SelectionChanged(const pp::Rect& left, const pp::Rect& right) override;
+  void SelectionChanged(const gfx::Rect& left, const gfx::Rect& right) override;
   void EnteredEditMode() override;
   float GetToolbarHeightInScreenCoords() override;
   void DocumentFocusChanged(bool document_has_focus) override;
+
+  // BlinkUrlLoader::Client:
+  bool IsValid() const override;
+  blink::WebURL CompleteURL(const blink::WebString& partial_url) const override;
+  net::SiteForCookies SiteForCookies() const override;
+  void SetReferrerForRequest(blink::WebURLRequest& request,
+                             const blink::WebURL& referrer_url) override;
+  std::unique_ptr<blink::WebAssociatedURLLoader> CreateAssociatedURLLoader(
+      const blink::WebAssociatedURLLoaderOptions& options) override;
+
+ protected:
+  // PdfViewPluginBase:
+  base::WeakPtr<PdfViewPluginBase> GetWeakPtr() override;
+  std::unique_ptr<UrlLoader> CreateUrlLoaderInternal() override;
+  void DidOpen(std::unique_ptr<UrlLoader> loader, int32_t result) override;
+  void DidOpenPreview(std::unique_ptr<UrlLoader> loader,
+                      int32_t result) override;
 
  private:
   // Call `Destroy()` instead.
   ~PdfViewWebPlugin() override;
 
+  blink::WebPluginParams initial_params_;
   blink::WebPluginContainer* container_ = nullptr;
+
+  base::WeakPtrFactory<PdfViewWebPlugin> weak_factory_{this};
 };
 
 }  // namespace chrome_pdf

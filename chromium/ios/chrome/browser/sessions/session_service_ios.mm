@@ -48,6 +48,8 @@ NSString* const kRootObjectKey = @"root";  // Key for the root object.
 NSString* const kSessionDirectory =
     @"Sessions";  // The directory name inside BrowserState directory which
                   // contain all sessions directories.
+NSString* const kSessionFileName =
+    @"session.plist";  // The session file name on disk.
 }
 
 @implementation NSKeyedUnarchiver (CrLegacySessionCompatibility)
@@ -169,11 +171,29 @@ NSString* const kSessionDirectory =
   return base::mac::ObjCCastStrict<SessionIOS>(rootObject);
 }
 
-- (void)deleteLastSessionFileInDirectory:(NSString*)directory
-                              completion:(base::OnceClosure)callback {
-  NSString* sessionPath = [[self class] sessionPathForDirectory:directory];
-  [self deletePaths:[NSArray arrayWithObject:sessionPath]
-         completion:std::move(callback)];
+- (void)deleteAllSessionFilesInBrowserStateDirectory:(NSString*)directory
+                                          completion:
+                                              (base::OnceClosure)callback {
+  NSMutableArray<NSString*>* sessionFilesPaths = [[NSMutableArray alloc] init];
+  NSString* sessionsDirectoryPath =
+      [directory stringByAppendingPathComponent:kSessionDirectory];
+  NSArray<NSString*>* allSessionIDs = [[NSFileManager defaultManager]
+      contentsOfDirectoryAtPath:sessionsDirectoryPath
+                          error:nil];
+  for (NSString* sessionID in allSessionIDs) {
+    NSString* sessionPath =
+        [SessionServiceIOS sessionPathForSessionID:sessionID
+                                         directory:directory];
+    [sessionFilesPaths addObject:sessionPath];
+  }
+
+  // If there were no session ids, then scenes are not supported fall back to
+  // the original location
+  if (sessionFilesPaths.count == 0)
+    [sessionFilesPaths
+        addObject:[[self class] sessionPathForDirectory:directory]];
+
+  [self deletePaths:sessionFilesPaths completion:std::move(callback)];
 }
 
 - (void)deleteSessions:(NSArray<NSString*>*)sessionIDs
@@ -190,7 +210,16 @@ NSString* const kSessionDirectory =
 }
 
 + (NSString*)sessionPathForDirectory:(NSString*)directory {
-  return [directory stringByAppendingPathComponent:@"session.plist"];
+  return [directory stringByAppendingPathComponent:kSessionFileName];
+}
+
++ (NSString*)sessionPathForSessionID:(NSString*)sessionID
+                           directory:(NSString*)directory {
+  if (!sessionID)
+    return [[self class] sessionPathForDirectory:directory];
+  return [NSString pathWithComponents:@[
+    directory, kSessionDirectory, sessionID, kSessionFileName
+  ]];
 }
 
 #pragma mark - Private methods

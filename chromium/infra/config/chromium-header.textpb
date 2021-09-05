@@ -42,7 +42,7 @@ links {
   name: "Chromium"
   links {
     text: "source"
-    url: "https://chromium.googlesource.com/chromium/src/+/refs/branch-heads/4240"
+    url: "https://chromium.googlesource.com/chromium/src/+/refs/branch-heads/4280"
     alt: "Chromium source code repository"
   }
   links {
@@ -75,27 +75,27 @@ links {
   name: "Consoles"
   links {
     text: "android"
-    url: "/p/chromium-m86/g/chromium.android"
+    url: "/p/chromium-m87/g/chromium.android"
     alt: "Chromium Android console"
   }
   links {
     text: "dawn"
-    url: "/p/chromium-m86/g/chromium.dawn"
+    url: "/p/chromium-m87/g/chromium.dawn"
     alt: "Chromium Dawn console"
   }
   links {
     text: "fyi"
-    url: "/p/chromium-m86/g/chromium.fyi"
+    url: "/p/chromium-m87/g/chromium.fyi"
     alt: "Chromium FYI console"
   }
   links {
     text: "gpu"
-    url: "/p/chromium-m86/g/chromium.gpu"
+    url: "/p/chromium-m87/g/chromium.gpu"
     alt: "Chromium GPU console"
   }
   links {
     text: "chromiumos"
-    url: "/p/chromium-m86/g/chromium.chromiumos"
+    url: "/p/chromium-m87/g/chromium.chromiumos"
     alt: "ChromiumOS console"
   }
 }
@@ -111,32 +111,32 @@ links {
   name: "Tryservers"
   links {
     text: "android"
-    url: "/p/chromium-m86/g/tryserver.chromium.android/builders"
+    url: "/p/chromium-m87/g/tryserver.chromium.android/builders"
     alt: "Android"
   }
   links {
     text: "blink"
-    url: "/p/chromium-m86/g/tryserver.blink/builders"
+    url: "/p/chromium-m87/g/tryserver.blink/builders"
     alt: "Blink"
   }
   links {
     text: "chromiumos"
-    url: "/p/chromium-m86/g/tryserver.chromium.chromiumos/builders"
+    url: "/p/chromium-m87/g/tryserver.chromium.chromiumos/builders"
     alt: "ChromiumOS"
   }
   links {
     text: "linux"
-    url: "/p/chromium-m86/g/tryserver.chromium.linux/builders"
+    url: "/p/chromium-m87/g/tryserver.chromium.linux/builders"
     alt: "Linux"
   }
   links {
     text: "mac"
-    url: "/p/chromium-m86/g/tryserver.chromium.mac/builders"
+    url: "/p/chromium-m87/g/tryserver.chromium.mac/builders"
     alt: "Mac"
   }
   links {
     text: "win"
-    url: "/p/chromium-m86/g/tryserver.chromium.win/builders"
+    url: "/p/chromium-m87/g/tryserver.chromium.win/builders"
     alt: "Win"
   }
 }
@@ -149,17 +149,17 @@ links {
   }
   links {
     text: "customize"
-    url: "https://chromium.googlesource.com/chromium/src/+/refs/branch-heads/4240/infra/config/generated/luci-milo.cfg"
+    url: "https://chromium.googlesource.com/chromium/src/+/refs/branch-heads/4280/infra/config/generated/luci-milo.cfg"
     alt: "Customize this console"
   }
 }
 console_groups {
-  console_ids: "chromium-m86/chromium"
-  console_ids: "chromium-m86/chromium.win"
-  console_ids: "chromium-m86/chromium.mac"
-  console_ids: "chromium-m86/chromium.linux"
-  console_ids: "chromium-m86/chromium.chromiumos"
-  console_ids: "chromium-m86/chromium.memory"
-  console_ids: "chromium-m86/chromium.gpu"
-  console_ids: "chromium-m86/chromium.android"
+  console_ids: "chromium-m87/chromium"
+  console_ids: "chromium-m87/chromium.win"
+  console_ids: "chromium-m87/chromium.mac"
+  console_ids: "chromium-m87/chromium.linux"
+  console_ids: "chromium-m87/chromium.chromiumos"
+  console_ids: "chromium-m87/chromium.memory"
+  console_ids: "chromium-m87/chromium.gpu"
+  console_ids: "chromium-m87/chromium.android"
 }

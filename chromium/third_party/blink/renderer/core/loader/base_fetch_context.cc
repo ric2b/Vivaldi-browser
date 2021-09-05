@@ -121,7 +121,7 @@ BaseFetchContext::CheckCSPForRequestInternal(
   }
 
   const ContentSecurityPolicy* csp =
-      GetContentSecurityPolicyForWorld(options.world.get());
+      GetContentSecurityPolicyForWorld(options.world_for_csp.get());
   if (csp &&
       !csp->AllowRequest(request_context, request_destination, url,
                          options.content_security_policy_nonce,
@@ -158,12 +158,10 @@ BaseFetchContext::CanRequestInternal(
   // the request's origin may be nullptr.
   // TODO(yhirano): Figure out if it's actually fine.
   DCHECK(request_mode == network::mojom::RequestMode::kNavigate || origin);
-#if !defined(OFFICIAL_BUILD)
   // VB-24745 VB-44251 Render Mail in Webview: Allow HTML messages to request
   // inline attachments as blob-URL. TODO: remove this when the webview will be
   // "self-contained" and the blobs will be created within the webview.
   if (!url.GetString().StartsWith("blob:chrome-extension://" VIVALDI_APP_ID "/"))
-#endif
   if (request_mode != network::mojom::RequestMode::kNavigate &&
       !resource_request.CanDisplay(url)) {
     if (reporting_disposition == ReportingDisposition::kReport) {

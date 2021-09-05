@@ -15,6 +15,13 @@ extern const base::Feature kForceStartupSigninPromo;
 // Returns true if the startup sign-in promo should be displayed at boot.
 bool ForceStartupSigninPromo();
 
+// Feature controlling whether to restore GAIA cookies if they are deleted.
+extern const base::Feature kRestoreGaiaCookiesIfDeleted;
+
+// Name of multi-value switch that controls the delay (in minutes) for polling
+// for the existence of Gaia cookies for google.com.
+extern const char kDelayThresholdMinutesToUpdateGaiaCookie[];
+
 }  // namespace signin
 
 #endif  // COMPONENTS_SIGNIN_IOS_BROWSER_FEATURES_H_

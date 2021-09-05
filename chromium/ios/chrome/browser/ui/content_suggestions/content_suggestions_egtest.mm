@@ -32,12 +32,10 @@
 #error "This file requires ARC support."
 #endif
 
-#if defined(CHROME_EARL_GREY_2)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wc++98-compat-extra-semi"
 GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ContentSuggestionsAppInterface);
 #pragma clang diagnostic pop
-#endif  // defined(CHROME_EARL_GREY_2)
 
 namespace {
 
@@ -104,19 +102,10 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
   return config;
 }
 
-#if defined(CHROME_EARL_GREY_2)
 + (void)setUpForTestCase {
   [super setUpForTestCase];
   [self setUpHelper];
 }
-#elif defined(CHROME_EARL_GREY_1)
-+ (void)setUp {
-  [super setUp];
-  [self setUpHelper];
-}
-#else
-#error Not an EarlGrey Test
-#endif
 
 + (void)setUpHelper {
   [self closeAllTabs];
@@ -326,9 +315,10 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
   const GURL pageURL = self.testServer->GetURL(kPageURL);
 
   // Open in new incognito tab.
-  [[EarlGrey selectElementWithMatcher:
-                 chrome_test_util::ButtonWithAccessibilityLabelId(
-                     IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWINCOGNITOTAB)]
+  [[EarlGrey
+      selectElementWithMatcher:chrome_test_util::OpenLinkInIncognitoButton(
+                                   [ChromeEarlGrey
+                                       isNativeContextMenusEnabled])]
       performAction:grey_tap()];
 
   [ChromeEarlGrey waitForMainTabCount:1];
@@ -405,17 +395,21 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 - (void)testMostVisitedLongPress {
   [self setupMostVisitedTileLongPress];
 
-  if (![ChromeEarlGrey isRegularXRegularSizeClass]) {
-    [[EarlGrey selectElementWithMatcher:
-                   chrome_test_util::ButtonWithAccessibilityLabelId(
-                       IDS_APP_CANCEL)] assertWithMatcher:grey_interactable()];
-  }
-
   // No read later.
   [[EarlGrey
       selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
                                    IDS_IOS_CONTENT_CONTEXT_ADDTOREADINGLIST)]
       assertWithMatcher:grey_nil()];
+
+  if ([ChromeEarlGrey isNativeContextMenusEnabled]) {
+    // iOS 13 Context Menus don't have a Cancel action.
+    return;
+  }
+  if (![ChromeEarlGrey isRegularXRegularSizeClass]) {
+    [[EarlGrey selectElementWithMatcher:
+                   chrome_test_util::ButtonWithAccessibilityLabelId(
+                       IDS_APP_CANCEL)] assertWithMatcher:grey_interactable()];
+  }
 }
 
 #pragma mark - Test utils

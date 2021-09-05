@@ -12,8 +12,8 @@
 #include "base/strings/string_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
-#include "chrome/browser/web_applications/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app.h"
 
 namespace web_app {
@@ -87,9 +87,23 @@ base::Optional<SkColor> WebAppRegistrar::GetAppBackgroundColor(
   return web_app ? web_app->background_color() : base::nullopt;
 }
 
-const GURL& WebAppRegistrar::GetAppLaunchURL(const AppId& app_id) const {
+const GURL& WebAppRegistrar::GetAppStartUrl(const AppId& app_id) const {
   auto* web_app = GetAppById(app_id);
-  return web_app ? web_app->launch_url() : GURL::EmptyGURL();
+  return web_app ? web_app->start_url() : GURL::EmptyGURL();
+}
+
+const std::string* WebAppRegistrar::GetAppLaunchQueryParams(
+    const AppId& app_id) const {
+  auto* web_app = GetAppById(app_id);
+  return web_app ? web_app->launch_query_params() : nullptr;
+}
+
+const apps::ShareTarget* WebAppRegistrar::GetAppShareTarget(
+    const AppId& app_id) const {
+  auto* web_app = GetAppById(app_id);
+  return (web_app && web_app->share_target().has_value())
+             ? &web_app->share_target().value()
+             : nullptr;
 }
 
 base::Optional<GURL> WebAppRegistrar::GetAppScopeInternal(
@@ -142,11 +156,11 @@ std::vector<WebApplicationIconInfo> WebAppRegistrar::GetAppIconInfos(
                  : std::vector<WebApplicationIconInfo>();
 }
 
-std::vector<SquareSizePx> WebAppRegistrar::GetAppDownloadedIconSizesAny(
+SortedSizesPx WebAppRegistrar::GetAppDownloadedIconSizesAny(
     const AppId& app_id) const {
   auto* web_app = GetAppById(app_id);
   return web_app ? web_app->downloaded_icon_sizes(IconPurpose::ANY)
-                 : std::vector<SquareSizePx>();
+                 : SortedSizesPx();
 }
 
 std::vector<WebApplicationShortcutsMenuItemInfo>
@@ -197,7 +211,7 @@ void WebAppRegistrar::OnProfileMarkedForPermanentDeletion(
     NotifyWebAppProfileWillBeDeleted(app.app_id());
     WebAppProviderBase::GetProviderBase(profile())
         ->os_integration_manager()
-        .UninstallOsHooks(app.app_id(), base::DoNothing());
+        .UninstallAllOsHooks(app.app_id(), base::DoNothing());
   }
   // We can't do registry_.clear() here because it makes in-memory registry
   // diverged from the sync server registry and from the on-disk registry

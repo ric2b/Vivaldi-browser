@@ -38,7 +38,6 @@
 #include "services/network/public/cpp/cors/cors_error_status.h"
 #include "services/network/public/mojom/cors.mojom-blink.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink.h"
-#include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
@@ -209,7 +208,7 @@ ThreadableLoader::ThreadableLoader(
       execution_context_(execution_context),
       resource_fetcher_(resource_fetcher),
       resource_loader_options_(resource_loader_options),
-      out_of_blink_cors_(RuntimeEnabledFeatures::OutOfBlinkCorsEnabled()),
+      out_of_blink_cors_(true),
       async_(resource_loader_options.synchronous_policy ==
              kRequestAsynchronously),
       request_context_(mojom::RequestContextType::UNSPECIFIED),
@@ -597,6 +596,10 @@ bool ThreadableLoader::RedirectReceived(
 
     DCHECK_EQ(redirect_mode_, network::mojom::RedirectMode::kFollow);
 
+    // TODO(crbug.com/1053866): Dead code as the redirect limit is checked in
+    // the network service with OOR-CORS today. This will be removed very soon.
+    // Consider if it's possible to show similar console messages, and to
+    // notify |client|.
     if (redirect_limit_ <= 0) {
       ThreadableLoaderClient* client = client_;
       Clear();
@@ -1000,9 +1003,6 @@ void ThreadableLoader::DispatchDidFail(const ResourceError& error) {
 void ThreadableLoader::LoadRequest(
     ResourceRequest& request,
     ResourceLoaderOptions resource_loader_options) {
-  resource_loader_options.cors_handling_by_resource_fetcher =
-      kDisableCorsHandlingByResourceFetcher;
-
   if (out_of_blink_cors_) {
     if (request.GetCredentialsMode() ==
         network::mojom::CredentialsMode::kOmit) {
@@ -1037,16 +1037,16 @@ void ThreadableLoader::LoadRequest(
     }
   }
 
+  const mojom::RequestContextType request_context = request.GetRequestContext();
   FetchParameters new_params(std::move(request), resource_loader_options);
   DCHECK(!GetResource());
 
   checker_.WillAddClient();
-  if (request.GetRequestContext() == mojom::RequestContextType::VIDEO ||
-      request.GetRequestContext() == mojom::RequestContextType::AUDIO) {
+  if (request_context == mojom::RequestContextType::VIDEO ||
+      request_context == mojom::RequestContextType::AUDIO) {
     DCHECK(async_);
     RawResource::FetchMedia(new_params, resource_fetcher_, this);
-  } else if (request.GetRequestContext() ==
-             mojom::RequestContextType::MANIFEST) {
+  } else if (request_context == mojom::RequestContextType::MANIFEST) {
     DCHECK(async_);
     RawResource::FetchManifest(new_params, resource_fetcher_, this);
   } else if (async_) {

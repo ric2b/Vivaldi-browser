@@ -29,6 +29,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -38,19 +39,24 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
+#include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
+#include "components/keyed_service/core/keyed_service_shutdown_notifier.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/file_url_loader.h"
 #include "content/public/browser/navigation_ui_data.h"
+#include "content/public/browser/non_network_url_loader_factory_base.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/common/child_process_host.h"
 #include "crypto/secure_hash.h"
 #include "crypto/sha2.h"
 #include "extensions/browser/content_verifier.h"
 #include "extensions/browser/content_verify_job.h"
 #include "extensions/browser/extension_navigation_ui_data.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_registry_factory.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -59,6 +65,7 @@
 #include "extensions/browser/info_map.h"
 #include "extensions/browser/media_router_extension_access_logger.h"
 #include "extensions/browser/process_map.h"
+#include "extensions/browser/process_map_factory.h"
 #include "extensions/browser/url_request_util.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
@@ -296,7 +303,7 @@ bool AllowExtensionResourceLoad(const GURL& url,
   // Service Worker and the imported scripts can be loaded with extension URLs
   // in browser process during update check when
   // ServiceWorkerImportedScriptUpdateCheck is enabled.
-  if (child_id == -1 &&
+  if (child_id == content::ChildProcessHost::kInvalidUniqueID &&
       (blink::IsResourceTypeFrame(resource_type) ||
        (base::FeatureList::IsEnabled(blink::features::kPlzDedicatedWorker) &&
         resource_type == blink::mojom::ResourceType::kWorker) ||
@@ -453,39 +460,66 @@ class FileLoaderObserver : public content::FileURLLoaderObserver {
   DISALLOW_COPY_AND_ASSIGN(FileLoaderObserver);
 };
 
-class ExtensionURLLoaderFactory : public network::mojom::URLLoaderFactory {
+class ExtensionURLLoaderFactory
+    : public content::NonNetworkURLLoaderFactoryBase {
  public:
-  ExtensionURLLoaderFactory(int render_process_id, int render_frame_id)
-      : render_process_id_(render_process_id),
-        render_frame_id_(render_frame_id) {
-    content::RenderProcessHost* process_host =
-        content::RenderProcessHost::FromID(render_process_id);
-    browser_context_ = process_host->GetBrowserContext();
-    is_web_view_request_ = WebViewGuest::FromFrameID(
-                               render_process_id_, render_frame_id) != nullptr;
-    content::RenderFrameHost* rfh =
-        content::RenderFrameHost::FromID(render_process_id_, render_frame_id_);
-    if (rfh)
-      ukm_source_id_ = base::UkmSourceId::FromInt64(rfh->GetPageUkmSourceId());
+  static mojo::PendingRemote<network::mojom::URLLoaderFactory> Create(
+      content::BrowserContext* browser_context,
+      base::UkmSourceId ukm_source_id,
+      bool is_web_view_request,
+      int render_process_id) {
+    DCHECK(browser_context);
 
-    Init();
+    mojo::PendingRemote<network::mojom::URLLoaderFactory> pending_remote;
+
+    // Return an unbound |pending_remote| if the |browser_context| has already
+    // started shutting down.
+    if (browser_context->ShutdownStarted())
+      return pending_remote;
+
+    // Manages its own lifetime.
+    new ExtensionURLLoaderFactory(
+        browser_context, ukm_source_id, is_web_view_request, render_process_id,
+        pending_remote.InitWithNewPipeAndPassReceiver());
+
+    return pending_remote;
   }
 
-  ExtensionURLLoaderFactory(content::BrowserContext* browser_context,
-                            base::UkmSourceId ukm_source_id,
-                            bool is_web_view_request)
-      : browser_context_(browser_context),
+  static void EnsureShutdownNotifierFactoryBuilt() {
+    BrowserContextShutdownNotifierFactory::GetInstance();
+  }
+
+ private:
+  // Constructs ExtensionURLLoaderFactory bound to the |factory_receiver|.
+  //
+  // The factory is self-owned - it will delete itself once there are no more
+  // receivers (including the receiver associated with the returned
+  // mojo::PendingRemote and the receivers bound by the Clone method).  See also
+  // the NonNetworkURLLoaderFactoryBase::OnDisconnect method.
+  ExtensionURLLoaderFactory(
+      content::BrowserContext* browser_context,
+      base::UkmSourceId ukm_source_id,
+      bool is_web_view_request,
+      int render_process_id,
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory_receiver)
+      : content::NonNetworkURLLoaderFactoryBase(std::move(factory_receiver)),
+        browser_context_(browser_context),
         is_web_view_request_(is_web_view_request),
         ukm_source_id_(ukm_source_id),
-        render_process_id_(-1),
-        render_frame_id_(-1) {
-    Init();
-  }
-
-  void Init() {
+        render_process_id_(render_process_id) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     extension_info_map_ =
         extensions::ExtensionSystem::Get(browser_context_)->info_map();
-    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    // base::Unretained is safe below, because lifetime of
+    // |browser_context_shutdown_subscription_| guarantees that
+    // OnBrowserContextDestroyed won't be called after |this| is destroyed.
+    browser_context_shutdown_subscription_ =
+        BrowserContextShutdownNotifierFactory::GetInstance()
+            ->Get(browser_context)
+            ->Subscribe(base::BindRepeating(
+                &ExtensionURLLoaderFactory::OnBrowserContextDestroyed,
+                base::Unretained(this)));
   }
 
   ~ExtensionURLLoaderFactory() override = default;
@@ -501,6 +535,12 @@ class ExtensionURLLoaderFactory : public network::mojom::URLLoaderFactory {
       const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
       override {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    if (browser_context_->ShutdownStarted()) {
+      mojo::Remote<network::mojom::URLLoaderClient>(std::move(client))
+          ->OnComplete(network::URLLoaderCompletionStatus(net::ERR_FAILED));
+      return;
+    }
 
     client =
         WrapWithMetricsIfNeeded(request.url, ukm_source_id_, std::move(client));
@@ -540,12 +580,6 @@ class ExtensionURLLoaderFactory : public network::mojom::URLLoaderFactory {
                   std::move(directory_path));
   }
 
-  void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
-      override {
-    receivers_.Add(this, std::move(receiver));
-  }
-
- private:
   void LoadExtension(
       mojo::PendingReceiver<network::mojom::URLLoader> loader,
       const network::ResourceRequest& request,
@@ -725,6 +759,38 @@ class ExtensionURLLoaderFactory : public network::mojom::URLLoaderFactory {
         /* allow_directory_listing */ false, std::move(response_headers));
   }
 
+  void OnBrowserContextDestroyed() {
+    // When |browser_context_| gets destroyed, |this| factory is not able to
+    // serve any more requests.
+    DisconnectReceiversAndDestroy();
+  }
+
+  class BrowserContextShutdownNotifierFactory
+      : public BrowserContextKeyedServiceShutdownNotifierFactory {
+   public:
+    static BrowserContextShutdownNotifierFactory* GetInstance() {
+      static base::NoDestructor<BrowserContextShutdownNotifierFactory>
+          s_factory;
+      return s_factory.get();
+    }
+
+    // No copying.
+    BrowserContextShutdownNotifierFactory(
+        const BrowserContextShutdownNotifierFactory&) = delete;
+    BrowserContextShutdownNotifierFactory& operator=(
+        const BrowserContextShutdownNotifierFactory&) = delete;
+
+   private:
+    friend class base::NoDestructor<BrowserContextShutdownNotifierFactory>;
+    BrowserContextShutdownNotifierFactory()
+        : BrowserContextKeyedServiceShutdownNotifierFactory(
+              "ExtensionURLLoaderFactory::"
+              "BrowserContextShutdownNotifierFactory") {
+      DependsOn(ExtensionRegistryFactory::GetInstance());
+      DependsOn(ProcessMapFactory::GetInstance());
+    }
+  };
+
   content::BrowserContext* browser_context_;
   bool is_web_view_request_;
   base::UkmSourceId ukm_source_id_;
@@ -733,9 +799,10 @@ class ExtensionURLLoaderFactory : public network::mojom::URLLoaderFactory {
   // avoid holding on to stale pointers if we get requests past the lifetime of
   // the objects.
   const int render_process_id_;
-  const int render_frame_id_;
   scoped_refptr<extensions::InfoMap> extension_info_map_;
-  mojo::ReceiverSet<network::mojom::URLLoaderFactory> receivers_;
+
+  std::unique_ptr<KeyedServiceShutdownNotifier::Subscription>
+      browser_context_shutdown_subscription_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionURLLoaderFactory);
 };
@@ -786,35 +853,54 @@ void SetExtensionProtocolTestHandler(ExtensionProtocolTestHandler* handler) {
   g_test_handler = handler;
 }
 
-std::unique_ptr<network::mojom::URLLoaderFactory>
+mojo::PendingRemote<network::mojom::URLLoaderFactory>
 CreateExtensionNavigationURLLoaderFactory(
     content::BrowserContext* browser_context,
     base::UkmSourceId ukm_source_id,
     bool is_web_view_request) {
-  return std::make_unique<ExtensionURLLoaderFactory>(
-      browser_context, ukm_source_id, is_web_view_request);
+  return ExtensionURLLoaderFactory::Create(
+      browser_context, ukm_source_id, is_web_view_request,
+      content::ChildProcessHost::kInvalidUniqueID);
 }
 
-std::unique_ptr<network::mojom::URLLoaderFactory>
+mojo::PendingRemote<network::mojom::URLLoaderFactory>
 CreateExtensionWorkerMainResourceURLLoaderFactory(
     content::BrowserContext* browser_context) {
-  return std::make_unique<ExtensionURLLoaderFactory>(
+  return ExtensionURLLoaderFactory::Create(
       browser_context, base::kInvalidUkmSourceId,
-      /*is_web_view_request=*/false);
+      /*is_web_view_request=*/false,
+      content::ChildProcessHost::kInvalidUniqueID);
 }
 
-std::unique_ptr<network::mojom::URLLoaderFactory>
+mojo::PendingRemote<network::mojom::URLLoaderFactory>
 CreateExtensionServiceWorkerScriptURLLoaderFactory(
     content::BrowserContext* browser_context) {
-  return std::make_unique<ExtensionURLLoaderFactory>(
+  return ExtensionURLLoaderFactory::Create(
       browser_context, base::kInvalidUkmSourceId,
-      /*is_web_view_request=*/false);
+      /*is_web_view_request=*/false,
+      content::ChildProcessHost::kInvalidUniqueID);
 }
 
-std::unique_ptr<network::mojom::URLLoaderFactory>
+mojo::PendingRemote<network::mojom::URLLoaderFactory>
 CreateExtensionURLLoaderFactory(int render_process_id, int render_frame_id) {
-  return std::make_unique<ExtensionURLLoaderFactory>(render_process_id,
-                                                     render_frame_id);
+  content::RenderProcessHost* process_host =
+      content::RenderProcessHost::FromID(render_process_id);
+  content::BrowserContext* browser_context = process_host->GetBrowserContext();
+  bool is_web_view_request =
+      WebViewGuest::FromFrameID(render_process_id, render_frame_id) != nullptr;
+
+  content::RenderFrameHost* rfh =
+      content::RenderFrameHost::FromID(render_process_id, render_frame_id);
+  base::UkmSourceId ukm_source_id = base::kInvalidUkmSourceId;
+  if (rfh)
+    ukm_source_id = base::UkmSourceId::FromInt64(rfh->GetPageUkmSourceId());
+
+  return ExtensionURLLoaderFactory::Create(
+      browser_context, ukm_source_id, is_web_view_request, render_process_id);
+}
+
+void EnsureExtensionURLLoaderFactoryShutdownNotifierFactoryBuilt() {
+  ExtensionURLLoaderFactory::EnsureShutdownNotifierFactoryBuilt();
 }
 
 }  // namespace extensions

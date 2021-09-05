@@ -177,6 +177,12 @@ void RecordBLockedUrls(
     blocked_urls_info->back().blocked_count = blocked_url.second.blocked_count;
   }
 }
+
+template <class T>
+std::vector<T> CopySetToVector(const std::set<T> set) {
+  return std::vector<T>(set.begin(), set.end());
+}
+
 }  // namespace
 
 ContentBlockingEventRouter::ContentBlockingEventRouter(
@@ -590,10 +596,11 @@ ContentBlockingGetExceptionsFunction::RunWithService(
   namespace Results = vivaldi::content_blocking::GetExceptions::Results;
   std::unique_ptr<Params> params(Params::Create(*args_));
 
-  return ArgumentList(Results::Create(rules_service->GetExceptions(
-      FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
-      FromVivaldiContentBlockingExceptionList(params->exception_list)
-          .value())));
+  return ArgumentList(
+      Results::Create(CopySetToVector(rules_service->GetExceptions(
+          FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
+          FromVivaldiContentBlockingExceptionList(params->exception_list)
+              .value()))));
 }
 
 ExtensionFunction::ResponseValue
@@ -602,18 +609,18 @@ ContentBlockingGetAllExceptionListsFunction::RunWithService(
   namespace Results = vivaldi::content_blocking::GetAllExceptionLists::Results;
 
   Results::Origins result;
-  result.ad_blocking.exempt_list =
+  result.ad_blocking.exempt_list = CopySetToVector(
       rules_service->GetExceptions(adblock_filter::RuleGroup::kAdBlockingRules,
-                                   adblock_filter::RuleService::kExemptList);
-  result.ad_blocking.process_list =
+                                   adblock_filter::RuleService::kExemptList));
+  result.ad_blocking.process_list = CopySetToVector(
       rules_service->GetExceptions(adblock_filter::RuleGroup::kAdBlockingRules,
-                                   adblock_filter::RuleService::kProcessList);
-  result.tracking.exempt_list =
+                                   adblock_filter::RuleService::kProcessList));
+  result.tracking.exempt_list = CopySetToVector(
       rules_service->GetExceptions(adblock_filter::RuleGroup::kTrackingRules,
-                                   adblock_filter::RuleService::kExemptList);
-  result.tracking.process_list =
+                                   adblock_filter::RuleService::kExemptList));
+  result.tracking.process_list = CopySetToVector(
       rules_service->GetExceptions(adblock_filter::RuleGroup::kTrackingRules,
-                                   adblock_filter::RuleService::kProcessList);
+                                   adblock_filter::RuleService::kProcessList));
 
   return ArgumentList(Results::Create(result));
 }

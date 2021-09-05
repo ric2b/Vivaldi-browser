@@ -80,12 +80,12 @@ size_t GetDiscardedTokenCountForTesting() {
   return g_discarded_token_count_for_testing;
 }
 
-// This sets the maximum number of tokens which the foreground HTML parser
-// should try to process in one go. Lower values generally mean faster first
-// paints, larger values delay first paint, but make sure it's closer to the
-// final page. This value gives a good speedup, but may need to be tuned
-// further.
-constexpr int kMaxTokenizationBudget = 500;
+// This sets the (default) maximum number of tokens which the foreground HTML
+// parser should try to process in one go. Lower values generally mean faster
+// first paints, larger values delay first paint, but make sure it's closer to
+// the final page. This is the default value to use, if no Finch-provided
+// value exists.
+constexpr int kDefaultMaxTokenizationBudget = 500;
 
 // This class encapsulates the internal state needed for synchronous foreground
 // HTML parsing (e.g. if HTMLDocumentParser::PumpTokenizer yields, this class
@@ -264,6 +264,15 @@ HTMLDocumentParser::HTMLDocumentParser(
       context_element, report_errors, options_));
 }
 
+namespace {
+int GetMaxTokenizationBudget() {
+  static int max = base::GetFieldTrialParamByFeatureAsInt(
+      features::kForceSynchronousHTMLParsing, "MaxTokenizationBudget",
+      kDefaultMaxTokenizationBudget);
+  return max;
+}
+}  // namespace
+
 HTMLDocumentParser::HTMLDocumentParser(Document& document,
                                        ParserContentPolicy content_policy,
                                        ParserSynchronizationPolicy sync_policy)
@@ -318,6 +327,8 @@ HTMLDocumentParser::HTMLDocumentParser(Document& document,
     metrics_reporter_ = std::make_unique<HTMLParserMetrics>(
         document.UkmSourceID(), document.UkmRecorder());
   }
+
+  max_tokenization_budget_ = GetMaxTokenizationBudget();
 
   // Don't create preloader for parsing clipboard content.
   if (content_policy == kDisallowScriptingAndPluginContent)
@@ -450,13 +461,12 @@ void HTMLDocumentParser::DeferredPumpTokenizerIfPossible() {
   // (e.g. fast/parser/iframe-onload-document-close-with-external-script.html).
   DCHECK(task_runner_state_->GetState() ==
              HTMLDocumentParserState::DeferredParserState::kNotScheduled ||
-         !IsStopped());
-  DCHECK(task_runner_state_->GetState() ==
-             HTMLDocumentParserState::DeferredParserState::kNotScheduled ||
          !IsDetached());
   TRACE_EVENT2("blink", "HTMLDocumentParser::DeferredPumpTokenizerIfPossible",
                "parser", (void*)this, "state",
                task_runner_state_->GetStateAsString());
+  if (IsStopped())
+    return;
   if (task_runner_state_->IsScheduled()) {
     HTMLDocumentParser::PumpTokenizerIfPossible();
   } else if (task_runner_state_->IsScheduledToDelayEnd()) {
@@ -507,7 +517,7 @@ void HTMLDocumentParser::ResumeParsingAfterYield() {
   DCHECK(have_background_parser_);
   DCHECK(!RuntimeEnabledFeatures::ForceSynchronousHTMLParsingEnabled());
 
-  ScopedYieldTimer(&yield_timer_, metrics_reporter_.get());
+  ScopedYieldTimer timer(&yield_timer_, metrics_reporter_.get());
 
   CheckIfBlockingStylesheetAdded();
   if (IsStopped() || IsPaused())
@@ -890,7 +900,7 @@ bool HTMLDocumentParser::PumpTokenizer() {
   probe::ParseHTML probe(GetDocument(), this);
 
   bool should_yield = false;
-  int budget = kMaxTokenizationBudget;
+  int budget = max_tokenization_budget_;
 
   while (CanTakeNextToken() && !should_yield) {
     {

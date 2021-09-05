@@ -67,13 +67,7 @@ void OnSetArcVmCpuRestriction(
     LOG(ERROR) << "SetVmCpuRestriction for ARCVM failed";
 }
 
-void DoSetArcVmCpuRestriction(CpuRestrictionState cpu_restriction_state,
-                              bool concierge_started) {
-  if (!concierge_started) {
-    LOG(ERROR) << "Concierge D-Bus service is not available";
-    return;
-  }
-
+void SetArcVmCpuRestriction(CpuRestrictionState cpu_restriction_state) {
   auto* client = chromeos::DBusThreadManager::Get()->GetConciergeClient();
   if (!client) {
     LOG(ERROR) << "ConciergeClient is not available";
@@ -95,17 +89,6 @@ void DoSetArcVmCpuRestriction(CpuRestrictionState cpu_restriction_state,
 
   client->SetVmCpuRestriction(request,
                               base::BindOnce(&OnSetArcVmCpuRestriction));
-}
-
-void SetArcVmCpuRestriction(CpuRestrictionState cpu_restriction_state) {
-  auto* client = chromeos::DBusThreadManager::Get()->GetDebugDaemonClient();
-  if (!client) {
-    LOG(WARNING) << "DebugDaemonClient is not available";
-    return;
-  }
-  // TODO(wvk): Call StartConcierge() only when the service is not running.
-  client->StartConcierge(
-      base::BindOnce(&DoSetArcVmCpuRestriction, cpu_restriction_state));
 }
 
 void SetArcContainerCpuRestriction(CpuRestrictionState cpu_restriction_state) {
@@ -154,6 +137,11 @@ bool IsArcAvailable() {
 bool IsArcVmEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       chromeos::switches::kEnableArcVm);
+}
+
+bool IsArcVmDevConfIgnored() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kIgnoreArcVmDevConf);
 }
 
 bool ShouldArcAlwaysStart() {
@@ -320,6 +308,8 @@ int32_t GetLcdDensityForDeviceScaleFactor(float device_scale_factor) {
   // per-display-density is supported.
   constexpr float kEpsilon = 0.001;
   if (std::abs(device_scale_factor - display::kDsf_2_252) < kEpsilon)
+    return 280;
+  if (std::abs(device_scale_factor - 2.4f) < kEpsilon)
     return 280;
   if (std::abs(device_scale_factor - 1.6f) < kEpsilon)
     return 213;  // TVDPI

@@ -21,9 +21,6 @@ namespace app_list_features {
 // Enables the answer card in the app list.
 ASH_PUBLIC_EXPORT extern const base::Feature kEnableAnswerCard;
 
-// Enables the Play Store app search.
-ASH_PUBLIC_EXPORT extern const base::Feature kEnablePlayStoreAppSearch;
-
 // Enables in-app data search.
 ASH_PUBLIC_EXPORT extern const base::Feature kEnableAppDataSearch;
 
@@ -88,8 +85,10 @@ ASH_PUBLIC_EXPORT extern const base::Feature kEnableAggregatedMlSearchRanking;
 // apps grid pages are scaled down and shown a background card.
 ASH_PUBLIC_EXPORT extern const base::Feature kNewDragSpecInLauncher;
 
+// Enables rich entity formatting for Omnibox results in the launcher.
+ASH_PUBLIC_EXPORT extern const base::Feature kEnableOmniboxRichEntities;
+
 bool ASH_PUBLIC_EXPORT IsAnswerCardEnabled();
-bool ASH_PUBLIC_EXPORT IsPlayStoreAppSearchEnabled();
 bool ASH_PUBLIC_EXPORT IsAppDataSearchEnabled();
 bool ASH_PUBLIC_EXPORT IsSettingsShortcutSearchEnabled();
 bool ASH_PUBLIC_EXPORT IsZeroStateSuggestionsEnabled();
@@ -109,6 +108,7 @@ bool ASH_PUBLIC_EXPORT IsExactMatchForNonLatinLocaleEnabled();
 bool ASH_PUBLIC_EXPORT IsLauncherSettingsSearchEnabled();
 bool ASH_PUBLIC_EXPORT IsAggregatedMlSearchRankingEnabled();
 bool ASH_PUBLIC_EXPORT IsNewDragSpecInLauncherEnabled();
+bool ASH_PUBLIC_EXPORT IsOmniboxRichEntitiesEnabled();
 
 std::string ASH_PUBLIC_EXPORT AnswerServerUrl();
 std::string ASH_PUBLIC_EXPORT AnswerServerQuerySuffix();

@@ -76,7 +76,7 @@ void MockMediaSessionPlayerObserver::OnSetAudioSinkId(
     int player_id,
     const std::string& raw_device_id) {
   EXPECT_GE(player_id, 0);
-  EXPECT_EQ(players_.size(), 1u);
+  EXPECT_GT(players_.size(), static_cast<size_t>(player_id));
 
   ++received_set_audio_sink_id_calls_;
   players_[player_id].audio_sink_id_ = raw_device_id;
@@ -175,6 +175,13 @@ std::string MockMediaSessionPlayerObserver::GetAudioOutputSinkId(
   EXPECT_GE(player_id, 0);
   EXPECT_GT(players_.size(), static_cast<size_t>(player_id));
   return players_.at(player_id).audio_sink_id_;
+}
+
+bool MockMediaSessionPlayerObserver::SupportsAudioOutputDeviceSwitching(
+    int player_id) const {
+  EXPECT_GE(player_id, 0);
+  EXPECT_GT(players_.size(), static_cast<size_t>(player_id));
+  return players_.at(player_id).supports_device_switching_;
 }
 
 MockMediaSessionPlayerObserver::MockPlayer::MockPlayer(bool is_playing,

@@ -131,13 +131,12 @@ void PrintContext::ComputePageRectsWithPageSizeInternal(
                                 : inline_direction_start - page_logical_width;
 
     auto* scrollable_area = GetFrame()->View()->LayoutViewport();
-    IntSize frame_scroll = scrollable_area->ScrollOffsetInt();
-    page_logical_left -= frame_scroll.Width();
-    page_logical_top -= frame_scroll.Height();
     IntRect page_rect(page_logical_left, page_logical_top, page_logical_width,
                       page_logical_height);
     if (!is_horizontal)
       page_rect = page_rect.TransposedRect();
+    IntSize frame_scroll = scrollable_area->ScrollOffsetInt();
+    page_rect.Move(-frame_scroll.Width(), -frame_scroll.Height());
     page_rects_.push_back(page_rect);
   }
 }
@@ -219,8 +218,8 @@ void PrintContext::CollectLinkedDestinations(Node* node) {
   if (url.HasFragmentIdentifier() &&
       EqualIgnoringFragmentIdentifier(url, node->GetDocument().BaseURL())) {
     String name = url.FragmentIdentifier();
-    if (Element* element = node->GetDocument().FindAnchor(name))
-      linked_destinations_.Set(name, element);
+    if (Node* target = node->GetDocument().FindAnchor(name))
+      linked_destinations_.Set(name, target);
   }
 }
 
@@ -246,7 +245,7 @@ void PrintContext::OutputLinkedDestinations(GraphicsContext& context,
 // static
 String PrintContext::PageProperty(LocalFrame* frame,
                                   const char* property_name,
-                                  int page_number) {
+                                  uint32_t page_number) {
   Document* document = frame->GetDocument();
   ScopedPrintContext print_context(frame);
   // Any non-zero size is OK here. We don't care about actual layout. We just
@@ -275,12 +274,12 @@ String PrintContext::PageProperty(LocalFrame* frame,
   return String("pageProperty() unimplemented for: ") + property_name;
 }
 
-bool PrintContext::IsPageBoxVisible(LocalFrame* frame, int page_number) {
+bool PrintContext::IsPageBoxVisible(LocalFrame* frame, uint32_t page_number) {
   return frame->GetDocument()->IsPageBoxVisible(page_number);
 }
 
 String PrintContext::PageSizeAndMarginsInPixels(LocalFrame* frame,
-                                                int page_number,
+                                                uint32_t page_number,
                                                 int width,
                                                 int height,
                                                 int margin_top,

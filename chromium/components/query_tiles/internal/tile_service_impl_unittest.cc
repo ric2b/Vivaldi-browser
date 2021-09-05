@@ -42,6 +42,10 @@ class MockTileManager : public TileManager {
   MOCK_METHOD(void, SetAcceptLanguagesForTesting, (const std::string&));
   MOCK_METHOD(TileGroupStatus, PurgeDb, ());
   MOCK_METHOD(TileGroup*, GetTileGroup, ());
+  MOCK_METHOD(void, OnTileClicked, (const std::string&));
+  MOCK_METHOD(void,
+              OnQuerySelected,
+              (const base::Optional<std::string>&, const base::string16&));
 };
 
 class MockTileServiceScheduler : public TileServiceScheduler {

@@ -8,6 +8,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_encode_options.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_async_blob_creator.h"
@@ -22,9 +23,8 @@
 
 namespace blink {
 
-CanvasRenderingContextHost::CanvasRenderingContextHost(
-    HostType host_type,
-    base::Optional<UkmParameters> ukm_params)
+CanvasRenderingContextHost::CanvasRenderingContextHost(HostType host_type,
+                                                       UkmParameters ukm_params)
     : host_type_(host_type), ukm_params_(ukm_params) {}
 
 void CanvasRenderingContextHost::RecordCanvasSizeToUMA(const IntSize& size) {
@@ -127,9 +127,9 @@ void CanvasRenderingContextHost::CreateCanvasResourceProvider3D() {
       // try a passthrough provider.
       DCHECK(LowLatencyEnabled());
       provider = CanvasResourceProvider::CreatePassThroughProvider(
-          Size(), SharedGpuContext::ContextProviderWrapper(), FilterQuality(),
-          ColorParams(), RenderingContext()->IsOriginTopLeft(),
-          std::move(dispatcher));
+          Size(), FilterQuality(), ColorParams(),
+          SharedGpuContext::ContextProviderWrapper(), dispatcher,
+          RenderingContext()->IsOriginTopLeft());
     }
     if (!provider) {
       // If PassThrough failed, try a SharedImage with usage display enabled,
@@ -142,9 +142,10 @@ void CanvasRenderingContextHost::CreateCanvasResourceProvider3D() {
             gpu::SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE;
       }
       provider = CanvasResourceProvider::CreateSharedImageProvider(
-          Size(), SharedGpuContext::ContextProviderWrapper(), FilterQuality(),
-          ColorParams(), RenderingContext()->IsOriginTopLeft(),
-          RasterMode::kGPU, shared_image_usage_flags);
+          Size(), FilterQuality(), ColorParams(),
+          CanvasResourceProvider::ShouldInitialize::kCallClear,
+          SharedGpuContext::ContextProviderWrapper(), RasterMode::kGPU,
+          RenderingContext()->IsOriginTopLeft(), shared_image_usage_flags);
     }
   } else if (SharedGpuContext::IsGpuCompositingEnabled()) {
     // If there is no LawLatency mode, and GPU is enabled, will try a GPU
@@ -155,9 +156,10 @@ void CanvasRenderingContextHost::CreateCanvasResourceProvider3D() {
       shared_image_usage_flags |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
     }
     provider = CanvasResourceProvider::CreateSharedImageProvider(
-        Size(), SharedGpuContext::ContextProviderWrapper(), FilterQuality(),
-        ColorParams(), RenderingContext()->IsOriginTopLeft(), RasterMode::kGPU,
-        shared_image_usage_flags);
+        Size(), FilterQuality(), ColorParams(),
+        CanvasResourceProvider::ShouldInitialize::kCallClear,
+        SharedGpuContext::ContextProviderWrapper(), RasterMode::kGPU,
+        RenderingContext()->IsOriginTopLeft(), shared_image_usage_flags);
   }
 
   // If either of the other modes failed and / or it was not possible to do, we
@@ -165,11 +167,13 @@ void CanvasRenderingContextHost::CreateCanvasResourceProvider3D() {
   // provider.
   if (!provider) {
     provider = CanvasResourceProvider::CreateSharedBitmapProvider(
-        Size(), FilterQuality(), ColorParams(), std::move(dispatcher));
+        Size(), FilterQuality(), ColorParams(),
+        CanvasResourceProvider::ShouldInitialize::kCallClear, dispatcher);
   }
   if (!provider) {
     provider = CanvasResourceProvider::CreateBitmapProvider(
-        Size(), FilterQuality(), ColorParams());
+        Size(), FilterQuality(), ColorParams(),
+        CanvasResourceProvider::ShouldInitialize::kCallClear);
   }
 
   ReplaceResourceProvider(std::move(provider));
@@ -202,8 +206,10 @@ void CanvasRenderingContextHost::CreateCanvasResourceProvider2D(
     // SwapChain if possible.
     if (base::FeatureList::IsEnabled(features::kLowLatencyCanvas2dSwapChain)) {
       provider = CanvasResourceProvider::CreateSwapChainProvider(
-          Size(), SharedGpuContext::ContextProviderWrapper(), FilterQuality(),
-          ColorParams(), is_origin_top_left, std::move(dispatcher));
+          Size(), FilterQuality(), ColorParams(),
+          CanvasResourceProvider::ShouldInitialize::kCallClear,
+          SharedGpuContext::ContextProviderWrapper(), dispatcher,
+          is_origin_top_left);
     }
     // If SwapChain failed or it was not possible, we will try a SharedImage
     // with a set of flags trying to add Usage Display and Usage Scanout and
@@ -218,9 +224,10 @@ void CanvasRenderingContextHost::CreateCanvasResourceProvider2D(
             gpu::SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE;
       }
       provider = CanvasResourceProvider::CreateSharedImageProvider(
-          Size(), SharedGpuContext::ContextProviderWrapper(), FilterQuality(),
-          ColorParams(), is_origin_top_left, RasterMode::kGPU,
-          shared_image_usage_flags);
+          Size(), FilterQuality(), ColorParams(),
+          CanvasResourceProvider::ShouldInitialize::kCallClear,
+          SharedGpuContext::ContextProviderWrapper(), RasterMode::kGPU,
+          is_origin_top_left, shared_image_usage_flags);
     }
   } else if (use_gpu) {
     // First try to be optimized for displaying on screen. In the case we are
@@ -230,16 +237,18 @@ void CanvasRenderingContextHost::CreateCanvasResourceProvider2D(
     if (RuntimeEnabledFeatures::Canvas2dImageChromiumEnabled())
       shared_image_usage_flags |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
     provider = CanvasResourceProvider::CreateSharedImageProvider(
-        Size(), SharedGpuContext::ContextProviderWrapper(), FilterQuality(),
-        ColorParams(), is_origin_top_left, RasterMode::kGPU,
-        shared_image_usage_flags);
+        Size(), FilterQuality(), ColorParams(),
+        CanvasResourceProvider::ShouldInitialize::kCallClear,
+        SharedGpuContext::ContextProviderWrapper(), RasterMode::kGPU,
+        is_origin_top_left, shared_image_usage_flags);
   } else if (RuntimeEnabledFeatures::Canvas2dImageChromiumEnabled()) {
     const uint32_t shared_image_usage_flags =
         gpu::SHARED_IMAGE_USAGE_DISPLAY | gpu::SHARED_IMAGE_USAGE_SCANOUT;
     provider = CanvasResourceProvider::CreateSharedImageProvider(
-        Size(), SharedGpuContext::ContextProviderWrapper(), FilterQuality(),
-        ColorParams(), is_origin_top_left, RasterMode::kCPU,
-        shared_image_usage_flags);
+        Size(), FilterQuality(), ColorParams(),
+        CanvasResourceProvider::ShouldInitialize::kCallClear,
+        SharedGpuContext::ContextProviderWrapper(), RasterMode::kCPU,
+        is_origin_top_left, shared_image_usage_flags);
   }
 
   // If either of the other modes failed and / or it was not possible to do, we
@@ -247,11 +256,13 @@ void CanvasRenderingContextHost::CreateCanvasResourceProvider2D(
   // provider.
   if (!provider) {
     provider = CanvasResourceProvider::CreateSharedBitmapProvider(
-        Size(), FilterQuality(), ColorParams(), std::move(dispatcher));
+        Size(), FilterQuality(), ColorParams(),
+        CanvasResourceProvider::ShouldInitialize::kCallClear, dispatcher);
   }
   if (!provider) {
     provider = CanvasResourceProvider::CreateBitmapProvider(
-        Size(), FilterQuality(), ColorParams());
+        Size(), FilterQuality(), ColorParams(),
+        CanvasResourceProvider::ShouldInitialize::kCallClear);
   }
 
   ReplaceResourceProvider(std::move(provider));
@@ -277,7 +288,8 @@ CanvasColorParams CanvasRenderingContextHost::ColorParams() const {
 ScriptPromise CanvasRenderingContextHost::convertToBlob(
     ScriptState* script_state,
     const ImageEncodeOptions* options,
-    ExceptionState& exception_state) {
+    ExceptionState& exception_state,
+    const CanvasRenderingContext* const context) {
   WTF::String object_name = "Canvas";
   if (this->IsOffscreenCanvas())
     object_name = "OffscreenCanvas";
@@ -328,7 +340,12 @@ ScriptPromise CanvasRenderingContextHost::convertToBlob(
     }
     auto* async_creator = MakeGarbageCollected<CanvasAsyncBlobCreator>(
         image_bitmap, options, function_type, start_time,
-        ExecutionContext::From(script_state), ukm_params_, resolver);
+        ExecutionContext::From(script_state), ukm_params_,
+        IdentifiabilityStudySettings::Get()->IsTypeAllowed(
+            IdentifiableSurface::Type::kCanvasReadback)
+            ? IdentifiabilityInputDigest(context)
+            : 0,
+        resolver);
     async_creator->ScheduleAsyncBlobCreation(options->quality());
     return resolver->Promise();
   }
@@ -339,6 +356,44 @@ ScriptPromise CanvasRenderingContextHost::convertToBlob(
 
 bool CanvasRenderingContextHost::IsOffscreenCanvas() const {
   return host_type_ == kOffscreenCanvasHost;
+}
+
+IdentifiableToken CanvasRenderingContextHost::IdentifiabilityInputDigest(
+    const CanvasRenderingContext* const context) const {
+  const uint64_t context_digest =
+      context ? context->IdentifiableTextToken().ToUkmMetricValue() : 0;
+  const IdentifiabilityPaintOpDigest* const identifiability_paintop_digest =
+      ResourceProvider()
+          ? &(ResourceProvider()->GetIdentifiablityPaintOpDigest())
+          : nullptr;
+  const uint64_t canvas_digest =
+      identifiability_paintop_digest
+          ? identifiability_paintop_digest->GetToken().ToUkmMetricValue()
+          : 0;
+  const uint64_t context_type =
+      context ? context->GetContextType()
+              : CanvasRenderingContext::kContextTypeUnknown;
+  const bool encountered_skipped_ops =
+      (context && context->IdentifiabilityEncounteredSkippedOps()) ||
+      (identifiability_paintop_digest &&
+       identifiability_paintop_digest->encountered_skipped_ops());
+  const bool encountered_sensitive_ops =
+      context && context->IdentifiabilityEncounteredSensitiveOps();
+  const bool encountered_partially_digested_image =
+      identifiability_paintop_digest &&
+      identifiability_paintop_digest->encountered_partially_digested_image();
+  // Bits [0-3] are the context type, bits [4-6] are skipped ops, sensitive
+  // ops, and partial image ops bits, respectively. The remaining bits are
+  // for the canvas digest.
+  uint64_t final_digest =
+      ((context_digest ^ canvas_digest) << 7) | context_type;
+  if (encountered_skipped_ops)
+    final_digest |= IdentifiableSurface::CanvasTaintBit::kSkipped;
+  if (encountered_sensitive_ops)
+    final_digest |= IdentifiableSurface::CanvasTaintBit::kSensitive;
+  if (encountered_partially_digested_image)
+    final_digest |= IdentifiableSurface::CanvasTaintBit::kPartiallyDigested;
+  return final_digest;
 }
 
 }  // namespace blink

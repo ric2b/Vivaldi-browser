@@ -167,8 +167,7 @@ void CanvasResourceDispatcher::DispatchFrameSync(
   pending_compositor_frames_++;
   WTF::Vector<viz::ReturnedResource> resources;
   sink_->SubmitCompositorFrameSync(
-      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
-          .local_surface_id(),
+      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceId(),
       std::move(frame), base::nullopt, 0, &resources);
   DidReceiveCompositorFrameAck(resources);
 }
@@ -188,8 +187,7 @@ void CanvasResourceDispatcher::DispatchFrame(
 
   pending_compositor_frames_++;
   sink_->SubmitCompositorFrame(
-      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
-          .local_surface_id(),
+      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceId(),
       std::move(frame), base::nullopt, 0);
 }
 
@@ -228,10 +226,11 @@ bool CanvasResourceDispatcher::PrepareFrame(
   frame->metadata.frame_token = ++next_frame_token_;
 
   const gfx::Rect bounds(size_.Width(), size_.Height());
-  constexpr viz::RenderPassId kRenderPassId{1};
+  constexpr viz::CompositorRenderPassId kRenderPassId{1};
   constexpr bool is_clipped = false;
-  auto pass = viz::RenderPass::Create(/*shared_quad_state_list_size=*/1u,
-                                      /*quad_list_size=*/1u);
+  auto pass =
+      viz::CompositorRenderPass::Create(/*shared_quad_state_list_size=*/1u,
+                                        /*quad_list_size=*/1u);
   pass->SetNew(kRenderPassId, bounds,
                gfx::Rect(damage_rect.x(), damage_rect.y(), damage_rect.width(),
                          damage_rect.height()),
@@ -249,15 +248,15 @@ bool CanvasResourceDispatcher::PrepareFrame(
 
   canvas_resource->PrepareTransferableResource(
       &resource, &frame_resource->release_callback, kVerifiedSyncToken);
-  resource.id = next_resource_id_;
+  const unsigned resource_id = next_resource_id_;
+  resource.id = resource_id;
 
-  resources_.insert(next_resource_id_, std::move(frame_resource));
+  resources_.insert(resource_id, std::move(frame_resource));
 
   // TODO(crbug.com/869913): add unit testing for this.
   const gfx::Size canvas_resource_size(canvas_resource->Size());
 
-  PostImageToPlaceholderIfNotBlocked(std::move(canvas_resource),
-                                     next_resource_id_);
+  PostImageToPlaceholderIfNotBlocked(std::move(canvas_resource), resource_id);
 
   frame->resource_list.push_back(std::move(resource));
 
@@ -277,7 +276,7 @@ bool CanvasResourceDispatcher::PrepareFrame(
   // marked as vertically flipped unless someone else has done the flip for us.
   const bool yflipped =
       SharedGpuContext::IsGpuCompositingEnabled() && needs_vertical_flip;
-  quad->SetAll(sqs, bounds, bounds, needs_blending, resource.id,
+  quad->SetAll(sqs, bounds, bounds, needs_blending, resource_id,
                canvas_resource_size, kPremultipliedAlpha, uv_top_left,
                uv_bottom_right, SK_ColorTRANSPARENT, vertex_opacity, yflipped,
                nearest_neighbor, /*secure_output_only=*/false,
@@ -286,16 +285,12 @@ bool CanvasResourceDispatcher::PrepareFrame(
   frame->render_pass_list.push_back(std::move(pass));
 
   if (change_size_for_next_commit_ ||
-      !parent_local_surface_id_allocator_.HasValidLocalSurfaceIdAllocation()) {
+      !parent_local_surface_id_allocator_.HasValidLocalSurfaceId()) {
     parent_local_surface_id_allocator_.GenerateId();
     surface_embedder_->SetLocalSurfaceId(
-        parent_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
-            .local_surface_id());
+        parent_local_surface_id_allocator_.GetCurrentLocalSurfaceId());
     change_size_for_next_commit_ = false;
   }
-  frame->metadata.local_surface_id_allocation_time =
-      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
-          .allocation_time();
 
   return true;
 }

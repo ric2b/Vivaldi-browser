@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">ਵਿਸ਼ੇਸ਼ ਜਾਣਕਾਰੀ</translation>
 <translation id="1281252709823657822">ਡਾਇਲੌਗ</translation>
 <translation id="1306460908038601864">ਬੰਦ</translation>
+<translation id="1311894908970423688">ਮੁੱਲ <ph name="VALUE_DATE_OR_TIME" /> ਹੋਣਾ ਚਾਹੀਦਾ ਹੈ।</translation>
 <translation id="1335095011850992622">ਕ੍ਰੈਡਿਟ</translation>
 <translation id="1342835525016946179">ਲੇਖ</translation>
 <translation id="1359897965706325498">ਬੈਨਰ</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> ਆਈਟਮਾਂ</translation>
 <translation id="1480676835519562650">ਇੱਕ ਤੋਂ ਵੱਧ ਚੁਣਨਯੋਗ, <ph name="COUNT" /> ਵਿੱਚੋਂ <ph name="SELECTED" /> ਨੂੰ ਚੁਣਿਆ ਗਿਆ।</translation>
 <translation id="1589122976691792535">ਖੇਤਰ</translation>
 <translation id="1591562245178063882">ਇਸ ਮਹੀਨੇ</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033">ਹਫ਼ਤਾ <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">ਟਰੈਕ <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">ਚੈੱਕ-ਬਾਕਸ</translation>
+<translation id="2307576640803031502">ਸੂਚੀ ਵਿੱਚ, <ph name="COUNT" /> ਵਿੱਚੋਂ <ph name="INDEX" /> ਆਈਟਮ</translation>
 <translation id="2311842470354187719">ਪੰਨਾ ਬ੍ਰੇਕ</translation>
 <translation id="2335594187091864976">ਮਿਤੀ ਅਤੇ ਸਮਾਂ ਚੋਣਕਰਤਾ</translation>
 <translation id="2393030564806080191">ਛੇ-ਦਸ਼ਮਲਵ ਪ੍ਰਨਾਲੀ ਰੰਗ ਮੁੱਲ</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">ਹੋਰ ਵਿਕਲਪ</translation>
 <translation id="576709008726043716">ਜਾਣ-ਪਛਾਣ</translation>
 <translation id="57838592816432529">ਮਿਊਟ ਕਰੋ</translation>
+<translation id="5860033963881614850">ਬੰਦ ਕਰੋ</translation>
 <translation id="588258955323874662">ਫੁਲਸਕ੍ਰੀਨ</translation>
 <translation id="5888666972993069672">ਹੁਣ <ph name="DEVICE_FRIENDLY_NAME" /> 'ਤੇ ਕਾਸਟ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ</translation>
 <translation id="591047860372322273">ਖੋਜ ਬਾਕਸ</translation>
+<translation id="5916664084637901428">ਚਾਲੂ</translation>
 <translation id="5939518447894949180">ਰੀਸੈਟ ਕਰੋ</translation>
 <translation id="5966707198760109579">ਹਫ਼ਤਾ</translation>
 <translation id="5987525920412732405">ਸਪਿਨ ਬਟਨ</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">ਹਟਾਓ</translation>
 <translation id="668171684555832681">ਹੋਰ...</translation>
 <translation id="6692633176391053278">ਸਟੈਪਰ</translation>
+<translation id="6709093583001123835">ਮੁੱਲ <ph name="VALUE" /> ਹੋਣਾ ਚਾਹੀਦਾ ਹੈ।</translation>
 <translation id="6709570249143506788">ਘਟੀਆ ਪਲੇਬੈਕ ਗੁਣਵੱਤਾ</translation>
 <translation id="6755330956360078551">ਟੂਲਟਿੱਪ</translation>
 <translation id="6790428901817661496">ਪਲੇ ਕਰੋ</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, <ph name="WEEK_START_DATE" /> ਨੂੰ ਅਰੰਭ</translation>
 <translation id="916607977885256133">ਤਸਵੀਰ-ਵਿੱਚ-ਤਸਵੀਰ</translation>
 <translation id="9168329111483466115">ਪਗ ਟਿੱਪਣੀ</translation>
+<translation id="945780513535800434">ਅੰਸ਼ਕ ਤੌਰ 'ਤੇ ਨਿਸ਼ਾਨ ਲਗਾਇਆ ਗਿਆ</translation>
 <translation id="954003015749068518">ਤਸਵੀਰ-ਵਿੱਚ-ਤਸਵੀਰ ਵਿੱਚ ਦਾਖਲ ਹੋਵੋ</translation>
 <translation id="966787709310836684">ਮੀਨੂ</translation>
 </translationbundle>

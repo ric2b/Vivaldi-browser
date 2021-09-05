@@ -5,10 +5,10 @@
 #include "chrome/browser/chromeos/login/saml/password_sync_token_verifier.h"
 
 #include "base/task/post_task.h"
+#include "chrome/browser/chromeos/login/login_pref_names.h"
 #include "chrome/browser/chromeos/login/saml/in_session_password_sync_manager.h"
 #include "chrome/browser/chromeos/login/saml/in_session_password_sync_manager_factory.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/known_user.h"
 #include "content/public/browser/storage_partition.h"
@@ -49,6 +49,18 @@ void PasswordSyncTokenVerifier::RecheckAfter(base::TimeDelta delay) {
       delay);
 }
 
+void PasswordSyncTokenVerifier::CreateTokenAsync() {
+  DCHECK(!password_sync_token_fetcher_);
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory =
+      primary_profile_->GetURLLoaderFactory();
+  if (!url_loader_factory.get())
+    return;
+
+  password_sync_token_fetcher_ = std::make_unique<PasswordSyncTokenFetcher>(
+      url_loader_factory, primary_profile_, this);
+  password_sync_token_fetcher_->StartTokenCreate();
+}
+
 void PasswordSyncTokenVerifier::CheckForPasswordNotInSync() {
   // In-session password change is as of now the only way to trigger the sync
   // token update. We do not need to poll if this feature is not enabled.
@@ -56,18 +68,42 @@ void PasswordSyncTokenVerifier::CheckForPasswordNotInSync() {
   if (!prefs->GetBoolean(prefs::kSamlInSessionPasswordChangeEnabled)) {
     return;
   }
-  // Get current sync token for primary_user_.
-  std::string sync_token = user_manager::known_user::GetPasswordSyncToken(
-      primary_user_->GetAccountId());
+  DCHECK(!password_sync_token_fetcher_);
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory =
+      primary_profile_->GetURLLoaderFactory();
+  // url_loader_factory is nullptr in unit tests so constructing
+  // PasswordSyncTokenFetcher does not make sense there.
+  if (!url_loader_factory.get())
+    return;
+  password_sync_token_fetcher_ = std::make_unique<PasswordSyncTokenFetcher>(
+      url_loader_factory, primary_profile_, this);
 
+  // Get current sync token for primary_user_.
+  std::string sync_token = prefs->GetString(prefs::kSamlPasswordSyncToken);
   // No local sync token on the device - create it by sending user through the
   // online re-auth.
   if (sync_token.empty())
     sync_token = dummy_token;
 
-  password_sync_token_fetcher_ = std::make_unique<PasswordSyncTokenFetcher>(
-      primary_profile_->GetURLLoaderFactory(), primary_profile_, this);
   password_sync_token_fetcher_->StartTokenVerify(sync_token);
+}
+
+void PasswordSyncTokenVerifier::FetchSyncTokenOnReauth() {
+  PrefService* prefs = primary_profile_->GetPrefs();
+  if (!prefs->GetBoolean(prefs::kSamlInSessionPasswordChangeEnabled)) {
+    return;
+  }
+
+  DCHECK(!password_sync_token_fetcher_);
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory =
+      primary_profile_->GetURLLoaderFactory();
+  // No url_loader_factory in unit tests.
+  if (!url_loader_factory.get())
+    return;
+
+  password_sync_token_fetcher_ = std::make_unique<PasswordSyncTokenFetcher>(
+      url_loader_factory, primary_profile_, this);
+  password_sync_token_fetcher_->StartTokenGet();
 }
 
 void PasswordSyncTokenVerifier::CancelPendingChecks() {
@@ -78,12 +114,38 @@ void PasswordSyncTokenVerifier::CancelPendingChecks() {
   weak_ptr_factory_.InvalidateWeakPtrs();
 }
 
-void PasswordSyncTokenVerifier::OnTokenCreated(const std::string& sync_token) {}
+void PasswordSyncTokenVerifier::OnTokenCreated(const std::string& sync_token) {
+  DCHECK(!sync_token.empty());
+  PrefService* prefs = primary_profile_->GetPrefs();
 
-void PasswordSyncTokenVerifier::OnTokenFetched(const std::string& sync_token) {}
+  // Set token value in prefs for in-session operations and ephemeral users and
+  // local settings for login screen sync.
+  prefs->SetString(prefs::kSamlPasswordSyncToken, sync_token);
+  user_manager::known_user::SetPasswordSyncToken(primary_user_->GetAccountId(),
+                                                 sync_token);
+  password_sync_token_fetcher_.reset();
+  RecheckAfter(retry_backoff_.GetTimeUntilRelease());
+}
+
+void PasswordSyncTokenVerifier::OnTokenFetched(const std::string& sync_token) {
+  password_sync_token_fetcher_.reset();
+  if (!sync_token.empty()) {
+    // Set token fetched from the endpoint in prefs and local settings.
+    PrefService* prefs = primary_profile_->GetPrefs();
+    prefs->SetString(prefs::kSamlPasswordSyncToken, sync_token);
+    user_manager::known_user::SetPasswordSyncToken(
+        primary_user_->GetAccountId(), sync_token);
+    RecheckAfter(retry_backoff_.GetTimeUntilRelease());
+  } else {
+    // This is the first time a sync token is created for the user: we need to
+    // initialize its value by calling the API and store it locally.
+    CreateTokenAsync();
+  }
+}
 
 void PasswordSyncTokenVerifier::OnTokenVerified(bool is_valid) {
   retry_backoff_.InformOfRequest(true);
+  password_sync_token_fetcher_.reset();
   // Schedule next token check after base interval.
   RecheckAfter(retry_backoff_.GetTimeUntilRelease());
   if (is_valid)

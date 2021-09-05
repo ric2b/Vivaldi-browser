@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_PAGE_LOAD_METRICS_OBSERVERS_AD_METRICS_FRAME_DATA_H_
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
@@ -39,7 +40,7 @@ const int kMaxPeakWindowedPercent = 50;
 
 // Store information received for a frame on the page. FrameData is meant
 // to represent a frame along with it's entire subtree.
-class FrameData {
+class FrameData : public base::SupportsWeakPtr<FrameData> {
  public:
   // The origin of the ad relative to the main frame's origin.
   // Note: Logged to UMA, keep in sync with CrossOriginAdStatus in enums.xml.
@@ -83,6 +84,27 @@ class FrameData {
     kTotalCpu = 2,
     kPeakCpu = 3,
     kMaxValue = kPeakCpu,
+  };
+
+  // Controls what values of HeavyAdStatus will be cause an unload due to the
+  // intervention.
+  enum class HeavyAdUnloadPolicy {
+    kNetworkOnly = 0,
+    kCpuOnly = 1,
+    kAll = 2,
+  };
+
+  // Represents how a frame should be treated by the heavy ad intervention.
+  enum class HeavyAdAction {
+    // Nothing should be done, i.e. the ad is not heavy or the intervention is
+    // not enabled.
+    kNone = 0,
+    // The ad should be reported as heavy.
+    kReport = 1,
+    // The ad should be reported and unloaded.
+    kUnload = 2,
+    // The frame was ignored, i.e. the blocklist was full or page is a reload.
+    kIgnored = 3,
   };
 
   // These values are persisted to logs. Entries should not be renumbered and
@@ -158,11 +180,11 @@ class FrameData {
   // |update_time|.
   void UpdateCpuUsage(base::TimeTicks update_time, base::TimeDelta update);
 
-  // Returns whether the heavy ad intervention was triggered on this frame.
+  // Returns how the frame should be treated by the heavy ad intervention.
   // This intervention is triggered when the frame is considered heavy, has not
   // received user gesture, and the intervention feature is enabled. This
-  // returns true the first time the criteria is met, and false afterwards.
-  bool MaybeTriggerHeavyAdIntervention();
+  // returns an action the first time the criteria is met, and false afterwards.
+  HeavyAdAction MaybeTriggerHeavyAdIntervention();
 
   // Get the cpu usage for the appropriate activation period.
   base::TimeDelta GetActivationCpuUsage(UserActivationStatus status) const;
@@ -263,6 +285,14 @@ class FrameData {
     return heavy_ad_status_with_noise_;
   }
 
+  HeavyAdStatus heavy_ad_status_with_policy() const {
+    return heavy_ad_status_with_policy_;
+  }
+
+  void set_heavy_ad_action(HeavyAdAction heavy_ad_action) {
+    heavy_ad_action_ = heavy_ad_action;
+  }
+
  private:
   // Time updates for the frame with a timestamp indicating when they arrived.
   // Used for windowed cpu load reporting.
@@ -280,8 +310,10 @@ class FrameData {
   // the heavy ad intervention and returns the type of threshold hit if any.
   // If |use_network_threshold_noise| is set,
   // |heavy_ad_network_threshold_noise_| is added to the network threshold when
+  // computing the status. |policy| controls which thresholds are used when
   // computing the status.
-  HeavyAdStatus ComputeHeavyAdStatus(bool use_network_threshold_noise) const;
+  HeavyAdStatus ComputeHeavyAdStatus(bool use_network_threshold_noise,
+                                     HeavyAdUnloadPolicy policy) const;
 
   // The frame tree node id of root frame of the subtree that |this| is
   // tracking information for.
@@ -362,6 +394,14 @@ class FrameData {
   // threshold is used when determining whether to actually trigger the
   // intervention.
   HeavyAdStatus heavy_ad_status_with_noise_;
+
+  // Same as |heavy_ad_status_with_noise_| but selectively uses thresholds based
+  // on a field trial param. This status is used to control when the
+  // intervention fires.
+  HeavyAdStatus heavy_ad_status_with_policy_ = HeavyAdStatus::kNone;
+
+  // The action taken on this frame by the heavy ad intervention if any.
+  HeavyAdAction heavy_ad_action_ = HeavyAdAction::kNone;
 
   // Number of bytes of noise that should be added to the network threshold.
   const int heavy_ad_network_threshold_noise_;

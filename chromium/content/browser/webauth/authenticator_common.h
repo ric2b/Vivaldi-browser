@@ -66,6 +66,8 @@ CONTENT_EXPORT extern const char kCreateType[];
 CONTENT_EXPORT extern const char kGetType[];
 }  // namespace client_data
 
+enum class RequestExtension;
+
 // Common code for any WebAuthn Authenticator interfaces.
 class CONTENT_EXPORT AuthenticatorCommon {
  public:
@@ -193,8 +195,6 @@ class CONTENT_EXPORT AuthenticatorCommon {
   scoped_refptr<WebAuthRequestSecurityChecker> security_checker_;
   std::unique_ptr<base::OneShotTimer> timer_ =
       std::make_unique<base::OneShotTimer>();
-  base::Optional<device::AuthenticatorSelectionCriteria>
-      authenticator_selection_criteria_;
   base::Optional<std::string> app_id_;
   base::Optional<device::CtapMakeCredentialRequest>
       ctap_make_credential_request_;
@@ -207,7 +207,8 @@ class CONTENT_EXPORT AuthenticatorCommon {
   bool awaiting_attestation_response_ = false;
   blink::mojom::AuthenticatorStatus error_awaiting_user_acknowledgement_ =
       blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR;
-  bool prf_requested_ = false;
+
+  base::flat_set<RequestExtension> requested_extensions_;
 
   base::WeakPtrFactory<AuthenticatorCommon> weak_factory_{this};
 

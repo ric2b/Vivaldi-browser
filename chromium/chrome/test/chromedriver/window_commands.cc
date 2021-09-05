@@ -417,30 +417,30 @@ Status ElementInViewCenter(Session* session,
   return Status(kOk);
 }
 
-bool IsRepeatedClickEvent(float x,
-                          float y,
-                          float last_x,
-                          float last_y,
-                          int click_count,
-                          const base::TimeTicks& timestamp,
-                          const base::TimeTicks& last_mouse_click_time) {
+int GetMouseClickCount(float x,
+                       float y,
+                       float last_x,
+                       float last_y,
+                       int click_count,
+                       const base::TimeTicks& timestamp,
+                       const base::TimeTicks& last_mouse_click_time) {
   const int kDoubleClickTimeMS = 500;
   const int kDoubleClickRange = 4;
 
   if (click_count == 0)
-    return false;
+    return 1;
 
   base::TimeDelta time_difference = timestamp - last_mouse_click_time;
   if (time_difference.InMilliseconds() > kDoubleClickTimeMS)
-    return false;
+    return 1;
 
   if (std::abs(x - last_x) > kDoubleClickRange / 2)
-    return false;
+    return 1;
 
   if (std::abs(y - last_y) > kDoubleClickRange / 2)
-    return false;
+    return 1;
 
-  return true;
+  return click_count + 1;
 }
 
 const char kLandscape[] = "landscape";
@@ -1492,7 +1492,6 @@ Status ExecutePerformActions(Session* session,
   std::map<std::string, bool> has_touch_start;
   std::map<std::string, int> buttons;
   std::map<std::string, std::string> button_type;
-  std::map<std::string, int> click_counts;
   int viewport_width = 0, viewport_height = 0;
   int init_x = 0, init_y = 0;
 
@@ -1562,12 +1561,10 @@ Status ExecutePerformActions(Session* session,
 
             std::string pointer_type;
             action->GetString("pointerType", &pointer_type);
-            if (pointer_type == "mouse" || pointer_type == "pen") {
+            if (pointer_type == "mouse" || pointer_type == "pen")
               buttons[id] = input_state->FindKey("pressed")->GetInt();
-              click_counts[id] = 0;
-            } else if (pointer_type == "touch") {
+            else if (pointer_type == "touch")
               has_touch_start[id] = false;
-            }
           }
         }
 
@@ -1665,8 +1662,6 @@ Status ExecutePerformActions(Session* session,
                 event.delta_y = delta_y;
                 buttons[id] |= StringToModifierMouseButton(button_type[id]);
                 session->mouse_position = WebPoint(event.x, event.y);
-                session->input_cancel_list.emplace_back(
-                    action_input_states[j], &event, nullptr, nullptr);
                 dispatch_wheel_events.push_back(event);
                 Status status = web_view->DispatchMouseEvents(
                     dispatch_wheel_events, session->GetCurrentFrameId(),
@@ -1701,12 +1696,10 @@ Status ExecutePerformActions(Session* session,
                 event.modifiers = session->sticky_modifiers;
                 if (event.type == kPressedMouseEventType) {
                   base::TimeTicks timestamp = base::TimeTicks::Now();
-                  bool is_repeated_click = IsRepeatedClickEvent(
+                  event.click_count = GetMouseClickCount(
                       event.x, event.y, session->mouse_position.x,
                       session->mouse_position.y, session->click_count,
                       timestamp, session->mouse_click_timestamp);
-                  click_counts[id] = is_repeated_click ? ++click_counts[id] : 1;
-                  event.click_count = click_counts[id];
                   buttons[id] |= StringToModifierMouseButton(button_type[id]);
                   session->mouse_position = WebPoint(event.x, event.y);
                   session->click_count = event.click_count;

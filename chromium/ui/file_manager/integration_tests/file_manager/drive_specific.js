@@ -227,14 +227,16 @@ testcase.drivePinMultiple = async () => {
       '#file-context-menu:not([hidden]) ' +
           '[command="#toggle-pinned"]:not([checked])');
 
-  // Wait the toggle pinned async action to finish, so the next call to display
-  // context menu is after the action has finished.
+  // Wait for the toggle pinned async action to finish, so the next call to
+  // display context menu is after the action has finished.
   await remoteCall.waitForElement(appId, '#file-context-menu[hidden]');
 
-  // Wait the pinned action to finish, it's flagged in the file list by
-  // removing CSS class "dim-offline".
+  // Wait for the pinned action to finish, it's flagged in the file list by
+  // removing CSS class "dim-offline" and adding class "pinned".
   await remoteCall.waitForElementLost(
       appId, '#file-list .dim-offline[file-name="world.ogv"]');
+  await remoteCall.waitForElement(
+      appId, '#file-list .pinned[file-name="world.ogv"] .detail-pinned');
 
   // Select world.ogv by itself.
   await remoteCall.waitAndClickElement(
@@ -256,6 +258,71 @@ testcase.drivePinMultiple = async () => {
 };
 
 /**
+ * Tests that pinning hosted files without the required extensions is disabled,
+ * and that it does not affect multiple selections with non-hosted files.
+ */
+testcase.drivePinHosted = async () => {
+  const appId = await setupAndWaitUntilReady(RootPath.DRIVE);
+
+  // Select Test Document.gdoc.
+  await remoteCall.waitAndClickElement(
+      appId, '#file-list [file-name="Test Document.gdoc"]');
+  await remoteCall.waitForElement(
+      appId, '[file-name="Test Document.gdoc"][selected]');
+
+  // Open the context menu once the file is selected.
+  chrome.test.assertTrue(await remoteCall.callRemoteTestUtil(
+      'fakeMouseRightClick', appId, ['.table-row[selected]']));
+
+  // Check that the pin action is disabled and unticked.
+  await remoteCall.waitForElement(
+      appId,
+      '#file-context-menu:not([hidden]) ' +
+          '[command="#toggle-pinned"][disabled]:not([checked])');
+
+  // Additionally select hello.txt.
+  await remoteCall.waitAndClickElement(
+      appId, '#file-list [file-name="hello.txt"]', {shift: true});
+  await remoteCall.waitForElement(appId, '[file-name="hello.txt"][selected]');
+
+  // Open the context menu with both files selected.
+  chrome.test.assertTrue(await remoteCall.callRemoteTestUtil(
+      'fakeMouseRightClick', appId, ['.table-row[selected]']));
+
+  // The pin action should be enabled to pin only hello.txt, so select it.
+  await remoteCall.waitAndClickElement(
+      appId,
+      '#file-context-menu:not([hidden]) ' +
+          '[command="#toggle-pinned"]:not([checked]):not([disabled])');
+
+  // Wait for the toggle pinned async action to finish, so the next call to
+  // display context menu is after the action has finished.
+  await remoteCall.waitForElement(appId, '#file-context-menu[hidden]');
+
+  // Wait for the pinned action to finish, it's flagged in the file list by
+  // removing CSS class "dim-offline" and adding class "pinned".
+  await remoteCall.waitForElementLost(
+      appId, '#file-list .dim-offline[file-name="hello.txt"]');
+  await remoteCall.waitForElement(
+      appId, '#file-list .pinned[file-name="hello.txt"] .detail-pinned');
+
+  // Test Document.gdoc should not be pinned however.
+  await remoteCall.waitForElement(
+      appId, '#file-list [file-name="Test Document.gdoc"]:not(.pinned)');
+
+
+  // Open the context menu with both files selected.
+  chrome.test.assertTrue(await remoteCall.callRemoteTestUtil(
+      'fakeMouseRightClick', appId, ['.table-row[selected]']));
+
+  // Check that the pin action is ticked, i.e. the action will unpin the file.
+  await remoteCall.waitForElement(
+      appId,
+      '#file-context-menu:not([hidden]) ' +
+          '[command="#toggle-pinned"][checked]:not([disabled])');
+};
+
+/**
  * Tests pinning a file to a mobile network.
  */
 testcase.drivePinFileMobileNetwork = async () => {
@@ -272,16 +339,16 @@ testcase.drivePinFileMobileNetwork = async () => {
   chrome.test.assertTrue(await remoteCall.callRemoteTestUtil(
       'fakeMouseRightClick', appId, ['.table-row[selected]']));
 
-  // Wait menu to appear and click on toggle pinned.
+  // Wait for the menu to appear and click on toggle pinned.
   await remoteCall.waitForElement(appId, '#file-context-menu:not([hidden])');
   await remoteCall.waitAndClickElement(
       appId, '[command="#toggle-pinned"]:not([hidden]):not([disabled])');
 
-  // Wait the toggle pinned async action to finish, so the next call to display
-  // context menu is after the action has finished.
+  // Wait for the toggle pinned async action to finish, so the next call to
+  // display context menu is after the action has finished.
   await remoteCall.waitForElement(appId, '#file-context-menu[hidden]');
 
-  // Wait the pinned action to finish, it's flagged in the file list by
+  // Wait for the pinned action to finish, it's flagged in the file list by
   // removing CSS class "dim-offline".
   await remoteCall.waitForElementLost(
       appId, '#file-list .dim-offline[file-name="hello.txt"]');
@@ -293,6 +360,8 @@ testcase.drivePinFileMobileNetwork = async () => {
 
   // Check: File is pinned.
   await remoteCall.waitForElement(appId, '[command="#toggle-pinned"][checked]');
+  await remoteCall.waitForElement(
+      appId, '#file-list .pinned[file-name="hello.txt"] .detail-pinned');
   await repeatUntil(async () => {
     const idSet =
         await remoteCall.callRemoteTestUtil('getNotificationIDs', null, []);
@@ -466,6 +535,83 @@ testcase.driveAvailableOfflineDirectoryGearMenu = async () => {
 
   // Check that "Available Offline" is shown in the menu.
   await remoteCall.waitForElement(appId, pinnedMenuQuery);
+};
+
+/**
+ * Verify that the "Available Offline" toggle in the action bar appears and
+ * changes according to the selection.
+ */
+testcase.driveAvailableOfflineActionBar = async () => {
+  // Open Files app on Drive.
+  const appId = await setupAndWaitUntilReady(RootPath.DRIVE, []);
+
+  // Check the "Available Offline" toggle is currently hidden as no file is
+  // currently selected.
+  await remoteCall.waitForElement(
+      appId, '#action-bar #pinned-toggle-wrapper[hidden]');
+
+  // Select a hosted file.
+  await remoteCall.waitAndClickElement(
+      appId, '#file-list [file-name="Test Document.gdoc"]');
+
+  // Wait for the entry to be selected.
+  await remoteCall.waitForElement(appId, '.table-row[selected]');
+
+  // Check the "Available Offline" toggle is shown in the action bar, but
+  // disabled.
+  await remoteCall.waitForElement(
+      appId,
+      '#action-bar #pinned-toggle-wrapper:not([hidden]) ' +
+          '#pinned-toggle[disabled]:not([checked])');
+
+  // Now select a non-hosted file.
+  await remoteCall.waitAndClickElement(
+      appId, '#file-list [file-name="hello.txt"]');
+
+  // Check the "Available Offline" toggle is now enabled, and pin the file.
+  await remoteCall.waitAndClickElement(
+      appId,
+      '#action-bar #pinned-toggle-wrapper:not([hidden]) ' +
+          '#pinned-toggle:not([disabled]):not([checked])');
+
+  // Wait for the file to be pinned.
+  await remoteCall.waitForElement(
+      appId, '#file-list .pinned[file-name="hello.txt"]');
+
+  // Check the "Available Offline" toggle is enabled and checked.
+  await remoteCall.waitForElement(
+      appId,
+      '#action-bar #pinned-toggle-wrapper:not([hidden]) ' +
+          '#pinned-toggle[checked]:not([disabled])');
+
+  // Select another file that is not pinned.
+  await remoteCall.waitAndClickElement(
+      appId, '#file-list [file-name="world.ogv"]');
+
+  // Check the "Available Offline" toggle is enabled and unchecked.
+  await remoteCall.waitForElement(
+      appId,
+      '#action-bar #pinned-toggle-wrapper:not([hidden]) ' +
+          '#pinned-toggle:not([disabled]):not([checked])');
+
+  // Reselect the previously pinned file.
+  await remoteCall.waitAndClickElement(
+      appId, '#file-list [file-name="hello.txt"]');
+
+  // Check the "Available Offline" toggle is enabled and checked.
+  await remoteCall.waitForElement(
+      appId,
+      '#action-bar #pinned-toggle-wrapper:not([hidden]) ' +
+          '#pinned-toggle[checked]:not([disabled])');
+
+  // Focus on the directory tree.
+  await remoteCall.focus(appId, ['#directory-tree']);
+
+  // Check the "Available Offline" toggle is still available in the action bar.
+  await remoteCall.waitForElement(
+      appId,
+      '#action-bar #pinned-toggle-wrapper:not([hidden]) ' +
+          '#pinned-toggle[checked]:not([disabled])');
 };
 
 /**

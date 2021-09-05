@@ -79,6 +79,9 @@ WebDialogView::WebDialogView(content::BrowserContext* context,
       WebDialogWebContentsDelegate(context, std::move(handler)),
       delegate_(delegate),
       web_view_(new ObservableWebView(context, delegate)) {
+  SetCanMinimize(!delegate_ || delegate_->can_minimize());
+  SetCanResize(!delegate_ || delegate_->can_resize());
+  SetModalType(GetDialogModalType());
   web_view_->set_allow_accelerators(true);
   AddChildView(web_view_);
   set_contents_view(web_view_);
@@ -176,14 +179,10 @@ bool WebDialogView::OnCloseRequested(Widget::ClosedReason close_reason) {
   return !delegate_ || delegate_->DeprecatedOnDialogCloseRequested();
 }
 
-bool WebDialogView::CanResize() const {
+bool WebDialogView::CanMaximize() const {
   if (delegate_)
-    return delegate_->CanResizeDialog();
-  return true;
-}
-
-ui::ModalType WebDialogView::GetModalType() const {
-  return GetDialogModalType();
+    return delegate_->CanMaximizeDialog();
+  return false;
 }
 
 base::string16 WebDialogView::GetWindowTitle() const {
@@ -432,6 +431,27 @@ bool WebDialogView::IsWebContentsCreationOverridden(
     const GURL& target_url) {
   if (delegate_)
     return delegate_->HandleShouldOverrideWebContentsCreation();
+  return false;
+}
+
+void WebDialogView::RequestMediaAccessPermission(
+    content::WebContents* web_contents,
+    const content::MediaStreamRequest& request,
+    content::MediaResponseCallback callback) {
+  if (delegate_) {
+    delegate_->RequestMediaAccessPermission(web_contents, request,
+                                            std::move(callback));
+  }
+}
+
+bool WebDialogView::CheckMediaAccessPermission(
+    content::RenderFrameHost* render_frame_host,
+    const GURL& security_origin,
+    blink::mojom::MediaStreamType type) {
+  if (delegate_) {
+    return delegate_->CheckMediaAccessPermission(render_frame_host,
+                                                 security_origin, type);
+  }
   return false;
 }
 

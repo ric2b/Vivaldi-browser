@@ -16,11 +16,11 @@
 #include "base/task/post_task.h"
 #include "base/task_runner_util.h"
 #include "content/browser/bad_message.h"
-#include "content/browser/frame_host/back_forward_cache_impl.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/media/media_devices_permission_checker.h"
+#include "content/browser/renderer_host/back_forward_cache_impl.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/media/video_capture_manager.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -262,11 +262,11 @@ void MediaDevicesDispatcherHost::FinalizeGetVideoInputCapabilities(
         blink::mojom::VideoInputDeviceCapabilities::New();
     capabilities->device_id = std::move(hmac_device_id);
     capabilities->group_id = std::move(hmac_group_id);
+    capabilities->control_support = device_info.video_control_support;
     capabilities->formats =
         media_stream_manager_->media_devices_manager()->GetVideoInputFormats(
             device_info.device_id, true /* try_in_use_first */);
     capabilities->facing_mode = device_info.video_facing;
-    capabilities->pan_tilt_zoom_supported = device_info.pan_tilt_zoom_supported;
     if (device_info.device_id == default_device_id) {
       video_input_capabilities.insert(video_input_capabilities.begin(),
                                       std::move(capabilities));

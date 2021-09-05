@@ -13,36 +13,63 @@
 
   // Possible events fired on an $(ref:automation.AutomationNode).
   enum EventType {
-    activedescendantchanged,
+    accessKeyChanged,
+    activeDescendantChanged,
     alert,
     ariaAttributeChanged,
+    atomicChanged,
+    autoCompleteChanged,
     autocorrectionOccured,
     blur,
+    busyChanged,
     checkedStateChanged,
     childrenChanged,
+    classNameChanged,
     clicked,
+    collapsed,
     controlsChanged,
+    describedByChanged,
+    descriptionChanged,
     documentSelectionChanged,
     documentTitleChanged,
+    dropeffectChanged,
+    enabledChanged,
     endOfTest,
+    expanded,
     expandedChanged,
+    flowFromChanged,
+    flowToChanged,
     focus,
     focusAfterMenuClose,
+    focusChanged,
     focusContext,
+    grabbedChanged,
+    haspopupChanged,
     hide,
+    hierarchicalLevelChanged,
     hitTestResult,
     hover,
+    ignoredChanged,
+    imageAnnotationChanged,
     imageFrameUpdated,
     invalidStatusChanged,
+    keyShortcutsChanged,
+    labeledByChanged,
+    languageChanged,
     layoutComplete,
+    layoutInvalidated,   // fired when aria-busy goes false
     liveRegionChanged,
     liveRegionCreated,
+    liveRegionNodeChanged,  // fired on a node within a live region.
+    liveRelevantChanged,
+    liveStatusChanged,
     loadComplete,
     loadStart,
     locationChanged,
     mediaStartedPlaying,
     mediaStoppedPlaying,
     menuEnd,
+    menuItemSelected,
     menuListItemSelected,
     menuListValueChanged,
     menuPopupEnd,
@@ -53,26 +80,48 @@
     mouseMoved,
     mousePressed,
     mouseReleased,
+    multilineStateChanged,
+    multiselectableStateChanged,
+    nameChanged,
+    objectAttributeChanged,
+    otherAttributeChanged,
+    placeholderChanged,
+    portalActivated,
+    positionInSetChanged,
+    readonlyChanged,
+    relatedNodeChanged,
+    requiredStateChanged,
+    roleChanged,
     rowCollapsed,
     rowCountChanged,
     rowExpanded,
+    scrollHorizontalPositionChanged,
     scrollPositionChanged,
+    scrollVerticalPositionChanged,
     scrolledToAnchor,
+    selectedChanged,
     selectedChildrenChanged,
     selection,
     selectionAdd,
     selectionRemove,
+    setSizeChanged,
     show,
+    sortChanged,
     stateChanged,
+    subtreeCreated,
+    textAttributeChanged,
     textChanged,
     textSelectionChanged,
     tooltipClosed,
     tooltipOpened,
+    treeChanged,
+    valueChanged,
+    valueMaxChanged,
+    valueMinChanged,
+    valueStepChanged,
     windowActivated,
     windowDeactivated,
-    windowVisibilityChanged,
-    treeChanged,
-    valueChanged
+    windowVisibilityChanged
   };
 
   // Describes the purpose of an $(ref:automation.AutomationNode).
@@ -211,7 +260,6 @@
     math,
     menu,
     menuBar,
-    menuButton,
     menuItem,
     menuItemCheckBox,
     menuItemRadio,
@@ -342,7 +390,6 @@
   // to the tree, each node that's added, removed, or changed, will appear
   // in exactly one TreeChange, with one of these types.
   //
-  //
   // nodeCreated means that this node was added to the tree and its parent is
   // new as well, so it's just one node in a new subtree that was added.
   enum TreeChangeType {
@@ -438,27 +485,71 @@ enum MarkerType {
   suggestion
 };
 
-// The following three enums are associated with an AutomationEvent.
+// The following three enums are associated with an $(ref:automation.AutomationIntent).
 
-// A command associated with an AutomationEvent.
-enum EventCommandType {
+// A command associated with an $(ref:automation.AutomationIntent).
+enum IntentCommandType {
   clearSelection,
-  cut,
   delete,
   dictate,
   extendSelection,
   format,
+  history,
   insert,
   marker,
   moveSelection,
-  paste,
-  replace,
-  setSelection,
-  type
+  setSelection
 };
 
-// A text boundary associated with an AutomationEvent.
-enum EventTextBoundaryType {
+// The type of an input event associated with an $(ref:automation.AutomationIntent). It describes an edit
+// command, e.g. IntentCommandType.insert, in more detail.
+enum IntentInputEventType {
+  // Insertion.
+  insertText,
+  insertLineBreak,
+  insertParagraph,
+  insertOrderedList,
+  insertUnorderedList,
+  insertHorizontalRule,
+  insertFromPaste,
+  insertFromDrop,
+  insertFromYank,
+  insertTranspose,
+  insertReplacementText,
+  insertCompositionText,
+  // Deletion.
+  deleteWordBackward,
+  deleteWordForward,
+  deleteSoftLineBackward,
+  deleteSoftLineForward,
+  deleteHardLineBackward,
+  deleteHardLineForward,
+  deleteContentBackward,
+  deleteContentForward,
+  deleteByCut,
+  deleteByDrag,
+  // History.
+  historyUndo,
+  historyRedo,
+  // Formatting.
+  formatBold,
+  formatItalic,
+  formatUnderline,
+  formatStrikeThrough,
+  formatSuperscript,
+  formatSubscript,
+  formatJustifyCenter,
+  formatJustifyFull,
+  formatJustifyRight,
+  formatJustifyLeft,
+  formatIndent,
+  formatOutdent,
+  formatRemove,
+  formatSetBlockTextDirection
+};
+
+// A text boundary associated with an $(ref:automation.AutomationIntent).
+enum IntentTextBoundaryType {
   character,
   format,
   lineEnd,
@@ -480,10 +571,18 @@ enum EventTextBoundaryType {
   wordStartOrEnd
 };
 
-// A move direction associated with an AutomationEvent.
-enum EventMoveDirectionType {
-  forward,
-  backward
+// A move direction associated with an $(ref:automation.AutomationIntent).
+enum IntentMoveDirectionType {
+  backward,
+  forward
+};
+
+// A sort applied to a table row or column header.
+enum SortDirectionType {
+  unsorted,
+  ascending,
+  descending,
+  other
 };
 
   dictionary Rect {
@@ -539,14 +638,14 @@ enum EventMoveDirectionType {
   callback QueryCallback = void(AutomationNode node);
 
   [nocompile, noinline_doc] dictionary AutomationIntent {
-    // A command associated with this AutomationEvent.
-    EventCommandType command;
+    // A command associated with this AutomationIntent.
+    IntentCommandType command;
 
-    // A text boundary associated with this AutomationEvent.
-    EventTextBoundaryType textBoundary;
+    // A text boundary associated with this AutomationIntent.
+    IntentTextBoundaryType textBoundary;
 
-    // A move direction associated with this AutomationEvent.
-    EventMoveDirectionType moveDirection;
+    // A move direction associated with this AutomationIntent.
+    IntentMoveDirectionType moveDirection;
   };
 
   // An event in the Automation tree.
@@ -560,14 +659,15 @@ enum EventMoveDirectionType {
     // The source of this event.
     DOMString eventFrom;
 
+    // Any mouse coordinates associated with this event.
     long mouseX;
     long mouseY;
 
-    // Intents associated with this event.
+    // A list of $(ref:automation.AutomationIntent)s associated with this event.
     AutomationIntent[] intents;
 
     // Stops this event from further processing except for any remaining
-    // listeners on $(ref:AutomationEvent.target).
+    // listeners on $(ref:automation.AutomationEvent.target).
     static void stopPropagation();
   };
 
@@ -951,6 +1051,9 @@ enum EventMoveDirectionType {
     // The affinity of the tree selection end, if any.
     DOMString? selectionEndAffinity;
 
+    // Indicates that the node is marked user-select:none
+    boolean? notUserSelectableStyle;
+
     //
     // Range attributes.
     //
@@ -1172,6 +1275,9 @@ enum EventMoveDirectionType {
     // The index of this node in its parent node's list of children. If this is
     // the root node, this will be undefined.
     long? indexInParent;
+
+    // The sort direction of this node.
+    SortDirectionType sortDirection;
 
     //
     // Actions.

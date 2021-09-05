@@ -130,6 +130,15 @@ void FrameView::UpdateViewportIntersection(unsigned flags,
       } else {
         viewport_intersection = EnclosingIntRect(intersection_rect);
       }
+
+      // Because the geometry code uses enclosing rects, we may end up with an
+      // intersection rect that is bigger than the rect we started with. Clamp
+      // the size of the viewport intersection to the bounds of the iframe's
+      // content rect.
+      viewport_intersection.SetLocation(
+          viewport_intersection.Location().ExpandedTo(IntPoint()));
+      viewport_intersection.SetSize(viewport_intersection.Size().ShrunkTo(
+          RoundedIntSize(owner_layout_object->ContentSize())));
     }
 
     PhysicalRect mainframe_intersection_rect;
@@ -144,6 +153,10 @@ void FrameView::UpdateViewportIntersection(unsigned flags,
       } else {
         mainframe_intersection = EnclosingIntRect(mainframe_intersection_rect);
       }
+      mainframe_intersection.SetLocation(
+          mainframe_intersection.Location().ExpandedTo(IntPoint()));
+      mainframe_intersection.SetSize(mainframe_intersection.Size().ShrunkTo(
+          RoundedIntSize(owner_layout_object->ContentSize())));
     }
 
     TransformState child_frame_to_root_frame(
@@ -163,11 +176,15 @@ void FrameView::UpdateViewportIntersection(unsigned flags,
     occlusion_state = FrameOcclusionState::kUnknown;
   }
 
+  // An iframe's content is always pixel-snapped, even if the iframe element has
+  // non-pixel-aligned location.
+  gfx::Transform main_frame_gfx_transform =
+      TransformationMatrix::ToTransform(main_frame_transform_matrix);
+  main_frame_gfx_transform.RoundTranslationComponents();
   SetViewportIntersection(
       {viewport_intersection, mainframe_intersection, WebRect(),
        occlusion_state, frame.GetMainFrameViewportSize(),
-       frame.GetMainFrameScrollOffset(),
-       TransformationMatrix::ToTransform(main_frame_transform_matrix)});
+       frame.GetMainFrameScrollOffset(), main_frame_gfx_transform});
 
   UpdateFrameVisibility(!viewport_intersection.IsEmpty());
 

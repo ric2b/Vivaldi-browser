@@ -11,8 +11,8 @@
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/gaia_id_hash.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/mock_password_store.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "url/gurl.h"
@@ -20,7 +20,6 @@
 #include "url/url_constants.h"
 
 using autofill::GaiaIdHash;
-using autofill::PasswordForm;
 using base::ASCIIToUTF16;
 using testing::_;
 using testing::IsEmpty;
@@ -438,6 +437,30 @@ TEST_F(MultiStoreFormFetcherTest, MovingToAccountStoreIsBlocked) {
   // PSL match entries should be ignored when computing the moving blacklist
   // entries.
   EXPECT_FALSE(form_fetcher_->IsMovingBlocked(kUser, psl_form.username_value));
+}
+
+TEST_F(MultiStoreFormFetcherTest, CompromisedCredentials) {
+  Fetch();
+  const CompromisedCredentials profile_store_compromised_credentials{
+      form_digest_.signon_realm, base::ASCIIToUTF16("profile_username"),
+      base::Time::FromTimeT(1), CompromiseType::kLeaked,
+      PasswordForm::Store::kProfileStore};
+
+  const CompromisedCredentials account_store_compromised_credentials{
+      form_digest_.signon_realm, base::ASCIIToUTF16("account_username"),
+      base::Time::FromTimeT(1), CompromiseType::kLeaked,
+      PasswordForm::Store::kAccountStore};
+
+  static_cast<CompromisedCredentialsConsumer*>(form_fetcher_.get())
+      ->OnGetCompromisedCredentials({profile_store_compromised_credentials});
+
+  static_cast<CompromisedCredentialsConsumer*>(form_fetcher_.get())
+      ->OnGetCompromisedCredentials({account_store_compromised_credentials});
+
+  EXPECT_THAT(form_fetcher_->GetCompromisedCredentials(),
+              testing::UnorderedElementsAreArray(
+                  {profile_store_compromised_credentials,
+                   account_store_compromised_credentials}));
 }
 
 }  // namespace password_manager

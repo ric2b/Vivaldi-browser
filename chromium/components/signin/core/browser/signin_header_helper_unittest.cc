@@ -9,6 +9,7 @@
 
 #include "base/command_line.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
@@ -68,7 +69,6 @@ class SigninHeaderHelperTest : public testing::Test {
 
     settings_map_ = new HostContentSettingsMap(
         &prefs_, false /* is_off_the_record */, false /* store_last_modified */,
-        false /* migrate_requesting_and_top_level_origin_settings */,
         false /* restore_session */);
     cookie_settings_ = new content_settings::CookieSettings(settings_map_.get(),
                                                             &prefs_, false, "");
@@ -161,23 +161,37 @@ TEST_F(SigninHeaderHelperTest, TestMirrorRequestNoAccountIdChromeOS) {
                            "consistency_enabled_by_default=false");
 }
 #else  // !defined(OS_CHROMEOS)
-#if defined(OS_ANDROID)
-// Tests that Mirror request is returned on Android for Public Sessions (no
-// account id), when the Mobile Identity Consistency feature is enabled.
-TEST_F(SigninHeaderHelperTest, TestMirrorRequestNoAccountIdAndroid) {
+#if defined(OS_ANDROID) || defined(OS_IOS)
+// Tests that eligible_for_consistency request is returned on mobile (Android,
+// iOS) when reaching to Gaia origin and there's no primary account. Only
+// applicable when the Mobile Identity Consistency is enabled.
+TEST_F(SigninHeaderHelperTest, TestEligibleForConsistencyRequestGaiaOrigin) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(kMobileIdentityConsistency);
 
   account_consistency_ = AccountConsistencyMethod::kMirror;
-  CheckMirrorHeaderRequest(GURL("https://docs.google.com"), "",
+  CheckMirrorHeaderRequest(GURL("https://accounts.google.com"), "",
                            "source=TestSource,eligible_for_consistency=true");
-  CheckMirrorCookieRequest(GURL("https://docs.google.com"), "",
+  CheckMirrorCookieRequest(GURL("https://accounts.google.com"), "",
                            "eligible_for_consistency=true");
+}
+
+// Tests that eligible_for_consistency request is NOT returned on mobile
+// (Android, iOS) when reaching to NON-Gaia origin and there's no primary
+// account. Only applicable when the Mobile Identity Consistency is enabled.
+TEST_F(SigninHeaderHelperTest,
+       TestNoEligibleForConsistencyRequestNonGaiaOrigin) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(kMobileIdentityConsistency);
+
+  account_consistency_ = AccountConsistencyMethod::kMirror;
+  CheckMirrorHeaderRequest(GURL("https://docs.google.com"), "", "");
+  CheckMirrorCookieRequest(GURL("https://docs.google.com"), "", "");
 }
 
 // Tests that the full Mirror request is returned when the
 // force_account_consistency param is true.
-TEST_F(SigninHeaderHelperTest, TestForceAccountConsistencyAndroid) {
+TEST_F(SigninHeaderHelperTest, TestForceAccountConsistencyMobile) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(kMobileIdentityConsistency);
 
@@ -188,7 +202,7 @@ TEST_F(SigninHeaderHelperTest, TestForceAccountConsistencyAndroid) {
       "source=TestSource,mode=0,enable_account_consistency=true,"
       "consistency_enabled_by_default=false");
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_IOS)
 
 // Tests that no Mirror request is returned when the user is not signed in (no
 // account id), for non Chrome OS platforms.
@@ -423,6 +437,7 @@ TEST_F(SigninHeaderHelperTest, TestBuildDiceResponseParams) {
 
   {
     // Signin response.
+    base::HistogramTester histogram_tester;
     DiceResponseParams params =
         BuildDiceSigninResponseParams(base::StringPrintf(
             "action=SIGNIN,id=%s,email=%s,authuser=%i,authorization_code=%s",
@@ -433,6 +448,8 @@ TEST_F(SigninHeaderHelperTest, TestBuildDiceResponseParams) {
     EXPECT_EQ(kEmail, params.signin_info->account_info.email);
     EXPECT_EQ(kSessionIndex, params.signin_info->account_info.session_index);
     EXPECT_EQ(kAuthorizationCode, params.signin_info->authorization_code);
+    histogram_tester.ExpectUniqueSample("Signin.DiceAuthorizationCode", true,
+                                        1);
   }
 
   {
@@ -488,11 +505,32 @@ TEST_F(SigninHeaderHelperTest, TestBuildDiceResponseParams) {
   }
 
   {
-    // Missing authorization code.
+    // Signin response with no_authorization_code and missing
+    // authorization_code.
+    base::HistogramTester histogram_tester;
+    DiceResponseParams params = BuildDiceSigninResponseParams(
+        base::StringPrintf("action=SIGNIN,id=%s,email=%s,authuser=%i,"
+                           "no_authorization_code=true",
+                           kGaiaID, kEmail, kSessionIndex));
+    EXPECT_EQ(DiceAction::SIGNIN, params.user_intention);
+    ASSERT_TRUE(params.signin_info);
+    EXPECT_EQ(kGaiaID, params.signin_info->account_info.gaia_id);
+    EXPECT_EQ(kEmail, params.signin_info->account_info.email);
+    EXPECT_EQ(kSessionIndex, params.signin_info->account_info.session_index);
+    EXPECT_TRUE(params.signin_info->authorization_code.empty());
+    EXPECT_TRUE(params.signin_info->no_authorization_code);
+    histogram_tester.ExpectUniqueSample("Signin.DiceAuthorizationCode", false,
+                                        1);
+  }
+
+  {
+    // Missing authorization code and no_authorization_code.
+    base::HistogramTester histogram_tester;
     DiceResponseParams params = BuildDiceSigninResponseParams(
         base::StringPrintf("action=SIGNIN,id=%s,email=%s,authuser=%i", kGaiaID,
                            kEmail, kSessionIndex));
     EXPECT_EQ(DiceAction::NONE, params.user_intention);
+    histogram_tester.ExpectTotalCount("Signin.DiceAuthorizationCode", 0);
   }
 
   {
@@ -577,6 +615,7 @@ TEST_F(SigninHeaderHelperTest, TestInvalidManageAccountsParams) {
   EXPECT_EQ(GAIA_SERVICE_TYPE_NONE, params.service_type);
 }
 
+// Tests that managed accounts' header is parsed correctly from string input.
 TEST_F(SigninHeaderHelperTest, TestBuildManageAccountsParams) {
   const char kContinueURL[] = "https://www.example.com/continue";
   const char kEmail[] = "foo@example.com";
@@ -585,7 +624,7 @@ TEST_F(SigninHeaderHelperTest, TestBuildManageAccountsParams) {
       "action=ADDSESSION,email=%s,is_saml=true,"
       "is_same_tab=true,continue_url=%s",
       kEmail, kContinueURL);
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_IOS)
   header += ",show_consistency_promo=true";
 #endif
 
@@ -595,7 +634,7 @@ TEST_F(SigninHeaderHelperTest, TestBuildManageAccountsParams) {
   EXPECT_EQ(true, params.is_saml);
   EXPECT_EQ(true, params.is_same_tab);
   EXPECT_EQ(GURL(kContinueURL), params.continue_url);
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_IOS)
   EXPECT_EQ(true, params.show_consistency_promo);
 #endif
 }

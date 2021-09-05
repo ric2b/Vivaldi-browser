@@ -30,6 +30,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_ACCESSIBILITY_AX_NODE_OBJECT_H_
 
 #include "base/macros.h"
+#include "third_party/blink/renderer/core/editing/markers/document_marker.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_object.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 
@@ -74,8 +75,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
 
   bool HasContentEditableAttributeSet() const;
   bool IsTextControl() const override;
-  AXObject* MenuButtonForMenu() const;
-  AXObject* MenuButtonForMenuIfExists() const;
   Element* MenuItemElementForMenu() const;
   Element* MouseButtonListener() const;
   bool IsNativeCheckboxOrRadio() const;
@@ -138,17 +137,21 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool CanvasHasFallbackContent() const final;
   int HeadingLevel() const final;
   unsigned HierarchicalLevel() const final;
-  void Markers(Vector<DocumentMarker::MarkerType>&,
-               Vector<AXRange>&) const override;
+  void GetDocumentMarkers(Vector<DocumentMarker::MarkerType>* marker_types,
+                          Vector<AXRange>* marker_ranges) const override;
   AXObject* InPageLinkTarget() const override;
   AccessibilityOrientation Orientation() const override;
   AXObjectVector RadioButtonsInGroup() const override;
   static HeapVector<Member<HTMLInputElement>> FindAllRadioButtonsWithSameName(
       HTMLInputElement* radio_button);
   String GetText() const override;
-  ax::mojom::blink::TextAlign GetTextAlign() const final;
   String ImageDataUrl(const IntSize& max_size) const final;
   int TextLength() const override;
+  int TextOffsetInFormattingContext(int offset) const override;
+
+  // Object attributes.
+  ax::mojom::blink::TextAlign GetTextAlign() const final;
+  float GetTextIndent() const final;
 
   // Properties of interactive elements.
   ax::mojom::blink::AriaCurrentState GetAriaCurrentState() const final;
@@ -247,7 +250,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   // Notifications that this object may have changed.
   void ChildrenChanged() override;
   void SelectionChanged() final;
-  void TextChanged() override;
 
   // The aria-errormessage object or native object from a validationMessage
   // alert.

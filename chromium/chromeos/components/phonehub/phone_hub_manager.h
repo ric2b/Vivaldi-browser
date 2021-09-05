@@ -5,66 +5,41 @@
 #ifndef CHROMEOS_COMPONENTS_PHONEHUB_PHONE_HUB_MANAGER_H_
 #define CHROMEOS_COMPONENTS_PHONEHUB_PHONE_HUB_MANAGER_H_
 
-#include <memory>
-
-#include "base/callback_forward.h"
-#include "components/keyed_service/core/keyed_service.h"
-
-class PrefService;
-
 namespace chromeos {
-
-namespace device_sync {
-class DeviceSyncClient;
-}  // namespace device_sync
-
-namespace multidevice_setup {
-class MultiDeviceSetupClient;
-}  // namespace multidevice_setup
-
 namespace phonehub {
 
+class ConnectionScheduler;
+class DoNotDisturbController;
 class FeatureStatusProvider;
+class FindMyDeviceController;
 class NotificationAccessManager;
+class NotificationManager;
+class OnboardingUiTracker;
 class PhoneModel;
+class TetherController;
 
-// Implements the core logic of the Phone Hub feature and exposes interfaces via
-// its public API. Implemented as a KeyedService which is keyed by the primary
-// Profile; since there is only one primary Profile, the class is intended to be
-// a singleton.
-class PhoneHubManager : public KeyedService {
+// Responsible for the core logic of the Phone Hub feature and exposes
+// interfaces via its public API. This class is intended to be a singleton.
+class PhoneHubManager {
  public:
-  // Returns a pointer to the singleton once it has been instantiated. Returns
-  // null if the primary profile has not yet been initialized or has already
-  // shut down, if the kPhoneHub flag is disabled, or if the feature is
-  // prohibited by policy.
-  static PhoneHubManager* Get();
+  virtual ~PhoneHubManager() = default;
 
-  PhoneHubManager(
-      PrefService* pref_service,
-      device_sync::DeviceSyncClient* device_sync_client,
-      multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client);
   PhoneHubManager(const PhoneHubManager&) = delete;
   PhoneHubManager& operator=(const PhoneHubManager&) = delete;
-  ~PhoneHubManager() override;
 
-  FeatureStatusProvider* feature_status_provider() {
-    return feature_status_provider_.get();
-  }
+  // Getters for sub-elements.
+  virtual ConnectionScheduler* GetConnectionScheduler() = 0;
+  virtual DoNotDisturbController* GetDoNotDisturbController() = 0;
+  virtual FeatureStatusProvider* GetFeatureStatusProvider() = 0;
+  virtual FindMyDeviceController* GetFindMyDeviceController() = 0;
+  virtual NotificationAccessManager* GetNotificationAccessManager() = 0;
+  virtual NotificationManager* GetNotificationManager() = 0;
+  virtual OnboardingUiTracker* GetOnboardingUiTracker() = 0;
+  virtual PhoneModel* GetPhoneModel() = 0;
+  virtual TetherController* GetTetherController() = 0;
 
-  NotificationAccessManager* notification_access_manager() {
-    return notification_access_manager_.get();
-  }
-
-  PhoneModel* phone_model() { return phone_model_.get(); }
-
- private:
-  // KeyedService:
-  void Shutdown() override;
-
-  std::unique_ptr<FeatureStatusProvider> feature_status_provider_;
-  std::unique_ptr<NotificationAccessManager> notification_access_manager_;
-  std::unique_ptr<PhoneModel> phone_model_;
+ protected:
+  PhoneHubManager() = default;
 };
 
 }  // namespace phonehub

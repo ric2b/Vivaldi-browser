@@ -12,6 +12,8 @@
 #include "chrome/browser/nearby_sharing/certificates/nearby_share_decrypted_public_certificate.h"
 #include "chrome/browser/nearby_sharing/incoming_frames_reader.h"
 #include "chrome/browser/nearby_sharing/paired_key_verification_runner.h"
+#include "chrome/browser/nearby_sharing/payload_tracker.h"
+#include "chrome/browser/nearby_sharing/transfer_update_callback.h"
 
 class NearbyConnection;
 
@@ -46,6 +48,15 @@ class ShareTargetInfo {
     connection_ = connection;
   }
 
+  TransferUpdateCallback* transfer_update_callback() const {
+    return transfer_update_callback_.get();
+  }
+
+  void set_transfer_update_callback(
+      std::unique_ptr<TransferUpdateCallback> transfer_update_callback) {
+    transfer_update_callback_ = std::move(transfer_update_callback);
+  }
+
   const base::Optional<std::string>& token() const { return token_; }
 
   void set_token(std::string token) { token_ = std::move(token); }
@@ -65,13 +76,21 @@ class ShareTargetInfo {
     key_verification_runner_ = std::move(key_verification_runner);
   }
 
+  PayloadTracker* payload_tracker() { return payload_tracker_.get(); }
+
+  void set_payload_tracker(std::unique_ptr<PayloadTracker> payload_tracker) {
+    payload_tracker_ = std::move(payload_tracker);
+  }
+
  private:
   base::Optional<std::string> endpoint_id_;
   base::Optional<NearbyShareDecryptedPublicCertificate> certificate_;
   NearbyConnection* connection_ = nullptr;
+  std::unique_ptr<TransferUpdateCallback> transfer_update_callback_;
   base::Optional<std::string> token_;
   std::unique_ptr<IncomingFramesReader> frames_reader_;
   std::unique_ptr<PairedKeyVerificationRunner> key_verification_runner_;
+  std::unique_ptr<PayloadTracker> payload_tracker_;
 };
 
 #endif  // CHROME_BROWSER_NEARBY_SHARING_SHARE_TARGET_INFO_H_

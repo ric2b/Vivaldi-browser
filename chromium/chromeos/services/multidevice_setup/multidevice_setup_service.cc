@@ -19,6 +19,7 @@
 #include "chromeos/services/multidevice_setup/public/cpp/android_sms_app_helper_delegate.h"
 #include "chromeos/services/multidevice_setup/public/cpp/android_sms_pairing_state_tracker.h"
 #include "chromeos/services/multidevice_setup/public/cpp/prefs.h"
+#include "chromeos/services/multidevice_setup/wifi_sync_feature_manager_impl.h"
 
 namespace chromeos {
 
@@ -30,6 +31,7 @@ void MultiDeviceSetupService::RegisterProfilePrefs(
   HostDeviceTimestampManagerImpl::RegisterPrefs(registry);
   AccountStatusChangeDelegateNotifierImpl::RegisterPrefs(registry);
   HostBackendDelegateImpl::RegisterPrefs(registry);
+  WifiSyncFeatureManagerImpl::RegisterPrefs(registry);
   HostVerifierImpl::RegisterPrefs(registry);
   GrandfatheredEasyUnlockHostDisabler::RegisterPrefs(registry);
   AndroidSmsAppInstallingStatusObserver::RegisterPrefs(registry);

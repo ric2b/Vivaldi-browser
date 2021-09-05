@@ -19,6 +19,16 @@
 
 namespace calendar {
 
+// Bit flags determing which fields should be updated in the
+// UpdateNotification API method
+enum UpdateNotificationFields {
+  NOTIFICATION_NAME = 1 << 0,
+  NOTIFICATION_WHEN = 1 << 1,
+  NOTIFICATION_PERIOD = 1 << 2,
+  NOTIFICATION_DELAY = 1 << 3,
+  NOTIFICATION_DESCRIPTION = 1 << 4,
+};
+
 // Simplified notification. Used when notification has to be created during
 // event create
 struct NotificationToCreate {
@@ -44,18 +54,27 @@ class NotificationRow {
   base::Time when;
 };
 
+class UpdateNotificationRow {
+ public:
+  UpdateNotificationRow() = default;
+  ~UpdateNotificationRow() = default;
+
+  NotificationRow notification_row;
+  int updateFields = 0;
+};
+
 typedef std::vector<NotificationRow> NotificationRows;
 typedef std::vector<NotificationToCreate> NotificationsToCreate;
 
-class CreateNotificationResult {
+class NotificationResult {
  public:
-  CreateNotificationResult() = default;
+  NotificationResult() = default;
   bool success;
   std::string message;
-  NotificationRow createdRow;
+  NotificationRow notification_row;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(CreateNotificationResult);
+  DISALLOW_COPY_AND_ASSIGN(NotificationResult);
 };
 
 class GetAllNotificationResult {

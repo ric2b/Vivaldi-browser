@@ -154,13 +154,6 @@ class MODULES_EXPORT RTCPeerConnectionHandler {
   virtual void SetRemoteDescription(blink::RTCVoidRequest* request,
                                     RTCSessionDescriptionPlatform* description);
 
-  virtual RTCSessionDescriptionPlatform* LocalDescription();
-  virtual RTCSessionDescriptionPlatform* RemoteDescription();
-  virtual RTCSessionDescriptionPlatform* CurrentLocalDescription();
-  virtual RTCSessionDescriptionPlatform* CurrentRemoteDescription();
-  virtual RTCSessionDescriptionPlatform* PendingLocalDescription();
-  virtual RTCSessionDescriptionPlatform* PendingRemoteDescription();
-
   virtual const webrtc::PeerConnectionInterface::RTCConfiguration&
   GetConfiguration() const;
   virtual webrtc::RTCErrorType SetConfiguration(
@@ -259,7 +252,16 @@ class MODULES_EXPORT RTCPeerConnectionHandler {
   class SetLocalDescriptionRequest;
   friend class SetLocalDescriptionRequest;
 
-  void OnSignalingChange(
+  void OnSessionDescriptionsUpdated(
+      std::unique_ptr<webrtc::SessionDescriptionInterface>
+          pending_local_description,
+      std::unique_ptr<webrtc::SessionDescriptionInterface>
+          current_local_description,
+      std::unique_ptr<webrtc::SessionDescriptionInterface>
+          pending_remote_description,
+      std::unique_ptr<webrtc::SessionDescriptionInterface>
+          current_remote_description);
+  void TrackSignalingChange(
       webrtc::PeerConnectionInterface::SignalingState new_state);
   void OnIceConnectionChange(
       webrtc::PeerConnectionInterface::IceConnectionState new_state);
@@ -269,11 +271,14 @@ class MODULES_EXPORT RTCPeerConnectionHandler {
       webrtc::PeerConnectionInterface::PeerConnectionState new_state);
   void OnIceGatheringChange(
       webrtc::PeerConnectionInterface::IceGatheringState new_state);
-  void OnRenegotiationNeeded();
-  void OnAddReceiverPlanB(blink::RtpReceiverState receiver_state);
-  void OnRemoveReceiverPlanB(uintptr_t receiver_id);
+  void OnNegotiationNeededEvent(uint32_t event_id);
+  void OnReceiversModifiedPlanB(
+      webrtc::PeerConnectionInterface::SignalingState signaling_state,
+      Vector<blink::RtpReceiverState> receiver_state,
+      Vector<uintptr_t> receiver_id);
   void OnModifySctpTransport(blink::WebRTCSctpTransportSnapshot state);
   void OnModifyTransceivers(
+      webrtc::PeerConnectionInterface::SignalingState signaling_state,
       std::vector<blink::RtpTransceiverState> transceiver_states,
       bool is_remote_description);
   void OnDataChannel(scoped_refptr<webrtc::DataChannelInterface> channel);

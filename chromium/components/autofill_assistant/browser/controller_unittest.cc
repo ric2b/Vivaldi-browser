@@ -9,6 +9,7 @@
 
 #include "base/bind_helpers.h"
 #include "base/guid.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/gtest_util.h"
@@ -21,14 +22,17 @@
 #include "components/autofill_assistant/browser/mock_controller_observer.h"
 #include "components/autofill_assistant/browser/mock_personal_data_manager.h"
 #include "components/autofill_assistant/browser/mock_service.h"
+#include "components/autofill_assistant/browser/public/mock_runtime_manager.h"
 #include "components/autofill_assistant/browser/service.h"
 #include "components/autofill_assistant/browser/trigger_context.h"
 #include "components/autofill_assistant/browser/web/mock_web_controller.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "ui/base/l10n/l10n_util.h"
 
 namespace autofill_assistant {
 
@@ -101,8 +105,16 @@ class ControllerTest : public content::RenderViewHostTestHarness {
 
     controller_ = std::make_unique<Controller>(
         web_contents(), &mock_client_, task_environment()->GetMockTickClock(),
-        std::move(service));
+        &mock_runtime_manager_, std::move(service));
     controller_->SetWebControllerForTest(std::move(web_controller));
+
+    ON_CALL(mock_client_, AttachUI()).WillByDefault(Invoke([this]() {
+      controller_->SetUiShown(true);
+    }));
+
+    ON_CALL(mock_client_, DestroyUI()).WillByDefault(Invoke([this]() {
+      controller_->SetUiShown(false);
+    }));
 
     // Fetching scripts succeeds for all URLs, but return nothing.
     ON_CALL(*mock_service_, OnGetScriptsForUrl(_, _, _))
@@ -114,6 +126,8 @@ class ControllerTest : public content::RenderViewHostTestHarness {
 
     ON_CALL(*mock_service_, OnGetNextActions(_, _, _, _, _))
         .WillByDefault(RunOnceCallback<4>(true, ""));
+
+    ON_CALL(*mock_service_, IsLiteService).WillByDefault(Return(false));
 
     ON_CALL(*mock_web_controller_, OnElementCheck(_, _))
         .WillByDefault(RunOnceCallback<1>(ClientStatus()));
@@ -163,9 +177,14 @@ class ControllerTest : public content::RenderViewHostTestHarness {
   void Start() { Start("http://initialurl.com"); }
 
   void Start(const std::string& url_string) {
+    Start(url_string, TriggerContext::CreateEmpty());
+  }
+
+  void Start(const std::string& url_string,
+             std::unique_ptr<TriggerContext> trigger_context) {
     GURL url(url_string);
     SetLastCommittedUrl(url);
-    controller_->Start(url, TriggerContext::CreateEmpty());
+    controller_->Start(url, std::move(trigger_context));
   }
 
   void SetLastCommittedUrl(const GURL& url) {
@@ -218,6 +237,7 @@ class ControllerTest : public content::RenderViewHostTestHarness {
   MockService* mock_service_;
   MockWebController* mock_web_controller_;
   NiceMock<MockClient> mock_client_;
+  NiceMock<MockRuntimeManager> mock_runtime_manager_;
   NiceMock<MockControllerObserver> mock_observer_;
   std::unique_ptr<Controller> controller_;
 };
@@ -656,6 +676,119 @@ TEST_F(ControllerTest, IgnoreProgressDecreases) {
   controller_->SetProgress(20);
   controller_->SetProgress(15);
   EXPECT_EQ(20, controller_->GetProgress());
+}
+
+TEST_F(ControllerTest, SetProgressStep) {
+  Start();
+
+  ShowProgressBarProto::StepProgressBarConfiguration config;
+  config.set_use_step_progress_bar(true);
+  config.add_annotated_step_icons()->set_identifier("icon1");
+  config.add_annotated_step_icons()->set_identifier("icon2");
+  EXPECT_CALL(mock_observer_, OnStepProgressBarConfigurationChanged(_))
+      .Times(1);
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(_)).Times(0);
+  controller_->SetStepProgressBarConfiguration(config);
+  EXPECT_TRUE(controller_->GetStepProgressBarConfiguration().has_value());
+
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(1)).Times(1);
+  controller_->SetProgressActiveStep(1);
+  EXPECT_EQ(1, *controller_->GetProgressActiveStep());
+}
+
+TEST_F(ControllerTest, IgnoreProgressStepDecreases) {
+  Start();
+
+  ShowProgressBarProto::StepProgressBarConfiguration config;
+  config.set_use_step_progress_bar(true);
+  config.add_annotated_step_icons()->set_identifier("icon1");
+  config.add_annotated_step_icons()->set_identifier("icon2");
+  controller_->SetStepProgressBarConfiguration(config);
+
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(Not(1)))
+      .Times(AnyNumber());
+  controller_->SetProgressActiveStep(2);
+}
+
+TEST_F(ControllerTest, NewProgressStepConfigurationClampsStep) {
+  Start();
+
+  ShowProgressBarProto::StepProgressBarConfiguration config;
+  config.set_use_step_progress_bar(true);
+  config.add_annotated_step_icons()->set_identifier("icon1");
+  config.add_annotated_step_icons()->set_identifier("icon2");
+  config.add_annotated_step_icons()->set_identifier("icon3");
+  controller_->SetStepProgressBarConfiguration(config);
+
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(3)).Times(1);
+  controller_->SetProgressActiveStep(3);
+  EXPECT_EQ(3, *controller_->GetProgressActiveStep());
+
+  ShowProgressBarProto::StepProgressBarConfiguration new_config;
+  new_config.set_use_step_progress_bar(true);
+  new_config.add_annotated_step_icons()->set_identifier("icon1");
+  new_config.add_annotated_step_icons()->set_identifier("icon2");
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(2)).Times(1);
+  controller_->SetStepProgressBarConfiguration(new_config);
+  EXPECT_EQ(2, *controller_->GetProgressActiveStep());
+}
+
+TEST_F(ControllerTest, ProgressStepWrapsNegativesToMax) {
+  Start();
+
+  ShowProgressBarProto::StepProgressBarConfiguration config;
+  config.set_use_step_progress_bar(true);
+  config.add_annotated_step_icons()->set_identifier("icon1");
+  config.add_annotated_step_icons()->set_identifier("icon2");
+  config.add_annotated_step_icons()->set_identifier("icon3");
+  controller_->SetStepProgressBarConfiguration(config);
+
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(3)).Times(1);
+  controller_->SetProgressActiveStep(-1);
+  EXPECT_EQ(3, *controller_->GetProgressActiveStep());
+}
+
+TEST_F(ControllerTest, ProgressStepClampsOverflowToMax) {
+  Start();
+
+  ShowProgressBarProto::StepProgressBarConfiguration config;
+  config.set_use_step_progress_bar(true);
+  config.add_annotated_step_icons()->set_identifier("icon1");
+  config.add_annotated_step_icons()->set_identifier("icon2");
+  config.add_annotated_step_icons()->set_identifier("icon3");
+  controller_->SetStepProgressBarConfiguration(config);
+
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(3)).Times(1);
+  controller_->SetProgressActiveStep(std::numeric_limits<int>::max());
+  EXPECT_EQ(3, *controller_->GetProgressActiveStep());
+}
+
+TEST_F(ControllerTest, SetProgressStepFromIdentifier) {
+  Start();
+
+  ShowProgressBarProto::StepProgressBarConfiguration config;
+  config.set_use_step_progress_bar(true);
+  config.add_annotated_step_icons()->set_identifier("icon1");
+  config.add_annotated_step_icons()->set_identifier("icon2");
+  controller_->SetStepProgressBarConfiguration(config);
+
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(1)).Times(1);
+  EXPECT_TRUE(controller_->SetProgressActiveStepIdentifier("icon2"));
+  EXPECT_EQ(1, *controller_->GetProgressActiveStep());
+}
+
+TEST_F(ControllerTest, SetProgressStepFromUnknownIdentifier) {
+  Start();
+
+  ShowProgressBarProto::StepProgressBarConfiguration config;
+  config.set_use_step_progress_bar(true);
+  config.add_annotated_step_icons()->set_identifier("icon1");
+  config.add_annotated_step_icons()->set_identifier("icon2");
+  controller_->SetStepProgressBarConfiguration(config);
+
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(_)).Times(0);
+  EXPECT_FALSE(controller_->SetProgressActiveStepIdentifier("icon3"));
+  EXPECT_FALSE(controller_->GetProgressActiveStep().has_value());
 }
 
 TEST_F(ControllerTest, StateChanges) {
@@ -1609,6 +1742,60 @@ TEST_F(ControllerTest, UnexpectedNavigationDuringPromptAction) {
                                    AutofillAssistantState::STOPPED));
 }
 
+TEST_F(ControllerTest, UnexpectedNavigationDuringLiteScriptPromptAction) {
+  ON_CALL(*mock_service_, IsLiteService).WillByDefault(Return(true));
+
+  SupportsScriptResponseProto script_response;
+  AddRunnableScript(&script_response, "autostart")
+      ->mutable_presentation()
+      ->set_autostart(true);
+  SetNextScriptResponse(script_response);
+
+  ActionsResponseProto autostart_script;
+  autostart_script.add_actions()
+      ->mutable_prompt()
+      ->add_choices()
+      ->mutable_chip()
+      ->set_text("continue");
+  autostart_script.add_actions()->mutable_tell()->set_message("never shown");
+  SetupActionsForScript("autostart", autostart_script);
+
+  Start();
+  EXPECT_EQ(AutofillAssistantState::PROMPT, controller_->GetState());
+  ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
+  EXPECT_EQ(controller_->GetUserActions()[0].chip().text, "continue");
+
+  // No error is shown for lite scripts.
+  EXPECT_CALL(mock_observer_, OnStatusMessageChanged(_)).Times(0);
+
+  // Renderer (Document) initiated navigation is allowed.
+  EXPECT_CALL(mock_client_, Shutdown(_)).Times(0);
+  EXPECT_CALL(mock_client_, RecordDropOut(_)).Times(0);
+  content::NavigationSimulator::NavigateAndCommitFromDocument(
+      GURL("http://a.example.com/page"), web_contents()->GetMainFrame());
+  EXPECT_EQ(AutofillAssistantState::PROMPT, controller_->GetState());
+
+  // Expected browser initiated navigation is allowed.
+  EXPECT_CALL(mock_client_, Shutdown(_)).Times(0);
+  EXPECT_CALL(mock_client_, RecordDropOut(_)).Times(0);
+  controller_->ExpectNavigation();
+  content::NavigationSimulator::NavigateAndCommitFromBrowser(
+      web_contents(), GURL("http://b.example.com/page"));
+  EXPECT_EQ(AutofillAssistantState::PROMPT, controller_->GetState());
+
+  // Unexpected browser initiated navigation is allowed for lite scripts.
+  EXPECT_CALL(mock_client_, Shutdown(_)).Times(0);
+  EXPECT_CALL(mock_client_, RecordDropOut(_)).Times(0);
+  content::NavigationSimulator::NavigateAndCommitFromBrowser(
+      web_contents(), GURL("http://c.example.com/page"));
+  EXPECT_EQ(AutofillAssistantState::PROMPT, controller_->GetState());
+
+  // Full history of state transitions.
+  EXPECT_THAT(states_, ElementsAre(AutofillAssistantState::STARTING,
+                                   AutofillAssistantState::RUNNING,
+                                   AutofillAssistantState::PROMPT));
+}
+
 TEST_F(ControllerTest, UnexpectedNavigationInRunningState) {
   SupportsScriptResponseProto script_response;
   AddRunnableScript(&script_response, "autostart")
@@ -1881,6 +2068,53 @@ TEST_F(ControllerTest, UserDataFormCreditCard) {
   EXPECT_THAT(GetUserData()->selected_addresses_["billing_address"]->Compare(
                   *billing_address),
               Eq(0));
+}
+
+TEST_F(ControllerTest, UserDataChangesByOutOfLoopWrite) {
+  auto options = std::make_unique<MockCollectUserDataOptions>();
+  auto user_data = std::make_unique<UserData>();
+
+  options->request_payer_name = true;
+  options->request_payer_email = true;
+  options->request_payer_phone = true;
+  options->contact_details_name = "selected_profile";
+
+  testing::InSequence sequence;
+
+  EXPECT_CALL(mock_observer_, OnUserActionsChanged(UnorderedElementsAre(
+                                  Property(&UserAction::enabled, Eq(false)))))
+      .Times(1);
+  controller_->SetCollectUserDataOptions(options.get());
+
+  EXPECT_CALL(mock_observer_, OnUserActionsChanged(UnorderedElementsAre(
+                                  Property(&UserAction::enabled, Eq(true)))))
+      .Times(1);
+  autofill::AutofillProfile contact_profile;
+  contact_profile.SetRawInfo(autofill::ServerFieldType::EMAIL_ADDRESS,
+                             base::UTF8ToUTF16("joedoe@example.com"));
+  contact_profile.SetRawInfo(autofill::ServerFieldType::NAME_FULL,
+                             base::UTF8ToUTF16("Joe Doe"));
+  contact_profile.SetRawInfo(autofill::ServerFieldType::PHONE_HOME_WHOLE_NUMBER,
+                             base::UTF8ToUTF16("+1 23 456 789 01"));
+  controller_->SetContactInfo(
+      std::make_unique<autofill::AutofillProfile>(contact_profile));
+  EXPECT_THAT(controller_->GetUserData()
+                  ->selected_address("selected_profile")
+                  ->Compare(contact_profile),
+              Eq(0));
+
+  EXPECT_CALL(mock_observer_, OnUserActionsChanged(UnorderedElementsAre(
+                                  Property(&UserAction::enabled, Eq(false)))))
+      .Times(1);
+  // Can be called by a PDM update.
+  controller_->WriteUserData(base::BindOnce(
+      [](UserData* user_data, UserData::FieldChange* field_change) {
+        auto it = user_data->selected_addresses_.find("selected_profile");
+        if (it != user_data->selected_addresses_.end()) {
+          user_data->selected_addresses_.erase(it);
+          *field_change = UserData::FieldChange::CONTACT_PROFILE;
+        }
+      }));
 }
 
 TEST_F(ControllerTest, SetTermsAndConditions) {
@@ -2569,4 +2803,58 @@ TEST_F(ControllerTest, PauseAndNavigate) {
       web_contents(), GURL("http://b.example.com/path"));
 }
 
+TEST_F(ControllerTest,
+       LiteScriptWithOnboardingDoesNotShowInitialStatusMessage) {
+  SupportsScriptResponseProto script_response;
+  AddRunnableScript(&script_response, "script")
+      ->mutable_presentation()
+      ->set_autostart(true);
+  SetupScripts(script_response);
+
+  ActionsResponseProto actions_response;
+  actions_response.add_actions()->mutable_tell()->set_message("Hello World");
+
+  SetupActionsForScript("script", actions_response);
+  auto trigger_context = std::make_unique<TriggerContextImpl>(
+      std::map<std::string, std::string>{
+          {"TRIGGER_SCRIPT_USED", "example/path"}},
+      /* exp = */ std::string());
+  trigger_context->SetOnboardingShown(true);
+
+  testing::InSequence seq;
+  EXPECT_CALL(mock_observer_,
+              OnStatusMessageChanged(testing::Not("Hello World")))
+      .Times(0);
+  EXPECT_CALL(mock_observer_, OnStatusMessageChanged("Hello World")).Times(1);
+  Start("http://a.example.com/path", std::move(trigger_context));
+}
+
+TEST_F(ControllerTest, RegularScriptShowsDefaultInitialStatusMessage) {
+  SupportsScriptResponseProto script_response;
+  AddRunnableScript(&script_response, "script")
+      ->mutable_presentation()
+      ->set_autostart(true);
+  SetupScripts(script_response);
+
+  ActionsResponseProto actions_response;
+  actions_response.add_actions()->mutable_tell()->set_message("Hello World");
+
+  SetupActionsForScript("script", actions_response);
+
+  testing::InSequence seq;
+  EXPECT_CALL(mock_observer_, OnStatusMessageChanged(l10n_util::GetStringFUTF8(
+                                  IDS_AUTOFILL_ASSISTANT_LOADING,
+                                  base::UTF8ToUTF16("a.example.com"))))
+      .Times(1);
+  EXPECT_CALL(mock_observer_, OnStatusMessageChanged("Hello World")).Times(1);
+  Start("http://a.example.com/path");
+}
+
+TEST_F(ControllerTest, NotifyRuntimeManagerOnUiStateChange) {
+  EXPECT_CALL(mock_runtime_manager_, SetUIState(UIState::kShown)).Times(1);
+  controller_->SetUiShown(true);
+
+  EXPECT_CALL(mock_runtime_manager_, SetUIState(UIState::kNotShown)).Times(1);
+  controller_->SetUiShown(false);
+}
 }  // namespace autofill_assistant

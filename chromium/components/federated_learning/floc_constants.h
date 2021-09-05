@@ -9,18 +9,24 @@
 
 namespace federated_learning {
 
-extern const char kManifestBlocklistFormatKey[];
+extern const uint8_t kMaxNumberOfBitsInFloc;
 
-extern const int kCurrentBlocklistFormatVersion;
+extern const char kManifestFlocComponentFormatKey[];
+
+extern const int kCurrentFlocComponentFormatVersion;
 
 // The name of the top-level directory under the user data directory that
 // contains all files and subdirectories related to the floc.
 extern const base::FilePath::CharType kTopLevelDirectoryName[];
 
 // Paths under |kTopLevelDirectoryName|
+// ------------------------------------
 
 // The name of the file that stores the blocklist.
 extern const base::FilePath::CharType kBlocklistFileName[];
+
+// The name of the file that stores the sorting-lsh clusters.
+extern const base::FilePath::CharType kSortingLshClustersFileName[];
 
 }  // namespace federated_learning
 

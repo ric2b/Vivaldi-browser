@@ -23,7 +23,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_THEME_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_THEME_H_
 
-#include "third_party/blink/public/platform/web_color_scheme.h"
+#include "third_party/blink/public/common/css/color_scheme.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
 #include "third_party/blink/renderer/core/scroll/scroll_types.h"
@@ -45,7 +45,6 @@ class ComputedStyle;
 class Element;
 class File;
 class FontDescription;
-class LengthSize;
 class LocalFrame;
 class Node;
 class ThemePainter;
@@ -63,17 +62,6 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
 
   virtual ThemePainter& Painter() = 0;
 
-  static void SetSizeIfAuto(ComputedStyle&, const IntSize&);
-  // Sets the minimum size to |part_size| or |min_part_size| as appropriate
-  // according to the given style, if they are specified.
-  static void SetMinimumSize(ComputedStyle&,
-                             const LengthSize* part_size,
-                             const LengthSize* min_part_size = nullptr);
-  // SetMinimumSizeIfAuto must be called before SetSizeIfAuto, because we
-  // will not set a minimum size if an explicit size is set, and SetSizeIfAuto
-  // sets an explicit size.
-  static void SetMinimumSizeIfAuto(ComputedStyle&, const IntSize&);
-
   // This method is called whenever style has been computed for an element and
   // the appearance property has been set to a value other than "none".
   // The theme should map in all of the appropriate metrics and defaults given
@@ -81,7 +69,7 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   // selection of control size based off the font, the disabling of appearance
   // when certain other properties like "border" are set, or if the appearance
   // is not supported by the theme.
-  void AdjustStyle(ComputedStyle&, Element*);
+  void AdjustStyle(const Element*, ComputedStyle&);
 
   // The remaining methods should be implemented by the platform-specific
   // portion of the theme, e.g., LayoutThemeMac.cpp for Mac OS X.
@@ -96,14 +84,6 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   // the native appearance.
   virtual bool IsControlStyled(ControlPart part, const ComputedStyle&) const;
 
-  // This method is called whenever a control state changes on a particular
-  // themed object, e.g., the mouse becomes pressed or a control becomes
-  // disabled. The ControlState parameter indicates which state has changed
-  // (from having to not having, or vice versa).
-  bool ControlStateChanged(const Node*,
-                           const ComputedStyle&,
-                           ControlState) const;
-
   bool ShouldDrawDefaultFocusRing(const Node*, const ComputedStyle&) const;
 
   // A method asking if the platform is able to show a calendar picker for a
@@ -111,24 +91,20 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   virtual bool SupportsCalendarPicker(const AtomicString&) const;
 
   // Text selection colors.
-  Color ActiveSelectionBackgroundColor(WebColorScheme color_scheme) const;
-  Color InactiveSelectionBackgroundColor(WebColorScheme color_scheme) const;
-  Color ActiveSelectionForegroundColor(WebColorScheme color_scheme) const;
-  Color InactiveSelectionForegroundColor(WebColorScheme color_scheme) const;
+  Color ActiveSelectionBackgroundColor(ColorScheme color_scheme) const;
+  Color InactiveSelectionBackgroundColor(ColorScheme color_scheme) const;
+  Color ActiveSelectionForegroundColor(ColorScheme color_scheme) const;
+  Color InactiveSelectionForegroundColor(ColorScheme color_scheme) const;
   virtual void SetSelectionColors(Color active_background_color,
                                   Color active_foreground_color,
                                   Color inactive_background_color,
                                   Color inactive_foreground_color) {}
 
   // List box selection colors
-  Color ActiveListBoxSelectionBackgroundColor(
-      WebColorScheme color_scheme) const;
-  Color ActiveListBoxSelectionForegroundColor(
-      WebColorScheme color_scheme) const;
-  Color InactiveListBoxSelectionBackgroundColor(
-      WebColorScheme color_scheme) const;
-  Color InactiveListBoxSelectionForegroundColor(
-      WebColorScheme color_scheme) const;
+  Color ActiveListBoxSelectionBackgroundColor(ColorScheme color_scheme) const;
+  Color ActiveListBoxSelectionForegroundColor(ColorScheme color_scheme) const;
+  Color InactiveListBoxSelectionBackgroundColor(ColorScheme color_scheme) const;
+  Color InactiveListBoxSelectionForegroundColor(ColorScheme color_scheme) const;
 
   virtual Color PlatformSpellingMarkerUnderlineColor() const;
   virtual Color PlatformGrammarMarkerUnderlineColor() const;
@@ -138,10 +114,10 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   // Highlight and text colors for TextMatches.
   Color PlatformTextSearchHighlightColor(bool active_match,
                                          bool in_forced_colors_mode,
-                                         WebColorScheme color_scheme) const;
+                                         ColorScheme color_scheme) const;
   Color PlatformTextSearchColor(bool active_match,
                                 bool in_forced_colors_mode,
-                                WebColorScheme color_scheme) const;
+                                ColorScheme color_scheme) const;
 
   virtual Color FocusRingColor() const;
   virtual Color PlatformFocusRingColor() const { return Color(0, 0, 0); }
@@ -161,13 +137,8 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   virtual base::TimeDelta CaretBlinkInterval() const;
 
   // System fonts and colors for CSS.
-  virtual void SystemFont(CSSValueID system_font_id,
-                          FontSelectionValue& font_slope,
-                          FontSelectionValue& font_weight,
-                          float& font_size,
-                          AtomicString& font_family) const = 0;
   void SystemFont(CSSValueID system_font_id, FontDescription&);
-  virtual Color SystemColor(CSSValueID, WebColorScheme color_scheme) const;
+  virtual Color SystemColor(CSSValueID, ColorScheme color_scheme) const;
 
   virtual void AdjustSliderThumbSize(ComputedStyle&) const;
 
@@ -195,14 +166,11 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   // DelegatesMenuListRendering() always returns true.
   void SetDelegatesMenuListRenderingForTesting(bool flag);
   virtual bool PopsMenuByArrowKeys() const { return false; }
-  virtual bool PopsMenuByReturnKey() const { return false; }
-  virtual bool PopsMenuByAltDownUpOrF4Key() const { return false; }
+  virtual bool PopsMenuByReturnKey() const { return true; }
 
   virtual String DisplayNameForFile(const File& file) const;
 
   virtual bool SupportsSelectionForegroundColors() const { return true; }
-
-  virtual bool ShouldUseFallbackTheme(const ComputedStyle&) const;
 
   // Adjust style as per platform selection.
   virtual void AdjustControlPartStyle(ComputedStyle&);
@@ -210,22 +178,22 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
  protected:
   // The platform selection color.
   virtual Color PlatformActiveSelectionBackgroundColor(
-      WebColorScheme color_scheme) const;
+      ColorScheme color_scheme) const;
   virtual Color PlatformInactiveSelectionBackgroundColor(
-      WebColorScheme color_scheme) const;
+      ColorScheme color_scheme) const;
   virtual Color PlatformActiveSelectionForegroundColor(
-      WebColorScheme color_scheme) const;
+      ColorScheme color_scheme) const;
   virtual Color PlatformInactiveSelectionForegroundColor(
-      WebColorScheme color_scheme) const;
+      ColorScheme color_scheme) const;
 
   virtual Color PlatformActiveListBoxSelectionBackgroundColor(
-      WebColorScheme color_scheme) const;
+      ColorScheme color_scheme) const;
   virtual Color PlatformInactiveListBoxSelectionBackgroundColor(
-      WebColorScheme color_scheme) const;
+      ColorScheme color_scheme) const;
   virtual Color PlatformActiveListBoxSelectionForegroundColor(
-      WebColorScheme color_scheme) const;
+      ColorScheme color_scheme) const;
   virtual Color PlatformInactiveListBoxSelectionForegroundColor(
-      WebColorScheme color_scheme) const;
+      ColorScheme color_scheme) const;
 
   // Methods for each appearance value.
   virtual void AdjustCheckboxStyle(ComputedStyle&) const;
@@ -237,26 +205,13 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   virtual void AdjustButtonStyle(ComputedStyle&) const;
   virtual void AdjustInnerSpinButtonStyle(ComputedStyle&) const;
 
-  virtual void AdjustMenuListStyle(ComputedStyle&, Element*) const;
-  virtual void AdjustMenuListButtonStyle(ComputedStyle&, Element*) const;
-  virtual void AdjustSliderContainerStyle(ComputedStyle&, Element*) const;
+  virtual void AdjustMenuListStyle(ComputedStyle&) const;
+  virtual void AdjustMenuListButtonStyle(ComputedStyle&) const;
+  virtual void AdjustSliderContainerStyle(const Element&, ComputedStyle&) const;
   virtual void AdjustSliderThumbStyle(ComputedStyle&) const;
   virtual void AdjustSearchFieldStyle(ComputedStyle&) const;
   virtual void AdjustSearchFieldCancelButtonStyle(ComputedStyle&) const;
-  void AdjustStyleUsingFallbackTheme(ComputedStyle&);
-  void AdjustCheckboxStyleUsingFallbackTheme(ComputedStyle&) const;
-  void AdjustRadioStyleUsingFallbackTheme(ComputedStyle&) const;
 
- public:
-  // Methods for state querying
-  static bool IsChecked(const Node*);
-  static bool IsIndeterminate(const Node*);
-  static bool IsEnabled(const Node*);
-  static bool IsPressed(const Node*);
-  static bool IsHovered(const Node*);
-  static bool IsReadOnlyControl(const Node*);
-
- protected:
   bool HasCustomFocusRingColor() const;
   Color GetCustomFocusRingColor() const;
 

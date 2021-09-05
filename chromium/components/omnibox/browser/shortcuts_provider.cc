@@ -123,20 +123,10 @@ void ShortcutsProvider::Start(const AutocompleteInput& input,
   TRACE_EVENT0("omnibox", "ShortcutsProvider::Start");
   matches_.clear();
 
-  if (input.focus_type() != OmniboxFocusType::DEFAULT ||
-      (input.type() == metrics::OmniboxInputType::EMPTY) ||
-      input.text().empty() || !initialized_)
-    return;
-
-  base::TimeTicks start_time = base::TimeTicks::Now();
-  GetMatches(input);
-  if (input.text().length() < 6) {
-    base::TimeTicks end_time = base::TimeTicks::Now();
-    std::string name = "ShortcutsProvider.QueryIndexTime." +
-                       base::NumberToString(input.text().size());
-    base::HistogramBase* counter = base::Histogram::FactoryGet(
-        name, 1, 1000, 50, base::Histogram::kUmaTargetedHistogramFlag);
-    counter->Add(static_cast<int>((end_time - start_time).InMilliseconds()));
+  if (input.focus_type() == OmniboxFocusType::DEFAULT &&
+      input.type() != metrics::OmniboxInputType::EMPTY &&
+      !input.text().empty() && initialized_) {
+    GetMatches(input);
   }
 }
 
@@ -276,8 +266,7 @@ AutocompleteMatch ShortcutsProvider::ShortcutToACMatch(
   match.keyword = shortcut.match_core.keyword;
   match.RecordAdditionalInfo("number of hits", shortcut.number_of_hits);
   match.RecordAdditionalInfo("last access time", shortcut.last_access_time);
-  match.RecordAdditionalInfo("original input text",
-                             base::UTF16ToUTF8(shortcut.text));
+  match.RecordAdditionalInfo("original input text", shortcut.text);
 
   // Set |inline_autocompletion| and |allowed_to_be_default_match| if possible.
   // If the input is in keyword mode, navigation matches cannot be the default
@@ -329,7 +318,8 @@ AutocompleteMatch ShortcutsProvider::ShortcutToACMatch(
             !input.prevent_inline_autocomplete() ||
             match.inline_autocompletion.empty();
       }
-    } else {
+    } else if (!match.TryRichAutocompletion(match.contents, match.description,
+                                            input, true)) {
       const size_t inline_autocomplete_offset =
           URLPrefix::GetInlineAutocompleteOffset(
               input.text(), fixed_up_input_text, true, match.fill_into_edit);

@@ -14,34 +14,33 @@
 
 namespace gfx {
 
-GpuFenceHandle::GpuFenceHandle() : type(GpuFenceHandleType::kEmpty) {}
+GpuFenceHandle::GpuFenceHandle() = default;
 
-GpuFenceHandle::GpuFenceHandle(const GpuFenceHandle& other) = default;
+GpuFenceHandle::GpuFenceHandle(GpuFenceHandle&& other) = default;
 
-GpuFenceHandle& GpuFenceHandle::operator=(const GpuFenceHandle& other) =
-    default;
+GpuFenceHandle& GpuFenceHandle::operator=(GpuFenceHandle&& other) = default;
 
-GpuFenceHandle::~GpuFenceHandle() {}
+GpuFenceHandle::~GpuFenceHandle() = default;
 
-GpuFenceHandle CloneHandleForIPC(const GpuFenceHandle& source_handle) {
-  switch (source_handle.type) {
-    case GpuFenceHandleType::kEmpty:
-      NOTREACHED();
-      return source_handle;
-    case GpuFenceHandleType::kAndroidNativeFenceSync: {
-      gfx::GpuFenceHandle handle;
+bool GpuFenceHandle::is_null() const {
 #if defined(OS_POSIX)
-      handle.type = GpuFenceHandleType::kAndroidNativeFenceSync;
-      int duped_handle = HANDLE_EINTR(dup(source_handle.native_fd.fd));
-      if (duped_handle < 0)
-        return GpuFenceHandle();
-      handle.native_fd = base::FileDescriptor(duped_handle, true);
+  return !owned_fd.is_valid();
+#else
+  return true;
 #endif
-      return handle;
-    }
-  }
+}
+
+GpuFenceHandle GpuFenceHandle::Clone() const {
+  gfx::GpuFenceHandle handle;
+#if defined(OS_POSIX)
+  const int duped_handle = HANDLE_EINTR(dup(owned_fd.get()));
+  if (duped_handle < 0)
+    return GpuFenceHandle();
+  handle.owned_fd = base::ScopedFD(duped_handle);
+#else
   NOTREACHED();
-  return gfx::GpuFenceHandle();
+#endif
+  return handle;
 }
 
 }  // namespace gfx

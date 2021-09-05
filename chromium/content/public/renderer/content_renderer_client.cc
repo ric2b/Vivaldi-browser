@@ -53,12 +53,6 @@ bool ContentRendererClient::HasErrorPage(int http_status_code) {
   return false;
 }
 
-bool ContentRendererClient::ShouldSuppressErrorPage(RenderFrame* render_frame,
-                                                    const GURL& url,
-                                                    int error_code) {
-  return false;
-}
-
 bool ContentRendererClient::ShouldTrackUseCounter(const GURL& url) {
   return true;
 }
@@ -205,14 +199,6 @@ bool ContentRendererClient::AllowScriptExtensionForServiceWorker(
   return false;
 }
 
-BrowserPluginDelegate* ContentRendererClient::CreateBrowserPluginDelegate(
-    RenderFrame* render_frame,
-    const WebPluginInfo& info,
-    const std::string& mime_type,
-    const GURL& original_url) {
-  return nullptr;
-}
-
 bool ContentRendererClient::IsExcludedHeaderForServiceWorkerFetchEvent(
     const std::string& header_name) {
   return false;
@@ -261,6 +247,11 @@ base::Optional<::media::AudioRendererAlgorithmParameters>
 ContentRendererClient::GetAudioRendererAlgorithmParameters(
     media::AudioParameters audio_parameters) {
   return base::nullopt;
+}
+
+void ContentRendererClient::MaybeProxyURLLoaderFactory(
+    RenderFrame* render_frame,
+    mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver) {
 }
 
 }  // namespace content

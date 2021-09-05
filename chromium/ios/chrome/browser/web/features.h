@@ -17,13 +17,12 @@ extern const base::Feature kWebPageTextAccessibility;
 // dynamic type setting.
 extern const base::Feature kWebPageDefaultZoomFromDynamicType;
 
+// Used to enable a different method of zooming web pages.
+extern const base::Feature kWebPageAlternativeTextZoom;
+
 // Feature flag to keep the mobile version for Google SRP. Should be used when
 // the desktop version is requested by default.
 extern const base::Feature kMobileGoogleSRP;
-
-// Feature flag to reload the page instead of showing the SadTab when the
-// renderer crashes.
-extern const base::Feature kReloadSadTab;
 
 }  // namespace web
 

@@ -19,8 +19,8 @@ import("//third_party/blink/renderer/platform/platform_generated.gni")
 import("//third_party/protobuf/proto_library.gni")
 
 visibility = [
-  "//third_party/blink/renderer/*",
   "//third_party/blink/public/*",
+  "//third_party/blink/renderer/*",
 ]
 
 rel_blink_core_gen_dir = rebase_path(blink_core_output_dir, root_build_dir)
@@ -65,6 +65,10 @@ core_config_add += [
   "//build/config/compiler:noshadowing",
 ]
 
+source_set("core_common") {
+  sources = [ "core_export.h" ]
+}
+
 source_set("prerequisites") {
   public_deps = [
     "//services/network/public/cpp:cpp",
@@ -73,6 +77,7 @@ source_set("prerequisites") {
     "//skia",
     "//third_party/angle:translator",
     "//third_party/blink/public/mojom:mojom_broadcastchannel_bindings_blink",
+    "//third_party/blink/renderer/bindings/core/v8:bindings_core_v8_generated",
     "//third_party/blink/renderer/bindings/core/v8:generated",
     "//third_party/blink/renderer/core/animation:buildflags",
     "//third_party/blink/renderer/core/inspector:generated",
@@ -87,6 +92,7 @@ source_set("prerequisites") {
     "//third_party/ots",
     "//third_party/snappy",
     "//third_party/zlib",
+    "//ui/accessibility/mojom:mojom_blink",
     "//ui/base:features",
     "//ui/base/ime/mojom",
     "//ui/display/mojom:mojom_blink",
@@ -99,7 +105,6 @@ source_set("prerequisites") {
   ]
   deps = [
     "//third_party/blink/public:scaled_resources",
-    "//third_party/blink/renderer/bindings/core/v8:bindings_core_v8_generated",
 
     # FIXME: don't depend on bindings_modules http://crbug.com/358074
     "//third_party/blink/renderer/bindings/modules/v8:bindings_modules_v8_generated",
@@ -125,7 +130,6 @@ component("core") {
   # If you create a new subdirectory, make a new BUILD file for that directory
   # and reference it in the deps below rather than adding the sources here.
   sources = [
-    "core_export.h",
     "core_initializer.cc",
     "core_initializer.h",
   ]
@@ -159,6 +163,7 @@ component("core") {
     "//third_party/blink/renderer/core/fullscreen",
     "//third_party/blink/renderer/core/geometry",
     "//third_party/blink/renderer/core/html",
+    "//third_party/blink/renderer/core/html/parser:parser",
     "//third_party/blink/renderer/core/imagebitmap",
     "//third_party/blink/renderer/core/input",
     "//third_party/blink/renderer/core/inspector",
@@ -198,6 +203,8 @@ component("core") {
     "//third_party/blink/renderer/platform",
     "//third_party/blink/renderer/platform/wtf",
   ]
+
+  allow_circular_includes_from = [ "//third_party/blink/renderer/core/xml:xml" ]
 
   public_configs = [ ":core_include_dirs" ]
 
@@ -720,6 +727,11 @@ make_names("make_core_generated_performance_entry_names") {
   output_dir = blink_core_output_dir
 }
 
+make_names("make_core_generated_shadow_element_names") {
+  in_files = [ "html/shadow/shadow_element_names.json5" ]
+  output_dir = "$blink_core_output_dir/html/shadow"
+}
+
 # make_qualified_names ---------------------------------------------------------
 
 make_qualified_names("make_core_generated_xlink_names") {
@@ -912,6 +924,7 @@ targets_generating_sources = [
   ":make_core_generated_media_type_names",
   ":make_core_generated_origin_trials",
   ":make_core_generated_performance_entry_names",
+  ":make_core_generated_shadow_element_names",
   ":make_core_generated_style_property_shorthand",
   ":make_core_generated_svg_element_type_helpers",
   ":make_core_generated_svg_names",
@@ -1070,7 +1083,6 @@ source_set("unit_tests") {
     "execution_context/agent_metrics_collector_test.cc",
     "execution_context/execution_context_lifecycle_state_observer_test.cc",
     "exported/local_frame_client_impl_test.cc",
-    "exported/prerendering_test.cc",
     "exported/web_document_subresource_filter_test.cc",
     "exported/web_document_test.cc",
     "exported/web_drag_data_test.cc",
@@ -1126,8 +1138,6 @@ source_set("unit_tests") {
     "frame/frame_overlay_test.cc",
     "frame/frame_serializer_test.cc",
     "frame/frame_test.cc",
-    "frame/frame_test_helpers.cc",
-    "frame/frame_test_helpers.h",
     "frame/history_test.cc",
     "frame/local_dom_window_test.cc",
     "frame/local_frame_back_forward_cache_test.cc",
@@ -1153,6 +1163,7 @@ source_set("unit_tests") {
     "input/scroll_snap_test.cc",
     "input/touch_action_test.cc",
     "input/touch_event_manager_test.cc",
+    "inspector/inspector_history_test.cc",
     "inspector/inspector_session_state_test.cc",
     "inspector/inspector_style_resolver_test.cc",
     "inspector/main_thread_debugger_test.cc",
@@ -1171,7 +1182,6 @@ source_set("unit_tests") {
     "layout/layout_block_test.cc",
     "layout/layout_box_model_object_test.cc",
     "layout/layout_box_test.cc",
-    "layout/layout_count_test.cc",
     "layout/layout_embedded_content_test.cc",
     "layout/layout_flexible_box_test.cc",
     "layout/layout_geometry_map_test.cc",
@@ -1215,6 +1225,7 @@ source_set("unit_tests") {
     "layout/ng/inline/ng_caret_position_test.cc",
     "layout/ng/inline/ng_fragment_item_test.cc",
     "layout/ng/inline/ng_fragment_items_builder_test.cc",
+    "layout/ng/inline/ng_fragment_items_test.cc",
     "layout/ng/inline/ng_inline_cursor_test.cc",
     "layout/ng/inline/ng_inline_fragment_traversal_test.cc",
     "layout/ng/inline/ng_inline_items_builder_test.cc",
@@ -1255,6 +1266,7 @@ source_set("unit_tests") {
     "layout/svg/layout_svg_text_test.cc",
     "layout/text_autosizer_test.cc",
     "layout/visual_rect_mapping_test.cc",
+    "loader/address_space_feature_test.cc",
     "loader/alternate_signed_exchange_resource_info_test.cc",
     "loader/base_fetch_context_test.cc",
     "loader/document_load_timing_test.cc",
@@ -1274,6 +1286,7 @@ source_set("unit_tests") {
     "loader/modulescript/module_tree_linker_test.cc",
     "loader/navigation_policy_test.cc",
     "loader/ping_loader_test.cc",
+    "loader/prerender_test.cc",
     "loader/previews_resource_loading_hints_test.cc",
     "loader/programmatic_scroll_test.cc",
     "loader/progress_tracker_test.cc",
@@ -1379,7 +1392,6 @@ source_set("unit_tests") {
     "scheduler_integration_tests/virtual_time_test.cc",
     "script/document_modulator_impl_test.cc",
     "script/dynamic_module_resolver_test.cc",
-    "script/mock_script_element_base.h",
     "script/module_map_test.cc",
     "script/module_record_resolver_impl_test.cc",
     "script/module_script_test.cc",
@@ -1405,20 +1417,6 @@ source_set("unit_tests") {
     "svg/svg_text_content_element_test.cc",
     "svg/svg_use_element_test.cc",
     "svg/unsafe_svg_attribute_sanitization_test.cc",
-    "testing/fake_web_plugin.cc",
-    "testing/fake_web_plugin.h",
-    "testing/sim/sim_canvas.cc",
-    "testing/sim/sim_canvas.h",
-    "testing/sim/sim_compositor.cc",
-    "testing/sim/sim_compositor.h",
-    "testing/sim/sim_network.cc",
-    "testing/sim/sim_network.h",
-    "testing/sim/sim_page.cc",
-    "testing/sim/sim_page.h",
-    "testing/sim/sim_request.cc",
-    "testing/sim/sim_request.h",
-    "testing/sim/sim_test.cc",
-    "testing/sim/sim_test.h",
     "timing/memory_info_test.cc",
     "timing/performance_mark_test.cc",
     "timing/performance_navigation_timing_test.cc",
@@ -1436,7 +1434,6 @@ source_set("unit_tests") {
     "workers/main_thread_worklet_test.cc",
     "workers/threaded_worklet_test.cc",
     "workers/worker_thread_test.cc",
-    "workers/worker_thread_test_helper.h",
     "workers/worklet_global_scope_test_helper.h",
     "workers/worklet_module_responses_map_test.cc",
     "xml/parser/shared_buffer_reader_test.cc",
@@ -1525,14 +1522,34 @@ source_set("perf_tests") {
 source_set("unit_test_support") {
   testonly = true
   sources = [
+    "frame/frame_test_helpers.cc",
+    "frame/frame_test_helpers.h",
+    "html/media/html_media_test_helper.cc",
+    "html/media/html_media_test_helper.h",
+    "script/mock_script_element_base.h",
     "testing/core_unit_test_helper.cc",
     "testing/core_unit_test_helper.h",
+    "testing/fake_web_plugin.cc",
+    "testing/fake_web_plugin.h",
     "testing/module_test_base.cc",
     "testing/module_test_base.h",
     "testing/page_test_base.cc",
     "testing/page_test_base.h",
     "testing/scoped_fake_plugin_registry.cc",
     "testing/scoped_fake_plugin_registry.h",
+    "testing/sim/sim_canvas.cc",
+    "testing/sim/sim_canvas.h",
+    "testing/sim/sim_compositor.cc",
+    "testing/sim/sim_compositor.h",
+    "testing/sim/sim_network.cc",
+    "testing/sim/sim_network.h",
+    "testing/sim/sim_page.cc",
+    "testing/sim/sim_page.h",
+    "testing/sim/sim_request.cc",
+    "testing/sim/sim_request.h",
+    "testing/sim/sim_test.cc",
+    "testing/sim/sim_test.h",
+    "workers/worker_thread_test_helper.h",
   ]
 
   configs += [

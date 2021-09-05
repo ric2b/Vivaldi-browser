@@ -11,17 +11,23 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_window.h"
+#include "chrome/browser/themes/theme_service.h"
+#include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/webui/signin/profile_picker_ui.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/google_chrome_strings.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
+#include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "google_apis/gaia/gaia_urls.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/view.h"
@@ -43,7 +49,11 @@ constexpr float kMaxRatioOfWorkArea = 0.9;
 GURL CreateURLForEntryPoint(ProfilePicker::EntryPoint entry_point) {
   GURL base_url = GURL(chrome::kChromeUIProfilePickerUrl);
   switch (entry_point) {
-    case ProfilePicker::EntryPoint::kOnStartup:
+    case ProfilePicker::EntryPoint::kOnStartup: {
+      GURL::Replacements replacements;
+      replacements.SetQueryStr(chrome::kChromeUIProfilePickerStartupQuery);
+      return base_url.ReplaceComponents(replacements);
+    }
     case ProfilePicker::EntryPoint::kProfileMenuManageProfiles:
     case ProfilePicker::EntryPoint::kOpenNewWindowAfterProfileDeletion:
       return base_url;
@@ -59,8 +69,16 @@ void ProfilePicker::Show(EntryPoint entry_point) {
   if (!g_profile_picker_view)
     g_profile_picker_view = new ProfilePickerView();
 
-  base::UmaHistogramEnumeration("ProfilePicker.Shown", entry_point);
   g_profile_picker_view->Display(entry_point);
+}
+
+// static
+void ProfilePicker::SwitchToSignIn(SkColor profile_color,
+                                   base::OnceClosure switch_failure_callback) {
+  if (g_profile_picker_view) {
+    g_profile_picker_view->SwitchToSignIn(profile_color,
+                                          std::move(switch_failure_callback));
+  }
 }
 
 // static
@@ -87,6 +105,17 @@ ProfilePickerView::ProfilePickerView()
 ProfilePickerView::~ProfilePickerView() = default;
 
 void ProfilePickerView::Display(ProfilePicker::EntryPoint entry_point) {
+  // Record creation metrics.
+  base::UmaHistogramEnumeration("ProfilePicker.Shown", entry_point);
+  if (entry_point == ProfilePicker::EntryPoint::kOnStartup) {
+    DCHECK(creation_time_on_startup_.is_null());
+    // Display() is called right after the creation of this object.
+    creation_time_on_startup_ = base::TimeTicks::Now();
+    base::UmaHistogramTimes("ProfilePicker.StartupTime.BeforeCreation",
+                            creation_time_on_startup_ -
+                                startup_metric_utils::MainEntryPointTicks());
+  }
+
   if (initialized_ == kNotInitialized) {
     initialized_ = kInProgress;
     g_browser_process->profile_manager()->CreateProfileAsync(
@@ -126,6 +155,7 @@ void ProfilePickerView::OnSystemProfileCreated(
 
 void ProfilePickerView::Init(ProfilePicker::EntryPoint entry_point,
                              Profile* system_profile) {
+  DCHECK_EQ(initialized_, kInProgress);
   web_view_ = new views::WebView(system_profile);
   web_view_->GetWebContents()->SetDelegate(this);
   // To record metrics using javascript, extensions are needed.
@@ -148,6 +178,74 @@ void ProfilePickerView::Init(ProfilePicker::EntryPoint entry_point,
   GetWidget()->Show();
   web_view_->RequestFocus();
   initialized_ = InitState::kDone;
+
+  if (entry_point == ProfilePicker::EntryPoint::kOnStartup) {
+    DCHECK(!creation_time_on_startup_.is_null());
+    base::UmaHistogramTimes("ProfilePicker.StartupTime.WebViewCreated",
+                            base::TimeTicks::Now() - creation_time_on_startup_);
+  }
+}
+
+void ProfilePickerView::SwitchToSignIn(
+    SkColor profile_color,
+    base::OnceClosure switch_failure_callback) {
+  DCHECK(!switch_failure_callback_);
+  switch_failure_callback_ = std::move(switch_failure_callback);
+  size_t icon_index = profiles::GetPlaceholderAvatarIndex();
+  // Silently create the new profile for browsing on GAIA (so that the sign-in
+  // cookies are stored in the right profile).
+  ProfileManager::CreateMultiProfileAsync(
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .ChooseNameForNewProfile(icon_index),
+      profiles::GetDefaultAvatarIconUrl(icon_index),
+      base::BindRepeating(&ProfilePickerView::OnProfileForSigninCreated,
+                          weak_ptr_factory_.GetWeakPtr(), profile_color));
+}
+
+void ProfilePickerView::OnProfileForSigninCreated(
+    SkColor profile_color,
+    Profile* profile,
+    Profile::CreateStatus status) {
+  if (status == Profile::CREATE_STATUS_LOCAL_FAIL) {
+    if (switch_failure_callback_)
+      std::move(switch_failure_callback_).Run();
+    return;
+  } else if (status != Profile::CREATE_STATUS_INITIALIZED) {
+    return;
+  }
+
+  // No need to report failure any more, delete the callback.
+  DCHECK(switch_failure_callback_);
+  switch_failure_callback_ = base::OnceClosure();
+
+  DCHECK(profile);
+
+  ProfileAttributesEntry* entry;
+  if (!g_browser_process->profile_manager()
+           ->GetProfileAttributesStorage()
+           .GetProfileAttributesWithPath(profile->GetPath(), &entry)) {
+    NOTREACHED();
+    return;
+  }
+
+  // Mark this profile ephemeral so that it is deleted upon next startup if the
+  // browser crashes before finishing the flow.
+  entry->SetIsEphemeral(true);
+
+  // Apply a new color to the profile.
+  auto* theme_service = ThemeServiceFactory::GetForProfile(profile);
+  theme_service->BuildAutogeneratedThemeFromColor(profile_color);
+
+  // Rebuild the view.
+  // TODO(crbug.com/1126913): Add the simple toolbar with the back button.
+  RemoveAllChildViews(true);
+  auto web_view = std::make_unique<views::WebView>(profile);
+  web_view->GetWebContents()->SetDelegate(this);
+  web_view_ = AddChildView(std::move(web_view));
+  SetLayoutManager(std::make_unique<views::FillLayout>());
+  web_view_->LoadInitialURL(GaiaUrls::GetInstance()->signin_chrome_sync_dice());
+  web_view_->RequestFocus();
 }
 
 gfx::Size ProfilePickerView::CalculatePreferredSize() const {

@@ -13,7 +13,12 @@ const DEFAULT_BLACK_CURSOR_COLOR = 0;
 Polymer({
   is: 'settings-manage-a11y-page',
 
-  behaviors: [WebUIListenerBehavior, settings.RouteOriginBehavior],
+  behaviors: [
+    DeepLinkingBehavior,
+    settings.RouteObserverBehavior,
+    settings.RouteOriginBehavior,
+    WebUIListenerBehavior,
+  ],
 
   properties: {
     /**
@@ -144,14 +149,6 @@ Polymer({
       },
     },
 
-    allowExperimentalSwitchAccess_: {
-      type: Boolean,
-      value() {
-        return loadTimeData.getBoolean(
-            'showExperimentalAccessibilitySwitchAccess');
-      },
-    },
-
     /** @private */
     shouldShowExperimentalCursorColor_: {
       type: Boolean,
@@ -170,14 +167,6 @@ Polymer({
       value() {
         return loadTimeData.getBoolean('isKioskModeActive');
       }
-    },
-
-    /** @private */
-    shouldShowExperimentalSwitchAccess_: {
-      type: Boolean,
-      computed: 'computeShouldShowExperimentalSwitchAccess_(' +
-          'allowExperimentalSwitchAccess_,' +
-          'isKioskModeActive_)',
     },
 
     /** @private */
@@ -208,14 +197,18 @@ Polymer({
     },
 
     /**
-     * |hasKeyboard_|, |hasMouse_|, and |hasTouchpad_| start undefined so
-     * observers don't trigger until they have been populated.
+     * |hasKeyboard_|, |hasMouse_|, |hasPointingStick_|, and |hasTouchpad_|
+     * start undefined so observers don't trigger until they have been
+     * populated.
      * @private
      */
     hasKeyboard_: Boolean,
 
     /** @private */
     hasMouse_: Boolean,
+
+    /** @private */
+    hasPointingStick_: Boolean,
 
     /** @private */
     hasTouchpad_: Boolean,
@@ -247,33 +240,78 @@ Polymer({
           'shelfNavigationButtonsImplicitlyEnabled_,' +
           'prefs.settings.a11y.tablet_mode_shelf_nav_buttons_enabled)',
     },
+
+    /**
+     * Used by DeepLinkingBehavior to focus this page's deep links.
+     * @type {!Set<!chromeos.settings.mojom.Setting>}
+     */
+    supportedSettingIds: {
+      type: Object,
+      value: () => new Set([
+        chromeos.settings.mojom.Setting.kChromeVox,
+        chromeos.settings.mojom.Setting.kSelectToSpeak,
+        chromeos.settings.mojom.Setting.kHighContrastMode,
+        chromeos.settings.mojom.Setting.kFullscreenMagnifier,
+        chromeos.settings.mojom.Setting.kDockedMagnifier,
+        chromeos.settings.mojom.Setting.kStickyKeys,
+        chromeos.settings.mojom.Setting.kOnScreenKeyboard,
+        chromeos.settings.mojom.Setting.kDictation,
+        chromeos.settings.mojom.Setting.kHighlightKeyboardFocus,
+        chromeos.settings.mojom.Setting.kHighlightTextCaret,
+        chromeos.settings.mojom.Setting.kAutoClickWhenCursorStops,
+        chromeos.settings.mojom.Setting.kLargeCursor,
+        chromeos.settings.mojom.Setting.kHighlightCursorWhileMoving,
+        chromeos.settings.mojom.Setting.kTabletNavigationButtons,
+        chromeos.settings.mojom.Setting.kMonoAudio,
+        chromeos.settings.mojom.Setting.kStartupSound,
+        chromeos.settings.mojom.Setting.kEnableSwitchAccess,
+        chromeos.settings.mojom.Setting.kLiveCaptions,
+        chromeos.settings.mojom.Setting.kEnableCursorColor,
+      ]),
+    },
   },
 
   observers: [
-    'pointersChanged_(hasMouse_, hasTouchpad_, isKioskModeActive_)',
+    'pointersChanged_(hasMouse_, hasPointingStick_, hasTouchpad_, ' +
+        'isKioskModeActive_)',
   ],
 
   /** settings.RouteOriginBehavior override */
   route_: settings.routes.MANAGE_ACCESSIBILITY,
+
+  /** @private {?ManageA11yPageBrowserProxy} */
+  manageBrowserProxy_: null,
+
+  /** @private {?settings.DevicePageBrowserProxy} */
+  deviceBrowserProxy_: null,
+
+  /** @override */
+  created() {
+    this.manageBrowserProxy_ = ManageA11yPageBrowserProxyImpl.getInstance();
+    this.deviceBrowserProxy_ =
+        settings.DevicePageBrowserProxyImpl.getInstance();
+  },
 
   /** @override */
   attached() {
     this.addWebUIListener(
         'has-mouse-changed', this.set.bind(this, 'hasMouse_'));
     this.addWebUIListener(
+        'has-pointing-stick-changed', this.set.bind(this, 'hasPointingStick_'));
+    this.addWebUIListener(
         'has-touchpad-changed', this.set.bind(this, 'hasTouchpad_'));
-    settings.DevicePageBrowserProxyImpl.getInstance().initializePointers();
+    this.deviceBrowserProxy_.initializePointers();
 
     this.addWebUIListener(
         'has-hardware-keyboard', this.set.bind(this, 'hasKeyboard_'));
-    chrome.send('initializeKeyboardWatcher');
+    this.deviceBrowserProxy_.initializeKeyboardWatcher();
   },
 
   /** @override */
   ready() {
     this.addWebUIListener(
         'initial-data-ready', this.onManageAllyPageReady_.bind(this));
-    chrome.send('manageA11yPageReady');
+    this.manageBrowserProxy_.manageA11yPageReady();
 
     const r = settings.routes;
     this.addFocusConfig_(r.MANAGE_TTS_SETTINGS, '#ttsSubpageButton');
@@ -286,13 +324,27 @@ Polymer({
   },
 
   /**
+   * @param {!settings.Route} route
+   * @param {!settings.Route} oldRoute
+   */
+  currentRouteChanged(route, oldRoute) {
+    // Does not apply to this page.
+    if (route !== settings.routes.MANAGE_ACCESSIBILITY) {
+      return;
+    }
+
+    this.attemptDeepLink();
+  },
+
+  /**
    * @param {boolean} hasMouse
+   * @param {boolean} hasPointingStick
    * @param {boolean} hasTouchpad
    * @private
    */
-  pointersChanged_(hasMouse, hasTouchpad, isKioskModeActive) {
+  pointersChanged_(hasMouse, hasTouchpad, hasPointingStick, isKioskModeActive) {
     this.$.pointerSubpageButton.hidden =
-        (!hasMouse && !hasTouchpad) || isKioskModeActive;
+        (!hasMouse && !hasPointingStick && !hasTouchpad) || isKioskModeActive;
   },
 
   /**
@@ -319,7 +371,7 @@ Polymer({
    * @private
    */
   toggleStartupSoundEnabled_(e) {
-    chrome.send('setStartupSoundEnabled', [e.detail]);
+    this.manageBrowserProxy_.setStartupSoundEnabled(e.detail);
   },
 
   /** @private */
@@ -330,7 +382,7 @@ Polymer({
 
   /** @private */
   onChromeVoxSettingsTap_() {
-    chrome.send('showChromeVoxSettings');
+    this.manageBrowserProxy_.showChromeVoxSettings();
   },
 
   /** @private */
@@ -341,7 +393,7 @@ Polymer({
 
   /** @private */
   onSelectToSpeakSettingsTap_() {
-    chrome.send('showSelectToSpeakSettings');
+    this.manageBrowserProxy_.showSelectToSpeakSettings();
   },
 
   /** @private */
@@ -453,11 +505,12 @@ Polymer({
       return;
     }
 
-    const enabled = this.$.shelfNavigationButtonsEnabledControl.checked;
+    const enabled = this.$$('#shelfNavigationButtonsEnabledControl').checked;
     this.set(
         'prefs.settings.a11y.tablet_mode_shelf_nav_buttons_enabled.value',
         enabled);
-    chrome.send('recordSelectedShowShelfNavigationButtonValue', [enabled]);
+    this.manageBrowserProxy_.recordSelectedShowShelfNavigationButtonValue(
+        enabled);
   },
 
   /**
@@ -506,13 +559,5 @@ Polymer({
    */
   shouldShowAdditionalFeaturesLink_(isKiosk, isGuest) {
     return !isKiosk && !isGuest;
-  },
-
-  /**
-   * @return {boolean}
-   * @private
-   */
-  computeShouldShowExperimentalSwitchAccess_() {
-    return this.allowExperimentalSwitchAccess_ && !this.isKioskModeActive_;
   },
 });

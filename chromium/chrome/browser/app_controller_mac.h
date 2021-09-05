@@ -18,7 +18,9 @@
 #include "components/prefs/pref_change_registrar.h"
 
 // Vivaldi
+#ifndef VIVALDI_SPARKLE_DISABLED
 #import  "autoupdate/mac/sparkle_updater_delegate.h"
+#endif
 
 class AppControllerProfileObserver;
 @class AppShimMenuController;
@@ -112,7 +114,9 @@ class TabMenuBridge;
   // Request to keep the browser alive during that object's lifetime.
   std::unique_ptr<ScopedKeepAlive> _keep_alive;
 
+#ifndef VIVALDI_SPARKLE_DISABLED
   SparkleUpdaterDelegate* _sparkle_updater_delegate;
+#endif
 }
 
 @property(readonly, nonatomic) BOOL startupComplete;

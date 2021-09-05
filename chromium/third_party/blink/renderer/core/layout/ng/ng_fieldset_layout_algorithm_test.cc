@@ -377,7 +377,7 @@ TEST_F(NGFieldsetLayoutAlgorithmTest, ZeroMaxHeight) {
   offset:unplaced size:1000x53
     offset:0,0 size:126x53
       offset:13,0 size:30x30
-      offset:3,30 size:120x220
+      offset:3,30 size:120x0
         offset:10,10 size:100x200
 )DUMP";
   EXPECT_EQ(expectation, dump);
@@ -681,11 +681,8 @@ TEST_F(NGFieldsetLayoutAlgorithmTest, FieldsetContentFragmentationAutoHeight) {
   ASSERT_TRUE(fragment->BreakToken());
 
   String dump = DumpFragmentTree(fragment.get());
-  // TODO(crbug.com/1097012): The height of the outermost fragment here should
-  // be 200, not 190, but the fragmentation machinery gets confused by the
-  // fieldset padding.
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
-  offset:unplaced size:176x190
+  offset:unplaced size:176x200
     offset:3,3 size:170x197
       offset:10,10 size:50x187
 )DUMP";
@@ -696,11 +693,8 @@ TEST_F(NGFieldsetLayoutAlgorithmTest, FieldsetContentFragmentationAutoHeight) {
   ASSERT_TRUE(fragment->BreakToken());
 
   dump = DumpFragmentTree(fragment.get());
-  // TODO(crbug.com/1097012): The height of the outermost fragment here should
-  // be 200, not 190, but the fragmentation machinery gets confused by the
-  // fieldset padding.
   expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
-  offset:unplaced size:176x190
+  offset:unplaced size:176x200
     offset:3,0 size:170x200
       offset:10,0 size:50x200
 )DUMP";
@@ -811,11 +805,8 @@ TEST_F(NGFieldsetLayoutAlgorithmTest, LegendFragmentationAutoHeight) {
   ASSERT_TRUE(fragment->BreakToken());
 
   String dump = DumpFragmentTree(fragment.get());
-  // TODO(crbug.com/1097012): The height of the outermost fragment here should
-  // be 500, not 490, but the fragmentation machinery gets confused by the
-  // fieldset padding.
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
-  offset:unplaced size:176x490
+  offset:unplaced size:176x500
     offset:13,0 size:50x500
 )DUMP";
   EXPECT_EQ(expectation, dump);
@@ -863,11 +854,8 @@ TEST_F(NGFieldsetLayoutAlgorithmTest, LegendFragmentation) {
   ASSERT_TRUE(fragment->BreakToken());
 
   String dump = DumpFragmentTree(fragment.get());
-  // TODO(crbug.com/1097012): The height of the outermost fragment here should
-  // be 500, not 490, but the fragmentation machinery gets confused by the
-  // fieldset padding.
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
-  offset:unplaced size:176x490
+  offset:unplaced size:176x500
     offset:13,0 size:50x500
 )DUMP";
   EXPECT_EQ(expectation, dump);
@@ -877,11 +865,8 @@ TEST_F(NGFieldsetLayoutAlgorithmTest, LegendFragmentation) {
   ASSERT_FALSE(fragment->BreakToken());
 
   dump = DumpFragmentTree(fragment.get());
-  // TODO(crbug.com/1097012): The height of the outermost fragment here should
-  // be 23, not 0, but the fragmentation machinery gets confused by the
-  // fieldset padding.
   expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
-  offset:unplaced size:176x0
+  offset:unplaced size:176x23
     offset:3,0 size:170x20
 )DUMP";
   EXPECT_EQ(expectation, dump);
@@ -922,11 +907,8 @@ TEST_F(NGFieldsetLayoutAlgorithmTest, LegendAndContentFragmentationAutoHeight) {
   ASSERT_TRUE(fragment->BreakToken());
 
   String dump = DumpFragmentTree(fragment.get());
-  // TODO(crbug.com/1097012): The height of the outermost fragment here should
-  // be 500, not 490, but the fragmentation machinery gets confused by the
-  // fieldset padding.
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
-  offset:unplaced size:176x490
+  offset:unplaced size:176x500
     offset:13,0 size:50x500
 )DUMP";
   EXPECT_EQ(expectation, dump);
@@ -934,12 +916,9 @@ TEST_F(NGFieldsetLayoutAlgorithmTest, LegendAndContentFragmentationAutoHeight) {
   fragment = NGBaseLayoutAlgorithmTest::RunFieldsetLayoutAlgorithm(
       node, space, fragment->BreakToken());
   ASSERT_TRUE(fragment->BreakToken());
-  // TODO(crbug.com/1097012): The height of the outermost fragment here should
-  // be 200, not 190, but the fragmentation machinery gets confused by the
-  // fieldset padding.
   dump = DumpFragmentTree(fragment.get());
   expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
-  offset:unplaced size:176x190
+  offset:unplaced size:176x200
     offset:3,0 size:170x200
       offset:10,10 size:100x190
 )DUMP";
@@ -993,11 +972,8 @@ TEST_F(NGFieldsetLayoutAlgorithmTest, LegendAndContentFragmentation) {
   ASSERT_TRUE(fragment->BreakToken());
 
   String dump = DumpFragmentTree(fragment.get());
-  // TODO(crbug.com/1097012): The height of the outermost fragment here should
-  // be 500, not 490, but the fragmentation machinery gets confused by the
-  // fieldset padding.
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
-  offset:unplaced size:176x490
+  offset:unplaced size:176x500
     offset:13,0 size:50x500
 )DUMP";
   EXPECT_EQ(expectation, dump);
@@ -1005,9 +981,10 @@ TEST_F(NGFieldsetLayoutAlgorithmTest, LegendAndContentFragmentation) {
   fragment = NGBaseLayoutAlgorithmTest::RunFieldsetLayoutAlgorithm(
       node, space, fragment->BreakToken());
   ASSERT_TRUE(fragment->BreakToken());
+
   dump = DumpFragmentTree(fragment.get());
   expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
-  offset:unplaced size:176x0
+  offset:unplaced size:176x23
     offset:3,0 size:170x20
       offset:10,10 size:100x190
 )DUMP";
@@ -1661,9 +1638,6 @@ TEST_F(NGFieldsetLayoutAlgorithmTest, MarginBottomPastEndOfFragmentainer) {
   ASSERT_TRUE(fragment->BreakToken());
 
   String dump = DumpFragmentTree(fragment.get());
-  // TODO(crbug.com/1097012): The height of the outermost fragment here should
-  // be 100, not 110, but the fragmentation machinery gets confused
-  // and includes the margin bottom.
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
   offset:unplaced size:100x110
     offset:0,0 size:0x90
@@ -1684,12 +1658,8 @@ TEST_F(NGFieldsetLayoutAlgorithmTest, MarginBottomPastEndOfFragmentainer) {
 }
 
 // Tests that a fieldset with a large border and a small legend fragment
-// correctly. In this case, the legend block offset is not adjusted because the
-// legend is broken across multiple fragments. Since we don't allow breaking
-// inside borders, they will overflow fragmentainers.
-// TODO(layout-dev): Allowing breaks inside a legend when not allowing breaks
-// inside borders seems inconsistent. Consider making legends monolithic, unless
-// they establish a parallel flow.
+// correctly. Since we don't allow breaking inside borders, they will overflow
+// fragmentainers.
 TEST_F(NGFieldsetLayoutAlgorithmTest, SmallLegendLargeBorderFragmentation) {
   SetBodyInnerHTML(R"HTML(
     <style>
@@ -1854,8 +1824,7 @@ TEST_F(NGFieldsetLayoutAlgorithmTest, SmallerLegendLargeBorderFragmentation2) {
 }
 
 // Tests that a fieldset with a large border and a small legend fragment
-// correctly. In this case, the legend block offset is not adjusted because the
-// legend breaks after attempting to adjust the offset.
+// correctly.
 TEST_F(NGFieldsetLayoutAlgorithmTest, SmallerLegendLargeBorderWithBreak) {
   SetBodyInnerHTML(R"HTML(
     <style>

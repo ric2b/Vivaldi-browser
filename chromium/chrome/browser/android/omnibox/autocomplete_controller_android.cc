@@ -55,6 +55,8 @@
 #include "components/open_from_clipboard/clipboard_recent_content.h"
 #include "components/prefs/pref_service.h"
 #include "components/query_tiles/android/tile_conversion_bridge.h"
+#include "components/query_tiles/switches.h"
+#include "components/query_tiles/tile_service.h"
 #include "components/search_engines/omnibox_focus_type.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/sessions/content/session_tab_helper.h"
@@ -203,8 +205,14 @@ void AutocompleteControllerAndroid::Start(
   input_.set_prefer_keyword(prefer_keyword);
   input_.set_allow_exact_keyword_match(allow_exact_keyword_match);
   input_.set_want_asynchronous_matches(want_asynchronous_matches);
-  if (!j_query_tile_id.is_null())
-    input_.set_query_tile_id(ConvertJavaStringToUTF8(env, j_query_tile_id));
+  if (!j_query_tile_id.is_null()) {
+    std::string tile_id = ConvertJavaStringToUTF8(env, j_query_tile_id);
+    input_.set_query_tile_id(tile_id);
+    if (base::FeatureList::IsEnabled(
+            query_tiles::features::kQueryTilesLocalOrdering)) {
+      provider_client_->GetQueryTileService()->OnTileClicked(tile_id);
+    }
+  }
   is_query_started_from_tiles_ = is_query_started_from_tiles;
   autocomplete_controller_->Start(input_);
 }
@@ -365,6 +373,18 @@ ScopedJavaLocalRef<jobject> AutocompleteControllerAndroid::
     } else {
       match.search_terms_args->search_terms = query;
     }
+    if (match.type == AutocompleteMatchType::TILE_SUGGESTION &&
+        base::FeatureList::IsEnabled(
+            query_tiles::features::kQueryTilesLocalOrdering)) {
+      // If the search is from clicking on a tile, report the click
+      // so that we can adjust the ordering of the tiles later.
+      // Because we don't have tile Id here, pass parent tile's Id
+      // and the full query string to TileService to locate the Id.
+      // In future, we could simplify this by passing the last tile
+      // Id to native.
+      provider_client_->GetQueryTileService()->OnQuerySelected(
+          input_.query_tile_id(), query);
+    }
   }
 
   if (!jnew_query_params.is_null() && match.search_terms_args) {
@@ -391,6 +411,14 @@ AutocompleteControllerAndroid::FindMatchingTabWithUrl(
       *url::GURLAndroid::ToNativeGURL(env, j_gurl), nullptr);
 
   return tab ? tab->GetJavaObject() : nullptr;
+}
+
+void AutocompleteControllerAndroid::GroupSuggestionsBySearchVsURL(
+    JNIEnv* /* env */,
+    int first_index,
+    int last_index) {
+  autocomplete_controller_->result().GroupSuggestionsBySearchVsURL(first_index,
+                                                                   last_index);
 }
 
 void AutocompleteControllerAndroid::Shutdown() {
@@ -483,11 +511,11 @@ void AutocompleteControllerAndroid::NotifySuggestionsReceived(
                                autocomplete_result.hidden_group_ids());
 
   // Get the inline-autocomplete text.
-  base::string16 inline_autocomplete_text;
+  base::string16 inline_autocompletion;
   if (auto* default_match = autocomplete_result.default_match())
-    inline_autocomplete_text = default_match->inline_autocompletion;
+    inline_autocompletion = default_match->inline_autocompletion;
   ScopedJavaLocalRef<jstring> inline_text =
-      ConvertUTF16ToJavaString(env, inline_autocomplete_text);
+      ConvertUTF16ToJavaString(env, inline_autocompletion);
   jlong j_autocomplete_result_raw_ptr =
       reinterpret_cast<intptr_t>(&(autocomplete_result));
   Java_AutocompleteController_onSuggestionsReceived(
@@ -541,7 +569,7 @@ void FormatMatchContentsForDisplay(
     for (size_t i = match.contents_class.size(); i > 0; --i) {
       ACMatchClassification classification(match.contents_class[i - 1]);
       int updated_offset = std::max(
-          0 , static_cast<int>(classification.offset) - match_offset_delta);
+          0, static_cast<int>(classification.offset) - match_offset_delta);
       out_classifications->insert(
           out_classifications->begin(),
           ACMatchClassification(updated_offset, classification.style));
@@ -615,13 +643,16 @@ AutocompleteControllerAndroid::BuildOmniboxSuggestion(
   ScopedJavaLocalRef<jobject> j_query_tiles =
       query_tiles::TileConversionBridge::CreateJavaTiles(env,
                                                          match.query_tiles);
+  ScopedJavaLocalRef<jobject> j_navsuggest_tiles =
+      BuildNavsuggestTilesList(env, match.navsuggest_tiles);
 
   BookmarkModel* bookmark_model =
       BookmarkModelFactory::GetForBrowserContext(profile_);
+  const std::vector<int> subtypes(match.subtypes.begin(), match.subtypes.end());
   return Java_AutocompleteController_buildOmniboxSuggestion(
-      env, match.type, AutocompleteMatch::IsSearchType(match.type),
-      match.relevance, match.transition, jcontents,
-      ToJavaIntArray(env, contents_class_offsets),
+      env, match.type, ToJavaIntArray(env, subtypes),
+      AutocompleteMatch::IsSearchType(match.type), match.relevance,
+      match.transition, jcontents, ToJavaIntArray(env, contents_class_offsets),
       ToJavaIntArray(env, contents_class_styles), description,
       ToJavaIntArray(env, description_class_offsets),
       ToJavaIntArray(env, description_class_styles), janswer, fill_into_edit,
@@ -632,21 +663,39 @@ AutocompleteControllerAndroid::BuildOmniboxSuggestion(
       match.suggestion_group_id.value_or(
           SearchSuggestionParser::kNoSuggestionGroupId),
       j_query_tiles, ToJavaByteArray(env, clipboard_image_data),
-      match.has_tab_match);
+      match.has_tab_match, j_navsuggest_tiles);
+}
+
+base::android::ScopedJavaLocalRef<jobject>
+AutocompleteControllerAndroid::BuildNavsuggestTilesList(
+    JNIEnv* env,
+    const std::vector<AutocompleteMatch::NavsuggestTile>& tiles) {
+  if (tiles.empty())
+    return ScopedJavaLocalRef<jobject>();
+  ScopedJavaLocalRef<jobject> j_navsuggest_tiles =
+      Java_AutocompleteController_buildOmniboxNavsuggestTileList(env,
+                                                                 tiles.size());
+  for (const auto& tile : tiles) {
+    ScopedJavaLocalRef<jstring> title =
+        ConvertUTF16ToJavaString(env, tile.title);
+    ScopedJavaLocalRef<jobject> url =
+        url::GURLAndroid::FromNativeGURL(env, tile.url);
+    Java_AutocompleteController_addOmniboxNavsuggestTile(
+        env, j_navsuggest_tiles, title, url);
+  }
+  return j_navsuggest_tiles;
 }
 
 void AutocompleteControllerAndroid::PopulateOmniboxGroupsDetails(
     JNIEnv* env,
     ScopedJavaLocalRef<jobject> j_autocomplete_result,
     const SearchSuggestionParser::HeadersMap& native_header_map,
-    const std::vector<int>& hidden_group_ids) {
-  base::flat_set<int> hidden_group_ids_set = hidden_group_ids;
-
+    const std::set<int>& hidden_group_ids) {
   for (const auto& group_header : native_header_map) {
     Java_AutocompleteController_addOmniboxGroupDetailsToResult(
         env, j_autocomplete_result, group_header.first,
         ConvertUTF16ToJavaString(env, group_header.second),
-        hidden_group_ids_set.contains(group_header.first));
+        base::Contains(hidden_group_ids, group_header.first));
   }
 }
 

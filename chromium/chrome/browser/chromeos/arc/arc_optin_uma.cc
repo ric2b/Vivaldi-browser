@@ -83,7 +83,7 @@ void UpdateProvisioningResultUMA(ProvisioningResult result,
 
 void UpdateCloudProvisionFlowErrorUMA(mojom::CloudProvisionFlowError error,
                                       const Profile* profile) {
-  UMA_HISTOGRAM_ENUMERATION(
+  base::UmaHistogramEnumeration(
       GetHistogramNameByUserType("Arc.Provisioning.CloudFlowError", profile),
       error);
 }
@@ -153,21 +153,26 @@ void UpdatePlayStoreShownTimeDeprecated(const base::TimeDelta& elapsed_time,
 }
 
 void UpdateAuthTiming(const char* histogram_name,
-                      base::TimeDelta elapsed_time) {
-  base::UmaHistogramCustomTimes(histogram_name, elapsed_time,
-                                base::TimeDelta::FromSeconds(1) /* minimum */,
-                                base::TimeDelta::FromMinutes(3) /* maximum */,
-                                50 /* bucket_count */);
+                      base::TimeDelta elapsed_time,
+                      const Profile* profile) {
+  base::UmaHistogramCustomTimes(
+      GetHistogramNameByUserType(histogram_name, profile), elapsed_time,
+      base::TimeDelta::FromSeconds(1) /* minimum */,
+      base::TimeDelta::FromMinutes(3) /* maximum */, 50 /* bucket_count */);
 }
 
-void UpdateAuthCheckinAttempts(int32_t num_attempts) {
-  base::UmaHistogramSparse("ArcAuth.CheckinAttempts", num_attempts);
+void UpdateAuthCheckinAttempts(int32_t num_attempts, const Profile* profile) {
+  base::UmaHistogramSparse(
+      GetHistogramNameByUserType("Arc.Auth.Checkin.Attempts", profile),
+      num_attempts);
 }
 
-void UpdateAuthAccountCheckStatus(mojom::AccountCheckStatus status) {
+void UpdateAuthAccountCheckStatus(mojom::AccountCheckStatus status,
+                                  const Profile* profile) {
   DCHECK_LE(status, mojom::AccountCheckStatus::CHECK_FAILED);
   UMA_HISTOGRAM_ENUMERATION(
-      "ArcAuth.AccountCheckStatus", static_cast<int>(status),
+      GetHistogramNameByUserType("Arc.Auth.AccountCheck.Status", profile),
+      static_cast<int>(status),
       static_cast<int>(mojom::AccountCheckStatus::CHECK_FAILED) + 1);
 }
 
@@ -176,7 +181,7 @@ void UpdateMainAccountResolutionStatus(
     mojom::MainAccountResolutionStatus status) {
   DCHECK(mojom::IsKnownEnumValue(status));
   base::UmaHistogramEnumeration(
-      GetHistogramNameByUserType("ArcAuth.MainAccountResolutionStatus",
+      GetHistogramNameByUserType("Arc.Auth.MainAccountResolution.Status",
                                  profile),
       status);
 }
@@ -212,7 +217,6 @@ std::ostream& operator<<(std::ostream& os, const ProvisioningResult& result) {
     MAP_PROVISIONING_RESULT(GMS_SERVICE_UNAVAILABLE);
     MAP_PROVISIONING_RESULT(GMS_BAD_AUTHENTICATION);
     MAP_PROVISIONING_RESULT(DEVICE_CHECK_IN_FAILED);
-    MAP_PROVISIONING_RESULT(DEPRECATED_CLOUD_PROVISION_FLOW_FAILED);
     MAP_PROVISIONING_RESULT(MOJO_VERSION_MISMATCH);
     MAP_PROVISIONING_RESULT(PROVISIONING_TIMEOUT);
     MAP_PROVISIONING_RESULT(DEVICE_CHECK_IN_TIMEOUT);
@@ -220,8 +224,6 @@ std::ostream& operator<<(std::ostream& os, const ProvisioningResult& result) {
     MAP_PROVISIONING_RESULT(GMS_SIGN_IN_FAILED);
     MAP_PROVISIONING_RESULT(GMS_SIGN_IN_TIMEOUT);
     MAP_PROVISIONING_RESULT(GMS_SIGN_IN_INTERNAL_ERROR);
-    MAP_PROVISIONING_RESULT(DEPRECATED_CLOUD_PROVISION_FLOW_TIMEOUT);
-    MAP_PROVISIONING_RESULT(DEPRECATED_CLOUD_PROVISION_FLOW_INTERNAL_ERROR);
     MAP_PROVISIONING_RESULT(ARC_STOPPED);
     MAP_PROVISIONING_RESULT(OVERALL_SIGN_IN_TIMEOUT);
     MAP_PROVISIONING_RESULT(CHROME_SERVER_COMMUNICATION_ERROR);

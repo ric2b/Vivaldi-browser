@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">catatan akhir</translation>
 <translation id="1281252709823657822">dialog</translation>
 <translation id="1306460908038601864">Nonaktif</translation>
+<translation id="1311894908970423688">Nilai harus <ph name="VALUE_DATE_OR_TIME" />.</translation>
 <translation id="1335095011850992622">daftar penghargaan</translation>
 <translation id="1342835525016946179">article</translation>
 <translation id="1359897965706325498">spanduk</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> item</translation>
 <translation id="1480676835519562650">dapat dipilih banyak, <ph name="SELECTED" /> dari <ph name="COUNT" /> dipilih.</translation>
 <translation id="1589122976691792535">wilayah</translation>
 <translation id="1591562245178063882">Bulan ini</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033">Minggu <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">Lagu <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">kotak centang</translation>
+<translation id="2307576640803031502">dalam daftar, item <ph name="INDEX" /> dari <ph name="COUNT" /></translation>
 <translation id="2311842470354187719">batas halaman</translation>
 <translation id="2335594187091864976">pemilih tanggal dan waktu</translation>
 <translation id="2393030564806080191">Nilai warna heksadesimal</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">opsi lainnya</translation>
 <translation id="576709008726043716">pendahuluan</translation>
 <translation id="57838592816432529">Bisukan</translation>
+<translation id="5860033963881614850">Nonaktif</translation>
 <translation id="588258955323874662">Layar Penuh</translation>
 <translation id="5888666972993069672">Sedang melakukan cast ke <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">kotak penelusuran</translation>
+<translation id="5916664084637901428">Aktif</translation>
 <translation id="5939518447894949180">Reset</translation>
 <translation id="5966707198760109579">Minggu</translation>
 <translation id="5987525920412732405">tombol putar</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">Hapus</translation>
 <translation id="668171684555832681">Lainnya...</translation>
 <translation id="6692633176391053278">stepper</translation>
+<translation id="6709093583001123835">Nilai harus <ph name="VALUE" />.</translation>
 <translation id="6709570249143506788">Kualitas pemutaran buruk</translation>
 <translation id="6755330956360078551">keterangan alat</translation>
 <translation id="6790428901817661496">Putar</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, dimulai pada <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Picture-in-Picture</translation>
 <translation id="9168329111483466115">catatan kaki</translation>
+<translation id="945780513535800434">Dicentang Sebagian</translation>
 <translation id="954003015749068518">masuk mode picture-in-picture</translation>
 <translation id="966787709310836684">menu</translation>
 </translationbundle>

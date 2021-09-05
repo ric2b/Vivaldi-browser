@@ -140,8 +140,8 @@ std::unique_ptr<views::View> GetShippingAddressLabel(
 
 std::unique_ptr<views::Label> GetLabelForMissingInformation(
     const base::string16& missing_info) {
-  std::unique_ptr<views::Label> label =
-      std::make_unique<views::Label>(missing_info, CONTEXT_BODY_TEXT_SMALL);
+  std::unique_ptr<views::Label> label = std::make_unique<views::Label>(
+      missing_info, CONTEXT_DIALOG_BODY_TEXT_SMALL);
   label->SetID(static_cast<int>(DialogViewID::PROFILE_LABEL_ERROR));
   // Missing information typically has a nice shade of blue.
   label->SetEnabledColor(label->GetNativeTheme()->GetSystemColor(
@@ -236,7 +236,7 @@ std::unique_ptr<views::ImageView> CreateAppIconView(
     float opacity) {
   std::unique_ptr<views::ImageView> icon_view =
       std::make_unique<views::ImageView>();
-  icon_view->set_can_process_events_within_subtree(false);
+  icon_view->SetCanProcessEventsWithinSubtree(false);
   if (icon_bitmap || !icon_resource_id) {
     gfx::ImageSkia img = gfx::ImageSkia::CreateFrom1xBitmap(
                              (icon_bitmap ? *icon_bitmap : SkBitmap()))
@@ -259,7 +259,7 @@ std::unique_ptr<views::ImageView> CreateAppIconView(
     // Images from |icon_resource_id| are 32x20 credit cards.
     icon_view->SetImageSize(gfx::Size(32, 20));
   }
-  icon_view->set_tooltip_text(tooltip_text);
+  icon_view->SetTooltipText(tooltip_text);
   icon_view->SetPaintToLayer();
   icon_view->layer()->SetFillsBoundsOpaquely(false);
   icon_view->layer()->SetOpacity(opacity);
@@ -279,14 +279,14 @@ std::unique_ptr<views::View> CreateProductLogoFooterView() {
   // Adds the Chrome logo image.
   std::unique_ptr<views::ImageView> chrome_logo =
       std::make_unique<views::ImageView>();
-  chrome_logo->set_can_process_events_within_subtree(false);
+  chrome_logo->SetCanProcessEventsWithinSubtree(false);
   chrome_logo->SetImage(
       ui::ResourceBundle::GetSharedInstance()
           .GetImageNamed(content_view->GetNativeTheme()->ShouldUseDarkColors()
                              ? IDR_PRODUCT_LOGO_NAME_22_WHITE
                              : IDR_PRODUCT_LOGO_NAME_22)
           .AsImageSkia());
-  chrome_logo->set_tooltip_text(l10n_util::GetStringUTF16(IDS_PRODUCT_NAME));
+  chrome_logo->SetTooltipText(l10n_util::GetStringUTF16(IDS_PRODUCT_NAME));
   content_view->AddChildView(std::move(chrome_logo));
 
   return content_view;
@@ -449,7 +449,7 @@ std::unique_ptr<views::View> CreateWarningView(const base::string16& message,
 
   if (show_icon) {
     auto warning_icon = std::make_unique<views::ImageView>();
-    warning_icon->set_can_process_events_within_subtree(false);
+    warning_icon->SetCanProcessEventsWithinSubtree(false);
     warning_icon->SetImage(gfx::CreateVectorIcon(
         vector_icons::kWarningIcon, 16,
         warning_icon->GetNativeTheme()->GetSystemColor(

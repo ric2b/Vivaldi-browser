@@ -316,7 +316,6 @@ void SyncEngineBackend::DoInitialize(SyncEngine::InitParams params) {
   sync_manager_->AddObserver(this);
 
   SyncManager::InitArgs args;
-  args.database_location = sync_data_folder_;
   args.event_handler = params.event_handler;
   args.service_url = params.service_url;
   args.enable_local_sync_backend = params.enable_local_sync_backend;
@@ -588,8 +587,8 @@ void SyncEngineBackend::DoOnInvalidatorClientIdChange(
 
 void SyncEngineBackend::DoOnInvalidationReceived(const std::string& payload) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(
-      base::FeatureList::IsEnabled(switches::kSubscribeForSyncInvalidations));
+  DCHECK(base::FeatureList::IsEnabled(switches::kSyncSendInterestedDataTypes) &&
+         base::FeatureList::IsEnabled(switches::kUseSyncInvalidations));
 
   sync_pb::SyncInvalidationsPayload payload_message;
   // TODO(crbug.com/1119804): Track parsing failures in a histogram.

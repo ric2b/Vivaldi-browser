@@ -130,9 +130,11 @@ class PermissionRequestManager
 
   // PermissionPrompt::Delegate:
   const std::vector<PermissionRequest*>& Requests() override;
+  GURL GetEmbeddingOrigin() const override;
   void Accept() override;
   void Deny() override;
   void Closing() override;
+  bool WasCurrentRequestAlreadyDisplayed() override;
 
   void set_web_contents_supports_permission_requests(
       bool web_contents_supports_permission_requests) {
@@ -258,7 +260,7 @@ class PermissionRequestManager
 
   // Whether the view for the current |requests_| has been shown to the user at
   // least once.
-  bool current_request_view_shown_to_user_ = false;
+  bool current_request_already_displayed_ = false;
 
   // Whether to use the normal or quiet UI to display the current permission
   // |requests_|, and whether to show warnings. This will be nullopt if we are

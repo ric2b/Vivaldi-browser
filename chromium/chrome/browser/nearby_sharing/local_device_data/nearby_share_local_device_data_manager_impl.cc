@@ -10,6 +10,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
 #include "base/rand_util.h"
+#include "base/strings/string_util.h"
 #include "chrome/browser/nearby_sharing/common/nearby_share_prefs.h"
 #include "chrome/browser/nearby_sharing/local_device_data/nearby_share_device_data_updater.h"
 #include "chrome/browser/nearby_sharing/local_device_data/nearby_share_device_data_updater_impl.h"
@@ -37,6 +38,10 @@ constexpr base::TimeDelta kUpdateDeviceDataTimeout =
 constexpr base::TimeDelta kDeviceDataDownloadPeriod =
     base::TimeDelta::FromHours(1);
 
+// The maximum length allowed for a device name, as encoded in UTF-8 in a
+// std::string, which will not contain a null terminator.
+size_t kDeviceNameMaxByteLength = 32;
+
 }  // namespace
 
 // static
@@ -47,13 +52,15 @@ NearbyShareLocalDeviceDataManagerImpl::Factory*
 std::unique_ptr<NearbyShareLocalDeviceDataManager>
 NearbyShareLocalDeviceDataManagerImpl::Factory::Create(
     PrefService* pref_service,
-    NearbyShareClientFactory* http_client_factory) {
+    NearbyShareClientFactory* http_client_factory,
+    const std::string& default_device_name) {
   if (test_factory_) {
-    return test_factory_->CreateInstance(pref_service, http_client_factory);
+    return test_factory_->CreateInstance(pref_service, http_client_factory,
+                                         default_device_name);
   }
 
   return base::WrapUnique(new NearbyShareLocalDeviceDataManagerImpl(
-      pref_service, http_client_factory));
+      pref_service, http_client_factory, default_device_name));
 }
 
 // static
@@ -66,7 +73,8 @@ NearbyShareLocalDeviceDataManagerImpl::Factory::~Factory() = default;
 
 NearbyShareLocalDeviceDataManagerImpl::NearbyShareLocalDeviceDataManagerImpl(
     PrefService* pref_service,
-    NearbyShareClientFactory* http_client_factory)
+    NearbyShareClientFactory* http_client_factory,
+    const std::string& default_device_name)
     : pref_service_(pref_service),
       device_data_updater_(NearbyShareDeviceDataUpdaterImpl::Factory::Create(
           GetId(),
@@ -81,62 +89,84 @@ NearbyShareLocalDeviceDataManagerImpl::NearbyShareLocalDeviceDataManagerImpl(
               pref_service_,
               base::BindRepeating(&NearbyShareLocalDeviceDataManagerImpl::
                                       OnDownloadDeviceDataRequested,
-                                  base::Unretained(this)))),
-      upload_device_name_scheduler_(
-          NearbyShareSchedulerFactory::CreateOnDemandScheduler(
-              /*retry_failures=*/true,
-              /*require_connectivity=*/true,
-              prefs::kNearbySharingSchedulerUploadDeviceNamePrefName,
-              pref_service_,
-              base::BindRepeating(&NearbyShareLocalDeviceDataManagerImpl::
-                                      OnUploadDeviceNameRequested,
-                                  base::Unretained(this)))) {}
+                                  base::Unretained(this)))) {
+  DCHECK(!default_device_name.empty());
+  if (GetDeviceName().empty())
+    SetDeviceName(default_device_name);
+}
 
 NearbyShareLocalDeviceDataManagerImpl::
     ~NearbyShareLocalDeviceDataManagerImpl() = default;
 
 std::string NearbyShareLocalDeviceDataManagerImpl::GetId() {
-  base::Optional<std::string> id =
-      GetStringPref(prefs::kNearbySharingDeviceIdPrefName);
-  if (id && !id->empty())
-    return *id;
+  std::string id =
+      pref_service_->GetString(prefs::kNearbySharingDeviceIdPrefName);
+  if (!id.empty())
+    return id;
 
-  id = std::string();
   for (size_t i = 0; i < kDeviceIdLength; ++i)
-    *id += kAlphaNumericChars[base::RandGenerator(kAlphaNumericChars.size())];
+    id += kAlphaNumericChars[base::RandGenerator(kAlphaNumericChars.size())];
 
-  SetStringPref(prefs::kNearbySharingDeviceIdPrefName, id);
+  pref_service_->SetString(prefs::kNearbySharingDeviceIdPrefName, id);
 
-  return *id;
+  return id;
 }
 
-base::Optional<std::string>
-NearbyShareLocalDeviceDataManagerImpl::GetDeviceName() const {
-  return GetStringPref(prefs::kNearbySharingDeviceNamePrefName);
+std::string NearbyShareLocalDeviceDataManagerImpl::GetDeviceName() const {
+  return pref_service_->GetString(prefs::kNearbySharingDeviceNamePrefName);
 }
 
 base::Optional<std::string> NearbyShareLocalDeviceDataManagerImpl::GetFullName()
     const {
-  return GetStringPref(prefs::kNearbySharingFullNamePrefName);
+  std::string name =
+      pref_service_->GetString(prefs::kNearbySharingFullNamePrefName);
+  if (name.empty())
+    return base::nullopt;
+
+  return name;
 }
 
 base::Optional<std::string> NearbyShareLocalDeviceDataManagerImpl::GetIconUrl()
     const {
-  return GetStringPref(prefs::kNearbySharingIconUrlPrefName);
+  std::string url =
+      pref_service_->GetString(prefs::kNearbySharingIconUrlPrefName);
+  if (url.empty())
+    return base::nullopt;
+
+  return url;
 }
 
-void NearbyShareLocalDeviceDataManagerImpl::SetDeviceName(
+nearby_share::mojom::DeviceNameValidationResult
+NearbyShareLocalDeviceDataManagerImpl::ValidateDeviceName(
     const std::string& name) {
-  if (name == GetDeviceName())
-    return;
+  if (name.empty())
+    return nearby_share::mojom::DeviceNameValidationResult::kErrorEmpty;
 
-  // TODO(b/161297140): Perform input validation.
-  SetStringPref(prefs::kNearbySharingDeviceNamePrefName, name);
-  upload_device_name_scheduler_->MakeImmediateRequest();
+  if (!base::IsStringUTF8(name))
+    return nearby_share::mojom::DeviceNameValidationResult::kErrorNotValidUtf8;
+
+  if (name.length() > kDeviceNameMaxByteLength)
+    return nearby_share::mojom::DeviceNameValidationResult::kErrorTooLong;
+
+  return nearby_share::mojom::DeviceNameValidationResult::kValid;
+}
+
+nearby_share::mojom::DeviceNameValidationResult
+NearbyShareLocalDeviceDataManagerImpl::SetDeviceName(const std::string& name) {
+  if (name == GetDeviceName())
+    return nearby_share::mojom::DeviceNameValidationResult::kValid;
+
+  auto error = ValidateDeviceName(name);
+  if (error != nearby_share::mojom::DeviceNameValidationResult::kValid)
+    return error;
+
+  pref_service_->SetString(prefs::kNearbySharingDeviceNamePrefName, name);
 
   NotifyLocalDeviceDataChanged(/*did_device_name_change=*/true,
                                /*did_full_name_change=*/false,
                                /*did_icon_url_change=*/false);
+
+  return nearby_share::mojom::DeviceNameValidationResult::kValid;
 }
 
 void NearbyShareLocalDeviceDataManagerImpl::DownloadDeviceData() {
@@ -147,7 +177,7 @@ void NearbyShareLocalDeviceDataManagerImpl::UploadContacts(
     std::vector<nearbyshare::proto::Contact> contacts,
     UploadCompleteCallback callback) {
   device_data_updater_->UpdateDeviceData(
-      /*device_name=*/base::nullopt, std::move(contacts),
+      std::move(contacts),
       /*certificates=*/base::nullopt,
       base::BindOnce(
           &NearbyShareLocalDeviceDataManagerImpl::OnUploadContactsFinished,
@@ -158,7 +188,6 @@ void NearbyShareLocalDeviceDataManagerImpl::UploadCertificates(
     std::vector<nearbyshare::proto::PublicCertificate> certificates,
     UploadCompleteCallback callback) {
   device_data_updater_->UpdateDeviceData(
-      /*device_name=*/base::nullopt,
       /*contacts=*/base::nullopt, std::move(certificates),
       base::BindOnce(
           &NearbyShareLocalDeviceDataManagerImpl::OnUploadCertificatesFinished,
@@ -169,51 +198,18 @@ void NearbyShareLocalDeviceDataManagerImpl::OnStart() {
   // This schedules an immediate download of the full name and icon URL from the
   // server if that has never happened before.
   download_device_data_scheduler_->Start();
-
-  upload_device_name_scheduler_->Start();
 }
 
 void NearbyShareLocalDeviceDataManagerImpl::OnStop() {
   download_device_data_scheduler_->Stop();
-  upload_device_name_scheduler_->Stop();
-}
-
-base::Optional<std::string>
-NearbyShareLocalDeviceDataManagerImpl::GetStringPref(
-    const std::string& pref_name) const {
-  std::string value = pref_service_->GetString(pref_name);
-  if (value.empty())
-    return base::nullopt;
-
-  return value;
-}
-
-void NearbyShareLocalDeviceDataManagerImpl::SetStringPref(
-    const std::string& pref_name,
-    const base::Optional<std::string>& value) {
-  if (value)
-    pref_service_->SetString(pref_name, *value);
-  else
-    pref_service_->ClearPref(pref_name);
 }
 
 void NearbyShareLocalDeviceDataManagerImpl::OnDownloadDeviceDataRequested() {
   device_data_updater_->UpdateDeviceData(
-      /*device_name=*/base::nullopt,
       /*contacts=*/base::nullopt,
       /*certificates=*/base::nullopt,
       base::BindOnce(
           &NearbyShareLocalDeviceDataManagerImpl::OnDownloadDeviceDataFinished,
-          base::Unretained(this)));
-}
-
-void NearbyShareLocalDeviceDataManagerImpl::OnUploadDeviceNameRequested() {
-  device_data_updater_->UpdateDeviceData(
-      GetDeviceName(),
-      /*contacts=*/base::nullopt,
-      /*certificates=*/base::nullopt,
-      base::BindOnce(
-          &NearbyShareLocalDeviceDataManagerImpl::OnUploadDeviceNameFinished,
           base::Unretained(this)));
 }
 
@@ -223,15 +219,6 @@ void NearbyShareLocalDeviceDataManagerImpl::OnDownloadDeviceDataFinished(
     HandleUpdateDeviceResponse(response);
 
   download_device_data_scheduler_->HandleResult(
-      /*success=*/response.has_value());
-}
-
-void NearbyShareLocalDeviceDataManagerImpl::OnUploadDeviceNameFinished(
-    const base::Optional<nearbyshare::proto::UpdateDeviceResponse>& response) {
-  if (response)
-    HandleUpdateDeviceResponse(response);
-
-  upload_device_name_scheduler_->HandleResult(
       /*success=*/response.has_value());
 }
 
@@ -264,11 +251,12 @@ void NearbyShareLocalDeviceDataManagerImpl::HandleUpdateDeviceResponse(
     return;
 
   if (did_full_name_change) {
-    SetStringPref(prefs::kNearbySharingFullNamePrefName,
-                  response->person_name());
+    pref_service_->SetString(prefs::kNearbySharingFullNamePrefName,
+                             response->person_name());
   }
   if (did_icon_url_change) {
-    SetStringPref(prefs::kNearbySharingIconUrlPrefName, response->image_url());
+    pref_service_->SetString(prefs::kNearbySharingIconUrlPrefName,
+                             response->image_url());
   }
 
   NotifyLocalDeviceDataChanged(/*did_device_name_change=*/false,

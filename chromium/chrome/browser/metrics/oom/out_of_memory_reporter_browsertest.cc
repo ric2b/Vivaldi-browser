@@ -16,12 +16,12 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/no_renderer_crashes_assertion.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "services/service_manager/embedder/switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
 #include "url/gurl.h"
@@ -35,7 +35,8 @@ using ui_test_utils::NavigateToURL;
 
 // No current reliable way to determine OOM on Linux/Mac. Sanitizers also
 // interfere with the exit code on OOM, making this detection unreliable.
-#if defined(OS_LINUX) || defined(OS_MAC) || defined(ADDRESS_SANITIZER)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_MAC) || \
+    defined(ADDRESS_SANITIZER)
 #define MAYBE_OutOfMemoryReporterBrowserTest \
   DISABLED_OutOfMemoryReporterBrowserTest
 #else
@@ -56,8 +57,7 @@ class MAYBE_OutOfMemoryReporterBrowserTest
   void SetUpCommandLine(base::CommandLine* command_line) override {
     // Disable stack traces during this test since DbgHelp is unreliable in
     // low-memory conditions (see crbug.com/692564).
-    command_line->AppendSwitch(
-        service_manager::switches::kDisableInProcessStackTraces);
+    command_line->AppendSwitch(switches::kDisableInProcessStackTraces);
   }
 
   // OutOfMemoryReporter::Observer:
@@ -91,7 +91,8 @@ IN_PROC_BROWSER_TEST_F(MAYBE_OutOfMemoryReporterBrowserTest, MemoryExhaust) {
 
 // No current reliable way to determine OOM on Linux/Mac. Sanitizers also
 // interfere with the exit code on OOM, making this detection unreliable.
-#if defined(OS_LINUX) || defined(OS_MAC) || defined(ADDRESS_SANITIZER)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_MAC) || \
+    defined(ADDRESS_SANITIZER)
 #define MAYBE_PortalOutOfMemoryReporterBrowserTest \
   DISABLED_PortalOutOfMemoryReporterBrowserTest
 #else

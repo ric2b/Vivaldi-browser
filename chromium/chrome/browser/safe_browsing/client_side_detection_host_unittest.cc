@@ -96,19 +96,14 @@ namespace {
 // buffer strings because the BrowserFeatureExtractor might add features to the
 // verdict object before calling SendClientReportPhishingRequest.
 MATCHER_P(PartiallyEqualVerdict, other, "") {
-  return (other.url() == arg.url() &&
-          other.client_score() == arg.client_score() &&
-          other.is_phishing() == arg.is_phishing());
+  return (other.url() == arg->url() &&
+          other.client_score() == arg->client_score() &&
+          other.is_phishing() == arg->is_phishing());
 }
 
 // Test that the callback is nullptr when the verdict is not phishing.
 MATCHER(CallbackIsNull, "") {
   return arg.is_null();
-}
-
-ACTION(QuitUIMessageLoop) {
-  EXPECT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 
 class MockModelLoader : public ModelLoader {
@@ -129,7 +124,7 @@ class MockClientSideDetectionService : public ClientSideDetectionService {
   ~MockClientSideDetectionService() override {}
 
   MOCK_METHOD4(SendClientReportPhishingRequest,
-               void(ClientPhishingRequest*,
+               void(std::unique_ptr<ClientPhishingRequest>,
                     bool,
                     bool,
                     const ClientReportPhishingRequestCallback&));
@@ -498,10 +493,10 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneNotPhishing) {
         request->CopyFrom(verdict);
         std::move(callback).Run(true, std::move(request));
       }));
-  EXPECT_CALL(*csd_service_,
-              SendClientReportPhishingRequest(
-                  Pointee(PartiallyEqualVerdict(verdict)), _, _, _))
-      .WillOnce(DoAll(DeleteArg<0>(), SaveArg<3>(&cb)));
+
+  EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(
+                                 PartiallyEqualVerdict(verdict), _, _, _))
+      .WillOnce(SaveArg<3>(&cb));
   PhishingDetectionDone(verdict.SerializeAsString());
   EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
   ASSERT_FALSE(cb.is_null());
@@ -533,10 +528,9 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneDisabled) {
         request->CopyFrom(verdict);
         std::move(callback).Run(true, std::move(request));
       }));
-  EXPECT_CALL(*csd_service_,
-              SendClientReportPhishingRequest(
-                  Pointee(PartiallyEqualVerdict(verdict)), _, _, _))
-      .WillOnce(DoAll(DeleteArg<0>(), SaveArg<3>(&cb)));
+  EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(
+                                 PartiallyEqualVerdict(verdict), _, _, _))
+      .WillOnce(SaveArg<3>(&cb));
   PhishingDetectionDone(verdict.SerializeAsString());
   EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
   ASSERT_FALSE(cb.is_null());
@@ -569,10 +563,9 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneShowInterstitial) {
         request->CopyFrom(verdict);
         std::move(callback).Run(true, std::move(request));
       }));
-  EXPECT_CALL(*csd_service_,
-              SendClientReportPhishingRequest(
-                  Pointee(PartiallyEqualVerdict(verdict)), _, _, _))
-      .WillOnce(DoAll(DeleteArg<0>(), SaveArg<3>(&cb)));
+  EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(
+                                 PartiallyEqualVerdict(verdict), _, _, _))
+      .WillOnce(SaveArg<3>(&cb));
   PhishingDetectionDone(verdict.SerializeAsString());
   EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
   EXPECT_TRUE(Mock::VerifyAndClear(csd_service_.get()));
@@ -623,10 +616,9 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneMultiplePings) {
         request->CopyFrom(verdict);
         std::move(callback).Run(true, std::move(request));
       }));
-  EXPECT_CALL(*csd_service_,
-              SendClientReportPhishingRequest(
-                  Pointee(PartiallyEqualVerdict(verdict)), _, _, _))
-      .WillOnce(DoAll(DeleteArg<0>(), SaveArg<3>(&cb)));
+  EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(
+                                 PartiallyEqualVerdict(verdict), _, _, _))
+      .WillOnce(SaveArg<3>(&cb));
   PhishingDetectionDone(verdict.SerializeAsString());
   EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
   EXPECT_TRUE(Mock::VerifyAndClear(csd_service_.get()));
@@ -648,16 +640,14 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneMultiplePings) {
   ClientSideDetectionService::ClientReportPhishingRequestCallback cb_other;
   verdict.set_url(other_phishing_url.spec());
   verdict.set_client_score(0.8f);
-  EXPECT_CALL(*csd_service_,
-              SendClientReportPhishingRequest(
-                  Pointee(PartiallyEqualVerdict(verdict)), _, _, _))
-      .WillOnce(
-          DoAll(DeleteArg<0>(), SaveArg<3>(&cb_other), QuitUIMessageLoop()));
+  EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(
+                                 PartiallyEqualVerdict(verdict), _, _, _))
+      .WillOnce(SaveArg<3>(&cb_other));
   std::vector<GURL> redirect_chain;
   redirect_chain.push_back(other_phishing_url);
   SetRedirectChain(redirect_chain);
   PhishingDetectionDone(verdict.SerializeAsString());
-  base::RunLoop().Run();
+  base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
   EXPECT_TRUE(Mock::VerifyAndClear(csd_service_.get()));
   ASSERT_FALSE(cb_other.is_null());
@@ -721,16 +711,10 @@ TEST_F(ClientSideDetectionHostTest,
   WaitAndCheckPreClassificationChecks();
   SetUnsafeSubResourceForCurrent(true /* expect_unsafe_resource */);
 
-  EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(
-                                 Pointee(PartiallyEqualVerdict(verdict)), _, _,
-                                 CallbackIsNull()))
-      .WillOnce(DoAll(DeleteArg<0>(), QuitUIMessageLoop()));
   std::vector<GURL> redirect_chain;
   redirect_chain.push_back(url);
   SetRedirectChain(redirect_chain);
   PhishingDetectionDone(verdict.SerializeAsString());
-  base::RunLoop().Run();
-  EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
 }
 
 TEST_F(ClientSideDetectionHostTest,
@@ -761,22 +745,10 @@ TEST_F(ClientSideDetectionHostTest,
   NavigateWithSBHitAndCommit(url);
   WaitAndCheckPreClassificationChecks();
 
-  EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(
-                                 Pointee(PartiallyEqualVerdict(verdict)), _, _,
-                                 CallbackIsNull()))
-      .WillOnce(DoAll(DeleteArg<0>(), QuitUIMessageLoop()));
   std::vector<GURL> redirect_chain;
   redirect_chain.push_back(url);
   SetRedirectChain(redirect_chain);
   PhishingDetectionDone(verdict.SerializeAsString());
-  base::RunLoop().Run();
-  EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
-
-  EXPECT_CALL(*csd_service_, GetModelStr()).WillRepeatedly(Return("model_str"));
-  ExpectPreClassificationChecks(start_url, &kFalse, &kFalse, &kFalse, &kFalse,
-                                &kFalse);
-  NavigateWithoutSBHitAndCommit(start_url);
-  WaitAndCheckPreClassificationChecks();
 }
 
 TEST_F(
@@ -817,19 +789,10 @@ TEST_F(
 
   WaitAndCheckPreClassificationChecks();
 
-  // Even though we have a pending navigation, the DidShowSBInterstitial check
-  // should apply to the committed navigation, so we should get a report even
-  // though the verdict has is_phishing = false.
-  EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(
-                                 Pointee(PartiallyEqualVerdict(verdict)), _, _,
-                                 CallbackIsNull()))
-      .WillOnce(DoAll(DeleteArg<0>(), QuitUIMessageLoop()));
   std::vector<GURL> redirect_chain;
   redirect_chain.push_back(url);
   SetRedirectChain(redirect_chain);
   PhishingDetectionDone(verdict.SerializeAsString());
-  base::RunLoop().Run();
-  EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
 }
 
 TEST_F(ClientSideDetectionHostTest, SafeBrowsingHitOnFreshTab) {
@@ -1150,8 +1113,7 @@ TEST_F(ClientSideDetectionHostTest, RecordsPhishingDetectionDuration) {
   histogram_tester.ExpectTotalCount(
       "SBClientPhishing.PhishingDetectionDuration", 1);
 
-  // Navigate to a different host which will have a malware hit.
-  GURL url("http://malware-but-not-phishing.com/");
+  GURL url("http://phishing.example.com/");
   ClientPhishingRequest verdict;
   verdict.set_url(url.spec());
   verdict.set_client_score(0.1f);
@@ -1160,24 +1122,18 @@ TEST_F(ClientSideDetectionHostTest, RecordsPhishingDetectionDuration) {
   EXPECT_CALL(*csd_service_, GetModelStr()).WillRepeatedly(Return("model_str"));
   ExpectPreClassificationChecks(url, &kFalse, &kFalse, &kFalse, &kFalse,
                                 &kFalse);
-  NavigateWithSBHitAndCommit(url);
+  NavigateAndCommit(url);
   WaitAndCheckPreClassificationChecks();
   const base::TimeDelta duration = base::TimeDelta::FromMilliseconds(10);
   AdvanceTimeTickClock(duration);
 
-  EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(
-                                 Pointee(PartiallyEqualVerdict(verdict)), _, _,
-                                 CallbackIsNull()))
-      .WillOnce(DoAll(DeleteArg<0>(), QuitUIMessageLoop()));
   std::vector<GURL> redirect_chain;
   redirect_chain.push_back(url);
   SetRedirectChain(redirect_chain);
   PhishingDetectionDone(verdict.SerializeAsString());
-  base::RunLoop().Run();
-  EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
 
   histogram_tester.ExpectTotalCount(
-      "SBClientPhishing.PhishingDetectionDuration", 2);
+      "SBClientPhishing.PhishingDetectionDuration", 3);
   EXPECT_LE(duration.InMilliseconds(),
             histogram_tester
                 .GetAllSamples("SBClientPhishing.PhishingDetectionDuration")
@@ -1211,7 +1167,7 @@ TEST_F(ClientSideDetectionHostTest, ClearsScreenshotData) {
   verdict.set_screenshot_phash("screenshot_phash");
   verdict.set_phash_dimension_size(48);
 
-  ClientPhishingRequest* request;
+  ClientPhishingRequest request;
 
   EXPECT_CALL(*mock_extractor, ExtractFeatures(_, _, _))
       .WillOnce(Invoke([&](const BrowseInfo* into,
@@ -1220,13 +1176,12 @@ TEST_F(ClientSideDetectionHostTest, ClearsScreenshotData) {
         std::move(callback).Run(true, std::move(request));
       }));
   EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(_, _, _, _))
-      .WillOnce(SaveArg<0>(&request));
+      .WillOnce(testing::SaveArgPointee<0>(&request));
   PhishingDetectionDone(verdict.SerializeAsString());
   EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
-  EXPECT_FALSE(request->has_phash_dimension_size());
-  EXPECT_FALSE(request->has_screenshot_phash());
-  EXPECT_FALSE(request->has_screenshot_digest());
-  delete request;
+  EXPECT_FALSE(request.has_phash_dimension_size());
+  EXPECT_FALSE(request.has_screenshot_phash());
+  EXPECT_FALSE(request.has_screenshot_digest());
 }
 
 TEST_F(ClientSideDetectionHostTest, AllowsScreenshotDataForSBER) {
@@ -1245,7 +1200,7 @@ TEST_F(ClientSideDetectionHostTest, AllowsScreenshotDataForSBER) {
   verdict.set_screenshot_phash("screenshot_phash");
   verdict.set_phash_dimension_size(48);
 
-  ClientPhishingRequest* request;
+  ClientPhishingRequest request;
 
   EXPECT_CALL(*mock_extractor, ExtractFeatures(_, _, _))
       .WillOnce(Invoke([&](const BrowseInfo* into,
@@ -1254,13 +1209,12 @@ TEST_F(ClientSideDetectionHostTest, AllowsScreenshotDataForSBER) {
         std::move(callback).Run(true, std::move(request));
       }));
   EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(_, _, _, _))
-      .WillOnce(SaveArg<0>(&request));
+      .WillOnce(testing::SaveArgPointee<0>(&request));
   PhishingDetectionDone(verdict.SerializeAsString());
   EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
-  EXPECT_TRUE(request->has_phash_dimension_size());
-  EXPECT_TRUE(request->has_screenshot_phash());
-  EXPECT_TRUE(request->has_screenshot_digest());
-  delete request;
+  EXPECT_TRUE(request.has_phash_dimension_size());
+  EXPECT_TRUE(request.has_screenshot_phash());
+  EXPECT_TRUE(request.has_screenshot_digest());
 }
 
 }  // namespace safe_browsing

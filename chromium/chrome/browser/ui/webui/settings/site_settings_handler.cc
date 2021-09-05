@@ -60,11 +60,11 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/content_features.h"
-#include "content/public/common/origin_util.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "third_party/blink/public/common/loader/network_utils.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/text/bytes_formatting.h"
@@ -313,7 +313,7 @@ bool IsPatternValidForType(const std::string& pattern_string,
   // return false with a string saying why.
   GURL url(pattern_string);
   if (url.is_valid() && map->IsRestrictedToSecureOrigins(content_type) &&
-      !content::IsOriginSecure(url)) {
+      !blink::network_utils::IsOriginSecure(url)) {
     *out_error = l10n_util::GetStringUTF8(
         IDS_SETTINGS_NOT_VALID_WEB_ADDRESS_FOR_CONTENT_TYPE);
     return false;
@@ -355,8 +355,6 @@ std::string GetCookieSettingDescription(Profile* profile) {
   auto content_setting =
       map->GetDefaultContentSetting(ContentSettingsType::COOKIES, nullptr);
 
-  bool block_third_party =
-      profile->GetPrefs()->GetBoolean(prefs::kBlockThirdPartyCookies);
   auto control_mode = static_cast<content_settings::CookieControlsMode>(
       profile->GetPrefs()->GetInteger(prefs::kCookieControlsMode));
 
@@ -368,20 +366,22 @@ std::string GetCookieSettingDescription(Profile* profile) {
         GetNumCookieExceptionsOfTypes(
             map, {ContentSetting::CONTENT_SETTING_ALLOW,
                   ContentSetting::CONTENT_SETTING_SESSION_ONLY}));
-  } else if (block_third_party) {
-    return l10n_util::GetStringUTF8(
-        IDS_SETTINGS_SITE_SETTINGS_COOKIES_BLOCK_THIRD_PARTY);
-  } else if (control_mode ==
-             content_settings::CookieControlsMode::kIncognitoOnly) {
-    return l10n_util::GetStringUTF8(
-        IDS_SETTINGS_SITE_SETTINGS_COOKIES_BLOCK_THIRD_PARTY_INCOGNITO);
-  } else {
-    // We do not make a distinction between allow and clear on exit.
-    return l10n_util::GetPluralStringFUTF8(
-        IDS_SETTINGS_SITE_SETTINGS_COOKIES_ALLOW,
-        GetNumCookieExceptionsOfTypes(map,
-                                      {ContentSetting::CONTENT_SETTING_BLOCK}));
   }
+  switch (control_mode) {
+    case content_settings::CookieControlsMode::kBlockThirdParty:
+      return l10n_util::GetStringUTF8(
+          IDS_SETTINGS_SITE_SETTINGS_COOKIES_BLOCK_THIRD_PARTY);
+    case content_settings::CookieControlsMode::kIncognitoOnly:
+      return l10n_util::GetStringUTF8(
+          IDS_SETTINGS_SITE_SETTINGS_COOKIES_BLOCK_THIRD_PARTY_INCOGNITO);
+    case content_settings::CookieControlsMode::kOff:
+      // We do not make a distinction between allow and clear on exit.
+      return l10n_util::GetPluralStringFUTF8(
+          IDS_SETTINGS_SITE_SETTINGS_COOKIES_ALLOW,
+          GetNumCookieExceptionsOfTypes(
+              map, {ContentSetting::CONTENT_SETTING_BLOCK}));
+  }
+  NOTREACHED();
 }
 
 }  // namespace
@@ -530,10 +530,6 @@ void SiteSettingsHandler::OnJavascriptAllowed() {
 
   // Listen for prefs that impact the effective cookie setting
   pref_change_registrar_->Add(
-      prefs::kBlockThirdPartyCookies,
-      base::Bind(&SiteSettingsHandler::SendCookieSettingDescription,
-                 base::Unretained(this)));
-  pref_change_registrar_->Add(
       prefs::kCookieControlsMode,
       base::Bind(&SiteSettingsHandler::SendCookieSettingDescription,
                  base::Unretained(this)));
@@ -551,7 +547,6 @@ void SiteSettingsHandler::OnJavascriptDisallowed() {
   chooser_observer_.RemoveAll();
   host_zoom_map_subscription_.reset();
   pref_change_registrar_->Remove(prefs::kBlockAutoplayEnabled);
-  pref_change_registrar_->Remove(prefs::kBlockThirdPartyCookies);
   pref_change_registrar_->Remove(prefs::kCookieControlsMode);
 #if defined(OS_CHROMEOS)
   pref_change_registrar_->Remove(prefs::kEnableDRM);

@@ -18,21 +18,20 @@ namespace features {
 // alongside the definition of their values in the .cc file.
 
 extern const base::Feature kBiometricTouchToFill;
+extern const base::Feature kChangePasswordAffiliationInfo;
 extern const base::Feature kCompromisedPasswordsReengagement;
-extern const base::Feature kEditPasswordsInDesktopSettings;
-extern const base::Feature kDeleteCorruptedPasswords;
+extern const base::Feature kEditPasswordsInSettings;
 extern const base::Feature kEnableOverwritingPlaceholderUsernames;
 extern const base::Feature kEnablePasswordsAccountStorage;
 extern const base::Feature KEnablePasswordGenerationForClearTextFields;
 extern const base::Feature kFillingPasswordsFromAnyOrigin;
 extern const base::Feature kFillOnAccountSelect;
-extern const base::Feature kGooglePasswordManager;
 extern const base::Feature kPasswordChange;
 extern const base::Feature kPasswordChangeInSettings;
 extern const base::Feature kPasswordCheck;
-extern const base::Feature kPasswordEditingAndroid;
 extern const base::Feature kPasswordImport;
-extern const base::Feature kPasswordManagerOnboardingAndroid;
+extern const base::Feature kPasswordScriptsFetching;
+extern const base::Feature kPasswordsWeaknessCheck;
 extern const base::Feature kRecoverFromNeverSaveAndroid;
 extern const base::Feature kUsernameFirstFlow;
 extern const base::Feature kWellKnownChangePassword;

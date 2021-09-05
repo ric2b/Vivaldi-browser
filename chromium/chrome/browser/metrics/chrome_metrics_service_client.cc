@@ -36,7 +36,7 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "build/lacros_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/google/google_brand.h"
@@ -60,6 +60,7 @@
 #include "chrome/browser/translate/translate_ranker_metrics_provider.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/channel_info.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
@@ -101,7 +102,6 @@
 #include "components/ukm/field_trials_provider_helper.h"
 #include "components/ukm/ukm_service.h"
 #include "components/version_info/version_info.h"
-#include "content/browser/accessibility/accessibility_metrics_provider.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/histogram_fetcher.h"
@@ -149,9 +149,11 @@
 #include "chrome/browser/metrics/ambient_mode_metrics_provider.h"
 #include "chrome/browser/metrics/assistant_service_metrics_provider.h"
 #include "chrome/browser/metrics/chromeos_metrics_provider.h"
+#include "chrome/browser/metrics/cros_healthd_metrics_provider.h"
+#include "chrome/browser/metrics/family_user_metrics_provider.h"
 #include "chrome/browser/signin/signin_status_metrics_provider_chromeos.h"
 #include "components/metrics/structured/structured_metrics_provider.h"
-#endif
+#endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
 #include <windows.h>
@@ -169,6 +171,7 @@
 #endif
 
 #if !defined(OS_CHROMEOS)
+#include "chrome/browser/metrics/accessibility_metrics_provider.h"
 #include "chrome/browser/signin/chrome_signin_status_metrics_provider_delegate.h"
 #include "components/signin/core/browser/signin_status_metrics_provider.h"
 #endif  // !defined(OS_CHROMEOS)
@@ -571,13 +574,6 @@ ChromeMetricsServiceClient::GetMetricsReportingDefaultState() {
 void ChromeMetricsServiceClient::Initialize() {
   PrefService* local_state = g_browser_process->local_state();
 
-  // Clear deprecated metrics preference for Android.
-  // TODO(gayane): Cleanup this code after M60 when the pref would be cleared
-  // from clients.
-#if defined(OS_ANDROID)
-  local_state->ClearPref(prefs::kCrashReportingEnabled);
-#endif
-
   metrics_service_ = std::make_unique<metrics::MetricsService>(
       metrics_state_manager_, this, local_state);
 
@@ -711,6 +707,11 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
       std::make_unique<ChromeOSMetricsProvider>(
           metrics::MetricsLogUploader::UMA));
 
+  if (base::FeatureList::IsEnabled(::features::kUmaStorageDimensions)) {
+    metrics_service_->RegisterMetricsProvider(
+        std::make_unique<CrosHealthdMetricsProvider>());
+  }
+
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<SigninStatusMetricsProviderChromeOS>());
 
@@ -733,6 +734,9 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
 
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<AmbientModeMetricsProvider>());
+
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<FamilyUserMetricsProvider>());
 #endif  // defined(OS_CHROMEOS)
 
 #if !defined(OS_CHROMEOS)

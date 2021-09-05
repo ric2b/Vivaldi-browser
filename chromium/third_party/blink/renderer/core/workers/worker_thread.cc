@@ -559,34 +559,36 @@ void WorkerThread::InitializeSchedulerOnWorkerThread(
   // worker thread. See also comments on GetTaskRunner().
   // We only capture task types that are actually used. When you want to use a
   // new task type, add it here.
-  Vector<TaskType> available_task_types = {TaskType::kBackgroundFetch,
-                                           TaskType::kCanvasBlobSerialization,
-                                           TaskType::kDatabaseAccess,
-                                           TaskType::kDOMManipulation,
-                                           TaskType::kFileReading,
-                                           TaskType::kFontLoading,
-                                           TaskType::kInternalDefault,
-                                           TaskType::kInternalInspector,
-                                           TaskType::kInternalLoading,
-                                           TaskType::kInternalMedia,
-                                           TaskType::kInternalMediaRealTime,
-                                           TaskType::kInternalTest,
-                                           TaskType::kInternalWebCrypto,
-                                           TaskType::kJavascriptTimerDelayed,
-                                           TaskType::kJavascriptTimerImmediate,
-                                           TaskType::kMediaElementEvent,
-                                           TaskType::kMicrotask,
-                                           TaskType::kMiscPlatformAPI,
-                                           TaskType::kNetworking,
-                                           TaskType::kPerformanceTimeline,
-                                           TaskType::kPermission,
-                                           TaskType::kPostedMessage,
-                                           TaskType::kRemoteEvent,
-                                           TaskType::kUserInteraction,
-                                           TaskType::kWebGL,
-                                           TaskType::kWebLocks,
-                                           TaskType::kWebSocket,
-                                           TaskType::kWorkerAnimation};
+  Vector<TaskType> available_task_types = {
+      TaskType::kBackgroundFetch,
+      TaskType::kCanvasBlobSerialization,
+      TaskType::kDatabaseAccess,
+      TaskType::kDOMManipulation,
+      TaskType::kFileReading,
+      TaskType::kFontLoading,
+      TaskType::kInternalDefault,
+      TaskType::kInternalInspector,
+      TaskType::kInternalLoading,
+      TaskType::kInternalMedia,
+      TaskType::kInternalMediaRealTime,
+      TaskType::kInternalTest,
+      TaskType::kInternalWebCrypto,
+      TaskType::kJavascriptTimerImmediate,
+      TaskType::kJavascriptTimerDelayedLowNesting,
+      TaskType::kJavascriptTimerDelayedHighNesting,
+      TaskType::kMediaElementEvent,
+      TaskType::kMicrotask,
+      TaskType::kMiscPlatformAPI,
+      TaskType::kNetworking,
+      TaskType::kPerformanceTimeline,
+      TaskType::kPermission,
+      TaskType::kPostedMessage,
+      TaskType::kRemoteEvent,
+      TaskType::kUserInteraction,
+      TaskType::kWebGL,
+      TaskType::kWebLocks,
+      TaskType::kWebSocket,
+      TaskType::kWorkerAnimation};
   for (auto type : available_task_types) {
     auto task_runner = worker_scheduler_->GetTaskRunner(type);
     auto result = worker_task_runners_.insert(type, std::move(task_runner));
@@ -748,14 +750,17 @@ void WorkerThread::PrepareForShutdownOnWorkerThread() {
   GetWorkerReportingProxy().WillDestroyWorkerGlobalScope();
 
   probe::AllAsyncTasksCanceled(GlobalScope());
+
+  // This will eventually call the |child_threads_|'s Terminate() through
+  // ContextLifecycleObserver::ContextDestroyed(), because the nested workers
+  // are observer of the |GlobalScope()| (see the DedicatedWorker class) and
+  // they initiate thread termination on destruction of the parent context.
   GlobalScope()->NotifyContextDestroyed();
+
   worker_scheduler_->Dispose();
 
   // No V8 microtasks should get executed after shutdown is requested.
   GetWorkerBackingThread().BackingThread().RemoveTaskObserver(this);
-
-  for (WorkerThread* child : child_threads_)
-    child->Terminate();
 }
 
 void WorkerThread::PerformShutdownOnWorkerThread() {

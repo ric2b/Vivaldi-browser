@@ -25,13 +25,18 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.MathUtils;
+import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.UiThreadTest;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.accessibility_tab_switcher.OverviewListLayout;
 import org.chromium.chrome.browser.compositor.animation.CompositorAnimationHandler;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
@@ -72,6 +77,9 @@ public class LayoutManagerTest implements MockTabModelDelegate {
 
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
+
+    @Mock
+    private ActivityTabProvider mTabSupplier;
 
     private long mLastDownTime;
 
@@ -148,6 +156,9 @@ public class LayoutManagerTest implements MockTabModelDelegate {
             TabModelUtils.setIndex(mTabModelSelector.getModel(true), incognitoIndexSelected);
         }
         mTabModelSelector.selectModel(incognitoSelected);
+        Assert.assertNotNull(
+                mTabModelSelector.getTabModelFilterProvider().getCurrentTabModelFilter());
+
         LayoutManagerHost layoutManagerHost = new MockLayoutHost(context);
         TabContentManager tabContentManager = new TabContentManager(context, null, false, null);
         tabContentManager.initWithNative();
@@ -157,10 +168,16 @@ public class LayoutManagerTest implements MockTabModelDelegate {
         FrameLayout container = new FrameLayout(context);
         parentContainer.addView(container);
 
-        mManagerPhone = new LayoutManagerChromePhone(layoutManagerHost, container, null);
+        ObservableSupplierImpl<TabContentManager> tabContentManagerSupplier =
+                new ObservableSupplierImpl<>();
+        OneshotSupplierImpl<OverviewModeBehavior> overviewModeBehaviorSupplier =
+                new OneshotSupplierImpl<>();
+        mManagerPhone = new LayoutManagerChromePhone(layoutManagerHost, container, null,
+                tabContentManagerSupplier, overviewModeBehaviorSupplier);
+        tabContentManagerSupplier.set(tabContentManager);
         mManager = mManagerPhone;
         CompositorAnimationHandler.setTestingMode(true);
-        mManager.init(mTabModelSelector, null, tabContentManager, null, null, null);
+        mManager.init(mTabModelSelector, null, null, null, null, mTabSupplier);
         initializeMotionEvent();
     }
 
@@ -626,6 +643,8 @@ public class LayoutManagerTest implements MockTabModelDelegate {
 
     @Before
     public void setUp() {
+        MockitoAnnotations.initMocks(this);
+
         // Load the browser process.
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> { ChromeBrowserInitializer.getInstance().handleSynchronousStartup(); });
@@ -686,12 +705,9 @@ public class LayoutManagerTest implements MockTabModelDelegate {
         CriteriaHelper.pollUiThread(
                 mActivityTestRule.getActivity().getTabModelSelector()::isTabStateInitialized);
 
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            LayoutManagerChrome layoutManager = mActivityTestRule.getActivity().getLayoutManager();
-            layoutManager.showOverview(false);
-
-            CriteriaHelper.pollUiThread(layoutManager::overviewVisible);
-        });
+        LayoutManagerChrome layoutManager = mActivityTestRule.getActivity().getLayoutManager();
+        TestThreadUtils.runOnUiThreadBlocking(() -> layoutManager.showOverview(false));
+        CriteriaHelper.pollUiThread(layoutManager::overviewVisible);
     }
 
     private Layout getActiveLayout() {

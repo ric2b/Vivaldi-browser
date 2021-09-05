@@ -42,9 +42,10 @@ class DialogExample::Delegate : public virtual DialogType {
   explicit Delegate(DialogExample* parent) : parent_(parent) {
     DialogDelegate::SetButtons(parent_->GetDialogButtons());
     DialogDelegate::SetButtonLabel(ui::DIALOG_BUTTON_OK,
-                                     parent_->ok_button_label_->GetText());
+                                   parent_->ok_button_label_->GetText());
     DialogDelegate::SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
-                                     parent_->cancel_button_label_->GetText());
+                                   parent_->cancel_button_label_->GetText());
+    WidgetDelegate::SetModalType(parent_->GetModalType());
   }
 
   void InitDelegate() {
@@ -62,11 +63,6 @@ class DialogExample::Delegate : public virtual DialogType {
   }
 
  protected:
-  // WidgetDelegate:
-  ui::ModalType GetModalType() const override {
-    return parent_->GetModalType();
-  }
-
   base::string16 GetWindowTitle() const override {
     return parent_->title_->GetText();
   }
@@ -157,7 +153,8 @@ void DialogExample::CreateExampleView(View* container) {
 
   StartRowWithLabel(layout, "Modal Type");
   mode_ = layout->AddView(std::make_unique<Combobox>(&mode_model_));
-  mode_->set_listener(this);
+  mode_->set_callback(base::BindRepeating(&DialogExample::OnPerformAction,
+                                          base::Unretained(this)));
   mode_->SetSelectedIndex(ui::MODAL_TYPE_CHILD);
 
   StartRowWithLabel(layout, "Bubble");
@@ -205,6 +202,10 @@ void DialogExample::AddCheckbox(GridLayout* layout, Checkbox** member) {
 ui::ModalType DialogExample::GetModalType() const {
   // "Fake" modeless happens when a DialogDelegate specifies window-modal, but
   // doesn't provide a parent window.
+  // TODO(ellyjones): This doesn't work on Mac at all - something should happen
+  // other than changing modality on the fly like this. In fact, it should be
+  // impossible to change modality in a live dialog at all, and this example
+  // should stop doing it.
   if (mode_->GetSelectedIndex() == kFakeModeless)
     return ui::MODAL_TYPE_WINDOW;
 
@@ -274,12 +275,12 @@ void DialogExample::ButtonPressed(Button* sender, const ui::Event& event) {
       LogStatus("You nearly always want Child Modal for bubbles.");
     }
     persistent_bubble_->SetEnabled(bubble_->GetChecked());
-    OnPerformAction(mode_);  // Validate the modal type.
+    OnPerformAction();  // Validate the modal type.
 
     if (!bubble_->GetChecked() && GetModalType() == ui::MODAL_TYPE_CHILD) {
       // Do something reasonable when simply unchecking bubble and re-enable.
       mode_->SetSelectedIndex(ui::MODAL_TYPE_WINDOW);
-      OnPerformAction(mode_);
+      OnPerformAction();
     }
     return;
   }
@@ -310,7 +311,7 @@ void DialogExample::ContentsChanged(Textfield* sender,
   ResizeDialog();
 }
 
-void DialogExample::OnPerformAction(Combobox* combobox) {
+void DialogExample::OnPerformAction() {
   bool enable = bubble_->GetChecked() || GetModalType() != ui::MODAL_TYPE_CHILD;
 #if defined(OS_APPLE)
   enable = enable && GetModalType() != ui::MODAL_TYPE_SYSTEM;

@@ -14,6 +14,11 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "build/build_config.h"
+
+#if defined(OS_ANDROID)
+#error This file should only be included on desktop.
+#endif
 
 class Browser;
 class Profile;
@@ -128,6 +133,10 @@ class BrowserList {
   // Returns the number of active incognito browsers except devtools windows
   // across all desktops.
   static size_t GetIncognitoBrowserCount();
+
+  // Returns the number of active guest browsers except devtools windows
+  // across all desktops.
+  static size_t GetGuestBrowserCount();
 
   // Returns true if the off-the-record browser for |profile| is in use in any
   // window across all desktops. This function considers devtools windows as

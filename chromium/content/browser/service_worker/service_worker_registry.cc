@@ -22,6 +22,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "storage/browser/quota/special_storage_policy.h"
+#include "third_party/blink/public/common/service_worker/service_worker_scope_match.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
 
 namespace content {
@@ -217,7 +218,7 @@ void ServiceWorkerRegistry::FindRegistrationForScope(
 
 void ServiceWorkerRegistry::FindRegistrationForId(
     int64_t registration_id,
-    const GURL& origin,
+    const url::Origin& origin,
     FindRegistrationCallback callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   // Registration lookup is expected to abort when storage is disabled.
@@ -594,7 +595,7 @@ void ServiceWorkerRegistry::GetUserKeysAndDataByKeyPrefix(
 
 void ServiceWorkerRegistry::StoreUserData(
     int64_t registration_id,
-    const GURL& origin,
+    const url::Origin& origin,
     const std::vector<std::pair<std::string, std::string>>& key_value_pairs,
     StatusCallback callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
@@ -769,7 +770,7 @@ ServiceWorkerRegistry::FindInstallingRegistrationForClientUrl(
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   DCHECK(!client_url.has_ref());
 
-  LongestScopeMatcher matcher(client_url);
+  blink::ServiceWorkerLongestScopeMatcher matcher(client_url);
   ServiceWorkerRegistration* match = nullptr;
 
   // TODO(nhiroki): This searches over installing registrations linearly and it
@@ -1151,9 +1152,7 @@ void ServiceWorkerRegistry::DidStoreRegistration(
     uint64_t stored_resources_total_size_bytes,
     const GURL& stored_scope,
     StatusCallback callback,
-    storage::mojom::ServiceWorkerDatabaseStatus database_status,
-    int64_t deleted_version_id,
-    const std::vector<int64_t>& newly_purgeable_resources) {
+    storage::mojom::ServiceWorkerDatabaseStatus database_status) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   blink::ServiceWorkerStatusCode status =
       DatabaseStatusToStatusCode(database_status);
@@ -1186,9 +1185,7 @@ void ServiceWorkerRegistry::DidDeleteRegistration(
     const GURL& origin,
     StatusCallback callback,
     storage::mojom::ServiceWorkerDatabaseStatus database_status,
-    ServiceWorkerStorage::OriginState origin_state,
-    int64_t deleted_version_id,
-    const std::vector<int64_t>& newly_purgeable_resources) {
+    ServiceWorkerStorage::OriginState origin_state) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   blink::ServiceWorkerStatusCode status =
       DatabaseStatusToStatusCode(database_status);

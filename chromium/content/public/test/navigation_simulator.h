@@ -203,12 +203,6 @@ class NavigationSimulator {
   // Note: this is only valid for renderer-initiated navigations.
   virtual void AbortFromRenderer() = 0;
 
-  // Simulates the navigation failing with the error code |error_code| and
-  // response headers |response_headers|.
-  virtual void FailWithResponseHeaders(
-      int error_code,
-      scoped_refptr<net::HttpResponseHeaders> response_headers) = 0;
-
   // Simulates the navigation failing with the error code |error_code|.
   // IMPORTANT NOTE: This is simulating a network connection error and implies
   // we do not get a response. Error codes like 204 are not properly managed.
@@ -294,8 +288,15 @@ class NavigationSimulator {
           receiver) = 0;
 
   // Provides the contents mime type to be set at commit. It should be
-  // specified before calling |Commit|.
+  // specified before calling |ReadyToCommit| or |Commit|.
   virtual void SetContentsMimeType(const std::string& contents_mime_type) = 0;
+
+  // Provides the response headers received during |ReadyToCommit| specified
+  // before calling |ReadyToCommit| or |Commit|.
+  // Note that the mime type should be specified separately with
+  // |SectContentsMimeType|.
+  virtual void SetResponseHeaders(
+      scoped_refptr<net::HttpResponseHeaders> response_headers) = 0;
 
   // Whether or not the NavigationSimulator automatically advances the
   // navigation past the stage requested (e.g. through asynchronous

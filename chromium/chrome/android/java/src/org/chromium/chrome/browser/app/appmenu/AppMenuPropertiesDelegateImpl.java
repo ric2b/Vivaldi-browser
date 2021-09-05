@@ -19,20 +19,22 @@ import android.view.View;
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.graphics.drawable.DrawableCompat;
 
 import org.chromium.base.Callback;
+import org.chromium.base.CallbackController;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.banners.AppBannerManager;
+import org.chromium.chrome.browser.banners.AppMenuVerbiage;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.device.DeviceClassManager;
@@ -41,6 +43,7 @@ import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.flags.StringCachedFieldTrialParameter;
+import org.chromium.chrome.browser.image_descriptions.ImageDescriptionsController;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
@@ -75,6 +78,10 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     public static final StringCachedFieldTrialParameter ACTION_BAR_VARIATION =
             new StringCachedFieldTrialParameter(
                     ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_REGROUP, "action_bar", "");
+    public static final StringCachedFieldTrialParameter THREE_BUTTON_ACTION_BAR_VARIATION =
+            new StringCachedFieldTrialParameter(
+                    ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_THREE_BUTTON_ACTIONBAR,
+                    "three_button_action_bar", "");
 
     private static Boolean sItemBookmarkedForTesting;
 
@@ -87,12 +94,14 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     protected final TabModelSelector mTabModelSelector;
     protected final ToolbarManager mToolbarManager;
     protected final View mDecorView;
-    private final @Nullable ObservableSupplier<OverviewModeBehavior> mOverviewModeBehaviorSupplier;
+    private CallbackController mCallbackController = new CallbackController();
     private final ObservableSupplier<BookmarkBridge> mBookmarkBridgeSupplier;
-    private @Nullable Callback<OverviewModeBehavior> mOverviewModeSupplierCallback;
     private Callback<BookmarkBridge> mBookmarkBridgeSupplierCallback;
     private boolean mUpdateMenuItemVisible;
     private ShareUtils mShareUtils;
+    // Keeps track of which menu item was shown when installable app is detected.
+    private int mAddAppTitleShown;
+
     @VisibleForTesting
     @IntDef({MenuGroup.INVALID, MenuGroup.PAGE_MENU, MenuGroup.OVERVIEW_MODE_MENU,
             MenuGroup.START_SURFACE_MODE_MENU, MenuGroup.TABLET_EMPTY_MODE_MENU})
@@ -109,6 +118,14 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         int STANDARD = 0;
         int BACKWARD_BUTTON = 1;
         int SHARE_BUTTON = 2;
+    }
+
+    @IntDef({ThreeButtonActionBarType.DISABLED, ThreeButtonActionBarType.ACTION_CHIP_VIEW,
+            ThreeButtonActionBarType.DESTINATION_CHIP_VIEW})
+    @interface ThreeButtonActionBarType {
+        int DISABLED = 0;
+        int ACTION_CHIP_VIEW = 1;
+        int DESTINATION_CHIP_VIEW = 2;
     }
 
     protected @Nullable OverviewModeBehavior mOverviewModeBehavior;
@@ -133,7 +150,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     public AppMenuPropertiesDelegateImpl(Context context, ActivityTabProvider activityTabProvider,
             MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
             TabModelSelector tabModelSelector, ToolbarManager toolbarManager, View decorView,
-            @Nullable ObservableSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
+            @Nullable OneshotSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
             ObservableSupplier<BookmarkBridge> bookmarkBridgeSupplier) {
         mContext = context;
         mIsTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext);
@@ -143,12 +160,9 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         mToolbarManager = toolbarManager;
         mDecorView = decorView;
 
-        mOverviewModeBehaviorSupplier = overviewModeBehaviorSupplier;
-        if (mOverviewModeBehaviorSupplier != null) {
-            mOverviewModeSupplierCallback = overviewModeBehavior -> {
-                mOverviewModeBehavior = overviewModeBehavior;
-            };
-            mOverviewModeBehaviorSupplier.addObserver(mOverviewModeSupplierCallback);
+        if (overviewModeBehaviorSupplier != null) {
+            overviewModeBehaviorSupplier.onAvailable(mCallbackController.makeCancelable(
+                    overviewModeBehavior -> { mOverviewModeBehavior = overviewModeBehavior; }));
         }
 
         mBookmarkBridgeSupplier = bookmarkBridgeSupplier;
@@ -159,15 +173,16 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
     @Override
     public void destroy() {
-        if (mOverviewModeBehaviorSupplier != null) {
-            mOverviewModeBehaviorSupplier.removeObserver(mOverviewModeSupplierCallback);
-        }
         mBookmarkBridgeSupplier.removeObserver(mBookmarkBridgeSupplierCallback);
+        if (mCallbackController != null) {
+            mCallbackController.destroy();
+            mCallbackController = null;
+        }
     }
 
     @Override
     public int getAppMenuLayoutId() {
-        if (shouldShowRegroupedMenu()) {
+        if (shouldShowRegroupedMenu() || shouldShowThreeButtonActionBar()) {
             return R.menu.main_menu_regroup;
         }
         return R.menu.main_menu;
@@ -180,6 +195,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         customViewBinders.add(new ManagedByMenuItemViewBinder());
         customViewBinders.add(new IncognitoMenuItemViewBinder());
         customViewBinders.add(new DividerLineMenuItemViewBinder());
+        customViewBinders.add(new ChipViewMenuItemViewBinder(getThreeButtonActionBarType()));
         return customViewBinders;
     }
 
@@ -287,7 +303,11 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             loadingStateChanged(currentTab.isLoading());
 
             MenuItem bookmarkMenuItem = actionBar.findItem(R.id.bookmark_this_page_id);
-            updateBookmarkMenuItem(bookmarkMenuItem, currentTab);
+            if (shouldShowThreeButtonActionBar()) {
+                actionBar.removeItem(R.id.bookmark_this_page_id);
+            } else {
+                updateBookmarkMenuItem(bookmarkMenuItem, currentTab);
+            }
 
             // Vivaldi
             if (currentTab.isNativePage() || currentTab.getWebContents() == null)
@@ -295,23 +315,43 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
             MenuItem offlineMenuItem = actionBar.findItem(R.id.offline_page_id);
             if (offlineMenuItem != null) {
-                offlineMenuItem.setEnabled(shouldEnableDownloadPage(currentTab));
+                if (shouldShowThreeButtonActionBar()) {
+                    actionBar.removeItem(R.id.offline_page_id);
+                } else {
+                    offlineMenuItem.setEnabled(shouldEnableDownloadPage(currentTab));
+                }
             }
 
             MenuItem shareMenuItem = actionBar.findItem(R.id.share_menu_button_id);
             if (shareMenuItem != null) {
-                if (actionBarType == ActionBarType.SHARE_BUTTON) {
-                    shareMenuItem.setEnabled(mShareUtils.shouldEnableShare(currentTab));
-                } else {
+                if (shouldShowShareInMenu()) {
                     actionBar.removeItem(R.id.share_menu_button_id);
+                } else {
+                    shareMenuItem.setEnabled(mShareUtils.shouldEnableShare(currentTab));
                 }
             }
 
-            if (actionBarType != ActionBarType.STANDARD) {
+            if (shouldShowInfoInMenu()) {
                 actionBar.removeItem(R.id.info_menu_id);
             }
 
-            assert actionBar.size() == 5;
+            if (shouldShowThreeButtonActionBar()) {
+                assert actionBar.size() == 3;
+            } else {
+                assert actionBar.size() == 5;
+            }
+        }
+        // Vivaldi
+        else {
+            mReloadMenuItem = menu.findItem(R.id.vivaldi_reload_menu_id);
+            Drawable icon = AppCompatResources.getDrawable(mContext, R.drawable.btn_reload_stop);
+            if (icon != null) {
+                DrawableCompat.setTintList(icon,
+                        AppCompatResources.getColorStateList(
+                                mContext, R.color.default_icon_color_tint_list));
+                mReloadMenuItem.setIcon(icon);
+                loadingStateChanged(currentTab.isLoading());
+            }
         }
 
         if (ChromeApplication.isVivaldi()) {
@@ -336,6 +376,41 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
         menu.findItem(R.id.move_to_other_window_menu_id).setVisible(shouldShowMoveToOtherWindow());
 
+        if (shouldShowThreeButtonActionBar()) {
+            @ThreeButtonActionBarType
+            int threeButtonActionBarType = getThreeButtonActionBarType();
+
+            MenuItem downloadMenuItem =
+                    menu.findItem(R.id.downloads_row_menu_id).getSubMenu().getItem(1);
+            assert downloadMenuItem.getItemId() == R.id.offline_page_chip_id;
+            downloadMenuItem.setEnabled(shouldEnableDownloadPage(currentTab));
+
+            MenuItem bookmarkMenuItem =
+                    menu.findItem(R.id.all_bookmarks_row_menu_id).getSubMenu().getItem(1);
+            assert bookmarkMenuItem.getItemId() == R.id.bookmark_this_page_chip_id;
+            updateBookmarkMenuItem(bookmarkMenuItem, currentTab);
+
+            // Update titles for ChipView menu items.
+            if (threeButtonActionBarType == ThreeButtonActionBarType.ACTION_CHIP_VIEW) {
+                downloadMenuItem.setTitle(R.string.add);
+                if (bookmarkMenuItem.isChecked()) {
+                    bookmarkMenuItem.setTitle(R.string.bookmark_item_edit);
+                } else {
+                    bookmarkMenuItem.setTitle(R.string.add);
+                }
+            } else if (threeButtonActionBarType == ThreeButtonActionBarType.DESTINATION_CHIP_VIEW) {
+                MenuItem allDownloadMenuItem =
+                        menu.findItem(R.id.downloads_row_menu_id).getSubMenu().getItem(0);
+                assert allDownloadMenuItem.getItemId() == R.id.downloads_menu_id;
+                allDownloadMenuItem.setTitle(R.string.all);
+
+                MenuItem allBookmarkMenuItem =
+                        menu.findItem(R.id.all_bookmarks_row_menu_id).getSubMenu().getItem(0);
+                assert allBookmarkMenuItem.getItemId() == R.id.all_bookmarks_menu_id;
+                allBookmarkMenuItem.setTitle(R.string.all);
+            }
+        }
+
         if (ChromeApplication.isVivaldi()) {
             menu.findItem(R.id.all_bookmarks_menu_id).setVisible(false);
             menu.findItem(R.id.downloads_menu_id).setVisible(false);
@@ -345,6 +420,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             menu.findItem(R.id.share_row_menu_id).setVisible(!currentTab.isNativePage());
             menu.findItem(R.id.launch_game_menu_id).setVisible(
                     VivaldiUtils.isVivaldiGameMenuItemOn());
+            menu.findItem(R.id.vivaldi_reload_menu_id).setVisible(mIsTablet);
         }
 
         // Don't allow either "chrome://" pages or interstitial pages to be shared.
@@ -356,6 +432,18 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
         menu.findItem(R.id.paint_preview_show_id)
                 .setVisible(shouldShowPaintPreview(isChromeScheme, currentTab, isIncognito));
+
+        // Enable image descriptions if the feature flag is enabled, and if a screen reader
+        // is currently running.
+        if (ImageDescriptionsController.getInstance().shouldShowImageDescriptionsMenuItem()) {
+            menu.findItem(R.id.get_image_descriptions_id).setVisible(true);
+            menu.findItem(R.id.get_image_descriptions_id)
+                    .setTitle(ImageDescriptionsController.getInstance().imageDescriptionsEnabled()
+                                    ? R.string.menu_stop_image_descriptions
+                                    : R.string.menu_get_image_descriptions);
+        } else {
+            menu.findItem(R.id.get_image_descriptions_id).setVisible(false);
+        }
 
         // Disable find in page on the native NTP.
         menu.findItem(R.id.find_in_page_id).setVisible(shouldShowFindInPage(currentTab));
@@ -588,6 +676,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             Menu menu, Tab currentTab, boolean shouldShowHomeScreenMenuItem) {
         MenuItem homescreenItem = menu.findItem(R.id.add_to_homescreen_id);
         MenuItem openWebApkItem = menu.findItem(R.id.open_webapk_id);
+        mAddAppTitleShown = AppMenuVerbiage.APP_MENU_OPTION_UNKNOWN;
         if (shouldShowHomeScreenMenuItem) {
             Context context = ContextUtils.getApplicationContext();
             long addToHomeScreenStart = SystemClock.elapsedRealtime();
@@ -606,9 +695,17 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 homescreenItem.setVisible(false);
                 openWebApkItem.setVisible(true);
             } else {
-                homescreenItem.setTitle(getAddToHomeScreenTitle());
+                AppBannerManager.InstallStringPair installStrings =
+                        getAddToHomeScreenTitle(currentTab);
+                homescreenItem.setTitle(installStrings.titleTextId);
                 homescreenItem.setVisible(true);
                 openWebApkItem.setVisible(false);
+
+                if (installStrings.titleTextId == AppBannerManager.NON_PWA_PAIR.titleTextId) {
+                    mAddAppTitleShown = AppMenuVerbiage.APP_MENU_OPTION_ADD_TO_HOMESCREEN;
+                } else if (installStrings.titleTextId == AppBannerManager.PWA_PAIR.titleTextId) {
+                    mAddAppTitleShown = AppMenuVerbiage.APP_MENU_OPTION_INSTALL;
+                }
             }
         } else {
             homescreenItem.setVisible(false);
@@ -617,12 +714,17 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
-    public @StringRes int getAddToHomeScreenTitle() {
-        return AppBannerManager.getHomescreenLanguageOption();
+    public AppBannerManager.InstallStringPair getAddToHomeScreenTitle(Tab currentTab) {
+        return AppBannerManager.getHomescreenLanguageOption(currentTab);
     }
 
     @Override
     public Bundle getBundleForMenuItem(MenuItem item) {
+        if (item.getItemId() == R.id.add_to_homescreen_id) {
+            Bundle payload = new Bundle();
+            payload.putInt(AppBannerManager.MENU_TITLE_KEY, mAddAppTitleShown);
+            return payload;
+        }
         return null;
     }
 
@@ -676,9 +778,11 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 || mDecorView.getWidth()
                         < DeviceFormFactor.getNonMultiDisplayMinimumTabletWidthPx(mContext);
 
-        final boolean isMenuButtonOnTop =
-                mToolbarManager != null && !mToolbarManager.isMenuFromBottom();
+        final boolean isMenuButtonOnTop = mToolbarManager != null;
         shouldShowIconRow &= isMenuButtonOnTop;
+        // Vivaldi
+        shouldShowIconRow &= VivaldiUtils.isTopToolbarOn();
+
         return shouldShowIconRow;
     }
 
@@ -716,11 +820,6 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     @Override
     public boolean shouldShowIconBeforeItem() {
         return false;
-    }
-
-    @Override
-    public boolean shouldShowRegroupedMenu() {
-        return CachedFeatureFlags.isEnabled(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_REGROUP);
     }
 
     /**
@@ -809,6 +908,17 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         sItemBookmarkedForTesting = bookmarked;
     }
 
+    private boolean shouldShowRegroupedMenu() {
+        if (ChromeApplication.isVivaldi()) return false;
+        return CachedFeatureFlags.isEnabled(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_REGROUP);
+    }
+
+    private boolean shouldShowThreeButtonActionBar() {
+        if (ChromeApplication.isVivaldi()) return false;
+        return CachedFeatureFlags.isEnabled(
+                ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_THREE_BUTTON_ACTIONBAR);
+    }
+
     private boolean shouldShowShareInMenu() {
         return getActionBarType() != ActionBarType.SHARE_BUTTON;
     }
@@ -823,11 +933,28 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     private @ActionBarType int getActionBarType() {
         // Vivaldi should always have backward button
         if (ChromeApplication.isVivaldi()) return ActionBarType.BACKWARD_BUTTON;
-        if (ACTION_BAR_VARIATION.getValue().equals("backward_button")) {
-            return ActionBarType.BACKWARD_BUTTON;
-        } else if (ACTION_BAR_VARIATION.getValue().equals("share_button")) {
-            return ActionBarType.SHARE_BUTTON;
+        if (shouldShowRegroupedMenu()) {
+            if (ACTION_BAR_VARIATION.getValue().equals("backward_button")) {
+                return ActionBarType.BACKWARD_BUTTON;
+            } else if (ACTION_BAR_VARIATION.getValue().equals("share_button")) {
+                return ActionBarType.SHARE_BUTTON;
+            }
         }
         return ActionBarType.STANDARD;
+    }
+
+    /**
+     * @return The type of three button action bar should be shown.
+     */
+    private @ThreeButtonActionBarType int getThreeButtonActionBarType() {
+        if (shouldShowThreeButtonActionBar()) {
+            if (THREE_BUTTON_ACTION_BAR_VARIATION.getValue().equals("action_chip_view")) {
+                return ThreeButtonActionBarType.ACTION_CHIP_VIEW;
+            } else if (THREE_BUTTON_ACTION_BAR_VARIATION.getValue().equals(
+                               "destination_chip_view")) {
+                return ThreeButtonActionBarType.DESTINATION_CHIP_VIEW;
+            }
+        }
+        return ThreeButtonActionBarType.DISABLED;
     }
 }

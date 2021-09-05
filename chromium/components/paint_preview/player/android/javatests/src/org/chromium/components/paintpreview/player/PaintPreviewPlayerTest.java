@@ -27,7 +27,6 @@ import org.chromium.base.task.PostTask;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.DisableIf;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.ScalableTimeout;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.test.util.Criteria;
@@ -172,7 +171,6 @@ public class PaintPreviewPlayerTest extends DummyUiActivityTestCase {
 
     @Test
     @MediumTest
-    @DisabledTest(message = "crbug.com/1117264")
     public void overscrollRefreshTest() throws Exception {
         initPlayerManager(true);
         UiDevice uiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
@@ -200,12 +198,36 @@ public class PaintPreviewPlayerTest extends DummyUiActivityTestCase {
                     new PaintPreviewTestService(mTempFolder.getRoot().getPath());
             // Use the wrong URL to simulate a failure.
             mPlayerManager = new PlayerManager(new GURL("about:blank"), getActivity(), service,
-                    TEST_DIRECTORY_KEY, mLinkClickHandler,
-                    () -> { Assert.fail("Unexpected overscroll refresh attempted."); },
-                    () -> {
-                        Assert.fail("View Ready callback occurred, but expected a failure.");
-                    }, null,
-                    0xffffffff, () -> { compositorErrorCallback.notifyCalled(); }, false);
+                    TEST_DIRECTORY_KEY, new PlayerManager.Listener() {
+                        @Override
+                        public void onCompositorError(int status) {
+                            compositorErrorCallback.notifyCalled();
+                        }
+
+                        @Override
+                        public void onViewReady() {
+                            Assert.fail("View Ready callback occurred, but expected a failure.");
+                        }
+
+                        @Override
+                        public void onFirstPaint() {}
+
+                        @Override
+                        public void onUserInteraction() {}
+
+                        @Override
+                        public void onUserFrustration() {}
+
+                        @Override
+                        public void onPullToRefresh() {
+                            Assert.fail("Unexpected overscroll refresh attempted.");
+                        }
+
+                        @Override
+                        public void onLinkClick(GURL url) {
+                            mLinkClickHandler.onLinkClicked(url);
+                        }
+                    }, 0xffffffff, false);
             mPlayerManager.setCompressOnClose(false);
         });
         compositorErrorCallback.waitForFirst();
@@ -355,9 +377,36 @@ public class PaintPreviewPlayerTest extends DummyUiActivityTestCase {
             }
 
             mPlayerManager = new PlayerManager(new GURL(TEST_URL), getActivity(), service,
-                    TEST_DIRECTORY_KEY, mLinkClickHandler, mRefreshedCallback::notifyCalled,
-                    viewReady::notifyCalled, null, 0xffffffff,
-                    () -> { mInitializationFailed = true; }, false);
+                    TEST_DIRECTORY_KEY, new PlayerManager.Listener() {
+                        @Override
+                        public void onCompositorError(int status) {
+                            mInitializationFailed = true;
+                        }
+
+                        @Override
+                        public void onViewReady() {
+                            viewReady.notifyCalled();
+                        }
+
+                        @Override
+                        public void onFirstPaint() {}
+
+                        @Override
+                        public void onUserInteraction() {}
+
+                        @Override
+                        public void onUserFrustration() {}
+
+                        @Override
+                        public void onPullToRefresh() {
+                            mRefreshedCallback.notifyCalled();
+                        }
+
+                        @Override
+                        public void onLinkClick(GURL url) {
+                            mLinkClickHandler.onLinkClicked(url);
+                        }
+                    }, 0xffffffff, false);
             mPlayerManager.setCompressOnClose(false);
             getActivity().setContentView(mPlayerManager.getView());
         });

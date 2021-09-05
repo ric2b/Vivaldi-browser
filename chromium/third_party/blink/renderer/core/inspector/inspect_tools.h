@@ -19,7 +19,9 @@ class WebPointerEvent;
 
 class SearchingForNodeTool : public InspectTool {
  public:
-  SearchingForNodeTool(InspectorDOMAgent* dom_agent,
+  SearchingForNodeTool(InspectorOverlayAgent* overlay,
+                       OverlayFrontend* frontend,
+                       InspectorDOMAgent* dom_agent,
                        bool ua_shadow,
                        const std::vector<uint8_t>& highlight_config);
 
@@ -35,6 +37,7 @@ class SearchingForNodeTool : public InspectTool {
   void Draw(float scale) override;
   void NodeHighlightRequested(Node*);
   void Trace(Visitor* visitor) const override;
+  bool SupportsPersistentOverlays() override;
 
   Member<InspectorDOMAgent> dom_agent_;
   bool ua_shadow_;
@@ -51,7 +54,9 @@ class SearchingForNodeTool : public InspectTool {
 
 class QuadHighlightTool : public InspectTool {
  public:
-  QuadHighlightTool(std::unique_ptr<FloatQuad> quad,
+  QuadHighlightTool(InspectorOverlayAgent* overlay,
+                    OverlayFrontend* frontend,
+                    std::unique_ptr<FloatQuad> quad,
                     Color color,
                     Color outline_color);
 
@@ -69,7 +74,9 @@ class QuadHighlightTool : public InspectTool {
 
 class NodeHighlightTool : public InspectTool {
  public:
-  NodeHighlightTool(Member<Node> node,
+  NodeHighlightTool(InspectorOverlayAgent* overlay,
+                    OverlayFrontend* frontend,
+                    Member<Node> node,
                     String selector_list,
                     std::unique_ptr<InspectorHighlightConfig> highlight_config);
 
@@ -79,6 +86,7 @@ class NodeHighlightTool : public InspectTool {
 
  private:
   bool ForwardEventsToOverlay() override;
+  bool SupportsPersistentOverlays() override;
   bool HideOnMouseMove() override;
   bool HideOnHideHighlight() override;
   void Draw(float scale) override;
@@ -99,6 +107,8 @@ class NodeHighlightTool : public InspectTool {
 class SourceOrderTool : public InspectTool {
  public:
   SourceOrderTool(
+      InspectorOverlayAgent* overlay,
+      OverlayFrontend* frontend,
       Node* node,
       std::unique_ptr<InspectorSourceOrderConfig> source_order_config);
   std::unique_ptr<protocol::DictionaryValue>
@@ -121,8 +131,10 @@ class SourceOrderTool : public InspectTool {
 // -----------------------------------------------------------------------------
 
 class GridHighlightTool : public InspectTool {
+  using InspectTool::InspectTool;
+
  public:
-  GridHighlightTool() = default;
+  void Draw(float scale) override;
   void AddGridConfig(
       Node* node,
       std::unique_ptr<InspectorGridHighlightConfig> grid_highlight_config);
@@ -135,7 +147,6 @@ class GridHighlightTool : public InspectTool {
   bool ForwardEventsToOverlay() override;
   bool HideOnMouseMove() override;
   bool HideOnHideHighlight() override;
-  void Draw(float scale) override;
 
   Vector<std::pair<Member<Node>, std::unique_ptr<InspectorGridHighlightConfig>>>
       grid_node_highlights_;
@@ -145,8 +156,7 @@ class GridHighlightTool : public InspectTool {
 // -----------------------------------------------------------------------------
 
 class NearbyDistanceTool : public InspectTool {
- public:
-  NearbyDistanceTool() = default;
+  using InspectTool::InspectTool;
 
  private:
   int GetDataResourceId() override;
@@ -164,8 +174,7 @@ class NearbyDistanceTool : public InspectTool {
 // -----------------------------------------------------------------------------
 
 class ShowViewSizeTool : public InspectTool {
- public:
-  ShowViewSizeTool() = default;
+  using InspectTool::InspectTool;
 
  private:
   bool ForwardEventsToOverlay() override;
@@ -178,11 +187,10 @@ class ShowViewSizeTool : public InspectTool {
 
 class ScreenshotTool : public InspectTool {
  public:
-  ScreenshotTool() = default;
+  ScreenshotTool(InspectorOverlayAgent* overlay, OverlayFrontend* frontend);
 
  private:
   int GetDataResourceId() override;
-  void DoInit() override;
   void Dispatch(const String& message) override;
 
   DISALLOW_COPY_AND_ASSIGN(ScreenshotTool);
@@ -192,9 +200,13 @@ class ScreenshotTool : public InspectTool {
 
 class PausedInDebuggerTool : public InspectTool {
  public:
-  PausedInDebuggerTool(v8_inspector::V8InspectorSession* v8_session,
+  PausedInDebuggerTool(InspectorOverlayAgent* overlay,
+                       OverlayFrontend* frontend,
+                       v8_inspector::V8InspectorSession* v8_session,
                        const String& message)
-      : v8_session_(v8_session), message_(message) {}
+      : InspectTool(overlay, frontend),
+        v8_session_(v8_session),
+        message_(message) {}
 
  private:
   int GetDataResourceId() override;

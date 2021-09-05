@@ -19,7 +19,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "build/build_config.h"
-#include "build/lacros_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/guest_view/common/guest_view_constants.h"
@@ -51,6 +51,7 @@
 #include "extensions/browser/api/web_request/web_request_api.h"
 #include "extensions/browser/bad_message.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/guest_view/web_view/web_view_content_script_manager.h"
@@ -91,8 +92,9 @@
 #include "components/prefs/pref_service.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
-#include "content/browser/frame_host/navigation_controller_impl.h"
+#include "content/browser/renderer_host/navigation_controller_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/browser/storage_partition_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
@@ -121,6 +123,11 @@ using zoom::ZoomController;
 namespace extensions {
 
 namespace {
+
+// Strings used to encode blob url fallback mode in site URLs.
+constexpr char kNoFallback[] = "nofallback";
+constexpr char kInMemoryFallback[] = "inmemoryfallback";
+constexpr char kOnDiskFallback[] = "ondiskfallback";
 
 // Returns storage partition removal mask from web_view clearData mask. Note
 // that storage partition mask is a subset of webview's data removal mask.
@@ -325,6 +332,29 @@ bool WebViewGuest::GetGuestPartitionConfigForSite(
 
   *storage_partition_config = content::StoragePartitionConfig::Create(
       site.host(), partition_name, in_memory);
+  // A <webview> inside a chrome app needs to be able to resolve Blob URLs that
+  // were created by the chrome app. The chrome app has the same
+  // partition_domain but empty partition_name. Setting this flag on the
+  // partition config causes it to be used as fallback for the purpose of
+  // resolving blob URLs.
+
+  // Default to having the fallback partition on disk, as that matches most
+  // closely what we would have done before fallback behavior started being
+  // encoded in the site URL.
+  content::StoragePartitionConfig::FallbackMode fallback_mode =
+      content::StoragePartitionConfig::FallbackMode::kFallbackPartitionOnDisk;
+  if (site.ref() == kNoFallback) {
+    fallback_mode = content::StoragePartitionConfig::FallbackMode::kNone;
+  } else if (site.ref() == kInMemoryFallback) {
+    fallback_mode = content::StoragePartitionConfig::FallbackMode::
+        kFallbackPartitionInMemory;
+  } else if (site.ref() == kOnDiskFallback) {
+    fallback_mode =
+        content::StoragePartitionConfig::FallbackMode::kFallbackPartitionOnDisk;
+  }
+
+  storage_partition_config->set_fallback_to_partition_domain_for_blob_urls(
+      fallback_mode);
   return true;
 }
 
@@ -333,11 +363,26 @@ GURL WebViewGuest::GetSiteForGuestPartitionConfig(
     const content::StoragePartitionConfig& storage_partition_config) {
   std::string url_encoded_partition = net::EscapeQueryParamValue(
       storage_partition_config.partition_name(), false);
+  const char* fallback = "";
+  switch (
+      storage_partition_config.fallback_to_partition_domain_for_blob_urls()) {
+    case content::StoragePartitionConfig::FallbackMode::kNone:
+      fallback = kNoFallback;
+      break;
+    case content::StoragePartitionConfig::FallbackMode::
+        kFallbackPartitionOnDisk:
+      fallback = kOnDiskFallback;
+      break;
+    case content::StoragePartitionConfig::FallbackMode::
+        kFallbackPartitionInMemory:
+      fallback = kInMemoryFallback;
+      break;
+  }
   return GURL(
-      base::StringPrintf("%s://%s/%s?%s", content::kGuestScheme,
+      base::StringPrintf("%s://%s/%s?%s#%s", content::kGuestScheme,
                          storage_partition_config.partition_domain().c_str(),
                          storage_partition_config.in_memory() ? "" : "persist",
-                         url_encoded_partition.c_str()));
+                         url_encoded_partition.c_str(), fallback));
 }
 
 // static
@@ -395,6 +440,28 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
     return;
   }
   std::string partition_domain = GetOwnerSiteURL().host();
+  auto partition_config = content::StoragePartitionConfig::Create(
+      partition_domain, storage_partition_id, !persist_storage /* in_memory */);
+
+  if (GetOwnerSiteURL().SchemeIs(extensions::kExtensionScheme)) {
+    auto owner_config =
+        extensions::util::GetStoragePartitionConfigForExtensionId(
+            GetOwnerSiteURL().host(),
+            owner_render_process_host->GetBrowserContext());
+    if (owner_render_process_host->GetBrowserContext()->IsOffTheRecord()) {
+      owner_config = owner_config.CopyWithInMemorySet();
+    }
+    if (!owner_config.is_default()) {
+      partition_config.set_fallback_to_partition_domain_for_blob_urls(
+          owner_config.in_memory()
+              ? content::StoragePartitionConfig::FallbackMode::
+                    kFallbackPartitionInMemory
+              : content::StoragePartitionConfig::FallbackMode::
+                    kFallbackPartitionOnDisk);
+      DCHECK(owner_config == partition_config.GetFallbackForBlobUrls().value());
+    }
+  }
+
   GURL guest_site;
   std::string new_url;
   if (IsVivaldiApp(owner_host())) {
@@ -457,14 +524,30 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
 
       content::BrowserPluginGuest::CreateInWebContents(contentsimpl, this);
       contentsimpl->GetBrowserPluginGuest()->Init();
-      if (IsVivaldiApp(owner_host())) {
-        contentsimpl->GetMutableRendererPrefs()
-            ->disable_client_blocked_error_page = false;
-      }
+
+      contentsimpl->GetBrowserPluginGuest()->set_allow_blocked_by_client();
 
       // NOTE(andre@vivaldi.com) : Need to set this otherwise script injection
       // can fail. See WebViewInternalExecuteCodeFunction::Init().
       src_ = new_contents->GetURL();
+
+      // Set the owners blobregistry as fallback when accessing blob-urls.
+      StoragePartition* partition =
+          content::BrowserContext::GetStoragePartition(
+              contentsimpl->GetBrowserContext(),
+              contentsimpl->GetSiteInstance());
+
+      StoragePartition* owner_partition =
+          content::BrowserContext::GetStoragePartition(
+              Profile::FromBrowserContext(
+                  owner_web_contents()->GetBrowserContext())
+                  ->GetOriginalProfile(),
+              owner_web_contents()->GetSiteInstance());
+
+      static_cast<content::StoragePartitionImpl*>(partition)
+          ->UpdateBlobRegistryWithParentAsFallback(
+              static_cast<content::StoragePartitionImpl*>(owner_partition));
+
       // Fire a WebContentsCreated event informing the client that script-
       // injection can be done.
       auto args = std::make_unique<base::DictionaryValue>();
@@ -1419,6 +1502,18 @@ void WebViewGuest::NavigateGuest(const std::string& src,
 
   GURL url = ResolveURL(src);
 
+  // If the webview was showing an Vivaldi url and we are navigating away, we
+  // need to recompute settings to enable everything that is disabled for
+  // platform-apps, and turn off some settings. This is done in
+  // |VivaldiContentBrowserClientParts::OverrideWebkitPrefs|
+  bool is_navigating_away_from_vivaldi =
+      (src_.SchemeIs(extensions::kExtensionScheme) &&
+       IsVivaldiApp(src_.host())) &&
+      !url.SchemeIs(extensions::kExtensionScheme);
+  SetIsNavigatingAwayFromVivaldiUI(is_navigating_away_from_vivaldi);
+  if (is_navigating_away_from_vivaldi) {
+    web_contents()->OnWebPreferencesChanged();
+  }
   // We wait for all the content scripts to load and then navigate the guest
   // if the navigation is embedder-initiated. For browser-initiated navigations,
   // content scripts will be ready.
@@ -1681,7 +1776,7 @@ bool WebViewGuest::LoadDataWithBaseURL(const std::string& data_url,
       content::NavigationController::UA_OVERRIDE_INHERIT;
 
   // Navigate to the data URL.
-  GuestViewBase::LoadURLWithParams(load_params);
+  web_contents()->GetController().LoadURLWithParams(load_params);
 
   return true;
 }
@@ -1794,6 +1889,10 @@ void WebViewGuest::WebContentsCreated(WebContents* source_contents,
   guest->name_ = frame_name;
   pending_new_windows_.insert(
       std::make_pair(guest, NewWindowInfo(target_url, frame_name)));
+
+  guest->delegate_to_browser_plugin_ =
+    static_cast<content::WebContentsImpl*>(new_contents)
+    ->GetBrowserPluginGuest();
 }
 
 void WebViewGuest::EnterFullscreenModeForTab(
@@ -1916,6 +2015,7 @@ void WebViewGuest::LoadURLWithParams(
     load_url_params.override_user_agent =
         content::NavigationController::UA_OVERRIDE_TRUE;
   }
+
   if (params) {
     // NOTE(espen@vivaldi.com) Add post data if present. Allows image search
     // and other tasks where post data is needed.
@@ -1926,7 +2026,8 @@ void WebViewGuest::LoadURLWithParams(
       load_url_params.post_data = params->post_data;
     }
   }
-  GuestViewBase::LoadURLWithParams(load_url_params);
+
+  web_contents()->GetController().LoadURLWithParams(load_url_params);
 
   src_ = validated_url;
 }
@@ -2024,10 +2125,12 @@ void WebViewGuest::OnWebViewNewWindowResponse(
       // If we are a new incognito window, don't open the tab here. Let the
       // tabs API (WindowsCreateFunction) handle that. Otherwise we would get a
       // second tab with the same URL.
-      if (!incognito && !src_.SchemeIs(content::kChromeDevToolsScheme))
-        AddGuestToTabStripModel(guest, window_id, foreground);
-      else
+      if (!incognito && !src_.SchemeIs(content::kChromeDevToolsScheme)) {
+        AddGuestToTabStripModel(guest, window_id, foreground,
+                                !(IsVivaldiWebPanel() || IsVivaldiMail()));
+      } else {
         guest->Destroy(true);
+      }
     }
   } else {
     guest->Destroy(true);

@@ -62,9 +62,8 @@ class CAPTURE_EXPORT VideoFrameConsumerFeedbackObserver {
   // previously sent out by the VideoCaptureDevice we are giving feedback about.
   // It is used to indicate which particular frame the reported utilization
   // corresponds to.
-  virtual void OnUtilizationReport(int frame_feedback_id, double utilization) {}
-
-  static constexpr double kNoUtilizationRecorded = -1.0;
+  virtual void OnUtilizationReport(int frame_feedback_id,
+                                   media::VideoFrameFeedback feedback) {}
 };
 
 class CAPTURE_EXPORT VideoCaptureDevice
@@ -178,6 +177,17 @@ class CAPTURE_EXPORT VideoCaptureDevice
         base::TimeTicks reference_time,
         base::TimeDelta timestamp,
         int frame_feedback_id = 0) = 0;
+
+    // Captured a new video frame. The data for this frame is in |handle|,
+    // which is owned by the platform-specific capture device, and is kept valid
+    // by |read_access_permission|.
+    virtual void OnIncomingCapturedExternalBuffer(
+        gfx::GpuMemoryBufferHandle handle,
+        std::unique_ptr<Buffer::ScopedAccessPermission> read_access_permission,
+        const VideoCaptureFormat& format,
+        const gfx::ColorSpace& color_space,
+        base::TimeTicks reference_time,
+        base::TimeDelta timestamp) = 0;
 
     // Reserve an output buffer into which contents can be captured directly.
     // The returned |buffer| will always be allocated with a memory size

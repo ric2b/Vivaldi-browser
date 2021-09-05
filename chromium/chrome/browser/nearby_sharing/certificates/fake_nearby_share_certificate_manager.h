@@ -39,11 +39,12 @@ class FakeNearbyShareCertificateManager : public NearbyShareCertificateManager {
     // NearbyShareCertificateManagerImpl::Factory:
     std::unique_ptr<NearbyShareCertificateManager> CreateInstance(
         NearbyShareLocalDeviceDataManager* local_device_data_manager,
+        NearbyShareContactManager* contact_manager,
         PrefService* pref_service,
         leveldb_proto::ProtoDatabaseProvider* proto_database_provider,
         const base::FilePath& profile_path,
         NearbyShareClientFactory* client_factory,
-        base::Clock* clock) override;
+        const base::Clock* clock) override;
 
     std::vector<FakeNearbyShareCertificateManager*> instances_;
   };
@@ -71,11 +72,9 @@ class FakeNearbyShareCertificateManager : public NearbyShareCertificateManager {
   ~FakeNearbyShareCertificateManager() override;
 
   // NearbyShareCertificateManager:
-  NearbySharePrivateCertificate GetValidPrivateCertificate(
-      NearbyShareVisibility visibility) override;
   std::vector<nearbyshare::proto::PublicCertificate>
   GetPrivateCertificatesAsPublicCertificates(
-      NearbyShareVisibility visibility) override;
+      nearby_share::mojom::Visibility visibility) override;
   void GetDecryptedPublicCertificate(
       NearbyShareEncryptedMetadataKey encrypted_metadata_key,
       CertDecryptedCallback callback) override;
@@ -85,9 +84,7 @@ class FakeNearbyShareCertificateManager : public NearbyShareCertificateManager {
   using NearbyShareCertificateManager::NotifyPrivateCertificatesChanged;
   using NearbyShareCertificateManager::NotifyPublicCertificatesDownloaded;
 
-  size_t num_get_valid_private_certificate_calls() {
-    return num_get_valid_private_certificate_calls_;
-  }
+  void set_next_salt(const std::vector<uint8_t>& salt) { next_salt_ = salt; }
 
   size_t num_get_private_certificates_as_public_certificates_calls() {
     return num_get_private_certificates_as_public_certificates_calls_;
@@ -106,12 +103,16 @@ class FakeNearbyShareCertificateManager : public NearbyShareCertificateManager {
   // NearbyShareCertificateManager:
   void OnStart() override;
   void OnStop() override;
+  base::Optional<NearbySharePrivateCertificate> GetValidPrivateCertificate(
+      nearby_share::mojom::Visibility visibility) const override;
+  void UpdatePrivateCertificateInStorage(
+      const NearbySharePrivateCertificate& private_certificate) override;
 
-  size_t num_get_valid_private_certificate_calls_ = 0;
   size_t num_get_private_certificates_as_public_certificates_calls_ = 0;
   size_t num_download_public_certificates_calls_ = 0;
   std::vector<GetDecryptedPublicCertificateCall>
       get_decrypted_public_certificate_calls_;
+  std::vector<uint8_t> next_salt_;
 };
 
 #endif  // CHROME_BROWSER_NEARBY_SHARING_CERTIFICATES_FAKE_NEARBY_SHARE_CERTIFICATE_MANAGER_H_

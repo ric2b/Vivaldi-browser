@@ -12,7 +12,6 @@
 #include "content/common/content_export.h"
 #include "content/common/frame_messages.h"
 #include "content/common/frame_proxy.mojom.h"
-#include "content/common/frame_visual_properties.h"
 #include "content/renderer/child_frame_compositor.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
@@ -22,6 +21,7 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
+#include "third_party/blink/public/common/frame/frame_visual_properties.h"
 #include "third_party/blink/public/common/widget/screen_info.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
@@ -37,6 +37,7 @@ struct WebRect;
 
 namespace content {
 
+class AgentSchedulingGroup;
 class BlinkInterfaceRegistryImpl;
 class ChildFrameCompositingHelper;
 class RenderFrameImpl;
@@ -76,6 +77,7 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   // created RenderFrameProxy. |frame_to_replace| is the frame that the new
   // proxy will eventually swap places with.
   static RenderFrameProxy* CreateProxyToReplaceFrame(
+      AgentSchedulingGroup& agent_scheduling_group,
       RenderFrameImpl* frame_to_replace,
       int routing_id,
       blink::mojom::TreeScopeType scope,
@@ -95,9 +97,10 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   // RenderFrame) because a new child of a local frame should always start out
   // as a frame, not a proxy.
   static RenderFrameProxy* CreateFrameProxy(
+      AgentSchedulingGroup& agent_scheduling_group,
       int routing_id,
       int render_view_routing_id,
-      const base::UnguessableToken& opener_frame_token,
+      const base::Optional<base::UnguessableToken>& opener_frame_token,
       int parent_routing_id,
       const FrameReplicationState& replicated_state,
       const base::UnguessableToken& frame_token,
@@ -106,6 +109,7 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   // Creates a RenderFrameProxy to be used with a portal owned by |parent|.
   // |routing_id| is the routing id of this new RenderFrameProxy.
   static RenderFrameProxy* CreateProxyForPortal(
+      AgentSchedulingGroup& agent_scheduling_group,
       RenderFrameImpl* parent,
       int proxy_routing_id,
       const base::UnguessableToken& frame_token,
@@ -138,9 +142,10 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   // RenderWidget, and we would only need to send one update to the browser as
   // a result.
   void DidChangeScreenInfo(const blink::ScreenInfo& screen_info) override;
-  void OnRootWindowSegmentsChanged(
-      std::vector<gfx::Rect> root_widget_window_segments);
-  void OnVisibleViewportSizeChanged(const gfx::Size& visible_viewport_size);
+  void DidChangeRootWindowSegments(
+      const std::vector<gfx::Rect>& root_widget_window_segments) override;
+  void DidChangeVisibleViewportSize(
+      const gfx::Size& visible_viewport_size) override;
 
   // Pass replicated information, such as security origin, to this
   // RenderFrameProxy's WebRemoteFrame.
@@ -171,8 +176,6 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
     return pending_visual_properties_.screen_info;
   }
 
-  const viz::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
-
   // blink::WebRemoteFrameClient implementation:
   void FrameDetached(DetachType type) override;
   blink::AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces() override;
@@ -197,10 +200,10 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   void UpdateCaptureSequenceNumber(uint32_t capture_sequence_number) override;
   void PageScaleFactorChanged(float page_scale_factor,
                               bool is_pinch_gesture_active) override;
+  viz::FrameSinkId GetFrameSinkId() override;
+  void WasEvicted() override;
 
   void DidStartLoading();
-
-  void WasEvicted();
 
   bool is_pinch_gesture_active_for_testing() {
     return pending_visual_properties_.is_pinch_gesture_active;
@@ -210,7 +213,8 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   void FrameSinkIdChanged(const viz::FrameSinkId& frame_sink_id);
 
  private:
-  RenderFrameProxy(int routing_id);
+  RenderFrameProxy(AgentSchedulingGroup& agent_scheduling_group,
+                   int routing_id);
 
   void Init(blink::WebRemoteFrame* frame,
             RenderViewImpl* render_view,
@@ -244,6 +248,11 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   SkBitmap* GetSadPageBitmap() override;
 
   const viz::LocalSurfaceId& GetLocalSurfaceId() const;
+
+  // The |AgentSchedulingGroup| this proxy is associated with. NOTE: This is
+  // different than the |AgentSchedulingGroup| associated with the frame being
+  // proxied.
+  AgentSchedulingGroup& agent_scheduling_group_;
 
   // The routing ID by which this RenderFrameProxy is known.
   const int routing_id_;
@@ -284,11 +293,11 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   // therefore don't care to synchronize ResizeParams with viz::LocalSurfaceIds.
   // Perhaps this can be moved to ChildFrameCompositingHelper?
   // The last ResizeParams sent to the browser process, if any.
-  base::Optional<FrameVisualProperties> sent_visual_properties_;
+  base::Optional<blink::FrameVisualProperties> sent_visual_properties_;
 
   // The current set of ResizeParams. This may or may not match
   // |sent_visual_properties_|.
-  FrameVisualProperties pending_visual_properties_;
+  blink::FrameVisualProperties pending_visual_properties_;
 
   bool crashed_ = false;
 

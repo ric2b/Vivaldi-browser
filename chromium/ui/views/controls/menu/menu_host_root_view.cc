@@ -94,7 +94,6 @@ MenuController* MenuHostRootView::GetMenuControllerForInputEvents() {
              : nullptr;
 }
 
-BEGIN_METADATA(MenuHostRootView)
-METADATA_PARENT_CLASS(RootView)
-END_METADATA()
+BEGIN_METADATA(MenuHostRootView, internal::RootView)
+END_METADATA
 }  // namespace views

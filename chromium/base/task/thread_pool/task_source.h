@@ -16,8 +16,8 @@
 #include "base/task/common/checked_lock.h"
 #include "base/task/common/intrusive_heap.h"
 #include "base/task/task_traits.h"
-#include "base/task/thread_pool/sequence_sort_key.h"
 #include "base/task/thread_pool/task.h"
+#include "base/task/thread_pool/task_source_sort_key.h"
 #include "base/threading/sequence_local_storage_map.h"
 
 namespace base {
@@ -105,10 +105,6 @@ class BASE_EXPORT TaskSource : public RefCountedThreadSafe<TaskSource> {
 
     operator bool() const { return !!task_source_; }
 
-    // Returns a SequenceSortKey representing the priority of the TaskSource.
-    // Cannot be called on an empty TaskSource.
-    SequenceSortKey GetSortKey() const;
-
     // Sets TaskSource priority to |priority|.
     void UpdatePriority(TaskPriority priority);
 
@@ -147,6 +143,9 @@ class BASE_EXPORT TaskSource : public RefCountedThreadSafe<TaskSource> {
   // this should only be used as a best-effort guess of how many more workers
   // are needed. This may be called on an empty task source.
   virtual size_t GetRemainingConcurrency() const = 0;
+
+  // Returns a TaskSourceSortKey representing the priority of the TaskSource.
+  virtual TaskSourceSortKey GetSortKey() const = 0;
 
   // Support for IntrusiveHeap.
   void SetHeapHandle(const HeapHandle& handle);
@@ -192,8 +191,6 @@ class BASE_EXPORT TaskSource : public RefCountedThreadSafe<TaskSource> {
   // unless it guarantees never to hand-out multiple RegisteredTaskSources that
   // are concurrently ready.
   virtual Task Clear(TaskSource::Transaction* transaction) = 0;
-
-  virtual SequenceSortKey GetSortKey() const = 0;
 
   // Sets TaskSource priority to |priority|.
   void UpdatePriority(TaskPriority priority);

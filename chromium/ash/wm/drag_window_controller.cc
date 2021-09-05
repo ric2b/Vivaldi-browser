@@ -96,10 +96,6 @@ class DragWindowController::DragWindowDetails {
                                       window->parent(), &bounds);
     window->SetBounds(bounds);
     window->SetTransform(original_window->transform());
-    window->layer()->SetClipRect(original_window->layer()->clip_rect());
-    window->layer()->SetRoundedCornerRadius(
-        original_window->layer()->rounded_corner_radii());
-    window->layer()->SetIsFastRoundedCorner(true);
     widget_->SetOpacity(opacity);
   }
 
@@ -129,7 +125,7 @@ class DragWindowController::DragWindowDetails {
     // show popups due to performance reasons. WindowPreviewView also needs to
     // be modified so that it can optionally be clipped to the main window's
     // bounds.
-    widget_->SetContentsView(new WindowMirrorView(
+    widget_->SetContentsView(std::make_unique<WindowMirrorView>(
         original_window, /*trilinear_filtering_on_init=*/false,
         /*show_non_client_view=*/true));
 

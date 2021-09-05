@@ -33,6 +33,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
 
+import java.util.Collections;
+import java.util.Comparator;
 
 import org.chromium.chrome.browser.ChromeApplication;
 
@@ -45,8 +47,9 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
      * Specifies the view types that the bookmark delegate screen can contain.
      */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef({ViewType.PERSONALIZED_SIGNIN_PROMO, ViewType.PERSONALIZED_SYNC_PROMO,
-            ViewType.SYNC_PROMO, ViewType.FOLDER, ViewType.BOOKMARK})
+    @IntDef({ViewType.INVALID_PROMO, ViewType.PERSONALIZED_SIGNIN_PROMO,
+            ViewType.PERSONALIZED_SYNC_PROMO, ViewType.SYNC_PROMO, ViewType.FOLDER,
+            ViewType.BOOKMARK})
     private @interface ViewType {
         int INVALID_PROMO = -1;
         int PERSONALIZED_SIGNIN_PROMO = 0;
@@ -63,6 +66,7 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
 
     // There can only be one promo header at a time. This takes on one of the values:
     // ViewType.PERSONALIZED_SIGNIN_PROMO, ViewType.SYNC_PROMO, or ViewType.INVALID_PROMO
+    @ViewType
     private int mPromoHeaderType = ViewType.INVALID_PROMO;
     private BookmarkDelegate mDelegate;
     private BookmarkPromoHeader mPromoHeaderManager;
@@ -72,6 +76,9 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
 
     // Keep track of the currently highlighted bookmark - used for "show in folder" action.
     private BookmarkId mHighlightedBookmark;
+
+    /** Vivaldi **/
+    private SortOrder mSortOrder = SortOrder.MANUAL;
 
     private BookmarkModelObserver mBookmarkModelObserver = new BookmarkModelObserver() {
         @Override
@@ -303,7 +310,8 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
             setBookmarks(mTopLevelFolders);
         } else {
             if (ChromeApplication.isVivaldi())
-                setBookmarks(mDelegate.getModel().getChildIDsVivaldi(folder, true, true, false));
+                setBookmarks(mDelegate.getModel().getChildIDsVivaldi(folder, true,
+                        true, false));
             else
             setBookmarks(mDelegate.getModel().getChildIDs(folder));
         }
@@ -582,4 +590,66 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
             mTopLevelFolders.add(trashNodeId);
         }
     }
+
+    /** Vivaldi **/
+    enum SortOrder {
+        MANUAL(0),
+        TITLE(1),
+        ADDRESS(2),
+        NICK(3),
+        DESCRIPTION(4);
+
+        public static SortOrder forNumber(int value) {
+            switch (value) {
+                case 0: return MANUAL;
+                case 1: return TITLE;
+                case 2: return ADDRESS;
+                case 3: return NICK;
+                case 4: return DESCRIPTION;
+                default: return null;
+            }
+        }
+        private final int value;
+        SortOrder(int value) {
+            this.value = value;
+        }
+
+        public int getNumber() {
+            return this.value;
+        }
+    }
+
+    void setSortOrder(SortOrder sortOrder) {
+        if (sortOrder == mSortOrder) return;
+        if (sortOrder != SortOrder.MANUAL) {
+            Collections.sort(mElements, new Comparator<BookmarkItem>() {
+                @Override
+                public int compare(BookmarkItem bookmarkItem, BookmarkItem t1) {
+                    switch (sortOrder) {
+                        case TITLE:
+                            return bookmarkItem.getTitle().compareTo(t1.getTitle());
+                        case ADDRESS:
+                            return bookmarkItem.getUrl().compareTo(t1.getUrl());
+                        case NICK:
+                            return bookmarkItem.getNickName().compareTo(t1.getNickName());
+                        case DESCRIPTION:
+                            return bookmarkItem.getDescription().compareTo(t1.getDescription());
+                        default:
+                            return 0;
+                    }
+                }
+            });
+            List<BookmarkId> sortedIds = new ArrayList<>(mElements.size());
+            for (BookmarkItem item : mElements) sortedIds.add(item.getId());
+            setBookmarks(sortedIds);
+            disableDrag();
+        } else {
+            setBookmarks(mDelegate.getModel().getChildIDsVivaldi(mCurrentFolder, true,
+                    true, false));
+            enableDrag();
+        }
+        mSortOrder = sortOrder;
+    }
+
+    public SortOrder getSortOrder() { return mSortOrder; }
 }

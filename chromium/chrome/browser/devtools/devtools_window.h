@@ -402,6 +402,15 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
 
   void OnReattachMainTargetComplete(base::Value);
 
+  // Called when the accepted language changes. |navigator.language| of the
+  // DevTools window should match the application language. When the user
+  // changes the accepted language then this listener flips the language back
+  // to the application language for the DevTools renderer process.
+  // Please note that |navigator.language| will have the wrong language for
+  // a very short period of time (until this handler has reset it again).
+  void OnLocaleChanged();
+  void OverrideAndSyncDevToolsRendererPrefs();
+
   std::unique_ptr<ObserverWithAccessor> inspected_contents_observer_;
 
   FrontendType frontend_type_;
@@ -449,6 +458,8 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   bool open_new_window_for_popups_ = false;
 
   base::OnceCallback<void()> reattach_complete_callback_;
+
+  PrefChangeRegistrar pref_change_registrar_;
 
   // Vivaldi:
   scoped_refptr<extensions::DevtoolsConnectorItem> connector_item_;

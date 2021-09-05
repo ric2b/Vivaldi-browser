@@ -106,7 +106,7 @@
 #include "ui/events/test/event_generator.h"
 #endif  // defined(OS_CHROMEOS)
 
-#if !defined(OS_CHROMEOS) && defined(OS_LINUX)
+#if !defined(OS_CHROMEOS) && defined(USE_X11)
 #include "ui/views/test/test_desktop_screen_x11.h"
 #endif
 
@@ -301,7 +301,7 @@ void InProcessBrowserTest::SetUp() {
       chrome_browser_net::NetErrorTabHelper::TESTING_FORCE_DISABLED);
 
 #if defined(OS_CHROMEOS)
-  chromeos::device_sync::DeviceSyncImpl::Factory::SetFactoryForTesting(
+  chromeos::device_sync::DeviceSyncImpl::Factory::SetCustomFactory(
       GetFakeDeviceSyncImplFactory());
 
   // On Chrome OS, access to files via file: scheme is restricted. Enable
@@ -353,7 +353,7 @@ void InProcessBrowserTest::TearDown() {
 #endif
 
 #if defined(OS_CHROMEOS)
-  chromeos::device_sync::DeviceSyncImpl::Factory::SetFactoryForTesting(nullptr);
+  chromeos::device_sync::DeviceSyncImpl::Factory::SetCustomFactory(nullptr);
 #endif
 }
 

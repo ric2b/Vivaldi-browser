@@ -15,9 +15,11 @@
 #include "base/task_runner.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chrome/browser/policy/messaging_layer/encryption/encryption_module.h"
 #include "chrome/browser/policy/messaging_layer/storage/storage_queue.h"
 #include "chrome/browser/policy/messaging_layer/util/status_macros.h"
 #include "chrome/browser/policy/messaging_layer/util/task_runner_context.h"
+#include "components/policy/proto/record.pb.h"
 
 namespace reporting {
 
@@ -123,12 +125,21 @@ class Storage::QueueUploaderInterface : public StorageQueue::UploaderInterface {
                                                     std::move(uploader));
   }
 
-  void ProcessBlob(StatusOr<base::span<const uint8_t>> data,
-                   base::OnceCallback<void(bool)> processed_cb) override {
-    storage_interface_->ProcessBlob(priority_, data, std::move(processed_cb));
+  void ProcessRecord(StatusOr<EncryptedRecord> encrypted_record,
+                     base::OnceCallback<void(bool)> processed_cb) override {
+    if (encrypted_record.ok()) {
+      // Update sequencing information: add Priority and Generation ID.
+      SequencingInformation* const sequencing_info =
+          encrypted_record.ValueOrDie().mutable_sequencing_information();
+      sequencing_info->set_priority(priority_);
+      // sequencing_info->set_generation_id(...);  Not supported yet.
+    }
+    storage_interface_->ProcessRecord(std::move(encrypted_record),
+                                      std::move(processed_cb));
   }
+
   void Completed(Status final_status) override {
-    storage_interface_->Completed(priority_, final_status);
+    storage_interface_->Completed(final_status);
   }
 
  private:
@@ -139,6 +150,7 @@ class Storage::QueueUploaderInterface : public StorageQueue::UploaderInterface {
 void Storage::Create(
     const Options& options,
     StartUploadCb start_upload_cb,
+    scoped_refptr<EncryptionModule> encryption_module,
     base::OnceCallback<void(StatusOr<scoped_refptr<Storage>>)> completion_cb) {
   // Initialize Storage object, populating all the queues.
   class StorageInitContext
@@ -147,6 +159,7 @@ void Storage::Create(
     StorageInitContext(
         const std::vector<std::pair<Priority, StorageQueue::Options>>&
             queues_options,
+        scoped_refptr<EncryptionModule> encryption_module,
         scoped_refptr<Storage> storage,
         base::OnceCallback<void(StatusOr<scoped_refptr<Storage>>)> callback)
         : TaskRunnerContext<StatusOr<scoped_refptr<Storage>>>(
@@ -154,6 +167,7 @@ void Storage::Create(
               base::ThreadPool::CreateSequencedTaskRunner(
                   {base::TaskPriority::BEST_EFFORT, base::MayBlock()})),
           queues_options_(queues_options),
+          encryption_module_(encryption_module),
           storage_(std::move(storage)),
           count_(queues_options_.size()) {}
 
@@ -169,6 +183,7 @@ void Storage::Create(
             base::BindRepeating(&QueueUploaderInterface::ProvideUploader,
                                 /*priority=*/queue_options.first,
                                 storage_->start_upload_cb_),
+            encryption_module_,
             base::BindOnce(&StorageInitContext::ScheduleAddQueue,
                            base::Unretained(this),
                            /*priority=*/queue_options.first));
@@ -209,6 +224,7 @@ void Storage::Create(
 
     const std::vector<std::pair<Priority, StorageQueue::Options>>
         queues_options_;
+    scoped_refptr<EncryptionModule> encryption_module_;
     scoped_refptr<Storage> storage_;
     int32_t count_;
     Status final_status_;
@@ -221,7 +237,8 @@ void Storage::Create(
 
   // Asynchronously run initialization.
   Start<StorageInitContext>(ExpectedQueues(storage->options_.directory()),
-                            std::move(storage), std::move(completion_cb));
+                            encryption_module, std::move(storage),
+                            std::move(completion_cb));
 }
 
 Storage::Storage(const Options& options, StartUploadCb start_upload_cb)
@@ -230,13 +247,13 @@ Storage::Storage(const Options& options, StartUploadCb start_upload_cb)
 Storage::~Storage() = default;
 
 void Storage::Write(Priority priority,
-                    base::span<const uint8_t> data,
+                    Record record,
                     base::OnceCallback<void(Status)> completion_cb) {
   // Note: queues_ never change after initialization is finished, so there is no
   // need to protect or serialize access to it.
   ASSIGN_OR_ONCE_CALLBACK_AND_RETURN(scoped_refptr<StorageQueue> queue,
                                      completion_cb, GetQueue(priority));
-  queue->Write(data, std::move(completion_cb));
+  queue->Write(std::move(record), std::move(completion_cb));
 }
 
 void Storage::Confirm(Priority priority,

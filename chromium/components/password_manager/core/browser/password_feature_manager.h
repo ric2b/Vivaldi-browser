@@ -6,7 +6,7 @@
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_FEATURE_MANAGER_H_
 
 #include "base/macros.h"
-#include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 
 namespace password_manager {
@@ -49,22 +49,21 @@ class PasswordFeatureManager {
   // associated settings (e.g. default store choice).
   virtual void OptOutOfAccountStorageAndClearSettings() = 0;
 
-  // Whether it makes sense to ask the user to move a password or about the
-  // store when saving a  password (i.e. profile or account store). This is true
-  // if the user has opted in already, or hasn't opted in but all other
+  // Whether it makes sense to ask the user to move a password to their account,
+  // or in which store to save a password (i.e. profile or account store). This
+  // is true if the user has opted in already, or hasn't opted in but all other
   // requirements are met (i.e. there is a signed-in user, Sync-the-feature is
   // not enabled, etc).
   virtual bool ShouldShowAccountStorageBubbleUi() const = 0;
 
   // Sets the default password store selected by user in prefs. This store is
   // used for saving new credentials and adding blacking listing entries.
-  virtual void SetDefaultPasswordStore(
-      const autofill::PasswordForm::Store& store) = 0;
+  virtual void SetDefaultPasswordStore(const PasswordForm::Store& store) = 0;
 
   // Returns the default storage location for signed-in but non-syncing users
   // (i.e. will new passwords be saved to locally or to the account by default).
   // Always returns an actual value, never kNotSet.
-  virtual autofill::PasswordForm::Store GetDefaultPasswordStore() const = 0;
+  virtual PasswordForm::Store GetDefaultPasswordStore() const = 0;
 
   // Returns the "usage level" of the account-scoped password storage. See
   // definition of PasswordAccountStorageUsageLevel.

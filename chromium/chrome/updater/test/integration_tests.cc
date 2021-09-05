@@ -5,7 +5,12 @@
 #include "chrome/updater/test/integration_tests.h"
 
 #include "base/test/task_environment.h"
+#include "base/version.h"
+#include "build/build_config.h"
+#include "chrome/updater/persisted_data.h"
 #include "chrome/updater/prefs.h"
+#include "chrome/updater/test/test_app/constants.h"
+#include "chrome/updater/test/test_app/test_app_version.h"
 #include "chrome/updater/updater_version.h"
 #include "chrome/updater/util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -18,16 +23,12 @@ namespace test {
 // the build directory. Therefore, installation of component builds is not
 // expected to work and these tests do not run on component builders.
 // See crbug.com/1112527.
-#if !defined(COMPONENT_BUILD)
+#if defined(OS_WIN) || !defined(COMPONENT_BUILD)
 
 namespace {
 
 void ExpectActiveVersion(std::string expected) {
   EXPECT_EQ(CreateGlobalPrefs()->GetActiveVersion(), expected);
-}
-
-void ExpectQualified() {
-  EXPECT_TRUE(CreateLocalPrefs()->GetQualified());
 }
 
 }  // namespace
@@ -52,21 +53,23 @@ class IntegrationTest : public ::testing::Test {
 TEST_F(IntegrationTest, InstallUninstall) {
   Install();
   ExpectInstalled();
-  Uninstall();
-}
-
-TEST_F(IntegrationTest, InstallAndPromote) {
-  Install();
-  ExpectInstalled();
-  ExpectActiveVersion("0");
-  RunWake(0);  // Candidate qualifies and promotes to active.
-  ExpectQualified();
   ExpectActiveVersion(UPDATER_VERSION_STRING);
   ExpectActive();
   Uninstall();
 }
 
-#endif  // !defined(COMPONENT_BUILD)
+#if defined(OS_MAC)
+// Flaky: https://crbug.com/1131654
+TEST_F(IntegrationTest, DISABLED_RegisterTestApp) {
+  RegisterTestApp();
+  ExpectInstalled();
+  ExpectActiveVersion(UPDATER_VERSION_STRING);
+  ExpectActive();
+  Uninstall();
+}
+#endif
+
+#endif  // defined(OS_WIN) || !defined(COMPONENT_BUILD)
 
 }  // namespace test
 

@@ -41,6 +41,7 @@ SettingsResetPromptDialog::SettingsResetPromptDialog(
     : browser_(nullptr), controller_(controller) {
   DCHECK(controller_);
 
+  SetShowIcon(false);
   SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(IDS_SETTINGS_RESET_PROMPT_ACCEPT_BUTTON_LABEL));
@@ -68,13 +69,13 @@ SettingsResetPromptDialog::SettingsResetPromptDialog(
   SetLayoutManager(std::make_unique<views::FillLayout>());
 
   views::StyledLabel* dialog_label =
-      new views::StyledLabel(controller_->GetMainText(), /*listener=*/nullptr);
-  dialog_label->SetTextContext(CONTEXT_BODY_TEXT_LARGE);
+      AddChildView(std::make_unique<views::StyledLabel>());
+  dialog_label->SetText(controller_->GetMainText());
+  dialog_label->SetTextContext(views::style::CONTEXT_DIALOG_BODY_TEXT);
   dialog_label->SetDefaultTextStyle(views::style::STYLE_SECONDARY);
   views::StyledLabel::RangeStyleInfo url_style;
   url_style.text_style = STYLE_EMPHASIZED_SECONDARY;
   dialog_label->AddStyleRange(controller_->GetMainTextUrlRange(), url_style);
-  AddChildView(dialog_label);
 }
 
 SettingsResetPromptDialog::~SettingsResetPromptDialog() {
@@ -100,10 +101,6 @@ void SettingsResetPromptDialog::Show(Browser* browser) {
 
 ui::ModalType SettingsResetPromptDialog::GetModalType() const {
   return ui::MODAL_TYPE_WINDOW;
-}
-
-bool SettingsResetPromptDialog::ShouldShowWindowIcon() const {
-  return false;
 }
 
 bool SettingsResetPromptDialog::ShouldShowCloseButton() const {

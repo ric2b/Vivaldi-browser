@@ -12,12 +12,12 @@
 <translation id="1163931534039071049">&amp;Крыніца Фрэйму</translation>
 <translation id="1165039591588034296">Памылка</translation>
 <translation id="1175364870820465910">&amp;Друк...</translation>
-<translation id="1177863135347784049">Наладзіць мяжы</translation>
 <translation id="1181037720776840403">Выдаліць</translation>
 <translation id="1187722533808055681">Выхад са Сну</translation>
 <translation id="119944043368869598">Выдаліць усе дадзеныя</translation>
 <translation id="1221825588892235038">Толкі вылучаныя</translation>
 <translation id="1244303850296295656">Памылка Пашырэння</translation>
+<translation id="125220115284141797">Па змаўчанні</translation>
 <translation id="1274977772557788323">Adobe Flash прагравальніка налады</translation>
 <translation id="1297175357211070620">Друкарка</translation>
 <translation id="1303101771013849280">Файл HTML з закладкамі</translation>
@@ -43,9 +43,11 @@
 <translation id="1723824996674794290">&amp;Новае акно</translation>
 <translation id="1725149567830788547">Паказаць панэль кіравання</translation>
 <translation id="1729533290416704613">Так сама пашырэнне змніла пашуковую сістэму па змаўчанні ў полі пошука.</translation>
+<translation id="174123615272205933">Наладзіць мяжы</translation>
 <translation id="1744108098763830590">фонавая старонка</translation>
 <translation id="176587472219019965">&amp;Новае акно</translation>
 <translation id="1769104665586091481">Адчыніць у новым Акне</translation>
+<translation id="1779468444204342338">Мінімум</translation>
 <translation id="1815083418640426271">Уставіць як Просты тэкст</translation>
 <translation id="1828901632669367785">Друкаваць праз сістэмны дзіялог.</translation>
 <translation id="1886996562706621347">Дазволіць спытаць "ці можна стаць апрацоўнікам пратаколу?" сайту (раім)</translation>
@@ -82,7 +84,6 @@
 <translation id="2379281330731083556">Друкаваць праз сістэмны дзіялоґ... <ph name="SHORTCUT_KEY" /></translation>
 <translation id="2381756643783702095">Спытаць перад дасылам (рэкамендуем)</translation>
 <translation id="241082044617551207">Невядомы плагін</translation>
-<translation id="2436707352762155834">Мінімум</translation>
 <translation id="2439110203301358333">Іншая праграма на тваім кампутары дадала пашырэнне, якое можа ўплываць на працу Вівалдзі.</translation>
 <translation id="2445081178310039857">Патрабуецца каранёвы каталог пашырэння.</translation>
 <translation id="2470702053775288986">Непадтрымліваючыяся пашырэнні выключаны</translation>
@@ -220,7 +221,6 @@
 <translation id="5036662165765606524">Не дазвалять сайтам пампаваць некалкі файлаў аўтамацічна</translation>
 <translation id="5039804452771397117">Дазволіць</translation>
 <translation id="5063480226653192405">Карыстанне</translation>
-<translation id="5068918910148307423">Не дазваляць толькі што зачыненым сайтам скончыць спампоўку</translation>
 <translation id="5116628073786783676">Захаваць Аўдыа як...</translation>
 <translation id="5143374789336132547">Пашырэнне "<ph name="EXTENSION_NAME" />" змяніла Хатнюю Старонку па змаўчанні.</translation>
 <translation id="5154108062446123722">Дадатковыя налады для <ph name="PRINTING_DESTINATION" /></translation>
@@ -238,6 +238,7 @@
 <translation id="5355926466126177564">Пашырэнне "<ph name="EXTENSION_NAME" />" змяніла пашуковую сістэму з полі пошуку.</translation>
 <translation id="5360150013186312835">Паказаць на панэлі інструмэнтаў</translation>
 <translation id="5362741141255528695">Пазначце файл закрытага ключа.</translation>
+<translation id="536638840841140142">Няма</translation>
 <translation id="5370819323174483825">&amp;Перазагрузіць</translation>
 <translation id="5398572795982417028">Выхад паза мяжу дзіапазону, лімит <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Працягнуць Загрузку</translation>
@@ -350,7 +351,6 @@
 <translation id="7663719505383602579">Атрымалнік: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Усталявана вашым Майстрам</translation>
 <translation id="7685049629764448582">JavaScript памяць</translation>
-<translation id="7701040980221191251">Няма</translation>
 <translation id="7701869757853594372">USER-дэскрыптары</translation>
 <translation id="7704305437604973648">Заданне</translation>
 <translation id="7710568461918838723">&amp;Трансляцыя...</translation>
@@ -413,7 +413,7 @@
 <translation id="8757090071857742562">Немагчыма трансляваць працоўны стол. Спраўдзіце, што Вы засуполілі (адчынілі доступ) экран.</translation>
 <translation id="8774934320277480003">Верняя мяжа</translation>
 <translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; хоча засуполіць для цябе друкарку &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;.</translation>
-<translation id="8798099450830957504">Па змаўчанні</translation>
+<translation id="8798099450830957504">Па змаўчанню</translation>
 <translation id="8800004011501252845">Паказаць месца прызначэння для</translation>
 <translation id="8808478386290700967">WEB-крама</translation>
 <translation id="8823514049557262177">Капіяваць Тэкст URL</translation>

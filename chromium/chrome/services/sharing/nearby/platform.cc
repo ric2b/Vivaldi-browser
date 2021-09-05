@@ -9,6 +9,7 @@
 #include "chrome/services/sharing/nearby/nearby_connections.h"
 #include "chrome/services/sharing/nearby/platform_v2/atomic_boolean.h"
 #include "chrome/services/sharing/nearby/platform_v2/atomic_uint32.h"
+#include "chrome/services/sharing/nearby/platform_v2/ble_medium.h"
 #include "chrome/services/sharing/nearby/platform_v2/bluetooth_adapter.h"
 #include "chrome/services/sharing/nearby/platform_v2/bluetooth_classic_medium.h"
 #include "chrome/services/sharing/nearby/platform_v2/condition_variable.h"
@@ -22,6 +23,7 @@
 #include "chrome/services/sharing/nearby/platform_v2/submittable_executor.h"
 #include "chrome/services/sharing/nearby/platform_v2/webrtc.h"
 #include "device/bluetooth/public/mojom/adapter.mojom.h"
+#include "mojo/public/cpp/bindings/shared_remote.h"
 #include "third_party/nearby/src/cpp/platform_v2/api/atomic_boolean.h"
 #include "third_party/nearby/src/cpp/platform_v2/api/atomic_reference.h"
 #include "third_party/nearby/src/cpp/platform_v2/api/ble.h"
@@ -52,14 +54,16 @@ int GetCurrentTid() {
 std::unique_ptr<SubmittableExecutor>
 ImplementationPlatform::CreateSingleThreadExecutor() {
   return std::make_unique<chrome::SubmittableExecutor>(
-      base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()}));
+      base::ThreadPool::CreateSingleThreadTaskRunner(
+          {base::MayBlock()},
+          base::SingleThreadTaskRunnerThreadMode::DEDICATED));
 }
 
 std::unique_ptr<SubmittableExecutor>
 ImplementationPlatform::CreateMultiThreadExecutor(int max_concurrency) {
-  // Chrome task runner does not support max_concurrency.
-  return std::make_unique<chrome::SubmittableExecutor>(
-      base::ThreadPool::CreateTaskRunner({base::MayBlock()}));
+  // Chrome TaskRunner does not support |max_concurrency|. Simply use our
+  // SingleThreadExecutor.
+  return CreateSingleThreadExecutor();
 }
 
 std::unique_ptr<ScheduledExecutor>
@@ -77,10 +81,10 @@ std::unique_ptr<AtomicUint32> ImplementationPlatform::CreateAtomicUint32(
 std::unique_ptr<BluetoothAdapter>
 ImplementationPlatform::CreateBluetoothAdapter() {
   auto& connections = connections::NearbyConnections::GetInstance();
-  bluetooth::mojom::Adapter* bluetooth_adapter =
-      connections.GetBluetoothAdapter();
+  const mojo::SharedRemote<bluetooth::mojom::Adapter>& bluetooth_adapter =
+      connections.bluetooth_adapter();
 
-  if (!bluetooth_adapter)
+  if (!bluetooth_adapter.is_bound())
     return nullptr;
 
   return std::make_unique<chrome::BluetoothAdapter>(bluetooth_adapter);
@@ -125,10 +129,10 @@ ImplementationPlatform::CreateBluetoothClassicMedium(
   // to implement chrome::BluetoothClassicMedium.
 
   auto& connections = connections::NearbyConnections::GetInstance();
-  bluetooth::mojom::Adapter* bluetooth_adapter =
-      connections.GetBluetoothAdapter();
+  const mojo::SharedRemote<bluetooth::mojom::Adapter>& bluetooth_adapter =
+      connections.bluetooth_adapter();
 
-  if (!bluetooth_adapter)
+  if (!bluetooth_adapter.is_bound())
     return nullptr;
 
   return std::make_unique<chrome::BluetoothClassicMedium>(bluetooth_adapter);
@@ -136,11 +140,22 @@ ImplementationPlatform::CreateBluetoothClassicMedium(
 
 std::unique_ptr<BleMedium> ImplementationPlatform::CreateBleMedium(
     api::BluetoothAdapter& adapter) {
-  return nullptr;
+  // Ignore the provided |adapter| argument. It provides no interface useful
+  // to implement chrome::BleMedium.
+
+  auto& connections = connections::NearbyConnections::GetInstance();
+  const mojo::SharedRemote<bluetooth::mojom::Adapter>& bluetooth_adapter =
+      connections.bluetooth_adapter();
+
+  if (!bluetooth_adapter.is_bound())
+    return nullptr;
+
+  return std::make_unique<chrome::BleMedium>(bluetooth_adapter);
 }
 
 std::unique_ptr<ble_v2::BleMedium> ImplementationPlatform::CreateBleV2Medium(
     api::BluetoothAdapter& adapter) {
+  // Do nothing. ble_v2::BleMedium is not yet supported in Chrome Nearby.
   return nullptr;
 }
 
@@ -160,20 +175,23 @@ std::unique_ptr<WifiLanMedium> ImplementationPlatform::CreateWifiLanMedium() {
 std::unique_ptr<WebRtcMedium> ImplementationPlatform::CreateWebRtcMedium() {
   auto& connections = connections::NearbyConnections::GetInstance();
 
-  network::mojom::P2PSocketManager* socket_manager =
-      connections.GetWebRtcP2PSocketManager();
-  network::mojom::MdnsResponder* mdns_responder =
-      connections.GetWebRtcMdnsResponder();
-  sharing::mojom::IceConfigFetcher* ice_config_fetcher =
-      connections.GetWebRtcIceConfigFetcher();
-  sharing::mojom::WebRtcSignalingMessenger* messenger =
-      connections.GetWebRtcSignalingMessenger();
+  const mojo::SharedRemote<network::mojom::P2PSocketManager>& socket_manager =
+      connections.socket_manager();
+  const mojo::SharedRemote<network::mojom::MdnsResponder>& mdns_responder =
+      connections.mdns_responder();
+  const mojo::SharedRemote<sharing::mojom::IceConfigFetcher>&
+      ice_config_fetcher = connections.ice_config_fetcher();
+  const mojo::SharedRemote<sharing::mojom::WebRtcSignalingMessenger>&
+      messenger = connections.webrtc_signaling_messenger();
 
-  if (!socket_manager || !mdns_responder || !ice_config_fetcher || !messenger)
+  if (!socket_manager.is_bound() || !mdns_responder.is_bound() ||
+      !ice_config_fetcher.is_bound() || !messenger.is_bound()) {
     return nullptr;
+  }
 
-  return std::make_unique<chrome::WebRtcMedium>(socket_manager, mdns_responder,
-                                                ice_config_fetcher, messenger);
+  return std::make_unique<chrome::WebRtcMedium>(
+      socket_manager, mdns_responder, ice_config_fetcher, messenger,
+      connections.GetThreadTaskRunner());
 }
 
 std::unique_ptr<Mutex> ImplementationPlatform::CreateMutex(Mutex::Mode mode) {

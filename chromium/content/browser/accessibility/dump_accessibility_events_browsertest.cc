@@ -95,8 +95,8 @@ class DumpAccessibilityEventsTest : public DumpAccessibilityTestBase {
     waiter->Quit();
   }
 
-  base::string16 initial_tree_;
-  base::string16 final_tree_;
+  std::string initial_tree_;
+  std::string final_tree_;
 };
 
 bool IsRecordingComplete(AccessibilityEventRecorder& event_recorder,
@@ -140,8 +140,7 @@ std::vector<std::string> DumpAccessibilityEventsTest::Dump(
     // Create a new Event Recorder for the run
     std::unique_ptr<AccessibilityEventRecorder> event_recorder =
         event_recorder_factory_(
-            web_contents->GetRootBrowserAccessibilityManager(), pid,
-            base::StringPiece{});
+            web_contents->GetRootBrowserAccessibilityManager(), pid, {});
     event_recorder->set_only_web_events(true);
 
     waiter.reset(new AccessibilityNotificationWaiter(
@@ -202,7 +201,7 @@ std::vector<std::string> DumpAccessibilityEventsTest::Dump(
     }
 
     if (run_go_again) {
-      final_tree_.append(base::ASCIIToUTF16("=== Start Continuation ===\n"));
+      final_tree_.append("=== Start Continuation ===\n");
       result.emplace_back("=== Start Continuation ===");
     }
   } while (run_go_again);
@@ -213,10 +212,10 @@ std::vector<std::string> DumpAccessibilityEventsTest::Dump(
 void DumpAccessibilityEventsTest::OnDiffFailed() {
   printf("\n");
   printf("Initial accessibility tree (after load complete):\n");
-  printf("%s\n", base::UTF16ToUTF8(initial_tree_).c_str());
+  printf("%s\n", initial_tree_.c_str());
   printf("\n");
   printf("Final accessibility tree after events fired:\n");
-  printf("%s\n", base::UTF16ToUTF8(final_tree_).c_str());
+  printf("%s\n", final_tree_.c_str());
   printf("\n");
 }
 
@@ -481,6 +480,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsChildrenChangedOnlyOnAncestor) {
+  RunEventTest(FILE_PATH_LITERAL("children-changed-only-on-ancestor.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsCheckedStateChanged) {
   RunEventTest(FILE_PATH_LITERAL("checked-state-changed.html"));
 }
@@ -654,8 +658,15 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("listbox-next.html"));
 }
 
+// TODO(https://crbug.com/1123394): This is failing on Windows.
+#if defined(OS_WIN)
+#define MAYBE_AccessibilityEventsLiveRegionAdd \
+  DISABLED_AccessibilityEventsLiveRegionAdd
+#else
+#define MAYBE_AccessibilityEventsLiveRegionAdd AccessibilityEventsLiveRegionAdd
+#endif
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsLiveRegionAdd) {
+                       MAYBE_AccessibilityEventsLiveRegionAdd) {
   RunEventTest(FILE_PATH_LITERAL("live-region-add.html"));
 }
 
@@ -850,6 +861,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsTextIndentChanged) {
+  RunEventTest(FILE_PATH_LITERAL("text-indent-changed.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsTextSelectionChanged) {
   RunEventTest(FILE_PATH_LITERAL("text-selection-changed.html"));
 }
@@ -899,8 +915,16 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("tbody-focus.html"));
 }
 
+#if defined(OS_WIN)
+// TODO(crbug.com/1084871) Flaky on Windows https://crbug.com/1084871#c33
+#define MAYBE_AccessibilityEventsVisibilityHiddenChanged \
+  DISABLED_AccessibilityEventsVisibilityHiddenChanged
+#else
+#define MAYBE_AccessibilityEventsVisibilityHiddenChanged \
+  AccessibilityEventsVisibilityHiddenChanged
+#endif
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsVisibilityHiddenChanged) {
+                       MAYBE_AccessibilityEventsVisibilityHiddenChanged) {
   RunEventTest(FILE_PATH_LITERAL("visibility-hidden-changed.html"));
 }
 

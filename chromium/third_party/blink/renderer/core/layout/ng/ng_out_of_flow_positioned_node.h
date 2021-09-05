@@ -27,7 +27,9 @@ namespace blink {
 //
 // This needs its static position [1] to be placed correctly in its containing
 // block. And in the case of fragmentation, this also needs the containing block
-// fragment to be placed correctly within the fragmentation context root.
+// fragment to be placed correctly within the fragmentation context root. In
+// addition, the containing block offset is needed to compute the start offset
+// and the initial fragmentainer of an out-of-flow positioned-node.
 //
 // This is struct is allowed to be stored/persisted.
 //

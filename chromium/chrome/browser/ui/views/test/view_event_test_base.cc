@@ -52,15 +52,16 @@ class TestView : public views::View {
 class TestBaseWidgetDelegate : public views::WidgetDelegate {
  public:
   explicit TestBaseWidgetDelegate(ViewEventTestBase* harness)
-      : harness_(harness) {}
+      : harness_(harness) {
+    SetCanResize(true);
+    SetOwnedByWidget(true);
+  }
   TestBaseWidgetDelegate(const TestBaseWidgetDelegate&) = delete;
   TestBaseWidgetDelegate& operator=(const TestBaseWidgetDelegate&) = delete;
   ~TestBaseWidgetDelegate() override = default;
 
   // views::WidgetDelegate:
-  bool CanResize() const override { return true; }
   void WindowClosing() override { harness_->window_ = nullptr; }
-  void DeleteDelegate() override { delete this; }
   views::Widget* GetWidget() override { return contents_->GetWidget(); }
   const views::Widget* GetWidget() const override {
     return contents_->GetWidget();

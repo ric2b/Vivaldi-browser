@@ -3,9 +3,11 @@
 <translationbundle lang="et">
 <translation id="1033008476608128425">Maastik 3</translation>
 <translation id="1118377629180821201">Maastik 12</translation>
+<translation id="1158503667684816647">Seda kinnitust rohkem ei näidata</translation>
 <translation id="1276145862619442150">Kiirvalimislehed</translation>
 <translation id="1281950884873973195">Loom 5</translation>
 <translation id="1411638389238344450">Saada link meiliga</translation>
+<translation id="1454726940098520109">Seda kinnitust rohkem ei näidata</translation>
 <translation id="1657174850639146440">Koll 9</translation>
 <translation id="1676595396635191120">Uus privaatne aken</translation>
 <translation id="1728549374069268714">Aseta ja mine</translation>
@@ -16,6 +18,7 @@
 <translation id="1921101374471252440">Laadi pilt uuesti</translation>
 <translation id="1924750141060565109">Maastik 15</translation>
 <translation id="19598411548897379">Üldine</translation>
+<translation id="2079036669923635404">Klõpsa siin, et uuendada Vivaldi versioonile <ph name="VERSION" />.</translation>
 <translation id="2441056087170876076">Koll 2</translation>
 <translation id="2444387452209867610">Sisesta märge</translation>
 <translation id="2486841023299517366">Loom 4</translation>
@@ -34,6 +37,7 @@
 <translation id="3334610655141903168">(pealkirjata)</translation>
 <translation id="3402602684546832928">Opera järjehoidjate faili valimine</translation>
 <translation id="3451317331714872347">Maastik 8</translation>
+<translation id="3457498675806041407">Väljumiskinnitus</translation>
 <translation id="3516213908976398531">Maastik 11</translation>
 <translation id="3540597690227428180">Loom 9</translation>
 <translation id="3542768452570884558">Ava link uues aknas</translation>
@@ -67,8 +71,10 @@
 <translation id="5213743983876949565">Loom 1</translation>
 <translation id="5238244642230426581">Imporditud järjehoidjad</translation>
 <translation id="527605719918376753">Vaigista kaart</translation>
+<translation id="5305569355661722298">Akna sulgemise kinnitus</translation>
 <translation id="5388358297987318779">Ava pilt</translation>
 <translation id="5416008465899576639">Vivaldi uus versioon on saadaval.</translation>
+<translation id="5497042274492038489">Akna sulgemise kinnitus</translation>
 <translation id="5594602170491763400">Koll 5</translation>
 <translation id="5615637589913244581">Opera versioon 15+ (beeta)</translation>
 <translation id="5648110075441906505">Ava pilt uues aknas</translation>
@@ -77,6 +83,7 @@
 <translation id="5857090052475505287">Uus kaust</translation>
 <translation id="588258955323874662">Täisekraan</translation>
 <translation id="5916080360077521750">Chrome’i töötamise ajal pole sinu seaded kahjuks kättesaadavad. Nende Vivaldisse importimiseks salvesta oma töö ja sulge kõik Chrome’i aknad. Seejärel klõpsa „Jätka”.</translation>
+<translation id="6229528619562190452">Klõpsa siin Vivaldi uuendamiseks.</translation>
 <translation id="6234173136417926046">Kasuta pilti avalehe taustana</translation>
 <translation id="630690498669249215">Opera järjehoidjate fail</translation>
 <translation id="6339818817272922368">Kohalik konto</translation>
@@ -95,6 +102,7 @@
 <translation id="7715497554424665066">&amp;Eira uuendust</translation>
 <translation id="7724603315864178912">Lõika</translation>
 <translation id="7793738202466490491">Lisa kalendrisündmusena</translation>
+<translation id="7865983598101744945">Väljumiskinnitus</translation>
 <translation id="7957213167373139414">Minu kalender</translation>
 <translation id="8027581147000338959">Ava uues aknas</translation>
 <translation id="8099620695029051217">Kopeeri lehe aadress</translation>
@@ -111,6 +119,7 @@
 <translation id="8669345741879513971">Koll 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Maastik 14</translation>
+<translation id="8773635261052182196">Neid märguandeid rohkem ei näidata. Kui soovid need hiljem taas sisse lülitada, saad seda teha Vivaldi seadetes.</translation>
 <translation id="8894900864683381599">Lisa link veebipaneelina</translation>
 <translation id="8947109330183116400">Järjehoidjate HTML-faili valimine</translation>
 <translation id="9017566390391482291">Imporditava Vivaldi profiilikausta valimine</translation>

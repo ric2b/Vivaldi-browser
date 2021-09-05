@@ -21,6 +21,7 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/password_manager/core/browser/bulk_leak_check_service.h"
 #include "components/password_manager/core/browser/ui/export_progress_status.h"
+#include "components/password_manager/core/browser/ui/insecure_credentials_manager.h"
 #include "extensions/browser/extension_function.h"
 
 namespace content {
@@ -40,8 +41,8 @@ class PasswordsPrivateDelegate : public KeyedService {
   using StartPasswordCheckCallback =
       base::OnceCallback<void(password_manager::BulkLeakCheckService::State)>;
 
-  using PlaintextCompromisedPasswordCallback = base::OnceCallback<void(
-      base::Optional<api::passwords_private::CompromisedCredential>)>;
+  using PlaintextInsecurePasswordCallback = base::OnceCallback<void(
+      base::Optional<api::passwords_private::InsecureCredential>)>;
 
   ~PasswordsPrivateDelegate() override = default;
 
@@ -56,12 +57,13 @@ class PasswordsPrivateDelegate : public KeyedService {
       base::OnceCallback<void(const ExceptionEntries&)>;
   virtual void GetPasswordExceptionsList(ExceptionEntriesCallback callback) = 0;
 
-  // Changes the password corresponding to |ids|.
-  // |ids|: The ids for the password entry being updated.
+  // Changes the username and password corresponding to |ids|.
+  // |ids|: The ids for the password entries being updated.
+  // |new_username|: The new username.
   // |new_password|: The new password.
-  // Returns whether the password for all ids has been successfully changed.
   virtual bool ChangeSavedPassword(const std::vector<int>& ids,
-                                   base::string16 new_password) = 0;
+                                   const base::string16& new_username,
+                                   const base::string16& new_password) = 0;
 
   // Removes the saved password entries corresponding to the |ids| generated for
   // each entry of the password list. Any invalid id will be ignored.
@@ -128,38 +130,48 @@ class PasswordsPrivateDelegate : public KeyedService {
   // Obtains information about compromised credentials. This includes the last
   // time a check was run, as well as all compromised credentials that are
   // present in the password store.
-  virtual std::vector<api::passwords_private::CompromisedCredential>
+  virtual std::vector<api::passwords_private::InsecureCredential>
   GetCompromisedCredentials() = 0;
+
+  // Obtains information about weak credentials.
+  virtual std::vector<api::passwords_private::InsecureCredential>
+  GetWeakCredentials() = 0;
 
   // Requests the plaintext password for |credential| due to |reason|. If
   // successful, |callback| gets invoked with the same |credential|, whose
   // |password| field will be set.
-  virtual void GetPlaintextCompromisedPassword(
-      api::passwords_private::CompromisedCredential credential,
+  virtual void GetPlaintextInsecurePassword(
+      api::passwords_private::InsecureCredential credential,
       api::passwords_private::PlaintextReason reason,
       content::WebContents* web_contents,
-      PlaintextCompromisedPasswordCallback callback) = 0;
+      PlaintextInsecurePasswordCallback callback) = 0;
 
   // Attempts to change the stored password of |credential| to |new_password|.
   // Returns whether the change succeeded.
-  virtual bool ChangeCompromisedCredential(
-      const api::passwords_private::CompromisedCredential& credential,
+  virtual bool ChangeInsecureCredential(
+      const api::passwords_private::InsecureCredential& credential,
       base::StringPiece new_password) = 0;
 
   // Attempts to remove |credential| from the password store. Returns whether
   // the remove succeeded.
-  virtual bool RemoveCompromisedCredential(
-      const api::passwords_private::CompromisedCredential& credential) = 0;
+  virtual bool RemoveInsecureCredential(
+      const api::passwords_private::InsecureCredential& credential) = 0;
 
-  // Requests to start a check for compromised passwords. Invokes |callback|
+  // Requests to start a check for insecure passwords. Invokes |callback|
   // once a check is running or the request was stopped via StopPasswordCheck().
   virtual void StartPasswordCheck(StartPasswordCheckCallback callback) = 0;
-  // Stops a check for compromised passwords.
+  // Stops a check for insecure passwords.
   virtual void StopPasswordCheck() = 0;
 
   // Returns the current status of the password check.
   virtual api::passwords_private::PasswordCheckStatus
   GetPasswordCheckStatus() = 0;
+
+  // Returns a pointer to the current instance of InsecureCredentialsManager.
+  // Needed to get notified when compromised credentials are written out to
+  // disk, since BulkLeakCheckService does not know about that step.
+  virtual password_manager::InsecureCredentialsManager*
+  GetInsecureCredentialsManager() = 0;
 };
 
 }  // namespace extensions

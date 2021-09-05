@@ -33,8 +33,6 @@ content::WebUIDataSource* CreateMediaAppUntrustedDataSource(
   source->AddResourcePath("js/app_main.js", IDR_MEDIA_APP_APP_MAIN_JS);
   source->AddResourcePath("js/app_image_handler_module.js",
                           IDR_MEDIA_APP_APP_IMAGE_HANDLER_MODULE_JS);
-  source->AddResourcePath("js/app_drop_target_module.js",
-                          IDR_MEDIA_APP_APP_DROP_TARGET_MODULE_JS);
 
   // Add all resources from chromeos_media_app_bundle_resources.pak.
   for (size_t i = 0; i < kChromeosMediaAppBundleResourcesSize; i++) {
@@ -59,7 +57,8 @@ content::WebUIDataSource* CreateMediaAppUntrustedDataSource(
       network::mojom::CSPDirectiveName::ImgSrc, "img-src blob: data: 'self';");
   // Allow styles to include inline styling needed for Polymer elements.
   source->OverrideContentSecurityPolicy(
-      network::mojom::CSPDirectiveName::StyleSrc, "style-src 'unsafe-inline';");
+      network::mojom::CSPDirectiveName::StyleSrc,
+      "style-src 'self' 'unsafe-inline';");
   // TODO(crbug.com/1098685): Trusted Type remaining WebUI.
   source->DisableTrustedTypesCSP();
   return source;

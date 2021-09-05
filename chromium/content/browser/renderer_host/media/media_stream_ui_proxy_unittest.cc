@@ -12,7 +12,7 @@
 #include "base/run_loop.h"
 #include "base/test/gmock_move_support.h"
 #include "build/build_config.h"
-#include "content/browser/frame_host/render_frame_host_delegate.h"
+#include "content/browser/renderer_host/render_frame_host_delegate.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/media_stream_request.h"
@@ -20,6 +20,7 @@
 #include "content/test/test_render_frame_host.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "ui/gfx/geometry/rect.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -37,7 +38,7 @@ class MockRenderFrameHostDelegate : public RenderFrameHostDelegate {
                                     MediaResponseCallback callback) {
     return RequestMediaAccessPermission(request, &callback);
   }
-  const WebPreferences& GetOrCreateWebPreferences() override {
+  const blink::web_pref::WebPreferences& GetOrCreateWebPreferences() override {
     return mock_web_preferences_;
   }
   MOCK_METHOD2(RequestMediaAccessPermission,
@@ -49,7 +50,7 @@ class MockRenderFrameHostDelegate : public RenderFrameHostDelegate {
                     blink::mojom::MediaStreamType type));
 
  private:
-  WebPreferences mock_web_preferences_;
+  blink::web_pref::WebPreferences mock_web_preferences_;
 };
 
 class MockResponseCallback {
@@ -443,12 +444,13 @@ class MediaStreamUIProxyFeaturePolicyTest
           devices, blink::mojom::MediaStreamRequestResult::OK, std::move(ui));
     }
 
-    const WebPreferences& GetOrCreateWebPreferences() override {
+    const blink::web_pref::WebPreferences& GetOrCreateWebPreferences()
+        override {
       return mock_web_preferences_;
     }
 
    private:
-    WebPreferences mock_web_preferences_;
+    blink::web_pref::WebPreferences mock_web_preferences_;
   };
 
   void GetResultForRequestOnIOThread(

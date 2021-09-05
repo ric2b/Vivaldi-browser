@@ -39,11 +39,12 @@ class GraphicsContext;
 class WebMouseEvent;
 
 class CORE_EXPORT ScrollbarTheme {
-  DISALLOW_COPY_AND_ASSIGN(ScrollbarTheme);
   USING_FAST_MALLOC(ScrollbarTheme);
 
  public:
   ScrollbarTheme() = default;
+  ScrollbarTheme(const ScrollbarTheme&) = delete;
+  ScrollbarTheme& operator=(const ScrollbarTheme&) = delete;
   virtual ~ScrollbarTheme() = default;
 
   // If true, then scrollbars with this theme will be painted every time
@@ -96,7 +97,7 @@ class CORE_EXPORT ScrollbarTheme {
                                  const Scrollbar* vertical_scrollbar,
                                  const DisplayItemClient&,
                                  const IntRect& corner_rect,
-                                 WebColorScheme color_scheme);
+                                 ColorScheme color_scheme);
   virtual void PaintTickmarks(GraphicsContext&,
                               const Scrollbar&,
                               const IntRect&);

@@ -15,11 +15,20 @@ if (is_mac) {
   import("//build/config/mac/mac_sdk.gni")
 }
 
+# This file depends on the legacy global sources assignment filter. It should
+# be converted to check target platform before assigning source files to the
+# sources variable. Remove this import and set_sources_assignment_filter call
+# when the file has been converted. See https://crbug.com/1018739 for details.
+import("//build/config/deprecated_default_sources_assignment_filter.gni")
+set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
+
 is_linux_without_udev = (is_linux || is_chromeos) && !use_udev
 
 test("device_unittests") {
   sources = [
     "base/synchronization/one_writer_seqlock_unittest.cc",
+    "bluetooth/adapter_unittest.cc",
+    "bluetooth/advertisement_unittest.cc",
     "bluetooth/bluetooth_adapter_android_unittest.cc",
     "bluetooth/bluetooth_adapter_mac_metrics_unittest.mm",
     "bluetooth/bluetooth_adapter_mac_unittest.mm",
@@ -144,12 +153,14 @@ test("device_unittests") {
       "fido/ctap_request_unittest.cc",
       "fido/ctap_response_unittest.cc",
       "fido/fake_fido_discovery_unittest.cc",
+      "fido/fido_device_authenticator_unittest.cc",
       "fido/fido_device_discovery_unittest.cc",
       "fido/fido_parsing_utils_unittest.cc",
       "fido/fido_request_handler_unittest.cc",
       "fido/get_assertion_handler_unittest.cc",
       "fido/get_assertion_task_unittest.cc",
       "fido/hid/fido_hid_message_unittest.cc",
+      "fido/large_blob_unittest.cc",
       "fido/mac/browsing_data_deletion_unittest.mm",
       "fido/mac/credential_metadata_unittest.cc",
       "fido/mac/get_assertion_operation_unittest_mac.mm",

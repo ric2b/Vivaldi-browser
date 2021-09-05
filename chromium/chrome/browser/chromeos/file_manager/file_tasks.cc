@@ -552,7 +552,9 @@ bool ExecuteFileTask(Profile* profile,
   }
 
   // Some action IDs of the file manager's file browser handlers require the
-  // files to be directly opened with the browser.
+  // files to be directly opened with the browser. In a multiprofile session
+  // this will always open on the current desktop, regardless of which profile
+  // owns the files, so return TASK_RESULT_OPENED.
   if (ShouldBeOpenedWithBrowser(task.app_id, task.action_id)) {
     const bool result =
         OpenFilesWithBrowser(profile, file_urls, task.action_id);
@@ -585,6 +587,9 @@ bool ExecuteFileTask(Profile* profile,
     DCHECK(!extension->from_bookmark());
     apps::LaunchPlatformAppWithFileHandler(extension_task_profile, extension,
                                            task.action_id, paths);
+    // In a multiprofile session, platform apps will open on the desktop
+    // corresponding to the profile that owns the files, so return
+    // TASK_RESULT_MESSAGE_SENT.
     if (!done.is_null())
       std::move(done).Run(
           extensions::api::file_manager_private::TASK_RESULT_MESSAGE_SENT, "");
@@ -881,10 +886,17 @@ void ChooseAndSetDefaultTask(const PrefService& pref_service,
   }
 
   // Prefer a fallback app over viewing in the browser (crbug.com/1111399).
+  // Unless it's HTML which should open in the browser (crbug.com/1121396).
   for (size_t i = 0; i < tasks->size(); ++i) {
     FullTaskDescriptor& task = (*tasks)[i];
     if (IsFallbackFileHandler(task) &&
         task.task_descriptor().action_id != "view-in-browser") {
+      const extensions::EntryInfo entry = entries[0];
+      const base::FilePath& file_path = entry.path;
+
+      if (IsHtmlFile(file_path)) {
+        break;
+      }
       task.set_is_default(true);
       return;
     }
@@ -906,6 +918,16 @@ bool IsRawImage(const base::FilePath& path) {
   constexpr const char* kRawExtensions[] = {".arw", ".cr2", ".dng", ".nef",
                                             ".nrw", ".orf", ".raf", ".rw2"};
   for (const char* extension : kRawExtensions) {
+    if (path.MatchesExtension(extension))
+      return true;
+  }
+  return false;
+}
+
+bool IsHtmlFile(const base::FilePath& path) {
+  constexpr const char* kHtmlExtensions[] = {".htm", ".html", ".mhtml",
+                                             ".xht", ".xhtm", ".xhtml"};
+  for (const char* extension : kHtmlExtensions) {
     if (path.MatchesExtension(extension))
       return true;
   }

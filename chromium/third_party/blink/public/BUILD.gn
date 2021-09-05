@@ -17,6 +17,13 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
+# This file depends on the legacy global sources assignment filter. It should
+# be converted to check target platform before assigning source files to the
+# sources variable. Remove this import and set_sources_assignment_filter call
+# when the file has been converted. See https://crbug.com/1018739 for details.
+import("//build/config/deprecated_default_sources_assignment_filter.gni")
+set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
+
 group("blink") {
   public_deps = [ ":blink_headers" ]
   deps = [
@@ -111,8 +118,6 @@ source_set("test_headers") {
 # the browser- and renderer-side components.
 source_set("blink_headers") {
   sources = [
-    "common/browser_interface_broker_proxy.h",
-    "common/thread_safe_browser_interface_broker_proxy.h",
     "platform/audio/web_audio_device_source_type.h",
     "platform/blame_context.h",
     "platform/cross_variant_mojo_util.h",
@@ -150,7 +155,6 @@ source_set("blink_headers") {
     "platform/modules/video_capture/web_video_capture_impl_manager.h",
     "platform/modules/webrtc/webrtc_logging.h",
     "platform/platform.h",
-    "platform/pointer_properties.h",
     "platform/scheduler/web_rail_mode_observer.h",
     "platform/scheduler/web_render_widget_scheduling_state.h",
     "platform/scheduler/web_renderer_process_type.h",
@@ -172,7 +176,6 @@ source_set("blink_headers") {
     "platform/web_callbacks.h",
     "platform/web_client_hints_type.h",
     "platform/web_code_cache_loader.h",
-    "platform/web_color_scheme.h",
     "platform/web_common.h",
     "platform/web_computed_ax_tree.h",
     "platform/web_connection_type.h",
@@ -204,14 +207,12 @@ source_set("blink_headers") {
     "platform/web_fetch_client_settings_object.h",
     "platform/web_file_system_type.h",
     "platform/web_float_rect.h",
-    "platform/web_float_size.h",
     "platform/web_font.h",
     "platform/web_font_description.h",
     "platform/web_font_render_style.h",
     "platform/web_frame_request_blocker.h",
     "platform/web_gesture_curve.h",
     "platform/web_graphics_context_3d_provider.h",
-    "platform/web_history_scroll_restoration_type.h",
     "platform/web_http_body.h",
     "platform/web_http_header_visitor.h",
     "platform/web_http_load_info.h",
@@ -272,12 +273,15 @@ source_set("blink_headers") {
     "platform/web_url_response.h",
     "platform/web_vector.h",
     "platform/web_video_frame_submitter.h",
-    "platform/web_viewport_style.h",
     "platform/web_worker_fetch_context.h",
     "platform/webaudiosourceprovider_impl.h",
     "platform/websocket_handshake_throttle.h",
     "web/blink.h",
     "web/modules/autofill/web_form_element_observer.h",
+    "web/modules/media/audio/fuchsia_audio_device_factory.h",
+    "web/modules/media/audio/web_audio_device_factory.h",
+    "web/modules/media/audio/web_audio_input_ipc_factory.h",
+    "web/modules/media/audio/web_audio_output_ipc_factory.h",
     "web/modules/media/webmediaplayer_util.h",
     "web/modules/mediastream/encoded_video_frame.h",
     "web/modules/mediastream/media_stream_video_sink.h",
@@ -354,6 +358,7 @@ source_set("blink_headers") {
     "web/web_navigation_policy.h",
     "web/web_navigation_type.h",
     "web/web_node.h",
+    "web/web_optimization_guide_hints.h",
     "web/web_option_element.h",
     "web/web_origin_policy.h",
     "web/web_page_popup.h",

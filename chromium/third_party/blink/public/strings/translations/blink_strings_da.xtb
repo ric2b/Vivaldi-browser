@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">slutnote</translation>
 <translation id="1281252709823657822">dialogboks</translation>
 <translation id="1306460908038601864">Fra</translation>
+<translation id="1311894908970423688">Værdien skal være <ph name="VALUE_DATE_OR_TIME" />.</translation>
 <translation id="1335095011850992622">anerkendelser</translation>
 <translation id="1342835525016946179">artikel</translation>
 <translation id="1359897965706325498">banner</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> elementer</translation>
 <translation id="1480676835519562650">listefelt med flere valg, <ph name="SELECTED" /> af <ph name="COUNT" /> er valgt.</translation>
 <translation id="1589122976691792535">område</translation>
 <translation id="1591562245178063882">Denne måned</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033">Uge <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">Spor <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">afkrydsningsfelt</translation>
+<translation id="2307576640803031502">liste, element <ph name="INDEX" /> af <ph name="COUNT" /></translation>
 <translation id="2311842470354187719">sideskift</translation>
 <translation id="2335594187091864976">dato- og tidsvælger</translation>
 <translation id="2393030564806080191">Hexadecimal farveværdi</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">flere valgmuligheder</translation>
 <translation id="576709008726043716">indledning</translation>
 <translation id="57838592816432529">Slå lyden fra</translation>
+<translation id="5860033963881614850">Fra</translation>
 <translation id="588258955323874662">Fuld skærm</translation>
 <translation id="5888666972993069672">Caster nu til <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">søgefelt</translation>
+<translation id="5916664084637901428">Til</translation>
 <translation id="5939518447894949180">Nulstil</translation>
 <translation id="5966707198760109579">Uge</translation>
 <translation id="5987525920412732405">skalafelt</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">Ryd</translation>
 <translation id="668171684555832681">Andre...</translation>
 <translation id="6692633176391053278">stepper</translation>
+<translation id="6709093583001123835">Værdien skal være <ph name="VALUE" />.</translation>
 <translation id="6709570249143506788">Dårlig afspilningskvalitet</translation>
 <translation id="6755330956360078551">værktøjstip</translation>
 <translation id="6790428901817661496">Afspil</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, med start <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Integreret billede</translation>
 <translation id="9168329111483466115">fodnote</translation>
+<translation id="945780513535800434">Delvis markering</translation>
 <translation id="954003015749068518">start integreret billede</translation>
 <translation id="966787709310836684">menu</translation>
 </translationbundle>

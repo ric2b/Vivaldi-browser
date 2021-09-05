@@ -24,6 +24,7 @@
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace blink {
 class WebFrame;
@@ -55,9 +56,6 @@ class ContentSettingsAgentImpl
     virtual base::Optional<bool> AllowReadFromClipboard();
     virtual base::Optional<bool> AllowWriteToClipboard();
     virtual base::Optional<bool> AllowMutationEvents();
-    virtual base::Optional<bool> AllowRunningInsecureContent(
-        bool allowed_per_settings,
-        const blink::WebURL& resource_url);
     virtual void PassiveInsecureContentFound(const blink::WebURL& resource_url);
   };
 
@@ -78,19 +76,19 @@ class ContentSettingsAgentImpl
   // Sends an IPC notification that the specified content type was blocked.
   void DidBlockContentType(ContentSettingsType settings_type);
 
+  // Helper to convert StorageType to its Mojo counterpart.
+  static mojom::ContentSettingsManager::StorageType ConvertToMojoStorageType(
+      StorageType storage_type);
+
   // blink::WebContentSettingsClient:
-  bool AllowDatabase() override;
-  void RequestFileSystemAccessAsync(
-      base::OnceCallback<void(bool)> callback) override;
+  void AllowStorageAccess(StorageType storage_type,
+                          base::OnceCallback<void(bool)> callback) override;
+  bool AllowStorageAccessSync(StorageType type) override;
   bool AllowImage(bool enabled_per_settings,
                   const blink::WebURL& image_url) override;
-  bool AllowIndexedDB() override;
-  bool AllowCacheStorage() override;
-  bool AllowWebLocks() override;
   bool AllowScript(bool enabled_per_settings) override;
   bool AllowScriptFromSource(bool enabled_per_settings,
                              const blink::WebURL& script_url) override;
-  bool AllowStorage(bool local) override;
   bool AllowReadFromClipboard(bool default_value) override;
   bool AllowWriteToClipboard(bool default_value) override;
   bool AllowMutationEvents(bool default_value) override;
@@ -148,10 +146,6 @@ class ContentSettingsAgentImpl
   // settings.
   bool IsWhitelistedForContentSettings() const;
 
-  // Common logic for AllowIndexedDB, AllowCacheStorage, etc.
-  bool AllowStorageAccess(
-      mojom::ContentSettingsManager::StorageType storage_type);
-
   // A getter for |content_settings_manager_| that ensures it is bound.
   mojom::ContentSettingsManager& GetContentSettingsManager();
 
@@ -169,8 +163,8 @@ class ContentSettingsAgentImpl
   // Stores if images, scripts, and plugins have actually been blocked.
   base::flat_set<ContentSettingsType> content_blocked_;
 
-  // Caches the result of AllowStorage.
-  using StoragePermissionsKey = std::pair<GURL, bool>;
+  // Caches the result of AllowStorageAccess.
+  using StoragePermissionsKey = std::pair<url::Origin, StorageType>;
   base::flat_map<StoragePermissionsKey, bool> cached_storage_permissions_;
 
   // Caches the result of AllowScript.

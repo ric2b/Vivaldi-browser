@@ -124,10 +124,10 @@ class ModelTypeRegistry : public ModelTypeConnector,
   // The known ModelSafeWorkers.
   std::map<ModelSafeGroup, scoped_refptr<ModelSafeWorker>> workers_map_;
 
-  // A copy of the directory's most recent cryptographer.
+  // A copy of the most recent cryptographer.
   std::unique_ptr<Cryptographer> cryptographer_;
 
-  // A copy of the directory's most recent passphrase type.
+  // A copy of the most recent passphrase type.
   PassphraseType passphrase_type_ =
       SyncEncryptionHandler::kInitialPassphraseType;
 
@@ -144,7 +144,7 @@ class ModelTypeRegistry : public ModelTypeConnector,
 
   // The set of observers of per-type debug info.
   //
-  // Each of the DirectoryTypeDebugInfoEmitters needs such a list.  There's
+  // Each of the DataTypeDebugInfoEmitter needs such a list. There's
   // a lot of them, and their lifetimes are unpredictable, so it makes the
   // book-keeping easier if we just store the list here.  That way it's
   // guaranteed to live as long as this sync backend.

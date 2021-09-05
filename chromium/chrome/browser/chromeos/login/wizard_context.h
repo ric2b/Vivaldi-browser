@@ -50,6 +50,10 @@ class WizardContext {
   // WizardController.
   bool device_has_users = false;
 
+  // Whether wizard controller should skip to the update screen. Setting this
+  // flag will ignore hid detection results.
+  bool skip_to_update_for_tests = false;
+
   // Whether user creation screen is enabled (could be disabled due to disabled
   // feature or on managed device). Set by UserCreationScreen::MaybeSkip and
   // will be flipped to true when screen is shown.

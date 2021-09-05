@@ -2632,26 +2632,37 @@ int HttpCache::Transaction::ValidateEntryHeadersAndContinue() {
   return OK;
 }
 
-int HttpCache::Transaction::BeginExternallyConditionalizedRequest() {
-  DCHECK_EQ(UPDATE, mode_);
+bool HttpCache::Transaction::
+    ExternallyConditionalizedValidationHeadersMatchEntry() const {
   DCHECK(external_validation_.initialized);
 
   for (size_t i = 0; i < base::size(kValidationHeaders); i++) {
     if (external_validation_.values[i].empty())
       continue;
+
     // Retrieve either the cached response's "etag" or "last-modified" header.
     std::string validator;
     response_.headers->EnumerateHeader(
         nullptr, kValidationHeaders[i].related_response_header_name,
         &validator);
 
-    if (response_.headers->response_code() != 200 || truncated_ ||
-        validator.empty() || validator != external_validation_.values[i]) {
-      // The externally conditionalized request is not a validation request
-      // for our existing cache entry. Proceed with caching disabled.
-      UpdateCacheEntryStatus(CacheEntryStatus::ENTRY_OTHER);
-      DoneWithEntry(true);
+    if (validator != external_validation_.values[i]) {
+      return false;
     }
+  }
+
+  return true;
+}
+
+int HttpCache::Transaction::BeginExternallyConditionalizedRequest() {
+  DCHECK_EQ(UPDATE, mode_);
+
+  if (response_.headers->response_code() != 200 || truncated_ ||
+      !ExternallyConditionalizedValidationHeadersMatchEntry()) {
+    // The externally conditionalized request is not a validation request
+    // for our existing cache entry. Proceed with caching disabled.
+    UpdateCacheEntryStatus(CacheEntryStatus::ENTRY_OTHER);
+    DoneWithEntry(true);
   }
 
   TransitionToState(STATE_SEND_REQUEST);
@@ -3601,13 +3612,17 @@ void HttpCache::Transaction::TransitionToState(State state) {
 bool HttpCache::Transaction::ShouldDisableCaching(
     const HttpResponseHeaders* headers) const {
   bool disable_caching = false;
-  if (base::FeatureList::IsEnabled(features::kTurnOffStreamingMediaCaching) &&
-      IsOnBatteryPower()) {
-    // If we're running on battery, and the acquired content is 'large' and
-    // not already cached, and we have a MIME type of audio or video, then
-    // disable the cache for this response. We based our initial definition of
-    // 'large' on the disk cache maximum block size of 16K, which we observed
-    // captures the majority of responses from various MSE implementations.
+  if (base::FeatureList::IsEnabled(
+          features::kTurnOffStreamingMediaCachingAlways) ||
+      (base::FeatureList::IsEnabled(
+           features::kTurnOffStreamingMediaCachingOnBattery) &&
+       IsOnBatteryPower())) {
+    // If the feature is always enabled or enabled while we're running on
+    // battery, and the acquired content is 'large' and not already cached, and
+    // we have a MIME type of audio or video, then disable the cache for this
+    // response. We based our initial definition of 'large' on the disk cache
+    // maximum block size of 16K, which we observed captures the majority of
+    // responses from various MSE implementations.
     static constexpr int kMaxContentSize = 4096 * 4;
     std::string mime_type;
     base::CompareCase insensitive_ascii = base::CompareCase::INSENSITIVE_ASCII;

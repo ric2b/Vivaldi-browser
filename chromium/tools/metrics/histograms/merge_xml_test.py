@@ -12,8 +12,10 @@ class MergeXmlTest(unittest.TestCase):
 
   def testMergeFiles(self):
     """Checks that enums.xml and histograms.xml can merge successfully."""
-    merged = merge_xml.PrettyPrintMergedFiles(
-        [histogram_paths.TEST_ENUMS_XML, histogram_paths.TEST_HISTOGRAMS_XML])
+    merged = merge_xml.PrettyPrintMergedFiles([
+        histogram_paths.TEST_ENUMS_XML, histogram_paths.TEST_HISTOGRAMS_XML,
+        histogram_paths.TEST_SUFFIXES_XML
+    ])
     # If ukm.xml is not provided, there is no need to populate the
     # UkmEventNameHash enum.
     expected_merged_xml = """
@@ -44,8 +46,8 @@ class MergeXmlTest(unittest.TestCase):
 <histograms>
 
 <variants name="TestToken">
-  <variant name="Variant1" label="Label1"/>
-  <variant name="Variant2" label="Label2"/>
+  <variant name="Variant1" summary="Label1"/>
+  <variant name="Variant2" summary="Label2"/>
 </variants>
 
 <histogram name="Foo.Bar" units="xxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyzzzz"
@@ -83,6 +85,12 @@ class MergeXmlTest(unittest.TestCase):
 </histograms>
 
 <histogram_suffixes_list>
+
+<histogram_suffixes name="Test.EnumHistogramSuffixes" separator="."
+    ordering="prefix,2">
+  <suffix name="TestEnumSuffix" label="The enum histogram_suffixes"/>
+  <affected-histogram name="Test.EnumHistogram"/>
+</histogram_suffixes>
 
 <histogram_suffixes name="Test.HistogramSuffixes" separator=".">
   <suffix name="TestSuffix" label="A histogram_suffixes"/>
@@ -137,8 +145,8 @@ class MergeXmlTest(unittest.TestCase):
 <histograms>
 
 <variants name="TestToken">
-  <variant name="Variant1" label="Label1"/>
-  <variant name="Variant2" label="Label2"/>
+  <variant name="Variant1" summary="Label1"/>
+  <variant name="Variant2" summary="Label2"/>
 </variants>
 
 <histogram name="Foo.Bar" units="xxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyzzzz"
@@ -176,6 +184,12 @@ class MergeXmlTest(unittest.TestCase):
 </histograms>
 
 <histogram_suffixes_list>
+
+<histogram_suffixes name="Test.EnumHistogramSuffixes" separator="."
+    ordering="prefix,2">
+  <suffix name="TestEnumSuffix" label="The enum histogram_suffixes"/>
+  <affected-histogram name="Test.EnumHistogram"/>
+</histogram_suffixes>
 
 <histogram_suffixes name="Test.HistogramSuffixes" separator=".">
   <suffix name="TestSuffix" label="A histogram_suffixes"/>

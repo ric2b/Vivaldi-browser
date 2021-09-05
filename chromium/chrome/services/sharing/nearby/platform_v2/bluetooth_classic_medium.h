@@ -13,6 +13,7 @@
 #include "device/bluetooth/public/mojom/adapter.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/bindings/shared_remote.h"
 #include "third_party/nearby/src/cpp/platform_v2/api/bluetooth_classic.h"
 
 namespace location {
@@ -24,9 +25,10 @@ namespace chrome {
 // implementation consumes the synchronous signatures of
 // bluetooth::mojom::Adapter methods.
 class BluetoothClassicMedium : public api::BluetoothClassicMedium,
-                               public bluetooth::mojom::AdapterClient {
+                               public bluetooth::mojom::AdapterObserver {
  public:
-  explicit BluetoothClassicMedium(bluetooth::mojom::Adapter* adapter);
+  explicit BluetoothClassicMedium(
+      const mojo::SharedRemote<bluetooth::mojom::Adapter>& adapter);
   ~BluetoothClassicMedium() override;
 
   BluetoothClassicMedium(const BluetoothClassicMedium&) = delete;
@@ -41,9 +43,10 @@ class BluetoothClassicMedium : public api::BluetoothClassicMedium,
   std::unique_ptr<api::BluetoothServerSocket> ListenForService(
       const std::string& service_name,
       const std::string& service_uuid) override;
+  BluetoothDevice* GetRemoteDevice(const std::string& mac_address) override;
 
  private:
-  // bluetooth::mojom::AdapterClient:
+  // bluetooth::mojom::AdapterObserver:
   void PresentChanged(bool present) override;
   void PoweredChanged(bool powered) override;
   void DiscoverableChanged(bool discoverable) override;
@@ -52,13 +55,11 @@ class BluetoothClassicMedium : public api::BluetoothClassicMedium,
   void DeviceChanged(bluetooth::mojom::DeviceInfoPtr device) override;
   void DeviceRemoved(bluetooth::mojom::DeviceInfoPtr device) override;
 
-  // This reference is owned by the top-level Nearby Connections interface and
-  // will always outlive this object.
-  bluetooth::mojom::Adapter* adapter_ = nullptr;
+  mojo::SharedRemote<bluetooth::mojom::Adapter> adapter_;
 
-  // |adapter_client_| is only set and bound during active discovery so that
+  // |adapter_observer_| is only set and bound during active discovery so that
   // events we don't care about outside of discovery don't pile up.
-  mojo::Receiver<bluetooth::mojom::AdapterClient> adapter_client_{this};
+  mojo::Receiver<bluetooth::mojom::AdapterObserver> adapter_observer_{this};
 
   // These properties are only set while discovery is active.
   base::Optional<DiscoveryCallback> discovery_callback_;

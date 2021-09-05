@@ -8,11 +8,13 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/optional.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/exo/input_trace.h"
 #include "components/exo/pointer_constraint_delegate.h"
 #include "components/exo/pointer_delegate.h"
 #include "components/exo/pointer_gesture_pinch_delegate.h"
+#include "components/exo/pointer_stylus_delegate.h"
 #include "components/exo/relative_pointer_delegate.h"
 #include "components/exo/seat.h"
 #include "components/exo/shell_surface_util.h"
@@ -32,7 +34,9 @@
 #include "ui/display/manager/managed_display_info.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
+#include "ui/events/event_constants.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
+#include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/gfx/transform_util.h"
 #include "ui/views/widget/widget.h"
 
@@ -70,6 +74,14 @@ bool SameLocation(const gfx::PointF& location_in_target,
   gfx::Vector2dF offset = location_in_target - location;
   return offset.LengthSquared() < (2 * kLocatedEventEpsilonSquared);
 }
+
+// Granularity for reporting force/pressure values coming from styli or other
+// devices that are normalized from 0 to 1, used to limit sending noisy values.
+const float kForceGranularity = 1e-2f;
+
+// Granularity for reporting tilt values coming from styli or other devices in
+// degrees, used to limit sending noisy values.
+const float kTiltGranularity = 1.f;
 
 display::ManagedDisplayInfo GetCaptureDisplayInfo() {
   display::ManagedDisplayInfo capture_info;
@@ -115,9 +127,8 @@ Pointer::Pointer(PointerDelegate* delegate, Seat* seat)
 
 Pointer::~Pointer() {
   delegate_->OnPointerDestroying(this);
-  if (focus_surface_) {
+  if (focus_surface_)
     focus_surface_->RemoveSurfaceObserver(this);
-  }
   if (pinch_delegate_)
     pinch_delegate_->OnPointerDestroying(this);
   if (relative_pointer_delegate_)
@@ -128,6 +139,8 @@ Pointer::~Pointer() {
     VLOG(1) << "Pointer constraint broken by pointer destruction";
     pointer_constraint_delegate_->OnConstraintBroken();
   }
+  if (stylus_delegate_)
+    stylus_delegate_->OnPointerDestroying(this);
   WMHelper* helper = WMHelper::GetInstance();
   helper->RemovePreTargetHandler(this);
   // TODO(sky): CursorClient does not exist in mash
@@ -302,6 +315,19 @@ void Pointer::DisablePointerCapture() {
   UpdateCursor();
 }
 
+void Pointer::SetStylusDelegate(PointerStylusDelegate* delegate) {
+  stylus_delegate_ = delegate;
+
+  // Reset last reported values to default.
+  last_pointer_type_ = ui::EventPointerType::kUnknown;
+  last_force_ = std::numeric_limits<float>::quiet_NaN();
+  last_tilt_ = gfx::Vector2dF();
+}
+
+bool Pointer::HasStylusDelegate() const {
+  return !!stylus_delegate_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // SurfaceDelegate overrides:
 
@@ -346,7 +372,7 @@ void Pointer::OnMouseEvent(ui::MouseEvent* event) {
   if (event->type() == ui::ET_MOUSE_CAPTURE_CHANGED)
     return;
 
-  seat_->SetLastLocation(event->root_location());
+  seat_->SetLastPointerLocation(event->root_location_f());
 
   Surface* target = GetEffectiveTargetForEvent(event);
   gfx::PointF location_in_target = event->location_f();
@@ -367,6 +393,13 @@ void Pointer::OnMouseEvent(ui::MouseEvent* event) {
 
   TRACE_EXO_INPUT_EVENT(event);
 
+  const auto& details = event->pointer_details();
+  if (stylus_delegate_ && last_pointer_type_ != details.pointer_type) {
+    last_pointer_type_ = details.pointer_type;
+    stylus_delegate_->OnPointerToolChange(details.pointer_type);
+    delegate_->OnPointerFrame();
+  }
+
   if (event->IsMouseEvent()) {
     // Generate motion event if location changed. We need to check location
     // here as mouse movement can generate both "moved" and "entered" events
@@ -379,9 +412,23 @@ void Pointer::OnMouseEvent(ui::MouseEvent* event) {
                              ? SameLocation(location_in_root, location_)
                              : gfx::ToFlooredPoint(location_in_root) ==
                                    gfx::ToFlooredPoint(location_);
+
+    // Ordinal motion is sent only on platforms that support it, which is
+    // indicated by the presence of a flag.
+    //
+    // TODO(b/161755250): the ifdef is only necessary because of the feature
+    // flag. This code should work fine on non-cros.
+    base::Optional<gfx::Vector2dF> ordinal_motion = base::nullopt;
+#if defined(OS_CHROMEOS)
+    if (event->flags() & ui::EF_UNADJUSTED_MOUSE &&
+        base::FeatureList::IsEnabled(chromeos::features::kExoOrdinalMotion)) {
+      ordinal_motion = event->movement();
+    }
+#endif
+
     if (!same_location) {
-      bool needs_frame =
-          HandleRelativePointerMotion(event->time_stamp(), location_in_root);
+      bool needs_frame = HandleRelativePointerMotion(
+          event->time_stamp(), location_in_root, ordinal_motion);
       if (capture_window_) {
         if (ShouldMoveToCenter())
           MoveCursorToCenterOfActiveDisplay();
@@ -457,6 +504,31 @@ void Pointer::OnMouseEvent(ui::MouseEvent* event) {
     default:
       NOTREACHED();
       break;
+  }
+
+  if (stylus_delegate_) {
+    bool needs_frame = false;
+    // Report the force value when either:
+    // - switching from a device that supports force to one that doesn't or
+    //   vice-versa (since force is NaN if the device doesn't support it), OR
+    // - the force value differs from the last reported force by greater than
+    //   the granularity.
+    // Using std::isgreaterequal for quiet error handling for NaNs.
+    if (std::isnan(last_force_) != std::isnan(details.force) ||
+        std::isgreaterequal(abs(last_force_ - details.force),
+                            kForceGranularity)) {
+      last_force_ = details.force;
+      stylus_delegate_->OnPointerForce(event->time_stamp(), details.force);
+      needs_frame = true;
+    }
+    if (abs(last_tilt_.x() - details.tilt_x) >= kTiltGranularity ||
+        abs(last_tilt_.y() - details.tilt_y) >= kTiltGranularity) {
+      last_tilt_ = gfx::Vector2dF(details.tilt_x, details.tilt_y);
+      stylus_delegate_->OnPointerTilt(event->time_stamp(), last_tilt_);
+      needs_frame = true;
+    }
+    if (needs_frame)
+      delegate_->OnPointerFrame();
   }
 
   last_event_type_ = event->type();
@@ -748,8 +820,10 @@ void Pointer::MoveCursorToCenterOfActiveDisplay() {
   root->MoveCursorTo(p);
 }
 
-bool Pointer::HandleRelativePointerMotion(base::TimeTicks time_stamp,
-                                          gfx::PointF location_in_root) {
+bool Pointer::HandleRelativePointerMotion(
+    base::TimeTicks time_stamp,
+    gfx::PointF location_in_root,
+    const base::Optional<gfx::Vector2dF>& ordinal_motion) {
   if (!relative_pointer_delegate_)
     return false;
 
@@ -766,9 +840,10 @@ bool Pointer::HandleRelativePointerMotion(base::TimeTicks time_stamp,
     }
   }
 
-  gfx::PointF delta(location_in_root.x() - location_.x(),
-                    location_in_root.y() - location_.y());
-  relative_pointer_delegate_->OnPointerRelativeMotion(time_stamp, delta);
+  gfx::Vector2dF delta = location_in_root - location_;
+  relative_pointer_delegate_->OnPointerRelativeMotion(
+      time_stamp, delta,
+      ordinal_motion.has_value() ? ordinal_motion.value() : delta);
   return true;
 }
 

@@ -63,7 +63,8 @@ void TestPasswordsPrivateDelegate::GetPasswordExceptionsList(
 
 bool TestPasswordsPrivateDelegate::ChangeSavedPassword(
     const std::vector<int>& ids,
-    base::string16 new_password) {
+    const base::string16& new_username,
+    const base::string16& new_password) {
   for (int id : ids) {
     if (static_cast<size_t>(id) >= current_entries_.size()) {
       return false;
@@ -178,31 +179,49 @@ void TestPasswordsPrivateDelegate::SetAccountStorageOptIn(
   is_opted_in_for_account_storage_ = opt_in;
 }
 
-std::vector<api::passwords_private::CompromisedCredential>
+std::vector<api::passwords_private::InsecureCredential>
 TestPasswordsPrivateDelegate::GetCompromisedCredentials() {
-  api::passwords_private::CompromisedCredential credential;
+  api::passwords_private::InsecureCredential credential;
   credential.username = "alice";
   credential.formatted_origin = "example.com";
   credential.detailed_origin = "https://example.com";
   credential.is_android_credential = false;
   credential.change_password_url =
       std::make_unique<std::string>("https://example.com/change-password");
-  credential.compromise_type = api::passwords_private::COMPROMISE_TYPE_LEAKED;
-  credential.compromise_time = 1583236800000;  // Mar 03 2020 12:00:00 UTC
-  credential.elapsed_time_since_compromise = base::UTF16ToUTF8(
-      TimeFormat::Simple(TimeFormat::FORMAT_ELAPSED, TimeFormat::LENGTH_LONG,
-                         base::TimeDelta::FromDays(3)));
-
-  std::vector<api::passwords_private::CompromisedCredential> credentials;
+  credential.compromised_info =
+      std::make_unique<api::passwords_private::CompromisedInfo>();
+  // Mar 03 2020 12:00:00 UTC
+  credential.compromised_info->compromise_time = 1583236800000;
+  credential.compromised_info->elapsed_time_since_compromise =
+      base::UTF16ToUTF8(TimeFormat::Simple(TimeFormat::FORMAT_ELAPSED,
+                                           TimeFormat::LENGTH_LONG,
+                                           base::TimeDelta::FromDays(3)));
+  credential.compromised_info->compromise_type =
+      api::passwords_private::COMPROMISE_TYPE_LEAKED;
+  std::vector<api::passwords_private::InsecureCredential> credentials;
   credentials.push_back(std::move(credential));
   return credentials;
 }
 
-void TestPasswordsPrivateDelegate::GetPlaintextCompromisedPassword(
-    api::passwords_private::CompromisedCredential credential,
+std::vector<api::passwords_private::InsecureCredential>
+TestPasswordsPrivateDelegate::GetWeakCredentials() {
+  api::passwords_private::InsecureCredential credential;
+  credential.username = "bob";
+  credential.formatted_origin = "example.com";
+  credential.detailed_origin = "https://example.com";
+  credential.is_android_credential = false;
+  credential.change_password_url =
+      std::make_unique<std::string>("https://example.com/change-password");
+  std::vector<api::passwords_private::InsecureCredential> credentials;
+  credentials.push_back(std::move(credential));
+  return credentials;
+}
+
+void TestPasswordsPrivateDelegate::GetPlaintextInsecurePassword(
+    api::passwords_private::InsecureCredential credential,
     api::passwords_private::PlaintextReason reason,
     content::WebContents* web_contents,
-    PlaintextCompromisedPasswordCallback callback) {
+    PlaintextInsecurePasswordCallback callback) {
   // Return a mocked password value.
   if (!plaintext_password_) {
     std::move(callback).Run(base::nullopt);
@@ -214,25 +233,24 @@ void TestPasswordsPrivateDelegate::GetPlaintextCompromisedPassword(
   std::move(callback).Run(std::move(credential));
 }
 
-// Fake implementation of ChangeCompromisedCredential. This succeeds if the
-// delegate knows of a compromised credential with the same id.
-bool TestPasswordsPrivateDelegate::ChangeCompromisedCredential(
-    const api::passwords_private::CompromisedCredential& credential,
+// Fake implementation of ChangeInsecureCredential. This succeeds if the
+// delegate knows of a insecure credential with the same id.
+bool TestPasswordsPrivateDelegate::ChangeInsecureCredential(
+    const api::passwords_private::InsecureCredential& credential,
     base::StringPiece new_password) {
-  return std::any_of(compromised_credentials_.begin(),
-                     compromised_credentials_.end(),
-                     [&credential](const auto& compromised_credential) {
-                       return compromised_credential.id == credential.id;
+  return std::any_of(insecure_credentials_.begin(), insecure_credentials_.end(),
+                     [&credential](const auto& insecure_credential) {
+                       return insecure_credential.id == credential.id;
                      });
 }
 
-// Fake implementation of RemoveCompromisedCredential. This succeeds if the
-// delegate knows of a compromised credential with the same id.
-bool TestPasswordsPrivateDelegate::RemoveCompromisedCredential(
-    const api::passwords_private::CompromisedCredential& credential) {
-  return base::EraseIf(compromised_credentials_,
-                       [&credential](const auto& compromised_credential) {
-                         return compromised_credential.id == credential.id;
+// Fake implementation of RemoveInsecureCredential. This succeeds if the
+// delegate knows of a insecure credential with the same id.
+bool TestPasswordsPrivateDelegate::RemoveInsecureCredential(
+    const api::passwords_private::InsecureCredential& credential) {
+  return base::EraseIf(insecure_credentials_,
+                       [&credential](const auto& insecure_credential) {
+                         return insecure_credential.id == credential.id;
                        }) != 0;
 }
 
@@ -259,6 +277,11 @@ TestPasswordsPrivateDelegate::GetPasswordCheckStatus() {
   return status;
 }
 
+password_manager::InsecureCredentialsManager*
+TestPasswordsPrivateDelegate::GetInsecureCredentialsManager() {
+  return nullptr;
+}
+
 void TestPasswordsPrivateDelegate::SetProfile(Profile* profile) {
   profile_ = profile;
 }
@@ -268,9 +291,9 @@ void TestPasswordsPrivateDelegate::SetOptedInForAccountStorage(bool opted_in) {
 }
 
 void TestPasswordsPrivateDelegate::AddCompromisedCredential(int id) {
-  api::passwords_private::CompromisedCredential cred;
+  api::passwords_private::InsecureCredential cred;
   cred.id = id;
-  compromised_credentials_.push_back(std::move(cred));
+  insecure_credentials_.push_back(std::move(cred));
 }
 
 void TestPasswordsPrivateDelegate::SendSavedPasswordsList() {

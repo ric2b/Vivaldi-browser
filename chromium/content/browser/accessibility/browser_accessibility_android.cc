@@ -265,8 +265,20 @@ bool BrowserAccessibilityAndroid::IsRangeType() const {
           (GetRole() == ax::mojom::Role::kSplitter && IsFocusable()));
 }
 
+bool BrowserAccessibilityAndroid::IsReportingCheckable() const {
+  // To communicate kMixed state Checkboxes, we will rely on state description,
+  // so we will not report node as checkable to avoid duplicate utterances.
+  return IsCheckable() &&
+         GetData().GetCheckedState() != ax::mojom::CheckedState::kMixed;
+}
+
 bool BrowserAccessibilityAndroid::IsScrollable() const {
   return GetBoolAttribute(ax::mojom::BoolAttribute::kScrollable);
+}
+
+bool BrowserAccessibilityAndroid::IsSeekControl() const {
+  // Range types should have seek control options, except progress bars.
+  return IsRangeType() && (GetRole() != ax::mojom::Role::kProgressIndicator);
 }
 
 bool BrowserAccessibilityAndroid::IsSelected() const {
@@ -319,6 +331,11 @@ bool BrowserAccessibilityAndroid::IsInterestingOnAndroid() const {
 
   // If it's not focusable but has a control role, then it's interesting.
   if (ui::IsControl(GetRole()))
+    return true;
+
+  // Mark progress indicators as interesting, since they are not focusable and
+  // not a control, but users should be able to swipe/navigate to them.
+  if (GetRole() == ax::mojom::Role::kProgressIndicator)
     return true;
 
   // If we are the direct descendant of a link and have no siblings/children,
@@ -543,6 +560,23 @@ base::string16 BrowserAccessibilityAndroid::GetStateDescription() const {
   if (IsMultiselectable())
     return GetMultiselectableStateDescription();
 
+  // For Toggle buttons, we will append "on"/"off" in the state description.
+  if (GetRole() == ax::mojom::Role::kToggleButton)
+    return GetToggleButtonStateDescription();
+
+  // For Checkboxes, if we are in a kMixed state, we will communicate
+  // "partially checked" through the state description.
+  if (IsCheckable() && !IsReportingCheckable())
+    return GetCheckboxStateDescription();
+
+  // For list boxes, use state description to communicate child item count.
+  if (GetRole() == ax::mojom::Role::kListBox)
+    return GetListBoxStateDescription();
+
+  // For list box items, use state description to communicate index of item.
+  if (GetRole() == ax::mojom::Role::kListBoxOption)
+    return GetListBoxItemStateDescription();
+
   // Otherwise we will not use state description
   return base::string16();
 }
@@ -577,6 +611,61 @@ base::string16 BrowserAccessibilityAndroid::GetMultiselectableStateDescription()
       content_client->GetLocalizedString(
           IDS_AX_MULTISELECTABLE_STATE_DESCRIPTION),
       values, nullptr);
+}
+
+base::string16 BrowserAccessibilityAndroid::GetToggleButtonStateDescription()
+    const {
+  content::ContentClient* content_client = content::GetContentClient();
+
+  // For checked Toggle buttons, we will return "on", otherwise "off".
+  if (IsChecked())
+    return content_client->GetLocalizedString(IDS_AX_TOGGLE_BUTTON_ON);
+
+  return content_client->GetLocalizedString(IDS_AX_TOGGLE_BUTTON_OFF);
+}
+
+base::string16 BrowserAccessibilityAndroid::GetCheckboxStateDescription()
+    const {
+  content::ContentClient* content_client = content::GetContentClient();
+
+  return content_client->GetLocalizedString(IDS_AX_CHECKBOX_PARTIALLY_CHECKED);
+}
+
+base::string16 BrowserAccessibilityAndroid::GetListBoxStateDescription() const {
+  content::ContentClient* content_client = content::GetContentClient();
+
+  // For empty list boxes, we will return an empty string.
+  int item_count = GetItemCount();
+  if (!item_count)
+    return base::string16();
+
+  // Otherwise, we will communicate "x items" as the state description.
+  return content_client->GetLocalizedString(IDS_AX_LIST_BOX_STATE_DESCRIPTION,
+                                            base::NumberToString16(item_count));
+}
+
+base::string16 BrowserAccessibilityAndroid::GetListBoxItemStateDescription()
+    const {
+  content::ContentClient* content_client = content::GetContentClient();
+
+  BrowserAccessibilityAndroid* parent =
+      static_cast<BrowserAccessibilityAndroid*>(PlatformGetParent());
+
+  // If we cannot find the parent collection, escape with an empty string.
+  if (!parent)
+    return base::string16();
+
+  // For list box items, we will communicate "in list, item x of y". We add
+  // one (1) to our index to offset from counting at 0.
+  int item_index = GetItemIndex() + 1;
+  int item_count = parent->GetItemCount();
+
+  return base::ReplaceStringPlaceholders(
+      content_client->GetLocalizedString(
+          IDS_AX_LIST_BOX_ITEM_STATE_DESCRIPTION),
+      std::vector<base::string16>({base::NumberToString16(item_index),
+                                   base::NumberToString16(item_count)}),
+      nullptr);
 }
 
 std::string BrowserAccessibilityAndroid::GetRoleString() const {
@@ -992,7 +1081,6 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
     case ax::mojom::Role::kMenuBar:
       message_id = IDS_AX_ROLE_MENU_BAR;
       break;
-    case ax::mojom::Role::kMenuButton:
     case ax::mojom::Role::kMenuItem:
       message_id = IDS_AX_ROLE_MENU_ITEM;
       break;

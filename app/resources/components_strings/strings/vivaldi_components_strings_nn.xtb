@@ -98,6 +98,7 @@
 <translation id="4235360514405112390">Gyldig</translation>
 <translation id="4250431568374086873">Tilkoplinga til denne nettstaden er ikkje heilt trygg</translation>
 <translation id="4265872034478892965">Tillate av administratoren din</translation>
+<translation id="4305666528087210886">Fikk ikkje tilgang til fila</translation>
 <translation id="4312866146174492540">Blokker (standard)</translation>
 <translation id="4356973930735388585">Åtakarar på denne nettstaden vil kanskje prøva å installera farlege program på maskina di som stel eller slettar opplysningane dine (t.d. bilde, passord, meldingar og kredittkort).</translation>
 <translation id="4408413947728134509">Informasjonskapslar <ph name="NUM_COOKIES" /></translation>
@@ -152,6 +153,7 @@
 <translation id="6165508094623778733">Lær mer</translation>
 <translation id="6177128806592000436">Tilkoplinga til denne nettstaden er ikkje trygt</translation>
 <translation id="6203231073485539293">Kontroller internettsambandet</translation>
+<translation id="6225522625585012689">Besøk &lt;strong&gt;vivaldi://policy&lt;/strong&gt; for å sjå lista over blokkerte adresser og andre reglar systemadministratoren har sett i verk.</translation>
 <translation id="625755898061068298">Du har valt å slå av tryggleiksåtvaringane for denne nettstaden.</translation>
 <translation id="6264485186158353794">Attende til tryggleiken</translation>
 <translation id="6305205051461490394">Klarer ikkje å nå <ph name="URL" />.</translation>
@@ -201,7 +203,6 @@
 <translation id="8041940743680923270">Bruk systemstandarden (spør)</translation>
 <translation id="808894953321890993">Endra passordet</translation>
 <translation id="8119307142152921512">sporing og annonsar</translation>
-<translation id="8142868475871995937">Besøk &lt;strong&gt;vivaldi://policy&lt;/strong&gt; for å sjå lista over blokkerte adresser og andre reglar frå systemadministratoren.</translation>
 <translation id="8149426793427495338">Datamaskina di er i kvilemodus.</translation>
 <translation id="8150722005171944719">Klarer ikkje å lesa fila hos <ph name="URL" /> .  Ho kan vera fjerna, flytta eller du manglar løyve til å få tilgang.</translation>
 <translation id="8184538546369750125">Bruk systemstandarden (tillat)</translation>
@@ -224,6 +225,7 @@
 <translation id="9011424611726486705">Opna nettstadinnstillingar</translation>
 <translation id="9025348182339809926">(Ugyldig)</translation>
 <translation id="9039213469156557790">Vidare inneheld denne sida andre ressursar som ikkje er trygge. Desse kan verta lesne av andre under overføringa og kan verta endra av ein åtakar for å endra korleis sida oppfører seg.</translation>
+<translation id="9062620674789239642">Fila kan ha vorte flytta, endra eller sletta.</translation>
 <translation id="9069693763241529744">Blokkert av ei utviding</translation>
 <translation id="9169664750068251925">Blokker alltid på denne sida</translation>
 <translation id="9180553614777056266">Annonseblokkering</translation>

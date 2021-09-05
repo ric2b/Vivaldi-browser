@@ -150,41 +150,36 @@ class TableView::HighlightPathGenerator : public views::HighlightPathGenerator {
       return SkPath();
 
     // Draw a focus indicator around the active cell.
-    return SkPath().addRect(gfx::RectToSkRect(table->GetActiveCellBounds()));
+    gfx::Rect bounds = table->GetActiveCellBounds();
+    bounds.set_x(table->GetMirroredXForRect(bounds));
+    return SkPath().addRect(gfx::RectToSkRect(bounds));
   }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(HighlightPathGenerator);
 };
 
-TableView::TableView(ui::TableModel* model,
-                     const std::vector<ui::TableColumn>& columns,
-                     TableTypes table_type,
-                     bool single_selection)
-    : columns_(columns),
-      table_type_(table_type),
-      single_selection_(single_selection) {
+TableView::TableView() {
   constexpr int kTextContext = style::CONTEXT_TABLE_ROW;
   constexpr int kTextStyle = style::STYLE_PRIMARY;
   font_list_ = style::GetFont(kTextContext, kTextStyle);
   row_height_ = LayoutProvider::GetControlHeightForFont(kTextContext,
                                                         kTextStyle, font_list_);
 
-  for (const auto& column : columns) {
-    VisibleColumn visible_column;
-    visible_column.column = column;
-    visible_columns_.push_back(visible_column);
-  }
-
   // Always focusable, even on Mac (consistent with NSTableView).
   SetFocusBehavior(FocusBehavior::ALWAYS);
   views::HighlightPathGenerator::Install(
       this, std::make_unique<TableView::HighlightPathGenerator>());
-  SetModel(model);
-  if (model_)
-    UpdateVirtualAccessibilityChildren();
 
   focus_ring_ = FocusRing::Install(this);
+}
+
+TableView::TableView(ui::TableModel* model,
+                     const std::vector<ui::TableColumn>& columns,
+                     TableTypes table_type,
+                     bool single_selection)
+    : TableView() {
+  Init(model, std::move(columns), table_type, single_selection);
 }
 
 TableView::~TableView() {
@@ -200,6 +195,25 @@ std::unique_ptr<ScrollView> TableView::CreateScrollViewWithTable(
   scroll_view->SetContents(std::move(table));
   table_ptr->CreateHeaderIfNecessary(scroll_view.get());
   return scroll_view;
+}
+
+void TableView::Init(ui::TableModel* model,
+                     const std::vector<ui::TableColumn>& columns,
+                     TableTypes table_type,
+                     bool single_selection) {
+  columns_ = columns;
+  table_type_ = table_type;
+  single_selection_ = single_selection;
+
+  for (const auto& column : columns) {
+    VisibleColumn visible_column;
+    visible_column.column = column;
+    visible_columns_.push_back(visible_column);
+  }
+
+  SetModel(model);
+  if (model_)
+    UpdateVirtualAccessibilityChildren();
 }
 
 // TODO(sky): this doesn't support arbitrarily changing the model, rename this
@@ -301,11 +315,6 @@ bool TableView::IsColumnVisible(int id) const {
   };
   return std::any_of(visible_columns_.cbegin(), visible_columns_.cend(),
                      ids_match);
-}
-
-void TableView::AddColumn(const ui::TableColumn& col) {
-  DCHECK(!HasColumn(col.id));
-  columns_.push_back(col);
 }
 
 bool TableView::HasColumn(int id) const {
@@ -489,17 +498,17 @@ bool TableView::OnKeyPressed(const ui::KeyEvent& event) {
 
     case ui::VKEY_LEFT:
       if (PlatformStyle::kTableViewSupportsKeyboardNavigationByCell) {
+        const AdvanceDirection direction = base::i18n::IsRTL()
+                                               ? AdvanceDirection::kIncrement
+                                               : AdvanceDirection::kDecrement;
         if (IsCmdOrCtrl(event)) {
           if (active_visible_column_index_ != -1 && header_) {
-            const AdvanceDirection direction =
-                base::i18n::IsRTL() ? AdvanceDirection::kIncrement
-                                    : AdvanceDirection::kDecrement;
             header_->ResizeColumnViaKeyboard(active_visible_column_index_,
                                              direction);
             focus_ring_->SchedulePaint();
           }
         } else {
-          AdvanceActiveVisibleColumn(AdvanceDirection::kDecrement);
+          AdvanceActiveVisibleColumn(direction);
         }
         return true;
       }
@@ -507,17 +516,17 @@ bool TableView::OnKeyPressed(const ui::KeyEvent& event) {
 
     case ui::VKEY_RIGHT:
       if (PlatformStyle::kTableViewSupportsKeyboardNavigationByCell) {
+        const AdvanceDirection direction = base::i18n::IsRTL()
+                                               ? AdvanceDirection::kDecrement
+                                               : AdvanceDirection::kIncrement;
         if (IsCmdOrCtrl(event)) {
           if (active_visible_column_index_ != -1 && header_) {
-            const AdvanceDirection direction =
-                base::i18n::IsRTL() ? AdvanceDirection::kDecrement
-                                    : AdvanceDirection::kIncrement;
             header_->ResizeColumnViaKeyboard(active_visible_column_index_,
                                              direction);
             focus_ring_->SchedulePaint();
           }
         } else {
-          AdvanceActiveVisibleColumn(AdvanceDirection::kIncrement);
+          AdvanceActiveVisibleColumn(direction);
         }
         return true;
       }
@@ -928,7 +937,11 @@ gfx::Rect TableView::GetCellBounds(int row, int visible_column_index) const {
 }
 
 gfx::Rect TableView::GetActiveCellBounds() const {
-  return GetCellBounds(selection_model_.active(), active_visible_column_index_);
+  if (selection_model_.active() == ui::ListSelectionModel::kUnselectedIndex) {
+    return gfx::Rect();
+  }
+  return GetCellBounds(ModelToView(selection_model_.active()),
+                       active_visible_column_index_);
 }
 
 void TableView::AdjustCellBoundsForText(int visible_column_index,
@@ -1522,17 +1535,16 @@ DEFINE_ENUM_CONVERTERS(TableTypes,
                        {TableTypes::ICON_AND_TEXT,
                         base::ASCIIToUTF16("ICON_AND_TEXT")})
 
-BEGIN_METADATA(TableView)
-METADATA_PARENT_CLASS(View)
-ADD_READONLY_PROPERTY_METADATA(TableView, int, RowCount)
-ADD_READONLY_PROPERTY_METADATA(TableView, int, FirstSelectedRow)
-ADD_READONLY_PROPERTY_METADATA(TableView, bool, HasFocusIndicator)
-ADD_PROPERTY_METADATA(TableView, int, ActiveVisibleColumnIndex)
-ADD_READONLY_PROPERTY_METADATA(TableView, bool, IsSorted)
-ADD_READONLY_PROPERTY_METADATA(TableView, int, RowHeight)
-ADD_PROPERTY_METADATA(TableView, bool, SelectOnRemove)
-ADD_READONLY_PROPERTY_METADATA(TableView, TableTypes, TableType)
-ADD_PROPERTY_METADATA(TableView, bool, SortOnPaint)
-END_METADATA()
+BEGIN_METADATA(TableView, View)
+ADD_READONLY_PROPERTY_METADATA(int, RowCount)
+ADD_READONLY_PROPERTY_METADATA(int, FirstSelectedRow)
+ADD_READONLY_PROPERTY_METADATA(bool, HasFocusIndicator)
+ADD_PROPERTY_METADATA(int, ActiveVisibleColumnIndex)
+ADD_READONLY_PROPERTY_METADATA(bool, IsSorted)
+ADD_READONLY_PROPERTY_METADATA(int, RowHeight)
+ADD_PROPERTY_METADATA(bool, SelectOnRemove)
+ADD_READONLY_PROPERTY_METADATA(TableTypes, TableType)
+ADD_PROPERTY_METADATA(bool, SortOnPaint)
+END_METADATA
 
 }  // namespace views

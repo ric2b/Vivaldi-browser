@@ -24,6 +24,7 @@
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/data_model/autofill_metadata.h"
+#include "components/autofill/core/browser/data_model/autofill_offer_data.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/data_model/credit_card_cloud_token_data.h"
@@ -138,8 +139,10 @@ int GetAutofillEntryCount(const base::string16& name,
 
 class AutofillTableTest : public testing::Test {
  public:
-  AutofillTableTest() {}
-  ~AutofillTableTest() override {}
+  AutofillTableTest() = default;
+  AutofillTableTest(const AutofillTableTest&) = delete;
+  AutofillTableTest& operator=(const AutofillTableTest&) = delete;
+  ~AutofillTableTest() override = default;
 
  protected:
   void SetUp() override {
@@ -160,9 +163,6 @@ class AutofillTableTest : public testing::Test {
   std::unique_ptr<AutofillTable> table_;
   std::unique_ptr<WebDatabase> db_;
   base::test::ScopedFeatureList scoped_feature_list_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(AutofillTableTest);
 };
 
 TEST_F(AutofillTableTest, Autofill) {
@@ -1034,9 +1034,12 @@ TEST_F(AutofillTableTest,
 }
 
 TEST_F(AutofillTableTest, AutofillProfile_StructuredAddresses) {
-  // Enable the structured addresses.
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillAddressEnhancementVotes);
+  // Enable the structured addresses features.
+  scoped_feature_list_.InitWithFeatures(
+      {features::kAutofillAddressEnhancementVotes,
+       features::kAutofillEnableSupportForMoreStructureInAddresses},
+      {});
+  ;
 
   AutofillProfile profile;
   profile.set_origin(std::string());
@@ -1047,9 +1050,30 @@ TEST_F(AutofillTableTest, AutofillProfile_StructuredAddresses) {
   profile.SetRawInfoWithVerificationStatus(ADDRESS_HOME_STREET_NAME,
                                            ASCIIToUTF16("Street Name"),
                                            VerificationStatus::kFormatted);
+  profile.SetRawInfoWithVerificationStatus(ADDRESS_HOME_DEPENDENT_LOCALITY,
+                                           ASCIIToUTF16("Dependent Locality"),
+                                           VerificationStatus::kObserved);
+
+  profile.SetRawInfoWithVerificationStatus(
+      ADDRESS_HOME_CITY, ASCIIToUTF16("City"), VerificationStatus::kObserved);
+
+  profile.SetRawInfoWithVerificationStatus(
+      ADDRESS_HOME_STATE, ASCIIToUTF16("State"), VerificationStatus::kObserved);
+
+  profile.SetRawInfoWithVerificationStatus(ADDRESS_HOME_SORTING_CODE,
+                                           ASCIIToUTF16("Sorting Code"),
+                                           VerificationStatus::kObserved);
+
+  profile.SetRawInfoWithVerificationStatus(
+      ADDRESS_HOME_ZIP, ASCIIToUTF16("ZIP"), VerificationStatus::kObserved);
+
+  profile.SetRawInfoWithVerificationStatus(
+      ADDRESS_HOME_COUNTRY, ASCIIToUTF16("DE"), VerificationStatus::kObserved);
+
   profile.SetRawInfoWithVerificationStatus(
       ADDRESS_HOME_DEPENDENT_STREET_NAME, ASCIIToUTF16("Dependent Street Name"),
       VerificationStatus::kObserved);
+
   profile.SetRawInfoWithVerificationStatus(ADDRESS_HOME_HOUSE_NUMBER,
                                            ASCIIToUTF16("House Number"),
                                            VerificationStatus::kUserVerified);
@@ -1065,9 +1089,44 @@ TEST_F(AutofillTableTest, AutofillProfile_StructuredAddresses) {
   // Add the profile to the table.
   EXPECT_TRUE(table_->AddAutofillProfile(profile));
 
+  // Read the profile from the table and verify the correct values.
   std::unique_ptr<AutofillProfile> db_profile =
       table_->GetAutofillProfile(profile.guid());
   ASSERT_TRUE(db_profile);
+
+  EXPECT_EQ(db_profile->GetVerificationStatus(ADDRESS_HOME_STREET_NAME),
+            VerificationStatus::kFormatted);
+
+  EXPECT_EQ(
+      db_profile->GetVerificationStatus(ADDRESS_HOME_DEPENDENT_STREET_NAME),
+      VerificationStatus::kObserved);
+
+  EXPECT_EQ(db_profile->GetVerificationStatus(ADDRESS_HOME_HOUSE_NUMBER),
+            VerificationStatus::kUserVerified);
+
+  EXPECT_EQ(db_profile->GetVerificationStatus(ADDRESS_HOME_SUBPREMISE),
+            VerificationStatus::kUserVerified);
+
+  EXPECT_EQ(db_profile->GetVerificationStatus(ADDRESS_HOME_PREMISE_NAME),
+            VerificationStatus::kUserVerified);
+
+  EXPECT_EQ(db_profile->GetVerificationStatus(ADDRESS_HOME_DEPENDENT_LOCALITY),
+            VerificationStatus::kObserved);
+
+  EXPECT_EQ(db_profile->GetVerificationStatus(ADDRESS_HOME_CITY),
+            VerificationStatus::kObserved);
+
+  EXPECT_EQ(db_profile->GetVerificationStatus(ADDRESS_HOME_STATE),
+            VerificationStatus::kObserved);
+
+  EXPECT_EQ(db_profile->GetVerificationStatus(ADDRESS_HOME_SORTING_CODE),
+            VerificationStatus::kObserved);
+
+  EXPECT_EQ(db_profile->GetVerificationStatus(ADDRESS_HOME_ZIP),
+            VerificationStatus::kObserved);
+
+  EXPECT_EQ(db_profile->GetVerificationStatus(ADDRESS_HOME_COUNTRY),
+            VerificationStatus::kObserved);
 
   EXPECT_EQ(db_profile->GetRawInfo(ADDRESS_HOME_STREET_NAME),
             ASCIIToUTF16("Street Name"));
@@ -1079,16 +1138,26 @@ TEST_F(AutofillTableTest, AutofillProfile_StructuredAddresses) {
             ASCIIToUTF16("Subpremise"));
   EXPECT_EQ(db_profile->GetRawInfo(ADDRESS_HOME_PREMISE_NAME),
             ASCIIToUTF16("Premise"));
+  EXPECT_EQ(db_profile->GetRawInfo(ADDRESS_HOME_DEPENDENT_LOCALITY),
+            ASCIIToUTF16("Dependent Locality"));
+  EXPECT_EQ(db_profile->GetRawInfo(ADDRESS_HOME_CITY), ASCIIToUTF16("City"));
+  EXPECT_EQ(db_profile->GetRawInfo(ADDRESS_HOME_STATE), ASCIIToUTF16("State"));
+  EXPECT_EQ(db_profile->GetRawInfo(ADDRESS_HOME_SORTING_CODE),
+            ASCIIToUTF16("Sorting Code"));
+  EXPECT_EQ(db_profile->GetRawInfo(ADDRESS_HOME_ZIP), ASCIIToUTF16("ZIP"));
+  EXPECT_EQ(db_profile->GetRawInfo(ADDRESS_HOME_COUNTRY), ASCIIToUTF16("DE"));
 
-  // Verify that it is correct.
   EXPECT_EQ(profile, *db_profile);
 }
 
 TEST_F(AutofillTableTest,
        AutofillProfile_StructuredAddresses_Eventual_Deletion) {
   // Enable the structured addresses.
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillAddressEnhancementVotes);
+  scoped_feature_list_.InitWithFeatures(
+      {features::kAutofillAddressEnhancementVotes,
+       features::kAutofillEnableSupportForMoreStructureInAddresses},
+      {});
+  ;
 
   AutofillProfile profile;
   profile.set_origin(std::string());
@@ -1135,10 +1204,11 @@ TEST_F(AutofillTableTest,
   EXPECT_EQ(db_profile->GetRawInfo(ADDRESS_HOME_PREMISE_NAME),
             ASCIIToUTF16("Premise"));
 
-  // Deactivate the feature.
+  // Deactivate the features.
   scoped_feature_list_.Reset();
-  scoped_feature_list_.InitAndDisableFeature(
-      features::kAutofillAddressEnhancementVotes);
+  scoped_feature_list_.InitWithFeatures(
+      {}, {features::kAutofillAddressEnhancementVotes,
+           features::kAutofillEnableSupportForMoreStructureInAddresses});
 
   // Retrieve the address and verify that the structured tokens are not written.
   std::unique_ptr<AutofillProfile> legacy_db_profile =
@@ -1177,7 +1247,7 @@ TEST_F(AutofillTableTest,
   ASSERT_TRUE(s.is_valid());
   ASSERT_TRUE(s.Run());
 
-  // And very that it is written.
+  // And verify that it is written.
   sql::Statement s1(db_->GetSQLConnection()->GetUniqueStatement(
       "SELECT count(*) "
       "FROM autofill_profile_addresses "
@@ -1189,29 +1259,17 @@ TEST_F(AutofillTableTest,
 
   // Enable the feature again and load the profile.
   scoped_feature_list_.Reset();
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillAddressEnhancementVotes);
+  scoped_feature_list_.InitWithFeatures(
+      {features::kAutofillAddressEnhancementVotes,
+       features::kAutofillEnableSupportForMoreStructureInAddresses},
+      {});
+  ;
 
-  // Retrieve the address and verify that the structured tokens are not written
-  // because the data is in an inconsistent state that should trigger a complete
-  // removal of the structured address.
+  // Retrieve the address and manually query the data base to verify that the
+  // structured address was deleted.
   std::unique_ptr<AutofillProfile> migrated_db_profile =
       table_->GetAutofillProfile(profile.guid());
   ASSERT_TRUE(migrated_db_profile);
-
-  EXPECT_EQ(migrated_db_profile->GetRawInfo(ADDRESS_HOME_STREET_NAME),
-            base::string16());
-  EXPECT_EQ(migrated_db_profile->GetRawInfo(ADDRESS_HOME_DEPENDENT_STREET_NAME),
-            base::string16());
-  EXPECT_EQ(migrated_db_profile->GetRawInfo(ADDRESS_HOME_HOUSE_NUMBER),
-            base::string16());
-  EXPECT_EQ(migrated_db_profile->GetRawInfo(ADDRESS_HOME_SUBPREMISE),
-            base::string16());
-  EXPECT_EQ(migrated_db_profile->GetRawInfo(ADDRESS_HOME_PREMISE_NAME),
-            base::string16());
-
-  // Manually query the data base to verify that the structured address was
-  // deleted.
   sql::Statement s2(db_->GetSQLConnection()->GetUniqueStatement(
       "SELECT count(*) "
       "FROM autofill_profile_addresses "
@@ -2447,6 +2505,7 @@ TEST_F(AutofillTableTest, SetGetServerCards) {
   inputs[0].SetRawInfo(CREDIT_CARD_EXP_MONTH, ASCIIToUTF16("1"));
   inputs[0].SetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR, ASCIIToUTF16("2020"));
   inputs[0].SetRawInfo(CREDIT_CARD_NUMBER, ASCIIToUTF16("4111111111111111"));
+  inputs[0].set_instrument_id(321);
 
   inputs.push_back(CreditCard(CreditCard::MASKED_SERVER_CARD, "b456"));
   inputs[1].SetRawInfo(CREDIT_CARD_NAME_FULL, ASCIIToUTF16("Rick Roman"));
@@ -2458,6 +2517,7 @@ TEST_F(AutofillTableTest, SetGetServerCards) {
   base::string16 nickname = ASCIIToUTF16("Grocery card");
   inputs[1].SetNickname(nickname);
   inputs[1].set_card_issuer(CreditCard::Issuer::GOOGLE);
+  inputs[1].set_instrument_id(123);
 
   test::SetServerCreditCards(table_.get(), inputs);
 
@@ -2488,6 +2548,9 @@ TEST_F(AutofillTableTest, SetGetServerCards) {
 
   EXPECT_EQ(CreditCard::Issuer::ISSUER_UNKNOWN, outputs[0]->card_issuer());
   EXPECT_EQ(CreditCard::Issuer::GOOGLE, outputs[1]->card_issuer());
+
+  EXPECT_EQ(321, outputs[0]->instrument_id());
+  EXPECT_EQ(123, outputs[1]->instrument_id());
 }
 
 TEST_F(AutofillTableTest, SetGetRemoveServerCardMetadata) {
@@ -2697,6 +2760,7 @@ TEST_F(AutofillTableTest, SetServerCardsData) {
   inputs[0].SetNetworkForMaskedCard(kVisaCard);
   inputs[0].SetServerStatus(CreditCard::EXPIRED);
   inputs[0].SetNickname(ASCIIToUTF16("Grocery card"));
+  inputs[0].set_instrument_id(1);
   table_->SetServerCardsData(inputs);
 
   // Make sure the card was added correctly.
@@ -3230,8 +3294,10 @@ struct GetFormValuesTestCase {
 
 class GetFormValuesTest : public testing::TestWithParam<GetFormValuesTestCase> {
  public:
-  GetFormValuesTest() {}
-  ~GetFormValuesTest() override {}
+  GetFormValuesTest() = default;
+  GetFormValuesTest(const GetFormValuesTest&) = delete;
+  GetFormValuesTest& operator=(const GetFormValuesTest&) = delete;
+  ~GetFormValuesTest() override = default;
 
  protected:
   void SetUp() override {
@@ -3251,9 +3317,6 @@ class GetFormValuesTest : public testing::TestWithParam<GetFormValuesTestCase> {
   base::ScopedTempDir temp_dir_;
   std::unique_ptr<AutofillTable> table_;
   std::unique_ptr<WebDatabase> db_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(GetFormValuesTest);
 };
 
 TEST_P(GetFormValuesTest, GetFormValuesForElementName_SubstringMatchEnabled) {
@@ -3330,11 +3393,11 @@ class AutofillTableTestPerModelType
     : public AutofillTableTest,
       public testing::WithParamInterface<syncer::ModelType> {
  public:
-  AutofillTableTestPerModelType() {}
-  ~AutofillTableTestPerModelType() override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(AutofillTableTestPerModelType);
+  AutofillTableTestPerModelType() = default;
+  AutofillTableTestPerModelType(const AutofillTableTestPerModelType&) = delete;
+  AutofillTableTestPerModelType& operator=(
+      const AutofillTableTestPerModelType&) = delete;
+  ~AutofillTableTestPerModelType() override = default;
 };
 
 TEST_P(AutofillTableTestPerModelType, AutofillNoMetadata) {
@@ -3612,6 +3675,103 @@ TEST_F(AutofillTableTest, GetAllUpiIds) {
 
   std::vector<std::string> upi_ids = table_->GetAllUpiIds();
   ASSERT_THAT(upi_ids, UnorderedElementsAre(upi_id1, upi_id2));
+}
+
+TEST_F(AutofillTableTest, SetAndGetCreditCardOfferData) {
+  // Create test data.
+  AutofillOfferData credit_card_offer_1;
+  AutofillOfferData credit_card_offer_2;
+  AutofillOfferData credit_card_offer_3;
+
+  // Set Offer ID.
+  credit_card_offer_1.offer_id = 1;
+  credit_card_offer_2.offer_id = 2;
+  credit_card_offer_3.offer_id = 3;
+
+  // Set reward amounts.
+  credit_card_offer_1.offer_reward_amount = "$5";
+  credit_card_offer_2.offer_reward_amount = "10%";
+  credit_card_offer_3.offer_reward_amount = "5%";
+
+  // Set expiry.
+  credit_card_offer_1.expiry = base::Time::FromDoubleT(1000);
+  credit_card_offer_2.expiry = base::Time::FromDoubleT(2000);
+  credit_card_offer_3.expiry = base::Time::FromDoubleT(3000);
+
+  // Set details URL.
+  credit_card_offer_1.offer_details_url =
+      GURL("https://www.offer_1_example.com/");
+  credit_card_offer_2.offer_details_url =
+      GURL("https://www.offer_2_example.com/");
+  credit_card_offer_3.offer_details_url =
+      GURL("https://www.offer_3_example.com/");
+
+  // Set merchant domains for offer 1.
+  credit_card_offer_1.merchant_domain.emplace_back(
+      "http://www.merchant_domain_1_1.com/");
+  credit_card_offer_1.merchant_domain.emplace_back(
+      "http://www.merchant_domain_1_2.com/");
+  credit_card_offer_1.merchant_domain.emplace_back(
+      "http://www.merchant_domain_1_3.com/");
+  // Set merchant domains for offer 2.
+  credit_card_offer_2.merchant_domain.emplace_back(
+      "http://www.merchant_domain_2_1.com/");
+  // Set merchant domains for offer 3.
+  credit_card_offer_3.merchant_domain.emplace_back(
+      "http://www.merchant_domain_3_1.com/");
+  credit_card_offer_3.merchant_domain.emplace_back(
+      "http://www.merchant_domain_3_2.com/");
+
+  // Set eligible instrument ID for offer 1.
+  credit_card_offer_1.eligible_instrument_id.push_back(10);
+  credit_card_offer_1.eligible_instrument_id.push_back(11);
+  // Set eligible instrument ID for offer 2.
+  credit_card_offer_2.eligible_instrument_id.push_back(20);
+  credit_card_offer_2.eligible_instrument_id.push_back(21);
+  credit_card_offer_2.eligible_instrument_id.push_back(22);
+  // Set eligible instrument ID for offer 3.
+  credit_card_offer_3.eligible_instrument_id.push_back(30);
+
+  // Create vector of offer data.
+  std::vector<AutofillOfferData> autofill_offer_data;
+  autofill_offer_data.push_back(credit_card_offer_1);
+  autofill_offer_data.push_back(credit_card_offer_2);
+  autofill_offer_data.push_back(credit_card_offer_3);
+
+  table_->SetCreditCardOffers(autofill_offer_data);
+
+  std::vector<std::unique_ptr<AutofillOfferData>> output_offer_data;
+
+  EXPECT_TRUE(table_->GetCreditCardOffers(&output_offer_data));
+  EXPECT_EQ(autofill_offer_data.size(), output_offer_data.size());
+
+  for (const auto& data : autofill_offer_data) {
+    // Find output data with corresponding Offer ID.
+    size_t output_index = 0;
+    while (output_index < output_offer_data.size()) {
+      if (data.offer_id == output_offer_data[output_index]->offer_id) {
+        break;
+      }
+      output_index++;
+    }
+
+    // Expect to find matching Offer ID's.
+    EXPECT_NE(output_index, output_offer_data.size());
+
+    // All corresponding fields must be equal.
+    EXPECT_EQ(data.offer_id, output_offer_data[output_index]->offer_id);
+    EXPECT_EQ(data.offer_reward_amount,
+              output_offer_data[output_index]->offer_reward_amount);
+    EXPECT_EQ(data.expiry, output_offer_data[output_index]->expiry);
+    EXPECT_EQ(data.offer_details_url.spec(),
+              output_offer_data[output_index]->offer_details_url.spec());
+    ASSERT_THAT(data.merchant_domain,
+                testing::UnorderedElementsAreArray(
+                    output_offer_data[output_index]->merchant_domain));
+    ASSERT_THAT(data.eligible_instrument_id,
+                testing::UnorderedElementsAreArray(
+                    output_offer_data[output_index]->eligible_instrument_id));
+  }
 }
 
 }  // namespace autofill

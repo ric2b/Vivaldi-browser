@@ -11,6 +11,7 @@ source_set("interstitial") {
   ]
   deps = [
     "../:adblock_filter",
+    "//chrome/browser/engagement:mojo_bindings",
     "//content/public/browser",
   ]
 }

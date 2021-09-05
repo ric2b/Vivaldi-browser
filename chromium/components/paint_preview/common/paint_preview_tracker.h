@@ -62,9 +62,6 @@ class PaintPreviewTracker {
       const gfx::Rect& rect,
       const base::UnguessableToken& embedding_token);
 
-  // Sets the scroll position for the top layer frame.
-  void SetScrollForFrame(const SkISize& scroll);
-
   // Adds the glyphs in |blob| to the glyph usage tracker for the |blob|'s
   // associated typface.
   void AddGlyphs(const SkTextBlob* blob);
@@ -72,22 +69,27 @@ class PaintPreviewTracker {
   // Adds |link| with bounding box |rect| to the list of links.
   void AnnotateLink(const GURL& link, const SkRect& rect);
 
-  // Transforms the cull rect for |id| to be in the correct place and return a
-  // non-zero replacement ID if the cull rect needed to be updated.
-  uint32_t TransformContentForRemoteFrame(uint32_t id);
+  // Used when walking the PaintOpBuffer to transforms the clip rect associated
+  // with the SkPicture with |id| to be relative to the top-left corner of
+  // the root space of the current frame associated with this tracker using
+  // |matrix_|. Originally the clip rect is relative to the current matrix stack
+  // of the canvas at time of drawing. The result in stored and accessible via
+  // the PictureSerializationContext during serialization.
+  void TransformClipForFrame(uint32_t id);
 
   // Data Serialization -------------------------------------------------------
   // NOTE: once any of these methods are called the PaintPreviewTracker should
   // be considered immutable.
 
   // Inserts the OOP subframe placeholder associated with |content_id| into
-  // |canvas|.
+  // |canvas|. The cull rect of the placeholder will encode the position and
+  // size of the the subframe in its parent's coordinate system.
   void CustomDataToSkPictureCallback(SkCanvas* canvas, uint32_t content_id);
 
   // Expose internal maps for use in MakeSerialProcs().
   // NOTE: Cannot be const due to how SkPicture procs work.
   PictureSerializationContext* GetPictureSerializationContext() {
-    return &content_id_to_embedding_token_;
+    return &picture_context_;
   }
   TypefaceUsageMap* GetTypefaceUsageMap() { return &typeface_glyph_usage_; }
 
@@ -107,12 +109,11 @@ class PaintPreviewTracker {
   const base::Optional<base::UnguessableToken> embedding_token_;
   const bool is_main_frame_;
 
-  SkISize scroll_;
   SkMatrix matrix_;
   std::vector<SkMatrix> states_;
 
   std::vector<mojom::LinkDataPtr> links_;
-  PictureSerializationContext content_id_to_embedding_token_;
+  PictureSerializationContext picture_context_;
   TypefaceUsageMap typeface_glyph_usage_;
   base::flat_map<uint32_t, sk_sp<SkPicture>> subframe_pics_;
 

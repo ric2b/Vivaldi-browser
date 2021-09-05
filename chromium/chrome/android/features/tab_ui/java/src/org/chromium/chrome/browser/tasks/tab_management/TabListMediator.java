@@ -213,7 +213,7 @@ class TabListMediator {
                     ()
                             -> TabGroupUtils.maybeShowIPH(
                                     FeatureConstants.TAB_GROUPS_YOUR_TABS_ARE_TOGETHER_FEATURE,
-                                    anchor),
+                                    anchor, null),
                     IPH_DELAY_MS);
         }
     };
@@ -577,6 +577,67 @@ class TabListMediator {
             }
         };
 
+        // TODO(meiliang): follow up with unit tests to test the close signal is sent correctly with
+        // the recommendedNextTab.
+        mTabClosedListener = new TabActionListener() {
+            @Override
+            public void run(int tabId) {
+                // TODO(crbug.com/990698): Consider disabling all touch events during animation.
+                if (mModel.indexFromId(tabId) == TabModel.INVALID_TAB_INDEX) return;
+                Tab closingTab =
+                        TabModelUtils.getTabById(mTabModelSelector.getCurrentModel(), tabId);
+                if (closingTab == null) return;
+
+                RecordUserAction.record("MobileTabClosed." + mComponentName);
+
+                if (mActionsOnAllRelatedTabs) {
+                    List<Tab> related = getRelatedTabsForId(tabId);
+                    if (related.size() > 1) {
+                        onGroupClosedFrom(tabId);
+                        mTabModelSelector.getCurrentModel().closeMultipleTabs(related, true);
+                        return;
+                    }
+                }
+                onTabClosedFrom(tabId, mComponentName);
+
+                Tab currentTab = mTabModelSelector.getCurrentTab();
+                Tab nextTab = currentTab == closingTab ? getNextTab(tabId) : null;
+
+                mTabModelSelector.getCurrentModel().closeTab(
+                        closingTab, nextTab, false, false, true);
+            }
+
+            private Tab getNextTab(int closingTabId) {
+                int closingTabIndex = mModel.indexFromId(closingTabId);
+
+                if (closingTabIndex == TabModel.INVALID_TAB_INDEX) {
+                    assert false;
+                    return null;
+                }
+
+                int nextTabId = Tab.INVALID_TAB_ID;
+                if (mModel.size() > 1) {
+                    PropertyModel nextCardModel = closingTabIndex == 0
+                            ? mModel.get(closingTabIndex + 1).model
+                            : mModel.get(closingTabIndex - 1).model;
+                    nextTabId = nextCardModel.get(CARD_TYPE) == TAB
+                            ? nextCardModel.get(TabProperties.TAB_ID)
+                            : Tab.INVALID_TAB_ID;
+                }
+
+                return TabModelUtils.getTabById(mTabModelSelector.getCurrentModel(), nextTabId);
+            }
+        };
+
+        mTabGridItemTouchHelperCallback =
+                new TabGridItemTouchHelperCallback(mModel, mTabModelSelector, mTabClosedListener,
+                        mTabGridDialogHandler, mComponentName, mActionsOnAllRelatedTabs);
+    }
+
+    public void initWithNative(Profile profile) {
+        mTabListFaviconProvider.initWithNative(profile);
+        mTabModelSelector.getTabModelFilterProvider().addTabModelFilterObserver(mTabModelObserver);
+
         if (mTabModelSelector.getTabModelFilterProvider().getCurrentTabModelFilter()
                         instanceof TabGroupModelFilter) {
             mTabGroupObserver = new EmptyTabGroupModelFilterObserver() {
@@ -715,67 +776,6 @@ class TabListMediator {
                     .addTabGroupObserver(mTabGroupObserver);
         }
 
-        // TODO(meiliang): follow up with unit tests to test the close signal is sent correctly with
-        // the recommendedNextTab.
-        mTabClosedListener = new TabActionListener() {
-            @Override
-            public void run(int tabId) {
-                // TODO(crbug.com/990698): Consider disabling all touch events during animation.
-                if (mModel.indexFromId(tabId) == TabModel.INVALID_TAB_INDEX) return;
-                Tab closingTab =
-                        TabModelUtils.getTabById(mTabModelSelector.getCurrentModel(), tabId);
-                if (closingTab == null) return;
-
-                RecordUserAction.record("MobileTabClosed." + mComponentName);
-
-                if (mActionsOnAllRelatedTabs) {
-                    List<Tab> related = getRelatedTabsForId(tabId);
-                    if (related.size() > 1) {
-                        onGroupClosedFrom(tabId);
-                        mTabModelSelector.getCurrentModel().closeMultipleTabs(related, true);
-                        return;
-                    }
-                }
-                onTabClosedFrom(tabId, mComponentName);
-
-                Tab currentTab = mTabModelSelector.getCurrentTab();
-                Tab nextTab = currentTab == closingTab ? getNextTab(tabId) : null;
-
-                mTabModelSelector.getCurrentModel().closeTab(
-                        closingTab, nextTab, false, false, true);
-            }
-
-            private Tab getNextTab(int closingTabId) {
-                int closingTabIndex = mModel.indexFromId(closingTabId);
-
-                if (closingTabIndex == TabModel.INVALID_TAB_INDEX) {
-                    assert false;
-                    return null;
-                }
-
-                int nextTabId = Tab.INVALID_TAB_ID;
-                if (mModel.size() > 1) {
-                    PropertyModel nextCardModel = closingTabIndex == 0
-                            ? mModel.get(closingTabIndex + 1).model
-                            : mModel.get(closingTabIndex - 1).model;
-                    nextTabId = nextCardModel.get(CARD_TYPE) == TAB
-                            ? nextCardModel.get(TabProperties.TAB_ID)
-                            : Tab.INVALID_TAB_ID;
-                }
-
-                return TabModelUtils.getTabById(mTabModelSelector.getCurrentModel(), nextTabId);
-            }
-        };
-
-        mTabGridItemTouchHelperCallback =
-                new TabGridItemTouchHelperCallback(mModel, mTabModelSelector, mTabClosedListener,
-                        mTabGridDialogHandler, mComponentName, mActionsOnAllRelatedTabs);
-    }
-
-    public void initWithNative(Profile profile) {
-        mTabListFaviconProvider.initWithNative(profile);
-        mTabModelSelector.getTabModelFilterProvider().addTabModelFilterObserver(mTabModelObserver);
-
         if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled()) {
             mTabGroupTitleEditor = new TabGroupTitleEditor(mTabModelSelector) {
                 @Override
@@ -816,6 +816,7 @@ class TabListMediator {
             mTemplateUrlObserver = () -> {
                 mSearchChipIconDrawableId = getSearchChipIconDrawableId();
                 for (int i = 0; i < mModel.size(); i++) {
+                    if (mModel.get(i).model.get(CARD_TYPE) != TAB) continue;
                     mModel.get(i).model.set(
                             TabProperties.SEARCH_CHIP_ICON_DRAWABLE_ID, mSearchChipIconDrawableId);
                 }

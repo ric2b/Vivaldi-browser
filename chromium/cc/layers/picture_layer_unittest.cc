@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <utility>
+
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/animation/animation_host.h"
 #include "cc/layers/append_quads_data.h"
@@ -220,7 +222,7 @@ TEST(PictureLayerTest, ClearVisibleRectWhenNoTiling) {
 
   host_impl.ActivateSyncTree();
 
-  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
+  auto render_pass = viz::CompositorRenderPass::Create();
   AppendQuadsData data;
   host_impl.active_tree()->root_layer()->WillDraw(DRAW_MODE_SOFTWARE, nullptr);
   host_impl.active_tree()->root_layer()->AppendQuads(render_pass.get(), &data);

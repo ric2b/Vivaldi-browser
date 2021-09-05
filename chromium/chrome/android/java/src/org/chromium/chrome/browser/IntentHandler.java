@@ -15,6 +15,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.os.SystemClock;
 import android.provider.Browser;
 import android.provider.MediaStore;
@@ -28,7 +29,6 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.browser.customtabs.CustomTabsSessionToken;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.FileUtils;
 import org.chromium.base.IntentUtils;
@@ -39,7 +39,6 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
-import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
 import org.chromium.chrome.browser.externalnav.IntentWithRequestMetadataHandler;
 import org.chromium.chrome.browser.externalnav.IntentWithRequestMetadataHandler.RequestMetadata;
@@ -353,6 +352,8 @@ public class IntentHandler {
      * @return ExternalAppId representing the app.
      */
     public static @ExternalAppId int determineExternalIntentSource(Intent intent) {
+        if (wasIntentSenderChrome(intent)) return ExternalAppId.CHROME;
+
         String appId = IntentUtils.safeGetStringExtra(intent, Browser.EXTRA_APPLICATION_ID);
         @ExternalAppId
         int externalId = ExternalAppId.OTHER;
@@ -420,6 +421,9 @@ public class IntentHandler {
     private void recordExternalIntentSourceUMA(Intent intent) {
         @ExternalAppId
         int externalId = determineExternalIntentSource(intent);
+
+        // Don't record external app page loads for intents we sent.
+        if (externalId == ExternalAppId.CHROME) return;
         RecordHistogram.recordEnumeratedHistogram(
                 "MobileIntent.PageLoadDueToExternalApp", externalId, ExternalAppId.NUM_ENTRIES);
     }
@@ -1033,7 +1037,7 @@ public class IntentHandler {
         if (isChromeToken(token)) {
             return true;
         }
-        if (ExternalAuthUtils.getInstance().isGoogleSigned(token.getCreatorPackage())) {
+        if (AppHooks.get().getExternalAuthUtils().isGoogleSigned(token.getCreatorPackage())) {
             return true;
         }
         return false;
@@ -1044,8 +1048,12 @@ public class IntentHandler {
         // Only process Intents if the screen is on and the device is unlocked;
         // i.e. the user will see what is going on.
         Context appContext = ContextUtils.getApplicationContext();
-        if (!ApiCompatibilityUtils.isInteractive()) return false;
+        PowerManager powerManager =
+                (PowerManager) appContext.getSystemService(Context.POWER_SERVICE);
+
+        if (!powerManager.isInteractive()) return false;
         if (!isDeviceProvisioned(appContext)) return true;
+
         return !((KeyguardManager) appContext.getSystemService(Context.KEYGUARD_SERVICE))
                 .inKeyguardRestrictedInputMode();
     }

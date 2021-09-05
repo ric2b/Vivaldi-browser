@@ -26,8 +26,8 @@ ActionableView::ActionableView(TrayPopupInkDropStyle ink_drop_style)
       destroyed_(nullptr),
       ink_drop_style_(ink_drop_style) {
   SetFocusBehavior(FocusBehavior::ALWAYS);
-  set_has_ink_drop_action_on_click(false);
-  set_notify_enter_exit_on_child(true);
+  SetHasInkDropActionOnClick(false);
+  SetNotifyEnterExitOnChild(true);
   // TODO(pbos): Replace the use of FocusPainter with the FocusRing (using the
   // below HighlightPathGenerator).
   SetInstallFocusRingOnFocus(false);
@@ -70,18 +70,13 @@ std::unique_ptr<views::InkDrop> ActionableView::CreateInkDrop() {
 
 std::unique_ptr<views::InkDropRipple> ActionableView::CreateInkDropRipple()
     const {
-  // TODO(minch): Do not hard code the background color. Add it as a constructor
-  // argument to ActionableView.
   return TrayPopupUtils::CreateInkDropRipple(
-      ink_drop_style_, this, GetInkDropCenterBasedOnLastEvent(), SK_ColorWHITE);
+      ink_drop_style_, this, GetInkDropCenterBasedOnLastEvent());
 }
 
 std::unique_ptr<views::InkDropHighlight>
 ActionableView::CreateInkDropHighlight() const {
-  // TODO(minch): Do not hard code the background color. Add it as a constructor
-  // argument to ActionableView.
-  return TrayPopupUtils::CreateInkDropHighlight(ink_drop_style_, this,
-                                                SK_ColorWHITE);
+  return TrayPopupUtils::CreateInkDropHighlight(this);
 }
 
 void ActionableView::ButtonPressed(Button* sender, const ui::Event& event) {

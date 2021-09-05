@@ -6,6 +6,8 @@ package org.chromium.chrome.browser.signin;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import static org.mockito.Mockito.when;
+import static org.mockito.MockitoAnnotations.initMocks;
 
 import android.app.Activity;
 import android.graphics.Bitmap;
@@ -20,18 +22,23 @@ import android.widget.ImageView;
 import androidx.annotation.Px;
 import androidx.test.filters.MediumTest;
 
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
 
 import org.chromium.base.test.params.ParameterAnnotations.ClassParameter;
 import org.chromium.base.test.params.ParameterAnnotations.UseRunnerDelegate;
 import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
+import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.Feature;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.components.signin.ProfileDataSource;
+import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.signin.test.util.FakeProfileDataSource;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.DummyUiActivityTestCase;
@@ -47,7 +54,10 @@ import java.util.List;
  */
 @RunWith(ParameterizedRunner.class)
 @UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
+@Batch(ProfileDataCacheRenderTest.PROFILE_DATA_BATCH_NAME)
 public class ProfileDataCacheRenderTest extends DummyUiActivityTestCase {
+    public static final String PROFILE_DATA_BATCH_NAME = "profile_data";
+
     @ClassParameter
     private static final List<ParameterSet> sClassParams =
             Arrays.asList(new ParameterSet().value(64).name("ImageSize64"),
@@ -63,14 +73,27 @@ public class ProfileDataCacheRenderTest extends DummyUiActivityTestCase {
     public ChromeRenderTestRule mRenderTestRule =
             ChromeRenderTestRule.Builder.withPublicCorpus().build();
 
+    @Mock
+    private Profile mProfileMock;
+
+    @Mock
+    private IdentityServicesProvider mIdentityServicesProviderMock;
+
+    private final IdentityManager mIdentityManager =
+            new IdentityManager(0 /* nativeIdentityManager */, null /* OAuth2TokenService */);
+
     private FrameLayout mContentView;
     private ImageView mImageView;
     private FakeProfileDataSource mProfileDataSource;
     private ProfileDataCache mProfileDataCache;
 
-    @Override
-    public void setUpTest() throws Exception {
-        super.setUpTest();
+    @Before
+    public void setUp() {
+        initMocks(this);
+        Profile.setLastUsedProfileForTesting(mProfileMock);
+        when(mIdentityServicesProviderMock.getIdentityManager(mProfileMock))
+                .thenReturn(mIdentityManager);
+        IdentityServicesProvider.setInstanceForTests(mIdentityServicesProviderMock);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Activity activity = getActivity();
             mContentView = new FrameLayout(activity);

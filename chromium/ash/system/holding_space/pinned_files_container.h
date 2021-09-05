@@ -5,20 +5,40 @@
 #ifndef ASH_SYSTEM_HOLDING_SPACE_PINNED_FILES_CONTAINER_H_
 #define ASH_SYSTEM_HOLDING_SPACE_PINNED_FILES_CONTAINER_H_
 
-#include "ui/views/view.h"
+#include <map>
+
+#include "ash/system/holding_space/holding_space_item_views_container.h"
+
+namespace views {
+class Label;
+}  // namespace views
 
 namespace ash {
 
+class HoldingSpaceItemChipsContainer;
+class HoldingSpaceItemViewDelegate;
+
 // Container for pinned files that the user adds to the holding space bubble.
-class PinnedFilesContainer : public views::View {
+class PinnedFilesContainer : public HoldingSpaceItemViewsContainer {
  public:
-  PinnedFilesContainer();
+  explicit PinnedFilesContainer(HoldingSpaceItemViewDelegate* delegate);
   PinnedFilesContainer(const PinnedFilesContainer& other) = delete;
   PinnedFilesContainer& operator=(const PinnedFilesContainer& other) = delete;
   ~PinnedFilesContainer() override;
 
-  // views::View:
-  const char* GetClassName() const override;
+  // HoldingSpaceItemViewsContainer:
+  void ViewHierarchyChanged(const views::ViewHierarchyChangedDetails&) override;
+  void AddHoldingSpaceItemView(const HoldingSpaceItem* item) override;
+  void RemoveAllHoldingSpaceItemViews() override;
+  void RemoveHoldingSpaceItemView(const HoldingSpaceItem* item) override;
+
+ private:
+  HoldingSpaceItemViewDelegate* const delegate_;
+
+  views::Label* empty_prompt_label_ = nullptr;
+  HoldingSpaceItemChipsContainer* item_chips_container_ = nullptr;
+
+  std::map<std::string, views::View*> views_by_item_id_;
 };
 
 }  // namespace ash

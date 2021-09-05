@@ -42,6 +42,7 @@
 #include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "components/viz/common/features.h"
+#include "components/viz/common/switches.h"
 #include "content/public/common/content_switches.h"
 #include "fuchsia/base/config_reader.h"
 #include "fuchsia/base/string_util.h"
@@ -124,17 +125,6 @@ bool SetContentDirectoriesInCommandLine(
                                   base::JoinString(directory_pairs, ","));
 
   return true;
-}
-
-base::Value LoadConfig() {
-  const base::Optional<base::Value>& config = cr_fuchsia::LoadPackageConfig();
-  if (!config) {
-    DLOG(WARNING) << "Configuration data not found. Using default "
-                     "WebEngine configuration.";
-    return base::Value(base::Value::Type::DICTIONARY);
-  }
-
-  return config->Clone();
 }
 
 void AppendFeature(base::StringPiece features_flag,
@@ -272,10 +262,11 @@ void ContextProviderImpl::Create(
       {kContextRequestHandleId, context_request.channel().get()});
 
   // Bind |data_directory| to /data directory, if provided.
+  zx::channel data_directory_channel;
   if (params.has_data_directory()) {
-    zx::channel data_directory_channel = ValidateDirectoryAndTakeChannel(
+    data_directory_channel = ValidateDirectoryAndTakeChannel(
         std::move(*params.mutable_data_directory()));
-    if (data_directory_channel.get() == ZX_HANDLE_INVALID) {
+    if (!data_directory_channel) {
       DLOG(ERROR)
           << "Invalid argument |data_directory| in CreateContextParams.";
       context_request.Close(ZX_ERR_INVALID_ARGS);
@@ -295,9 +286,15 @@ void ContextProviderImpl::Create(
   base::CommandLine launch_command = *base::CommandLine::ForCurrentProcess();
   std::vector<zx::channel> devtools_listener_channels;
 
-  base::Value web_engine_config =
-      config_for_test_.is_none() ? LoadConfig() : std::move(config_for_test_);
-
+  // Process command-line settings specified in our package config-data.
+  base::Value web_engine_config;
+  if (config_for_test_.is_none()) {
+    const base::Optional<base::Value>& config = cr_fuchsia::LoadPackageConfig();
+    web_engine_config =
+        config ? config->Clone() : base::Value(base::Value::Type::DICTIONARY);
+  } else {
+    web_engine_config = std::move(config_for_test_);
+  }
   if (!MaybeAddCommandLineArgsFromConfig(web_engine_config, &launch_command)) {
     context_request.Close(ZX_ERR_INTERNAL);
     return;
@@ -361,6 +358,13 @@ void ContextProviderImpl::Create(
     context_request.Close(ZX_ERR_NOT_SUPPORTED);
     return;
   }
+  if ((enable_widevine || enable_playready) &&
+      !params.has_cdm_data_directory()) {
+    LOG(ERROR) << "WIDEVINE_CDM and PLAYREADY_CDM features require a "
+                  "|cdm_data_directory|.";
+    context_request.Close(ZX_ERR_NOT_SUPPORTED);
+    return;
+  }
 
   // If the system doesn't actually support DRM then disable it. This may result
   // in the Context being able to run without using protected buffers.
@@ -382,9 +386,13 @@ void ContextProviderImpl::Create(
   bool enable_protected_graphics =
       ((enable_playready || enable_widevine) && allow_protected_graphics) ||
       force_protected_graphics;
+  bool use_overlays_for_video =
+      web_engine_config.FindBoolPath("use-overlays-for-video").value_or(false);
 
   if (enable_protected_graphics) {
-    launch_command.AppendSwitch(switches::kEnforceVulkanProtectedMemory);
+    if (force_protected_graphics || !use_overlays_for_video) {
+      launch_command.AppendSwitch(switches::kEnforceVulkanProtectedMemory);
+    }
     launch_command.AppendSwitch(switches::kEnableProtectedVideoBuffers);
     bool force_protected_video_buffers =
         web_engine_config.FindBoolPath("force-protected-video-buffers")
@@ -392,6 +400,16 @@ void ContextProviderImpl::Create(
     if (force_protected_video_buffers) {
       launch_command.AppendSwitch(switches::kForceProtectedVideoOutputBuffers);
     }
+  }
+
+  if (use_overlays_for_video) {
+    // Overlays are only available if OutputPresenterFuchsia is in use.
+    AppendFeature(switches::kEnableFeatures,
+                  features::kUseSkiaOutputDeviceBufferQueue.name,
+                  &launch_command);
+    launch_command.AppendSwitchASCII(switches::kEnableHardwareOverlays,
+                                     "underlay");
+    launch_command.AppendSwitch(switches::kUseOverlaysForVideo);
   }
 
   if (enable_vulkan) {
@@ -439,13 +457,51 @@ void ContextProviderImpl::Create(
                                       key_system);
   }
 
+  bool enable_audio = (features & fuchsia::web::ContextFeatureFlags::AUDIO) ==
+                      fuchsia::web::ContextFeatureFlags::AUDIO;
+  if (!enable_audio) {
+    // TODO(fxbug.dev/58902): Split up audio input and output in
+    // ContextFeatureFlags.
+    launch_command.AppendSwitch(switches::kDisableAudioOutput);
+    launch_command.AppendSwitch(switches::kDisableAudioInput);
+  }
+
+  zx::channel cdm_data_directory_channel;
+  if (enable_widevine || enable_playready) {
+    DCHECK(params.has_cdm_data_directory());
+    const char kCdmDataPath[] = "/cdm_data";
+
+    cdm_data_directory_channel = ValidateDirectoryAndTakeChannel(
+        std::move(*params.mutable_cdm_data_directory()));
+    if (!cdm_data_directory_channel) {
+      LOG(ERROR)
+          << "Invalid argument |cdm_data_directory| in CreateContextParams.";
+      context_request.Close(ZX_ERR_INVALID_ARGS);
+      return;
+    }
+
+    launch_command.AppendSwitchNative(switches::kCdmDataDirectory,
+                                      kCdmDataPath);
+    launch_options.paths_to_transfer.push_back(base::PathToTransfer{
+        base::FilePath(kCdmDataPath), cdm_data_directory_channel.get()});
+  }
+
+  bool enable_hardware_video_decoder =
+      (features & fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER) ==
+      fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER;
+  if (!enable_hardware_video_decoder)
+    launch_command.AppendSwitch(switches::kDisableAcceleratedVideoDecode);
+
+  if (enable_hardware_video_decoder && !enable_vulkan) {
+    DLOG(ERROR) << "HARDWARE_VIDEO_DECODER requires VULKAN.";
+    context_request.Close(ZX_ERR_NOT_SUPPORTED);
+    return;
+  }
+
   bool disable_software_video_decoder =
       (features &
        fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER_ONLY) ==
       fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER_ONLY;
-  bool enable_hardware_video_decoder =
-      (features & fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER) ==
-      fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER;
   if (disable_software_video_decoder) {
     if (!enable_hardware_video_decoder) {
       LOG(ERROR) << "Software video decoding may only be disabled if hardware "
@@ -524,18 +580,13 @@ void ContextProviderImpl::Create(
     context_process = base::LaunchProcess(launch_command, launch_options);
   }
 
-  if (context_process.IsValid()) {
-    // Set |context_process| termination to teardown its job and sub-processes.
-    zx_status_t result = zx_job_set_critical(launch_options.job_handle, 0,
-                                             context_process.Handle());
-    ZX_CHECK(ZX_OK == result, result) << "zx_job_set_critical";
-  }
-
-  // |context_request| and any DevTools channels were transferred (not copied)
-  // to the Context process.
+  // |context_request|, any DevTools channels and data directory channels were
+  // transferred (not copied) to the Context process.
   ignore_result(context_request.TakeChannel().release());
   for (auto& channel : devtools_listener_channels)
     ignore_result(channel.release());
+  ignore_result(data_directory_channel.release());
+  ignore_result(cdm_data_directory_channel.release());
 }
 
 void ContextProviderImpl::SetLaunchCallbackForTest(

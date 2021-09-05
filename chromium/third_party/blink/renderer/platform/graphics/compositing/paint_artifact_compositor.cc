@@ -518,7 +518,7 @@ FloatRect PaintArtifactCompositor::PendingLayer::VisualRectForOverlapTesting()
   FloatClipRect visual_rect(bounds);
   GeometryMapper::LocalToAncestorVisualRect(
       property_tree_state, PropertyTreeState::Root(), visual_rect,
-      kIgnorePlatformOverlayScrollbarSize, kNonInclusiveIntersect,
+      kIgnoreOverlayScrollbarSize, kNonInclusiveIntersect,
       kExpandVisualRectForAnimation);
   return visual_rect.Rect();
 }
@@ -1314,10 +1314,27 @@ void PaintArtifactCompositor::Update(
     int transform_id =
         property_tree_manager.EnsureCompositorTransformNode(transform);
     int clip_id = property_tree_manager.EnsureCompositorClipNode(clip);
+
     int effect_id = property_tree_manager.SwitchToEffectNodeWithSynthesizedClip(
         property_state.Effect(), clip, layer->DrawsContent());
-    blink_effects.resize(effect_id + 1);
-    blink_effects[effect_id] = &property_state.Effect();
+    if (blink_effects.size() <= static_cast<wtf_size_t>(effect_id))
+      blink_effects.resize(effect_id + 1);
+    if (!blink_effects[effect_id]) {
+      blink_effects[effect_id] = &property_state.Effect();
+      // We need additional bookkeeping for backdrop-filter mask.
+      if (property_state.Effect().RequiresCompositingForBackdropFilterMask()) {
+        static_cast<cc::PictureLayer*>(layer.get())
+            ->SetIsBackdropFilterMask(true);
+        layer->SetElementId(property_state.Effect().GetCompositorElementId());
+        auto& effect_tree = host->property_trees()->effect_tree;
+        auto* cc_node = effect_tree.Node(effect_id);
+        effect_tree.Node(cc_node->parent_id)->backdrop_mask_element_id =
+            property_state.Effect().GetCompositorElementId();
+      }
+    } else {
+      DCHECK_EQ(blink_effects[effect_id], &property_state.Effect());
+    }
+
     // The compositor scroll node is not directly stored in the property tree
     // state but can be created via the scroll offset translation node.
     const auto& scroll_translation =
@@ -1337,9 +1354,6 @@ void PaintArtifactCompositor::Update(
     layer->SetEffectTreeIndex(effect_id);
     bool backface_hidden = property_state.Transform().IsBackfaceHidden();
     layer->SetShouldCheckBackfaceVisibility(backface_hidden);
-    bool has_will_change_transform =
-        property_state.Transform().RequiresCompositingForWillChangeTransform();
-    layer->SetHasWillChangeTransformHint(has_will_change_transform);
 
     // If the property tree state has changed between the layer and the root,
     // we need to inform the compositor so damage can be calculated. Calling
@@ -1404,19 +1418,11 @@ void PaintArtifactCompositor::Update(
 
   g_s_property_tree_sequence_number++;
 
-#if DCHECK_IS_ON()
-  if (VLOG_IS_ON(2)) {
-    static String s_previous_output;
-    LayerTreeFlags flags = VLOG_IS_ON(3) ? 0xffffffff : 0;
-    String new_output = GetLayersAsJSON(flags)->ToPrettyJSONString();
-    if (new_output != s_previous_output) {
-      LOG(ERROR) << "PaintArtifactCompositor::Update() done\n"
-                 << "Composited layers:\n"
-                 << new_output.Utf8();
-      s_previous_output = new_output;
-    }
-  }
-#endif
+  DVLOG(2) << "PaintArtifactCompositor::Update() done\n"
+           << "Composited layers:\n"
+           << GetLayersAsJSON(VLOG_IS_ON(3) ? 0xffffffff : 0)
+                  ->ToPrettyJSONString()
+                  .Utf8();
 }
 
 void PaintArtifactCompositor::UpdateRepaintedLayerProperties(
@@ -1710,10 +1716,10 @@ cc::LayerList LayerListBuilder::Finalize() {
 
 #if DCHECK_IS_ON()
 void PaintArtifactCompositor::ShowDebugData() {
-  LOG(ERROR) << GetLayersAsJSON(kLayerTreeIncludesDebugInfo |
-                                kLayerTreeIncludesDetailedInvalidations)
-                    ->ToPrettyJSONString()
-                    .Utf8();
+  LOG(INFO) << GetLayersAsJSON(kLayerTreeIncludesDebugInfo |
+                               kLayerTreeIncludesDetailedInvalidations)
+                   ->ToPrettyJSONString()
+                   .Utf8();
 }
 #endif
 

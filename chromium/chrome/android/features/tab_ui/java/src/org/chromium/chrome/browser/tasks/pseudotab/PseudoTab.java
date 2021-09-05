@@ -14,7 +14,6 @@ import org.chromium.base.Log;
 import org.chromium.base.StreamUtil;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.TabList;
@@ -24,6 +23,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore;
 import org.chromium.chrome.browser.tabmodel.TabbedModeTabPersistencePolicy;
 import org.chromium.chrome.browser.tabpersistence.TabStateDirectory;
+import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 
 import java.io.ByteArrayInputStream;
@@ -213,6 +213,9 @@ public class PseudoTab {
     public long getTimestampMillis() {
         assert mTab != null
                 && mTab.get() != null : "getTimestampMillis can only be used with real tabs";
+        if (!mTab.get().isInitialized()) {
+            return CriticalPersistedTabData.INVALID_TIMESTAMP;
+        }
         return CriticalPersistedTabData.from(mTab.get()).getTimestampMillis();
     }
 
@@ -311,7 +314,8 @@ public class PseudoTab {
     }
 
     private static void readAllPseudoTabsFromStateFile() {
-        assert CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START);
+        assert CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START)
+                || CachedFeatureFlags.isEnabled(ChromeFeatureList.PAINT_PREVIEW_SHOW_ON_STARTUP);
         if (sReadStateFile) return;
         sReadStateFile = true;
 
@@ -344,7 +348,10 @@ public class PseudoTab {
                     (index, id, url, isIncognito, isStandardActiveIndex, isIncognitoActiveIndex)
                             -> {
                         // Skip restoring of non-selected NTP to match the real restoration logic.
-                        if (NewTabPage.isNTPUrl(url) && !isStandardActiveIndex) return;
+                        if (ReturnToChromeExperimentsUtil.isCanonicalizedNTPUrl(url)
+                                && !isStandardActiveIndex) {
+                            return;
+                        }
                         PseudoTab tab = PseudoTab.fromTabId(id);
                         if (isStandardActiveIndex) {
                             assert sActiveTabFromStateFile == null;

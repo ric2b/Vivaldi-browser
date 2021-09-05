@@ -14,8 +14,7 @@ without changes to the corresponding grd file. -->
   <release seq="1">
     <includes>
       <if expr="chromeos">
-        <include name="IDR_WEBUI_I18N_TEMPLATE_JS" file="js/i18n_template.js"
-                 flattenhtml="true" type="BINDATA" />
+        <include name="IDR_WEBUI_I18N_TEMPLATE_PROCESS_JS" file="js/i18n_template_process.js" type="BINDATA" />
       </if>
       <include name="IDR_WEBUI_JSTEMPLATE_JS" file="js/jstemplate_compiled.js"
                flattenhtml="true" type="BINDATA"/>
@@ -295,9 +294,11 @@ without changes to the corresponding grd file. -->
                  file="js/promise_resolver.js" type="chrome_html" />
 
       <structure name="IDR_WEBUI_JS_CR"
-                 file="js/cr.js" type="chrome_html" />
+                 file="js/cr.js" type="chrome_html"
+                 preprocess="true" />
       <structure name="IDR_WEBUI_JS_CR_M_JS"
-                 file="js/cr.m.js" type="chrome_html" />
+                 file="js/cr.m.js" type="chrome_html"
+                 preprocess="true" />
       <structure name="IDR_WEBUI_JS_CR_EVENT_TARGET"
                  file="js/cr/event_target.js" type="chrome_html" />
       <structure name="IDR_WEBUI_JS_CR_UI"

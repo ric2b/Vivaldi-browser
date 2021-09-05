@@ -1,23 +1,33 @@
 {
-  "name": "Camera",
-  "display": "standalone",
-  "icons": [
-    {
-      "src": "src/images/camera_app_icons_192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "src/images/camera_app_icons_128.png",
-      "sizes": "128x128",
-      "type": "image/png"
-    },
-    {
-      "src": "src/images/camera_app_icons_48.png",
-      "sizes": "48x48",
-      "type": "image/png"
-    }
+  "key": "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC3oA1Ox8PiRORjuFDgJeWcwnzZDPHUzuH6fymTrx8KPybhfd6XIYFXvilSsRnsGKPslN+BXke3HWC4/MoB2HM2pNGmsQ+jNyTh2dgk4ISdZYRLfqjxr846/245dkznCJLYAZr72Lk+vRZUyYBcLNNox8jRV5ZF16+8uPPUsUiqbQIDAQAB",
+  "manifest_version": 2,
+  "name": "__MSG_name__",
+  "description": "__MSG_description__",
+  "version": "6.1.0",
+  "default_locale": "en",
+  "minimum_chrome_version": "60.0.0.0",
+  "icons": {
+    "48": "images/camera_app_icons_48.png",
+    "128": "images/camera_app_icons_128.png"
+  },
+  "permissions": [
+    "notifications",
+    "videoCapture",
+    "audioCapture",
+    "storage",
+    "system.display",
+    "unlimitedStorage",
+    "idle",
+    "chromeosInfoPrivate",
+    "metricsPrivate",
+    "fileManagerPrivate",
+    "fileSystem.requestDownloads",
+    {"fileSystem": ["write", "directory"]},
+    "https://www.google-analytics.com/"
   ],
-  "start_url": "src/views/main.html",
-  "theme_color": "#000000"
+  "app": {
+    "background": {
+      "page": "views/background.html"
+    }
+  }
 }

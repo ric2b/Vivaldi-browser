@@ -5,7 +5,7 @@
 package org.chromium.chrome.browser.site_settings;
 
 import static org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge.SITE_WILDCARD;
-import static org.chromium.components.content_settings.PrefNames.BLOCK_THIRD_PARTY_COOKIES;
+import static org.chromium.components.content_settings.PrefNames.COOKIE_CONTROLS_MODE;
 
 import android.content.Context;
 import android.content.Intent;
@@ -62,12 +62,12 @@ import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.embedder_support.browser_context.BrowserContextHandle;
 import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.components.permissions.nfc.NfcSystemLevelSetting;
+import org.chromium.components.policy.test.annotations.Policies;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.device.geolocation.LocationProviderOverrider;
 import org.chromium.device.geolocation.MockLocationProvider;
-import org.chromium.policy.test.annotations.Policies;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -252,7 +252,7 @@ public class SiteSettingsTest {
             Assert.assertEquals(
                     "Third Party Cookie Blocking should be " + (expected ? "managed" : "unmanaged"),
                     UserPrefs.get(Profile.getLastUsedRegularProfile())
-                            .isManagedPreference(BLOCK_THIRD_PARTY_COOKIES),
+                            .isManagedPreference(COOKIE_CONTROLS_MODE),
                     expected);
         });
     }
@@ -759,6 +759,8 @@ public class SiteSettingsTest {
         testCases.put(SiteSettingsCategory.Type.CLIPBOARD, new Pair<>(binaryToggle, binaryToggle));
         testCases.put(SiteSettingsCategory.Type.COOKIES, new Pair<>(cookie, cookie));
         testCases.put(SiteSettingsCategory.Type.DEVICE_LOCATION,
+                new Pair<>(binaryToggleWithAllowed, binaryToggleWithAllowed));
+        testCases.put(SiteSettingsCategory.Type.IDLE_DETECTION,
                 new Pair<>(binaryToggleWithAllowed, binaryToggleWithAllowed));
         testCases.put(SiteSettingsCategory.Type.JAVASCRIPT,
                 new Pair<>(binaryToggleWithException, binaryToggleWithException));
@@ -1339,5 +1341,34 @@ public class SiteSettingsTest {
         initializeUpdateWaiter(false /* expectGranted */);
         mPermissionRule.runNoPromptTest(mPermissionUpdateWaiter,
                 "/content/test/data/android/eme_permissions.html", "requestEME()", 0, true, true);
+    }
+
+    /**
+     * Helper function to test allowing and blocking IDLE_DETECTION feature.
+     * @param enabled true to test enabling IDLE_DETECTION feature, false to test disabling the
+     *         feature.
+     */
+    private void doTestIdleDetectionPermission(final boolean enabled) {
+        setGlobalToggleForCategory(SiteSettingsCategory.Type.IDLE_DETECTION, enabled);
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertEquals("Idle detection should be " + (enabled ? "enabled" : "disabled"),
+                    WebsitePreferenceBridge.isCategoryEnabled(
+                            getBrowserContextHandle(), ContentSettingsType.IDLE_DETECTION),
+                    enabled);
+        });
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Preferences"})
+    public void testAllowIdleDetection() {
+        doTestIdleDetectionPermission(true);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Preferences"})
+    public void testBlockIdleDetection() {
+        doTestIdleDetectionPermission(false);
     }
 }

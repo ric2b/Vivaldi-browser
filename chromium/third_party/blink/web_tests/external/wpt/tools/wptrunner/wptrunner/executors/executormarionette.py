@@ -429,9 +429,6 @@ class MarionetteSelectorProtocolPart(SelectorProtocolPart):
     def elements_by_selector(self, selector):
         return self.marionette.find_elements("css selector", selector)
 
-    def elements_by_selector_and_frame(self, element_selector, frame):
-        return self.marionette.find_elements("css selector", element_selector)
-
 
 class MarionetteClickProtocolPart(ClickProtocolPart):
     def setup(self):
@@ -471,6 +468,24 @@ class MarionetteTestDriverProtocolPart(TestDriverProtocolPart):
         if message:
             obj["message"] = str(message)
         self.parent.base.execute_script("window.postMessage(%s, '*')" % json.dumps(obj))
+
+    def switch_to_window(self, window_id):
+        if window_id is None:
+            return
+
+        for window_handle in self.marionette.window_handles:
+            _switch_to_window(self.marionette, window_handle)
+            try:
+                handle_window_id = self.marionette.execute_script("return window.name")
+            except errors.JavascriptException:
+                continue
+            if str(handle_window_id) == window_id:
+                return
+
+        raise Exception("Window with id %s not found" % window_id)
+
+    def switch_to_frame(self, frame_number):
+        self.marionette.switch_to_frame(frame_number)
 
 
 class MarionetteCoverageProtocolPart(CoverageProtocolPart):
@@ -860,7 +875,8 @@ class MarionetteRefTestExecutor(RefTestExecutor):
                  screenshot_cache=None, close_after_done=True,
                  debug_info=None, reftest_internal=False,
                  reftest_screenshot="unexpected", ccov=False,
-                 group_metadata=None, capabilities=None, debug=False, **kwargs):
+                 group_metadata=None, capabilities=None, debug=False,
+                 browser_version=None, **kwargs):
         """Marionette-based executor for reftests"""
         RefTestExecutor.__init__(self,
                                  logger,
@@ -873,9 +889,11 @@ class MarionetteRefTestExecutor(RefTestExecutor):
                                            timeout_multiplier, kwargs["e10s"],
                                            ccov)
         self.implementation = self.get_implementation(reftest_internal)
-        self.implementation_kwargs = ({"screenshot": reftest_screenshot} if
-                                      reftest_internal else {})
-
+        self.implementation_kwargs = {}
+        if reftest_internal:
+            self.implementation_kwargs["screenshot"] = reftest_screenshot
+            self.implementation_kwargs["chrome_scope"] = (browser_version is not None and
+                                                          int(browser_version.split(".")[0]) < 82)
         self.close_after_done = close_after_done
         self.has_window = False
         self.original_pref_values = {}
@@ -980,22 +998,26 @@ class InternalRefTestImplementation(RefTestImplementation):
     def __init__(self, executor):
         self.timeout_multiplier = executor.timeout_multiplier
         self.executor = executor
+        self.chrome_scope = False
 
     @property
     def logger(self):
         return self.executor.logger
 
-    def setup(self, screenshot="unexpected"):
+    def setup(self, screenshot="unexpected", chrome_scope=False):
         data = {"screenshot": screenshot, "isPrint": self.executor.is_print}
         if self.executor.group_metadata is not None:
             data["urlCount"] = {urljoin(self.executor.server_url(key[0]), key[1]):value
                                 for key, value in iteritems(
                                     self.executor.group_metadata.get("url_count", {}))
                                 if value > 1}
-        self.executor.protocol.marionette.set_context(self.executor.protocol.marionette.CONTEXT_CHROME)
+        self.chrome_scope = chrome_scope
+        if chrome_scope:
+            self.logger.debug("Using marionette Chrome scope for reftests")
+            self.executor.protocol.marionette.set_context(self.executor.protocol.marionette.CONTEXT_CHROME)
         self.executor.protocol.marionette._send_message("reftest:setup", data)
 
-    def reset(self, screenshot=None):
+    def reset(self, **kwargs):
         # this is obvious wrong; it shouldn't be a no-op
         # see https://github.com/web-platform-tests/wpt/issues/15604
         pass
@@ -1024,7 +1046,9 @@ class InternalRefTestImplementation(RefTestImplementation):
         try:
             if self.executor.protocol.marionette and self.executor.protocol.marionette.session_id:
                 self.executor.protocol.marionette._send_message("reftest:teardown", {})
-                self.executor.protocol.marionette.set_context(self.executor.protocol.marionette.CONTEXT_CONTENT)
+                if self.chrome_scope:
+                    self.executor.protocol.marionette.set_context(
+                        self.executor.protocol.marionette.CONTEXT_CONTENT)
                 # the reftest runner opens/closes a window with focus, so as
                 # with after closing a window we need to give a new window
                 # focus

@@ -63,7 +63,6 @@ class FullscreenMouseLockDispatcher : public MouseLockDispatcher {
 };
 
 WebMouseEvent WebMouseEventFromGestureEvent(const WebGestureEvent& gesture) {
-
   // Only convert touch screen gesture events, do not convert
   // touchpad/mouse wheel gesture events. (crbug.com/620974)
   if (gesture.SourceDevice() != blink::WebGestureDevice::kTouchscreen)
@@ -105,11 +104,10 @@ WebMouseEvent WebMouseEventFromGestureEvent(const WebGestureEvent& gesture) {
 }
 
 FullscreenMouseLockDispatcher::FullscreenMouseLockDispatcher(
-    RenderWidgetFullscreenPepper* widget) : widget_(widget) {
-}
+    RenderWidgetFullscreenPepper* widget)
+    : widget_(widget) {}
 
-FullscreenMouseLockDispatcher::~FullscreenMouseLockDispatcher() {
-}
+FullscreenMouseLockDispatcher::~FullscreenMouseLockDispatcher() = default;
 
 void FullscreenMouseLockDispatcher::SendLockMouseRequest(
     blink::WebLocalFrame* requester_frame,
@@ -161,17 +159,7 @@ class PepperExternalWidgetClient : public blink::WebExternalWidgetClient {
     widget_->DidInitiatePaint();
   }
 
-  void FocusChanged(bool enabled) override { widget_->FocusChanged(enabled); }
-
-  void UpdateVisualProperties(
-      const blink::VisualProperties& visual_properties) override {
-    widget_->UpdateVisualProperties(visual_properties);
-  }
-
-  void UpdateScreenRects(const gfx::Rect& widget_screen_rect,
-                         const gfx::Rect& window_screen_rect) override {
-    widget_->UpdateScreenRects(widget_screen_rect, window_screen_rect);
-  }
+  void DidUpdateVisualProperties() override { widget_->UpdateLayerBounds(); }
 
  private:
   RenderWidgetFullscreenPepper* widget_;
@@ -179,6 +167,7 @@ class PepperExternalWidgetClient : public blink::WebExternalWidgetClient {
 
 // static
 RenderWidgetFullscreenPepper* RenderWidgetFullscreenPepper::Create(
+    AgentSchedulingGroup& agent_scheduling_group,
     int32_t routing_id,
     RenderWidget::ShowCallback show_callback,
     CompositorDependencies* compositor_deps,
@@ -191,8 +180,9 @@ RenderWidgetFullscreenPepper* RenderWidgetFullscreenPepper::Create(
   DCHECK(show_callback);
   RenderWidgetFullscreenPepper* render_widget =
       new RenderWidgetFullscreenPepper(
-          routing_id, compositor_deps, plugin, std::move(blink_widget_host),
-          std::move(blink_widget), local_main_frame_url);
+          agent_scheduling_group, routing_id, compositor_deps, plugin,
+          std::move(blink_widget_host), std::move(blink_widget),
+          local_main_frame_url);
   render_widget->InitForPepperFullscreen(std::move(show_callback),
                                          render_widget->blink_widget_.get(),
                                          screen_info);
@@ -200,16 +190,14 @@ RenderWidgetFullscreenPepper* RenderWidgetFullscreenPepper::Create(
 }
 
 RenderWidgetFullscreenPepper::RenderWidgetFullscreenPepper(
+    AgentSchedulingGroup& agent_scheduling_group,
     int32_t routing_id,
     CompositorDependencies* compositor_deps,
     PepperPluginInstanceImpl* plugin,
     mojo::PendingAssociatedRemote<blink::mojom::WidgetHost> mojo_widget_host,
     mojo::PendingAssociatedReceiver<blink::mojom::Widget> mojo_widget,
     blink::WebURL main_frame_url)
-    : RenderWidget(routing_id,
-                   compositor_deps,
-                   /*hidden=*/false,
-                   /*never_composited=*/false),
+    : RenderWidget(agent_scheduling_group, routing_id, compositor_deps),
       plugin_(plugin),
       mouse_lock_dispatcher_(
           std::make_unique<FullscreenMouseLockDispatcher>(this)),
@@ -273,24 +261,21 @@ void RenderWidgetFullscreenPepper::Close(std::unique_ptr<RenderWidget> widget) {
   RenderWidget::Close(std::move(widget));
 }
 
-void RenderWidgetFullscreenPepper::AfterUpdateVisualProperties() {
-  UpdateLayerBounds();
-}
-
 void RenderWidgetFullscreenPepper::UpdateLayerBounds() {
   if (!layer_)
     return;
 
   // The |layer_| is sized here to cover the entire renderer's compositor
   // viewport.
-  gfx::Size layer_size = gfx::Rect(ViewRect()).size();
+  gfx::Size layer_size = gfx::Rect(GetWebWidget()->ViewRect()).size();
   // When IsUseZoomForDSFEnabled() is true, layout and compositor layer sizes
   // given by blink are all in physical pixels, and the compositor does not do
   // any scaling. But the ViewRect() is always in DIP so we must scale the layer
   // here as the compositor won't.
   if (compositor_deps()->IsUseZoomForDSFEnabled()) {
     layer_size = gfx::ScaleToCeiledSize(
-        layer_size, GetOriginalScreenInfo().device_scale_factor);
+        layer_size,
+        GetWebWidget()->GetOriginalScreenInfo().device_scale_factor);
   }
   layer_->SetBounds(layer_size);
 }
@@ -351,8 +336,7 @@ WebInputEventResult RenderWidgetFullscreenPepper::ProcessInputEvent(
   // generates context menu events. Since we don't have a WebView, we need to
   // do the necessary translation ourselves.
   if (WebInputEvent::IsMouseEventType(event.GetType())) {
-    const WebMouseEvent& mouse_event =
-        reinterpret_cast<const WebMouseEvent&>(event);
+    const WebMouseEvent& mouse_event = static_cast<const WebMouseEvent&>(event);
     bool send_context_menu_event = false;
     // On Mac/Linux, we handle it on mouse down.
     // On Windows, we handle it on mouse up.

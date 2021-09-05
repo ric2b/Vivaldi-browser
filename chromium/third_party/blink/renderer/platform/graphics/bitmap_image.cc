@@ -50,15 +50,16 @@
 
 namespace blink {
 
-int GetRepetitionCountWithPolicyOverride(int actual_count,
-                                         ImageAnimationPolicy policy) {
+int GetRepetitionCountWithPolicyOverride(
+    int actual_count,
+    web_pref::ImageAnimationPolicy policy) {
   if (actual_count == kAnimationNone ||
-      policy == kImageAnimationPolicyNoAnimation) {
+      policy == web_pref::kImageAnimationPolicyNoAnimation) {
     return kAnimationNone;
   }
 
   if (actual_count == kAnimationLoopOnce ||
-      policy == kImageAnimationPolicyAnimateOnce) {
+      policy == web_pref::kImageAnimationPolicyAnimateOnce) {
     return kAnimationLoopOnce;
   }
 
@@ -67,7 +68,7 @@ int GetRepetitionCountWithPolicyOverride(int actual_count,
 
 BitmapImage::BitmapImage(ImageObserver* observer, bool is_multipart)
     : Image(observer, is_multipart),
-      animation_policy_(kImageAnimationPolicyAllowed),
+      animation_policy_(web_pref::kImageAnimationPolicyAllowed),
       all_data_received_(false),
       have_size_(false),
       size_available_(false),
@@ -292,7 +293,7 @@ void BitmapImage::Draw(
     }
   }
 
-  uint32_t unique_id = image.GetSkImage()->uniqueID();
+  uint32_t stable_id = image.stable_id();
   bool is_lazy_generated = image.IsLazyGenerated();
   canvas->drawImageRect(std::move(image), adjusted_src_rect, adjusted_dst_rect,
                         &flags,
@@ -301,7 +302,7 @@ void BitmapImage::Draw(
   if (is_lazy_generated) {
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"),
                          "Draw LazyPixelRef", TRACE_EVENT_SCOPE_THREAD,
-                         "LazyPixelRef", unique_id);
+                         "LazyPixelRef", stable_id);
   }
 
   StartAnimation();
@@ -346,12 +347,15 @@ PaintImage BitmapImage::PaintImageForCurrentFrame() {
 
   cached_frame_ = CreatePaintImage();
 
+  // BitmapImage should not be texture backed.
+  DCHECK(!cached_frame_.IsTextureBacked());
+
   // Create the SkImage backing for this PaintImage here to ensure that copies
   // of the PaintImage share the same SkImage. Skia's caching of the decoded
   // output of this image is tied to the lifetime of the SkImage. So we create
   // the SkImage here and cache the PaintImage to keep the decode alive in
   // skia's cache.
-  cached_frame_.GetSkImage();
+  cached_frame_.GetSwSkImage();
   NotifyMemoryChanged();
 
   return cached_frame_;
@@ -431,7 +435,7 @@ bool BitmapImage::MaybeAnimated() {
   return decoder_ && decoder_->RepetitionCount() != kAnimationNone;
 }
 
-void BitmapImage::SetAnimationPolicy(ImageAnimationPolicy policy) {
+void BitmapImage::SetAnimationPolicy(web_pref::ImageAnimationPolicy policy) {
   if (animation_policy_ == policy)
     return;
 

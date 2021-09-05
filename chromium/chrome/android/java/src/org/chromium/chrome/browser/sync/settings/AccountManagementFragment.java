@@ -12,8 +12,8 @@ import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.UserManager;
 
+import androidx.annotation.LayoutRes;
 import androidx.annotation.Nullable;
-import androidx.appcompat.content.res.AppCompatResources;
 import androidx.fragment.app.DialogFragment;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
@@ -162,7 +162,11 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
         mSignedInAccountName = CoreAccountInfo.getEmailFrom(
                 IdentityServicesProvider.get()
                         .getIdentityManager(Profile.getLastUsedRegularProfile())
-                        .getPrimaryAccountInfo(ConsentLevel.SYNC));
+                        .getPrimaryAccountInfo(
+                                ChromeFeatureList.isEnabled(
+                                        ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)
+                                        ? ConsentLevel.NOT_REQUIRED
+                                        : ConsentLevel.SYNC));
         if (mSignedInAccountName == null) {
             // The AccountManagementFragment can only be shown when the user is signed in. If the
             // user is signed out, exit the fragment.
@@ -189,25 +193,38 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
     }
 
     private void configureSignOutSwitch() {
-        Preference signOutSwitch = findPreference(PREF_SIGN_OUT);
+        Preference signOutPreference = findPreference(PREF_SIGN_OUT);
         if (mProfile.isChild()) {
-            getPreferenceScreen().removePreference(signOutSwitch);
+            getPreferenceScreen().removePreference(signOutPreference);
             getPreferenceScreen().removePreference(findPreference(PREF_SIGN_OUT_DIVIDER));
         } else {
-            signOutSwitch.setTitle(R.string.sign_out_and_turn_off_sync);
-            signOutSwitch.setEnabled(getSignOutAllowedPreferenceValue());
-            signOutSwitch.setOnPreferenceClickListener(preference -> {
+            if (ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)) {
+                signOutPreference.setLayoutResource(R.layout.account_management_account_row);
+                signOutPreference.setIcon(R.drawable.ic_signout_40dp);
+            }
+            signOutPreference.setTitle(getSignOutPreferenceText());
+            signOutPreference.setEnabled(getSignOutAllowedPreferenceValue());
+            signOutPreference.setOnPreferenceClickListener(preference -> {
                 if (!isVisible() || !isResumed()) return false;
 
                 if (mSignedInAccountName != null && getSignOutAllowedPreferenceValue()) {
                     SigninUtils.logEvent(
                             ProfileAccountManagementMetrics.TOGGLE_SIGNOUT, mGaiaServiceType);
 
-                    SignOutDialogFragment signOutFragment =
-                            SignOutDialogFragment.create(mGaiaServiceType);
-                    signOutFragment.setTargetFragment(AccountManagementFragment.this, 0);
-                    signOutFragment.show(getFragmentManager(), SIGN_OUT_DIALOG_TAG);
-
+                    if (IdentityServicesProvider.get()
+                                    .getIdentityManager(Profile.getLastUsedRegularProfile())
+                                    .getPrimaryAccountInfo(ConsentLevel.SYNC)
+                            != null) {
+                        // Only show the sign-out dialog if the user has given sync consent.
+                        SignOutDialogFragment signOutFragment =
+                                SignOutDialogFragment.create(mGaiaServiceType);
+                        signOutFragment.setTargetFragment(AccountManagementFragment.this, 0);
+                        signOutFragment.show(getFragmentManager(), SIGN_OUT_DIALOG_TAG);
+                    } else {
+                        IdentityServicesProvider.get()
+                                .getSigninManager(Profile.getLastUsedRegularProfile())
+                                .signOut(SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS, null, false);
+                    }
                     return true;
                 }
 
@@ -264,6 +281,18 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
         }
     }
 
+    private int getSignOutPreferenceText() {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)) {
+            if (!IdentityServicesProvider.get()
+                            .getIdentityManager(Profile.getLastUsedRegularProfile())
+                            .hasPrimaryAccount()) {
+                // There is no syncing account.
+                return R.string.sign_out;
+            }
+        }
+        return R.string.sign_out_and_turn_off_sync;
+    }
+
     private void updateAccountsList() {
         PreferenceCategory accountsCategory =
                 (PreferenceCategory) findPreference(PREF_ACCOUNTS_CATEGORY);
@@ -271,18 +300,20 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
 
         accountsCategory.removeAll();
 
+        accountsCategory.addPreference(
+                createAccountPreference(AccountUtils.createAccountFromName(mSignedInAccountName)));
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)) {
+            accountsCategory.addPreference(
+                    createDividerPreference(R.layout.account_divider_preference));
+            accountsCategory.addPreference(createManageYourGoogleAccountPreference());
+            accountsCategory.addPreference(createDividerPreference(R.layout.divider_preference));
+        }
+
         List<Account> accounts = AccountManagerFacadeProvider.getInstance().tryGetGoogleAccounts();
-        for (int i = 0; i < accounts.size(); i++) {
-            Account account = accounts.get(i);
-            Preference pref = new Preference(getStyledContext());
-            pref.setLayoutResource(R.layout.account_management_account_row);
-            pref.setTitle(account.name);
-            pref.setIcon(mProfileDataCache.getProfileDataOrDefault(account.name).getImage());
-
-            pref.setOnPreferenceClickListener(
-                    preference -> SigninUtils.openSettingsForAccount(getActivity(), account));
-
-            accountsCategory.addPreference(pref);
+        for (Account account : accounts) {
+            if (!mSignedInAccountName.equals(account.name)) {
+                accountsCategory.addPreference(createAccountPreference(account));
+            }
         }
 
         if (!mProfile.isChild()) {
@@ -290,14 +321,48 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
         }
     }
 
+    private Preference createAccountPreference(Account account) {
+        Preference accountPreference = new Preference(getStyledContext());
+        accountPreference.setLayoutResource(R.layout.account_management_account_row);
+        accountPreference.setTitle(account.name);
+        accountPreference.setIcon(
+                mProfileDataCache.getProfileDataOrDefault(account.name).getImage());
+
+        accountPreference.setOnPreferenceClickListener(SyncSettingsUtils.toOnClickListener(
+                this, () -> SigninUtils.openSettingsForAccount(getActivity(), account)));
+
+        return accountPreference;
+    }
+
+    private Preference createManageYourGoogleAccountPreference() {
+        Preference manageYourGoogleAccountPreference = new Preference(getStyledContext());
+        manageYourGoogleAccountPreference.setLayoutResource(
+                R.layout.account_management_account_row);
+        manageYourGoogleAccountPreference.setTitle(R.string.manage_your_google_account);
+        manageYourGoogleAccountPreference.setIcon(R.drawable.ic_google_services_48dp);
+        manageYourGoogleAccountPreference.setOnPreferenceClickListener(
+                SyncSettingsUtils.toOnClickListener(
+                        this, () -> SyncSettingsUtils.openGoogleMyAccount(getActivity())));
+
+        return manageYourGoogleAccountPreference;
+    }
+
+    private Preference createDividerPreference(@LayoutRes int layoutResId) {
+        Preference dividerPreference = new Preference(getStyledContext());
+        dividerPreference.setLayoutResource(layoutResId);
+
+        return dividerPreference;
+    }
+
     private ChromeBasePreference createAddAccountPreference() {
         ChromeBasePreference addAccountPreference = new ChromeBasePreference(getStyledContext());
         addAccountPreference.setLayoutResource(R.layout.account_management_account_row);
-        addAccountPreference.setIcon(
-                AppCompatResources.getDrawable(requireContext(), R.drawable.ic_add_circle_40dp));
+
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)) {
+            addAccountPreference.setIcon(R.drawable.ic_person_add_40dp);
             addAccountPreference.setTitle(R.string.signin_add_account_to_device);
         } else {
+            addAccountPreference.setIcon(R.drawable.ic_add_circle_40dp);
             addAccountPreference.setTitle(R.string.account_management_add_account_title);
         }
         addAccountPreference.setOnPreferenceClickListener(preference -> {
@@ -344,9 +409,10 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
     public void onSignOutClicked(boolean forceWipeUserData) {
         // In case the user reached this fragment without being signed in, we guard the sign out so
         // we do not hit a native crash.
-        if (!IdentityServicesProvider.get()
+        if (IdentityServicesProvider.get()
                         .getIdentityManager(Profile.getLastUsedRegularProfile())
-                        .hasPrimaryAccount()) {
+                        .getPrimaryAccountInfo(ConsentLevel.NOT_REQUIRED)
+                == null) {
             return;
         }
         final DialogFragment clearDataProgressDialog = new ClearDataProgressDialog();

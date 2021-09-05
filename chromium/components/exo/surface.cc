@@ -22,7 +22,7 @@
 #include "components/exo/surface_delegate.h"
 #include "components/exo/surface_observer.h"
 #include "components/exo/wm_helper.h"
-#include "components/viz/common/quads/render_pass.h"
+#include "components/viz/common/quads/compositor_render_pass.h"
 #include "components/viz/common/quads/shared_quad_state.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/surface_draw_quad.h"
@@ -45,6 +45,7 @@
 #include "ui/events/event.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/geometry/dip_util.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -590,7 +591,7 @@ void Surface::SetEmbeddedSurfaceSize(const gfx::Size& size) {
 
 void Surface::SetAcquireFence(std::unique_ptr<gfx::GpuFence> gpu_fence) {
   TRACE_EVENT1("exo", "Surface::SetAcquireFence", "fence_fd",
-               gpu_fence ? gpu_fence->GetGpuFenceHandle().native_fd.fd : -1);
+               gpu_fence ? gpu_fence->GetGpuFenceHandle().owned_fd.get() : -1);
 
   pending_acquire_fence_ = std::move(gpu_fence);
 }
@@ -1028,7 +1029,7 @@ void Surface::UpdateBufferTransform(bool y_invert) {
 void Surface::AppendContentsToFrame(const gfx::Point& origin,
                                     float device_scale_factor,
                                     viz::CompositorFrame* frame) {
-  const std::unique_ptr<viz::RenderPass>& render_pass =
+  const std::unique_ptr<viz::CompositorRenderPass>& render_pass =
       frame->render_pass_list.back();
   gfx::Rect output_rect(origin, content_size_);
   gfx::Rect quad_rect(0, 0, 1, 1);
@@ -1044,8 +1045,8 @@ void Surface::AppendContentsToFrame(const gfx::Point& origin,
     damage_rect += origin.OffsetFromOrigin();
     damage_rect.Intersect(output_rect);
     if (device_scale_factor <= 1) {
-      render_pass->damage_rect.Union(
-          gfx::ConvertRectToPixel(device_scale_factor, damage_rect));
+      render_pass->damage_rect.Union(gfx::ToEnclosingRect(
+          gfx::ConvertRectToPixels(damage_rect, device_scale_factor)));
     } else {
       // The damage will eventually be rescaled by 1/device_scale_factor. Since
       // that scale factor is <1, taking the enclosed rect here means that that

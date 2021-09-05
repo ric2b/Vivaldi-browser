@@ -38,6 +38,7 @@
 #include "extensions/api/calendar/calendar_api.h"
 #include "extensions/api/contacts/contacts_api.h"
 #include "extensions/api/content_blocking/content_blocking_api.h"
+#include "extensions/api/events/vivaldi_ui_events.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/api/history/history_private_api.h"
 #include "extensions/api/import_data/import_data_api.h"
@@ -113,6 +114,7 @@ void VivaldiBrowserMainExtraParts::
   extensions::ContactsAPI::GetFactoryInstance();
   extensions::ContentBlockingAPI::GetFactoryInstance();
   extensions::VivaldiBookmarksAPI::GetFactoryInstance();
+  extensions::VivaldiUIEvents::InitSingleton();
   extensions::DevtoolsConnectorAPI::GetFactoryInstance();
   extensions::ExtensionActionUtilFactory::GetInstance();
   extensions::ImportDataAPI::GetFactoryInstance();

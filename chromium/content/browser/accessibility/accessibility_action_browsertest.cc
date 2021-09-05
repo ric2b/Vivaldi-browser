@@ -482,9 +482,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest,
   EXPECT_EQ("Before",
             target->GetStringAttribute(ax::mojom::StringAttribute::kValue));
 
-  AccessibilityNotificationWaiter waiter2(shell()->web_contents(),
-                                          ui::kAXModeComplete,
-                                          ax::mojom::Event::kValueChanged);
+  AccessibilityNotificationWaiter waiter2(
+      shell()->web_contents(), ui::kAXModeComplete,
+      ui::AXEventGenerator::Event::VALUE_CHANGED);
   GetManager()->SetValue(*target, "Line1\nLine2");
   waiter2.WaitForNotification();
 
@@ -530,8 +530,115 @@ IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest, ShowContextMenu) {
   UntrustworthyContextMenuParams context_menu_params =
       context_menu_filter->get_params();
   EXPECT_EQ(base::ASCIIToUTF16("2"), context_menu_params.link_text);
-  EXPECT_EQ(ui::MenuSourceType::MENU_SOURCE_NONE,
+  EXPECT_EQ(ui::MenuSourceType::MENU_SOURCE_KEYBOARD,
             context_menu_params.source_type);
+}
+
+IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest,
+                       ShowContextMenuOnMultilineElement) {
+  LoadInitialAccessibilityTreeFromHtml(R"HTML(
+      <a style="line-height: 16px" href='www.google.com'>
+      This is a <br><br><br><br>multiline link.</a>
+      )HTML");
+
+  BrowserAccessibility* target_node =
+      FindNode(ax::mojom::Role::kLink, "This is a multiline link.");
+  EXPECT_NE(target_node, nullptr);
+
+  // Register a ContextMenuFilter in the render process to wait for the
+  // ShowContextMenu event to be raised.
+  content::RenderProcessHost* render_process_host =
+      shell()->web_contents()->GetMainFrame()->GetProcess();
+  auto context_menu_filter = base::MakeRefCounted<ContextMenuFilter>();
+  render_process_host->AddFilter(context_menu_filter.get());
+
+  // Raise the ShowContextMenu event from the link.
+  ui::AXActionData context_menu_action;
+  context_menu_action.action = ax::mojom::Action::kShowContextMenu;
+  target_node->AccessibilityPerformAction(context_menu_action);
+  context_menu_filter->Wait();
+
+  UntrustworthyContextMenuParams context_menu_params =
+      context_menu_filter->get_params();
+  std::string link_text = base::UTF16ToUTF8(context_menu_params.link_text);
+  base::ReplaceChars(link_text, "\n", "\\n", &link_text);
+  EXPECT_EQ("This is a\\n\\n\\n\\nmultiline link.", link_text);
+  EXPECT_EQ(ui::MenuSourceType::MENU_SOURCE_KEYBOARD,
+            context_menu_params.source_type);
+  // Expect the context menu to open on the same line as the first line of link
+  // text. Check that the y coordinate of the context menu is near the line
+  // height.
+  EXPECT_NEAR(16, context_menu_params.y, 15);
+}
+
+IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest,
+                       ShowContextMenuOnOffscreenElement) {
+  LoadInitialAccessibilityTreeFromHtml(R"HTML(
+      <a href='www.google.com'
+      style='position: absolute; top: -1000px; left: -1000px'>
+      Offscreen</a></div>
+      )HTML");
+
+  BrowserAccessibility* target_node =
+      FindNode(ax::mojom::Role::kLink, "Offscreen");
+  EXPECT_NE(target_node, nullptr);
+
+  // Register a ContextMenuFilter in the render process to wait for the
+  // ShowContextMenu event to be raised.
+  content::RenderProcessHost* render_process_host =
+      shell()->web_contents()->GetMainFrame()->GetProcess();
+  auto context_menu_filter = base::MakeRefCounted<ContextMenuFilter>();
+  render_process_host->AddFilter(context_menu_filter.get());
+
+  // Raise the ShowContextMenu event from the link.
+  ui::AXActionData context_menu_action;
+  context_menu_action.action = ax::mojom::Action::kShowContextMenu;
+  target_node->AccessibilityPerformAction(context_menu_action);
+  context_menu_filter->Wait();
+
+  UntrustworthyContextMenuParams context_menu_params =
+      context_menu_filter->get_params();
+  EXPECT_EQ(base::ASCIIToUTF16("Offscreen"), context_menu_params.link_text);
+  EXPECT_EQ(ui::MenuSourceType::MENU_SOURCE_KEYBOARD,
+            context_menu_params.source_type);
+  // Expect the context menu point to be 0, 0.
+  EXPECT_EQ(0, context_menu_params.x);
+  EXPECT_EQ(0, context_menu_params.y);
+}
+
+IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest,
+                       ShowContextMenuOnObscuredElement) {
+  LoadInitialAccessibilityTreeFromHtml(R"HTML(
+      <a href='www.google.com'>Obscured</a>
+      <div style="position: absolute; height: 100px; width: 100px; top: 0px;
+                  left: 0px; background-color:red; line-height: 16px"></div>
+      )HTML");
+
+  BrowserAccessibility* target_node =
+      FindNode(ax::mojom::Role::kLink, "Obscured");
+  EXPECT_NE(target_node, nullptr);
+
+  // Register a ContextMenuFilter in the render process to wait for the
+  // ShowContextMenu event to be raised.
+  content::RenderProcessHost* render_process_host =
+      shell()->web_contents()->GetMainFrame()->GetProcess();
+  auto context_menu_filter = base::MakeRefCounted<ContextMenuFilter>();
+  render_process_host->AddFilter(context_menu_filter.get());
+
+  // Raise the ShowContextMenu event from the link.
+  ui::AXActionData context_menu_action;
+  context_menu_action.action = ax::mojom::Action::kShowContextMenu;
+  target_node->AccessibilityPerformAction(context_menu_action);
+  context_menu_filter->Wait();
+
+  UntrustworthyContextMenuParams context_menu_params =
+      context_menu_filter->get_params();
+  EXPECT_EQ(base::ASCIIToUTF16("Obscured"), context_menu_params.link_text);
+  EXPECT_EQ(ui::MenuSourceType::MENU_SOURCE_KEYBOARD,
+            context_menu_params.source_type);
+  // Expect the context menu to open on the same line as the link text. Check
+  // that the y coordinate of the context menu is near the line height.
+  EXPECT_NEAR(16, context_menu_params.y, 15);
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest,

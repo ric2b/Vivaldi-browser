@@ -25,7 +25,7 @@ load("//project.star", "settings")
 # milestone project will use the same bucket names, so we create a no-op job for
 # the 'ci' bucket.
 _BRANCH_NOOP_CONFIG = struct(
-    buckets = ["ci-m84", "ci-m85"],
+    buckets = ["ci-m85"],
     fmt = "{bucket}-{builder}",
 ) if settings.is_master else struct(
     buckets = ["ci"],
@@ -37,6 +37,11 @@ _NON_BRANCHED_TESTERS = (
     # not mirrored by any branched try builders, so we do not need to run it on
     # the branches
     "mac-osxbeta-rel",
+
+    # This tester is triggered by 'mac-arm64-rel', but it is an FYI builder and
+    # not mirrored by any branched try builders and we have limited test
+    # capacity, so we do not need to run it on the branches
+    "mac-arm64-rel-tests",
 
     # These testers are triggered by 'Win x64 Builder', but it is an FYI builder
     # and not mirrored by any branched try builders, so we do not need to run it

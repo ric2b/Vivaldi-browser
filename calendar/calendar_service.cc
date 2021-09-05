@@ -226,7 +226,7 @@ base::CancelableTaskTracker::TaskId CalendarService::CreateCalendarEvents(
 
 base::CancelableTaskTracker::TaskId CalendarService::UpdateCalendarEvent(
     EventID event_id,
-    CalendarEvent event,
+    EventRow event,
     const UpdateEventCallback& callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
@@ -449,19 +449,37 @@ base::CancelableTaskTracker::TaskId CalendarService::GetAllNotifications(
 
 base::CancelableTaskTracker::TaskId CalendarService::CreateNotification(
     NotificationRow row,
-    const CreateNotificationCallback& callback,
+    const NotificationCallback& callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  std::shared_ptr<CreateNotificationResult> create_notification_result =
-      std::shared_ptr<CreateNotificationResult>(new CreateNotificationResult());
+  std::shared_ptr<NotificationResult> create_notification_result =
+      std::shared_ptr<NotificationResult>(new NotificationResult());
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
       base::Bind(&CalendarBackend::CreateNotification, calendar_backend_, row,
                  create_notification_result),
       base::Bind(callback, create_notification_result));
+}
+
+base::CancelableTaskTracker::TaskId CalendarService::UpdateNotification(
+    NotificationID notification_id,
+    UpdateNotificationRow notification,
+    const NotificationCallback& callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  std::shared_ptr<NotificationResult> update_notification_result =
+      std::shared_ptr<NotificationResult>(new NotificationResult());
+
+  return tracker->PostTaskAndReply(
+      backend_task_runner_.get(), FROM_HERE,
+      base::Bind(&CalendarBackend::UpdateNotification, calendar_backend_,
+                 notification, update_notification_result),
+      base::Bind(callback, update_notification_result));
 }
 
 base::CancelableTaskTracker::TaskId CalendarService::DeleteNotification(

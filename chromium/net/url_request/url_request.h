@@ -84,7 +84,6 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // factories to be queried.  If no factory handles the request, then the
   // default job will be used.
   typedef URLRequestJob*(ProtocolFactory)(URLRequest* request,
-                                          NetworkDelegate* network_delegate,
                                           const std::string& scheme);
 
   // Max number of http redirects to follow. The Fetch spec says: "If
@@ -341,11 +340,10 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // If credentials are allowed, the request will send and save HTTP
   // cookies, as well as authentication to the origin server. If not,
   // they will not be sent, however proxy-level authentication will
-  // still occur.
-  // Setting this to false is equivalent to setting the
-  // LOAD_DO_NOT_SAVE_COOKIES, LOAD_DO_NOT_SEND_COOKIES, and
-  // LOAD_DO_NOT_SEND_AUTH_DATA flags. See https://crbug.com/799935.
+  // still occur. Setting this will force the LOAD_DO_NOT_SAVE_COOKIES field to
+  // be set in |load_flags_|. See https://crbug.com/799935.
   void set_allow_credentials(bool allow_credentials);
+  bool allow_credentials() const { return allow_credentials_; }
 
   // Sets the upload data.
   void set_upload(std::unique_ptr<UploadDataStream> upload);
@@ -509,10 +507,10 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
 
   // Returns PrivacyMode that should be used for the request. Updated every time
   // the request is redirected.
-  PrivacyMode privacy_mode() { return privacy_mode_; }
+  PrivacyMode privacy_mode() const { return privacy_mode_; }
 
   // Returns whether secure DNS should be disabled for the request.
-  bool disable_secure_dns() { return disable_secure_dns_; }
+  bool disable_secure_dns() const { return disable_secure_dns_; }
 
   void set_maybe_sent_cookies(CookieAccessResultList cookies);
   void set_maybe_stored_cookies(CookieAndLineAccessResultList cookies);
@@ -621,6 +619,9 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
 
   // Used to specify the context (cookie store, cache) for this request.
   const URLRequestContext* context() const;
+
+  // Returns context()->network_delegate().
+  NetworkDelegate* network_delegate() const;
 
   const NetLogWithSource& net_log() const { return net_log_; }
 
@@ -747,14 +748,10 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   friend class TestNetworkDelegate;
 
   // URLRequests are always created by calling URLRequestContext::CreateRequest.
-  //
-  // If no network delegate is passed in, will use the ones from the
-  // URLRequestContext.
   URLRequest(const GURL& url,
              RequestPriority priority,
              Delegate* delegate,
              const URLRequestContext* context,
-             NetworkDelegate* network_delegate,
              NetworkTrafficAnnotationTag traffic_annotation);
 
   // Resumes or blocks a request paused by the NetworkDelegate::OnBeforeRequest
@@ -764,12 +761,11 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // paused).
   void BeforeRequestComplete(int error);
 
-  // TODO(mmenke):  Make this take a scoped_ptr.
-  void StartJob(URLRequestJob* job);
+  void StartJob(std::unique_ptr<URLRequestJob> job);
 
   // Restarting involves replacing the current job with a new one such as what
   // happens when following a HTTP redirect.
-  void RestartWithJob(URLRequestJob* job);
+  void RestartWithJob(std::unique_ptr<URLRequestJob> job);
   void PrepareToRestart();
 
   // Cancels the request and set the error and ssl info for this request to the
@@ -799,9 +795,9 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
                                  bool fatal);
   void NotifyReadCompleted(int bytes_read);
 
-  // These functions delegate to |network_delegate_| if it is not NULL.
-  // If |network_delegate_| is NULL, cookies can be used unless
-  // SetDefaultCookiePolicyToBlock() has been called.
+  // These functions delegate to the NetworkDelegate if it is not nullptr.
+  // Otherwise, cookies can be used unless SetDefaultCookiePolicyToBlock() has
+  // been called.
   bool CanGetCookies() const;
   bool CanSetCookie(const net::CanonicalCookie& cookie,
                     CookieOptions* options) const;
@@ -826,8 +822,6 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // cookie store, socket pool, etc.)
   const URLRequestContext* context_;
 
-  NetworkDelegate* network_delegate_;
-
   // Tracks the time spent in various load states throughout this request.
   NetLogWithSource net_log_;
 
@@ -847,8 +841,16 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   ReferrerPolicy referrer_policy_;
   RedirectInfo::FirstPartyURLPolicy first_party_url_policy_;
   HttpRequestHeaders extra_request_headers_;
-  int load_flags_;  // Flags indicating the request type for the load;
-                    // expected values are LOAD_* enums above.
+  // Flags indicating the request type for the load. Expected values are LOAD_*
+  // enums above.
+  int load_flags_;
+  // Whether the request is allowed to send credentials in general. Set by
+  // caller.
+  bool allow_credentials_;
+  // Privacy mode for current hop. Based on |allow_credentials_|, |load_flags_|,
+  // and information provided by the NetworkDelegate. Saving cookies can
+  // currently be blocked independently of this field by setting the deprecated
+  // LOAD_DO_NOT_SAVE_COOKIES field in |load_flags_|.
   PrivacyMode privacy_mode_;
   bool disable_secure_dns_;
 

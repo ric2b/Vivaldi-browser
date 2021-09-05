@@ -67,6 +67,14 @@ bool EventDatabase::CreateEventTable() {
       "organizer LONGVARCHAR,"
       "timezone LONGVARCHAR,"
       "is_template INTEGER DEFAULT 0 NOT NULL,"
+      "due INTEGER,"
+      "priority INTEGER,"
+      "status LONGVARCHAR,"
+      "percentage_complete INTEGER,"
+      "categories LONGVARCHAR,"
+      "component_class LONGVARCHAR,"
+      "attachment LONGVARCHAR,"
+      "completed INTEGER,"
       "created INTEGER,"
       "last_modified INTEGER"
       ")");
@@ -82,39 +90,47 @@ EventID EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
       "start, end, all_day, is_recurring, start_recurring, end_recurring, "
       "location, url, etag, href, uid, event_type_id, task, complete, trash, "
       "trash_time, sequence, ical, rrule, organizer, timezone, is_template, "
-      "created, last_modified) "
+      "due, priority, status, percentage_complete, categories, "
+      "component_class, attachment, completed, created, last_modified) "
       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-      "?, ?, ?, ?, ?, ?, ?)"));
+      "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )"));
 
-  statement.BindInt64(0, row.calendar_id());
-  statement.BindInt64(1, row.alarm_id());
-  statement.BindString16(2, row.title());
-  statement.BindString16(3, row.description());
-  statement.BindInt64(4, row.start().ToInternalValue());
-  statement.BindInt64(5, row.end().ToInternalValue());
-  statement.BindInt(6, row.all_day() ? 1 : 0);
-  statement.BindInt(7, row.is_recurring() ? 1 : 0);
-  statement.BindInt64(8, row.start_recurring().ToInternalValue());
-  statement.BindInt64(9, row.end_recurring().ToInternalValue());
-  statement.BindString16(10, row.location());
-  statement.BindString16(11, row.url());
-  statement.BindString(12, row.etag());
-  statement.BindString(13, row.href());
-  statement.BindString(14, row.uid());
-  statement.BindInt64(15, row.event_type_id());
-  statement.BindInt(16, row.task() ? 1 : 0);
-  statement.BindInt(17, row.complete() ? 1 : 0);
-  statement.BindInt(18, row.trash() ? 1 : 0);
-  statement.BindInt64(19,
-                      row.trash() ? base::Time().Now().ToInternalValue() : 0);
-  statement.BindInt64(20, row.sequence());
-  statement.BindString16(21, row.ical());
-  statement.BindString(22, row.rrule());
-  statement.BindString(23, row.organizer());
-  statement.BindString(24, row.timezone());
-  statement.BindInt(25, row.is_template() ? 1 : 0);
-  statement.BindInt64(26, base::Time().Now().ToInternalValue());
-  statement.BindInt64(27, base::Time().Now().ToInternalValue());
+  statement.BindInt64(0, row.calendar_id);
+  statement.BindInt64(1, row.alarm_id);
+  statement.BindString16(2, row.title);
+  statement.BindString16(3, row.description);
+  statement.BindInt64(4, row.start.ToInternalValue());
+  statement.BindInt64(5, row.end.ToInternalValue());
+  statement.BindInt(6, row.all_day ? 1 : 0);
+  statement.BindInt(7, row.is_recurring ? 1 : 0);
+  statement.BindInt64(8, row.start_recurring.ToInternalValue());
+  statement.BindInt64(9, row.end_recurring.ToInternalValue());
+  statement.BindString16(10, row.location);
+  statement.BindString16(11, row.url);
+  statement.BindString(12, row.etag);
+  statement.BindString(13, row.href);
+  statement.BindString(14, row.uid);
+  statement.BindInt64(15, row.event_type_id);
+  statement.BindInt(16, row.task ? 1 : 0);
+  statement.BindInt(17, row.complete ? 1 : 0);
+  statement.BindInt(18, row.trash ? 1 : 0);
+  statement.BindInt64(19, row.trash ? base::Time().Now().ToInternalValue() : 0);
+  statement.BindInt64(20, row.sequence);
+  statement.BindString16(21, row.ical);
+  statement.BindString(22, row.rrule);
+  statement.BindString(23, row.organizer);
+  statement.BindString(24, row.timezone);
+  statement.BindInt(25, row.is_template ? 1 : 0);
+  statement.BindInt64(26, row.due.ToInternalValue());
+  statement.BindInt(27, row.priority);
+  statement.BindString(28, row.status);
+  statement.BindInt(29, row.percentage_complete);
+  statement.BindString16(30, row.categories);
+  statement.BindString16(31, row.component_class);
+  statement.BindString16(32, row.attachment);
+  statement.BindInt64(33, row.completed.ToInternalValue());
+  statement.BindInt64(34, base::Time().Now().ToInternalValue());
+  statement.BindInt64(35, base::Time().Now().ToInternalValue());
 
   if (!statement.Run()) {
     return 0;
@@ -174,34 +190,46 @@ bool EventDatabase::UpdateEventRow(const EventRow& event) {
         all_day=?, is_recurring=?, start_recurring=?, end_recurring=?, \
         location=?, url=?, etag=?, href=?, uid=?, event_type_id=?, \
         task=?, complete=?, trash=?, trash_time=?, sequence=?, ical=?, \
-        rrule=?, organizer=?, timezone=? WHERE id=?"));
-  statement.BindInt64(0, event.calendar_id());
-  statement.BindInt64(1, event.alarm_id());
-  statement.BindString16(2, event.title());
-  statement.BindString16(3, event.description());
-  statement.BindInt64(4, event.start().ToInternalValue());
-  statement.BindInt64(5, event.end().ToInternalValue());
-  statement.BindInt(6, event.all_day() ? 1 : 0);
-  statement.BindInt(7, event.is_recurring() ? 1 : 0);
-  statement.BindInt64(8, event.start_recurring().ToInternalValue());
-  statement.BindInt64(9, event.end_recurring().ToInternalValue());
-  statement.BindString16(10, event.location());
-  statement.BindString16(11, event.url());
-  statement.BindString(12, event.etag());
-  statement.BindString(13, event.href());
-  statement.BindString(14, event.uid());
-  statement.BindInt64(15, event.event_type_id());
-  statement.BindInt(16, event.task() ? 1 : 0);
-  statement.BindInt(17, event.complete() ? 1 : 0);
-  statement.BindInt(18, event.trash() ? 1 : 0);
+        rrule=?, organizer=?, timezone=?, \
+        due=?, priority=?, status=?, percentage_complete=?,  \
+        categories=?, component_class=?, attachment=?, completed=? \
+        WHERE id=?"));
+  statement.BindInt64(0, event.calendar_id);
+  statement.BindInt64(1, event.alarm_id);
+  statement.BindString16(2, event.title);
+  statement.BindString16(3, event.description);
+  statement.BindInt64(4, event.start.ToInternalValue());
+  statement.BindInt64(5, event.end.ToInternalValue());
+  statement.BindInt(6, event.all_day ? 1 : 0);
+  statement.BindInt(7, event.is_recurring ? 1 : 0);
+  statement.BindInt64(8, event.start_recurring.ToInternalValue());
+  statement.BindInt64(9, event.end_recurring.ToInternalValue());
+  statement.BindString16(10, event.location);
+  statement.BindString16(11, event.url);
+  statement.BindString(12, event.etag);
+  statement.BindString(13, event.href);
+  statement.BindString(14, event.uid);
+  statement.BindInt64(15, event.event_type_id);
+  statement.BindInt(16, event.task ? 1 : 0);
+  statement.BindInt(17, event.complete ? 1 : 0);
+  statement.BindInt(18, event.trash ? 1 : 0);
   statement.BindInt64(19,
-                      event.trash() ? base::Time().Now().ToInternalValue() : 0);
-  statement.BindInt(20, event.sequence());
-  statement.BindString16(21, event.ical());
-  statement.BindString(22, event.rrule());
-  statement.BindString(23, event.organizer());
-  statement.BindString(24, event.timezone());
-  statement.BindInt64(25, event.id());
+                      event.trash ? base::Time().Now().ToInternalValue() : 0);
+  statement.BindInt(20, event.sequence);
+  statement.BindString16(21, event.ical);
+  statement.BindString(22, event.rrule);
+  statement.BindString(23, event.organizer);
+  statement.BindString(24, event.timezone);
+  statement.BindInt64(25, event.due.ToInternalValue());
+  statement.BindInt64(26, event.priority);
+  statement.BindString(27, event.status);
+  statement.BindInt(28, event.percentage_complete);
+  statement.BindString16(29, event.categories);
+  statement.BindString16(30, event.component_class);
+  statement.BindString16(31, event.attachment);
+  statement.BindInt64(32, event.completed.ToInternalValue());
+
+  statement.BindInt64(33, event.id);
 
   return statement.Run();
 }
@@ -235,33 +263,49 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
   std::string rrule = s.ColumnString(23);
   std::string organizer = s.ColumnString(24);
   std::string timezone = s.ColumnString(25);
+  base::Time due = base::Time::FromInternalValue(s.ColumnInt64(26));
+  int priority = s.ColumnInt(27);
+  std::string status = s.ColumnString(28);
+  int percentage_complete = s.ColumnInt(29);
+  base::string16 categories = s.ColumnString16(30);
+  base::string16 component_class = s.ColumnString16(31);
+  base::string16 attachment = s.ColumnString16(32);
+  base::Time completed = base::Time::FromInternalValue(s.ColumnInt64(33));
 
-  event->set_id(id);
-  event->set_calendar_id(calendar_id);
-  event->set_alarm_id(alarm_id);
-  event->set_title(title);
-  event->set_description(description);
-  event->set_start(start);
-  event->set_end(end);
-  event->set_all_day(all_day == 1 ? true : false);
-  event->set_is_recurring(is_recurring == 1 ? true : false);
-  event->set_start_recurring(start_recurring);
-  event->set_end_recurring(end_recurring);
-  event->set_location(location);
-  event->set_url(url);
-  event->set_etag(etag);
-  event->set_href(href);
-  event->set_uid(uid);
-  event->set_event_type_id(event_type_id);
-  event->set_task(task == 1 ? true : false);
-  event->set_complete(complete == 1 ? true : false);
-  event->set_trash(trash == 1 ? true : false);
-  event->set_trash_time(trash_time);
-  event->set_sequence(sequence);
-  event->set_ical(ical);
-  event->set_rrule(rrule);
-  event->set_organizer(organizer);
-  event->set_timezone(timezone);
+  event->id = id;
+  event->calendar_id = calendar_id;
+  event->alarm_id = alarm_id;
+  event->title = title;
+  event->description = description;
+  event->start = start;
+  event->end = end;
+  event->all_day = all_day == 1 ? true : false;
+  event->is_recurring = is_recurring == 1 ? true : false;
+  event->start_recurring = start_recurring;
+  event->end_recurring = end_recurring;
+  event->location = location;
+  event->url = url;
+  event->etag = etag;
+  event->href = href;
+  event->uid = uid;
+  event->event_type_id = event_type_id;
+  event->task = task == 1 ? true : false;
+  event->complete = complete == 1 ? true : false;
+  event->trash = trash == 1 ? true : false;
+  event->trash_time = trash_time;
+  event->sequence = sequence;
+  event->ical = ical;
+  event->rrule = rrule;
+  event->organizer = organizer;
+  event->timezone = timezone;
+  event->due = due;
+  event->priority = priority;
+  event->status = status;
+  event->percentage_complete = percentage_complete;
+  event->categories = categories;
+  event->component_class = component_class;
+  event->attachment = attachment;
+  event->completed = completed;
 }
 
 bool EventDatabase::DeleteEvent(calendar::EventID event_id) {
@@ -370,6 +414,65 @@ bool EventDatabase::MigrateCalendarToVersion8() {
   if (!GetDB().DoesColumnExist("events", "is_template")) {
     if (!GetDB().Execute("ALTER TABLE events "
                          "ADD COLUMN is_template INTEGER DEFAULT 0 NOT NULL"))
+      return false;
+  }
+  return true;
+}
+
+// Updates to version 9. Adds columns
+// due, priority, status, percentage_complete, categories, component_class,
+// attachment, completed
+bool EventDatabase::MigrateCalendarToVersion9() {
+  if (!GetDB().DoesTableExist("events")) {
+    NOTREACHED() << "events table should exist before migration";
+    return false;
+  }
+
+  if (!GetDB().DoesColumnExist("events", "due")) {
+    if (!GetDB().Execute("ALTER TABLE events "
+                         "ADD COLUMN due INTEGER"))
+      return false;
+  }
+
+  if (!GetDB().DoesColumnExist("events", "priority")) {
+    if (!GetDB().Execute("ALTER TABLE events "
+                         "ADD COLUMN priority INTEGER"))
+      return false;
+  }
+
+  if (!GetDB().DoesColumnExist("events", "status")) {
+    if (!GetDB().Execute("ALTER TABLE events "
+                         "ADD COLUMN status LONGVARCHAR"))
+      return false;
+  }
+
+  if (!GetDB().DoesColumnExist("events", "percentage_complete")) {
+    if (!GetDB().Execute("ALTER TABLE events "
+                         "ADD COLUMN percentage_complete INTEGER"))
+      return false;
+  }
+
+  if (!GetDB().DoesColumnExist("events", "categories")) {
+    if (!GetDB().Execute("ALTER TABLE events "
+                         "ADD COLUMN categories LONGVARCHAR"))
+      return false;
+  }
+
+  if (!GetDB().DoesColumnExist("events", "component_class")) {
+    if (!GetDB().Execute("ALTER TABLE events "
+                         "ADD COLUMN component_class LONGVARCHAR"))
+      return false;
+  }
+
+  if (!GetDB().DoesColumnExist("events", "attachment")) {
+    if (!GetDB().Execute("ALTER TABLE events "
+                         "ADD COLUMN attachment LONGVARCHAR"))
+      return false;
+  }
+
+  if (!GetDB().DoesColumnExist("events", "completed")) {
+    if (!GetDB().Execute("ALTER TABLE events "
+                         "ADD COLUMN completed INTEGER"))
       return false;
   }
   return true;

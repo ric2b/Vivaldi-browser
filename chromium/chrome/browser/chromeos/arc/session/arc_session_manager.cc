@@ -303,10 +303,8 @@ int GetSignInErrorCode(arc::mojom::ArcSignInErrorPtr signin_error) {
 }
 
 ArcSupportHost::Error GetCloudProvisionFlowError(
-    base::Optional<mojom::CloudProvisionFlowError> cloud_provision_flow_error) {
-  DCHECK(cloud_provision_flow_error);
-
-  switch (cloud_provision_flow_error.value()) {
+    mojom::CloudProvisionFlowError cloud_provision_flow_error) {
+  switch (cloud_provision_flow_error) {
     case mojom::CloudProvisionFlowError::ERROR_ENROLLMENT_TOKEN_INVALID:
       return ArcSupportHost::Error::
           SIGN_IN_CLOUD_PROVISION_FLOW_ENROLLMENT_TOKEN_INVALID;
@@ -531,7 +529,6 @@ void ArcSessionManager::OnSessionStopped(ArcStopReason reason,
     DCHECK_EQ(state_, State::ACTIVE);
     // If ARC is being restarted, here do nothing, and just wait for its
     // next run.
-    VLOG(1) << "ARC session is stopped, but being restarted: " << reason;
     return;
   }
 
@@ -592,8 +589,6 @@ void ArcSessionManager::OnProvisioningFinished(
   if (scoped_opt_in_tracker_ && !provisioning_successful)
     scoped_opt_in_tracker_->TrackError();
 
-  base::Optional<mojom::CloudProvisionFlowError> cloud_provision_flow_error;
-
   if (result == ProvisioningResult::CHROME_SERVER_COMMUNICATION_ERROR) {
     // TODO(poromov): Consider ARC PublicSession offline mode.
     // Currently ARC session will be exited below, while the main user session
@@ -617,15 +612,12 @@ void ArcSessionManager::OnProvisioningFinished(
     UpdateProvisioningTiming(base::TimeTicks::Now() - sign_in_start_time_,
                              provisioning_successful, profile_);
     UpdateProvisioningResultUMA(result, profile_);
-    if (signin_error && signin_error->is_cloud_provision_flow_error()) {
-      cloud_provision_flow_error =
-          signin_error->get_cloud_provision_flow_error();
+    if (signin_error && signin_error->is_cloud_provision_flow_error())
+      UpdateCloudProvisionFlowErrorUMA(
+          signin_error->get_cloud_provision_flow_error(), profile_);
 
-      UpdateCloudProvisionFlowErrorUMA(cloud_provision_flow_error.value(),
-                                       profile_);
-    }
     if (!provisioning_successful)
-      UpdateOptInCancelUMA(OptInCancelReason::CLOUD_PROVISION_FLOW_FAIL);
+      UpdateOptInCancelUMA(OptInCancelReason::PROVISIONING_FAILED);
   }
 
   if (provisioning_successful) {
@@ -682,13 +674,10 @@ void ArcSessionManager::OnProvisioningFinished(
     case ProvisioningResult::DEVICE_CHECK_IN_INTERNAL_ERROR:
       error = ArcSupportHost::Error::SIGN_IN_GMS_NOT_AVAILABLE_ERROR;
       break;
-    case ProvisioningResult::DEPRECATED_CLOUD_PROVISION_FLOW_FAILED:
-    case ProvisioningResult::DEPRECATED_CLOUD_PROVISION_FLOW_TIMEOUT:
-    case ProvisioningResult::DEPRECATED_CLOUD_PROVISION_FLOW_INTERNAL_ERROR:
-      error = ArcSupportHost::Error::SIGN_IN_CLOUD_PROVISION_FLOW_FAIL_ERROR;
-      break;
     case ProvisioningResult::CLOUD_PROVISION_FLOW_ERROR:
-      error = GetCloudProvisionFlowError(cloud_provision_flow_error);
+      DCHECK(signin_error && signin_error->is_cloud_provision_flow_error());
+      error = GetCloudProvisionFlowError(
+          signin_error->get_cloud_provision_flow_error());
       break;
     case ProvisioningResult::CHROME_SERVER_COMMUNICATION_ERROR:
       error = ArcSupportHost::Error::SERVER_COMMUNICATION_ERROR;
@@ -712,16 +701,13 @@ void ArcSessionManager::OnProvisioningFinished(
       result == ProvisioningResult::CHROME_SERVER_COMMUNICATION_ERROR) {
     if (profile_->GetPrefs()->HasPrefPath(prefs::kArcSignedIn))
       profile_->GetPrefs()->SetBoolean(prefs::kArcSignedIn, false);
+    VLOG(1) << "Stopping ARC due to provisioning failure";
     ShutdownSession();
     ShowArcSupportHostError(error, 0 /* error_code */, true);
     return;
   }
 
-  if (result == ProvisioningResult::DEPRECATED_CLOUD_PROVISION_FLOW_FAILED ||
-      result == ProvisioningResult::DEPRECATED_CLOUD_PROVISION_FLOW_TIMEOUT ||
-      result ==
-          ProvisioningResult::DEPRECATED_CLOUD_PROVISION_FLOW_INTERNAL_ERROR ||
-      result == ProvisioningResult::CLOUD_PROVISION_FLOW_ERROR ||
+  if (result == ProvisioningResult::CLOUD_PROVISION_FLOW_ERROR ||
       // OVERALL_SIGN_IN_TIMEOUT might be an indication that ARC believes it is
       // fully setup, but Chrome does not.
       result == ProvisioningResult::OVERALL_SIGN_IN_TIMEOUT ||
@@ -824,6 +810,7 @@ void ArcSessionManager::Initialize() {
 }
 
 void ArcSessionManager::Shutdown() {
+  VLOG(1) << "Shutting down session manager";
   enable_requested_ = false;
   ResetArcState();
   arc_session_runner_->OnShutdown();
@@ -851,9 +838,14 @@ void ArcSessionManager::ShutdownSession() {
       // Ignore in NOT_INITIALIZED case. This is called in initial SetProfile
       // invocation.
       // TODO(hidehiko): Remove this along with the clean up.
-      break;
     case State::STOPPED:
       // Currently, ARC is stopped. Do nothing.
+    case State::REMOVING_DATA_DIR:
+      // When data removing is done, |state_| will be set to STOPPED.
+      // Do nothing here.
+    case State::STOPPING:
+      // Now ARC is stopping. Do nothing here.
+      VLOG(1) << "Skipping session shutdown because state is: " << state_;
       break;
     case State::NEGOTIATING_TERMS_OF_SERVICE:
     case State::CHECKING_ANDROID_MANAGEMENT:
@@ -864,9 +856,7 @@ void ArcSessionManager::ShutdownSession() {
       // immediately.
       state_ = State::STOPPED;
       break;
-    case State::REMOVING_DATA_DIR:
-      // When data removing is done, |state_| will be set to STOPPED.
-      // Do nothing here.
+
       break;
     case State::ACTIVE:
       // Request to stop the ARC. |state_| will be set to STOPPED eventually.
@@ -875,9 +865,6 @@ void ArcSessionManager::ShutdownSession() {
       // |state_| might be changed.
       state_ = State::STOPPING;
       arc_session_runner_->RequestStop();
-      break;
-    case State::STOPPING:
-      // Now ARC is stopping. Do nothing here.
       break;
   }
 }
@@ -942,6 +929,7 @@ void ArcSessionManager::CancelAuthCode() {
   }
 
   MaybeUpdateOptInCancelUMA(support_host_.get());
+  VLOG(1) << "Auth cancelled. Stopping ARC. state: " << state_;
   StopArc();
   SetArcPlayStoreEnabledForProfile(profile_, false);
 }
@@ -1124,7 +1112,7 @@ void ArcSessionManager::RequestArcDataRemoval() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(profile_);
   DCHECK(data_remover_);
-  VLOG(1) << "Removing user ARC data.";
+  VLOG(1) << "Scheduling ARC data removal.";
 
   // TODO(hidehiko): DCHECK the previous state. This is called for four cases;
   // 1) Supporting managed user initial disabled case (Please see also
@@ -1508,6 +1496,8 @@ void ArcSessionManager::OnRetryClicked() {
   DCHECK(!g_ui_enabled || !support_host_->HasAuthDelegate());
 
   UpdateOptInActionUMA(OptInActionType::RETRY);
+
+  VLOG(1) << "Retry button clicked";
 
   if (state_ == State::ACTIVE) {
     // ERROR_WITH_FEEDBACK is set in OnSignInFailed(). In the case, stopping

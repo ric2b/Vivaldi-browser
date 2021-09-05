@@ -293,7 +293,7 @@ TEST(VideoCaptureOracleTest, SamplesAtCorrectTimesAroundRefreshRequests) {
 
 // Tests that VideoCaptureOracle does not rapidly change proposed capture sizes,
 // to allow both the source content and the rest of the end-to-end system to
-// stabilize.
+// stabilize (if autothrottling is enabled).
 TEST(VideoCaptureOracleTest, DoesNotRapidlyChangeCaptureSize) {
   VideoCaptureOracle oracle(true);
   oracle.SetMinCapturePeriod(k30HzPeriod);
@@ -312,7 +312,9 @@ TEST(VideoCaptureOracleTest, DoesNotRapidlyChangeCaptureSize) {
     const int frame_number = oracle.next_frame_number();
     oracle.RecordCapture(0.0);
     ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
-    oracle.RecordConsumerFeedback(frame_number, 0.0);
+    // Must provide non-zero actionable resource_utilization to enable
+    // auto-throttling.
+    oracle.RecordConsumerFeedback(frame_number, media::VideoFrameFeedback(0.1));
   }
 
   // Now run 30 seconds of frame captures with lots of random source size
@@ -342,7 +344,7 @@ TEST(VideoCaptureOracleTest, DoesNotRapidlyChangeCaptureSize) {
     const int frame_number = oracle.next_frame_number();
     oracle.RecordCapture(0.0);
     ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
-    oracle.RecordConsumerFeedback(frame_number, 0.0);
+    oracle.RecordConsumerFeedback(frame_number, media::VideoFrameFeedback(0.0));
   }
 }
 
@@ -380,7 +382,7 @@ TEST(VideoCaptureOracleTest, ResizeThrottlingDisabled) {
     const int frame_number = oracle.next_frame_number();
     oracle.RecordCapture(0.0);
     ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
-    oracle.RecordConsumerFeedback(frame_number, 0.0);
+    oracle.RecordConsumerFeedback(frame_number, media::VideoFrameFeedback(0.0));
   }
 }
 
@@ -422,12 +424,14 @@ void RunAutoThrottleTest(bool is_content_animating,
     base::TimeTicks ignored;
     ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
     if (with_consumer_feedback) {
-      oracle.RecordConsumerFeedback(frame_number, utilization);
+      oracle.RecordConsumerFeedback(frame_number,
+                                    media::VideoFrameFeedback(utilization));
     } else if (t == kInitialTestTimeTicks) {
       // Provide feedback with the very first capture to activate the capture
       // size auto-throttling logic. After this, no consumer feedback applies
       // and the buffer utilization will be the only consideration.
-      oracle.RecordConsumerFeedback(frame_number, 0.0);
+      oracle.RecordConsumerFeedback(frame_number,
+                                    media::VideoFrameFeedback(0.0));
     }
   }
 
@@ -464,7 +468,8 @@ void RunAutoThrottleTest(bool is_content_animating,
       base::TimeTicks ignored;
       ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
       if (with_consumer_feedback)
-        oracle.RecordConsumerFeedback(frame_number, utilization);
+        oracle.RecordConsumerFeedback(frame_number,
+                                      media::VideoFrameFeedback(utilization));
     }
   }
 
@@ -505,7 +510,8 @@ void RunAutoThrottleTest(bool is_content_animating,
       base::TimeTicks ignored;
       ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
       if (with_consumer_feedback)
-        oracle.RecordConsumerFeedback(frame_number, utilization);
+        oracle.RecordConsumerFeedback(frame_number,
+                                      media::VideoFrameFeedback(utilization));
     }
   }
 }
@@ -593,7 +599,8 @@ TEST(VideoCaptureOracleTest, IncreasesFrequentlyOnlyAfterSourceSizeChange) {
     oracle.RecordCapture(0.25);
     base::TimeTicks ignored;
     ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
-    oracle.RecordConsumerFeedback(frame_number, 0.25);
+    oracle.RecordConsumerFeedback(frame_number,
+                                  media::VideoFrameFeedback(0.25));
   }
 
   // Now, set the source size to 720p, continuing to report under-utilization,
@@ -614,7 +621,8 @@ TEST(VideoCaptureOracleTest, IncreasesFrequentlyOnlyAfterSourceSizeChange) {
     oracle.RecordCapture(0.25);
     base::TimeTicks ignored;
     ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
-    oracle.RecordConsumerFeedback(frame_number, 0.25);
+    oracle.RecordConsumerFeedback(frame_number,
+                                  media::VideoFrameFeedback(0.25));
   }
   ASSERT_EQ(k720pSize, oracle.capture_size());
 
@@ -645,7 +653,8 @@ TEST(VideoCaptureOracleTest, IncreasesFrequentlyOnlyAfterSourceSizeChange) {
     oracle.RecordCapture(utilization);
     base::TimeTicks ignored;
     ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
-    oracle.RecordConsumerFeedback(frame_number, utilization);
+    oracle.RecordConsumerFeedback(frame_number,
+                                  media::VideoFrameFeedback(utilization));
   }
   ASSERT_FALSE(stepped_down_size.IsEmpty());
 
@@ -678,7 +687,8 @@ TEST(VideoCaptureOracleTest, IncreasesFrequentlyOnlyAfterSourceSizeChange) {
     oracle.RecordCapture(utilization);
     base::TimeTicks ignored;
     ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
-    oracle.RecordConsumerFeedback(frame_number, utilization);
+    oracle.RecordConsumerFeedback(frame_number,
+                                  media::VideoFrameFeedback(utilization));
   }
   ASSERT_FALSE(stepped_up_size.IsEmpty());
 }
@@ -704,7 +714,7 @@ TEST(VideoCaptureOracleTest, DoesNotAutoThrottleWhenResolutionIsFixed) {
     const int frame_number = oracle.next_frame_number();
     oracle.RecordCapture(0.9);
     ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
-    oracle.RecordConsumerFeedback(frame_number, 0.9);
+    oracle.RecordConsumerFeedback(frame_number, media::VideoFrameFeedback(0.9));
   }
 
   // Now run 10 seconds with overload indicated.  Still, expect no capture size
@@ -718,8 +728,223 @@ TEST(VideoCaptureOracleTest, DoesNotAutoThrottleWhenResolutionIsFixed) {
     const int frame_number = oracle.next_frame_number();
     oracle.RecordCapture(2.0);
     ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
-    oracle.RecordConsumerFeedback(frame_number, 2.0);
+    oracle.RecordConsumerFeedback(frame_number, media::VideoFrameFeedback(2.0));
   }
+}
+
+// Tests that VideoCaptureOracle reduces resolution on max_pixels feedback.
+TEST(VideoCaptureOracleTest, RespectsMaxPixelsFeedback) {
+  VideoCaptureOracle oracle(true);
+  oracle.SetMinCapturePeriod(k30HzPeriod);
+  oracle.SetCaptureSizeConstraints(kSmallestNonEmptySize, k720pSize, false);
+  oracle.SetSourceSize(k720pSize);
+
+  // Run 1 second with no feedback and expect no capture size changes.
+  base::TimeTicks t = kInitialTestTimeTicks;
+  const base::TimeDelta event_increment = k30HzPeriod * 2;
+  base::TimeTicks end_t = t + base::TimeDelta::FromSeconds(1);
+  for (; t < end_t; t += event_increment) {
+    ASSERT_TRUE(oracle.ObserveEventAndDecideCapture(
+        VideoCaptureOracle::kCompositorUpdate, gfx::Rect(), t));
+    ASSERT_EQ(k720pSize, oracle.capture_size());
+    base::TimeTicks ignored;
+    const int frame_number = oracle.next_frame_number();
+    oracle.RecordCapture(0.25);  // Low buffer utilization.
+    ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
+    oracle.RecordConsumerFeedback(frame_number, media::VideoFrameFeedback());
+  }
+
+  // Now run for a single frame with 360p pixel limit.
+  {
+    ASSERT_TRUE(oracle.ObserveEventAndDecideCapture(
+        VideoCaptureOracle::kCompositorUpdate, gfx::Rect(), t));
+    ASSERT_EQ(k720pSize, oracle.capture_size());
+    base::TimeTicks ignored;
+    const int frame_number = oracle.next_frame_number();
+    oracle.RecordCapture(0.25);  // Low buffer utilization.
+    ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
+    oracle.RecordConsumerFeedback(
+        frame_number,
+        media::VideoFrameFeedback(-1.0, std::numeric_limits<float>::infinity(),
+                                  k360pSize.GetArea()));
+    t += event_increment;
+  }
+
+  // Capture another frame. Size should be 360p. Make feedback with no limit.
+  {
+    ASSERT_TRUE(oracle.ObserveEventAndDecideCapture(
+        VideoCaptureOracle::kCompositorUpdate, gfx::Rect(), t));
+    ASSERT_EQ(k360pSize, oracle.capture_size());
+    base::TimeTicks ignored;
+    const int frame_number = oracle.next_frame_number();
+    oracle.RecordCapture(0.25);  // Low buffer utilization.
+    ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
+    oracle.RecordConsumerFeedback(frame_number, media::VideoFrameFeedback());
+    t += event_increment;
+  }
+
+  // Capture another frame. Size should be reverted back, since the last frame
+  // reported no limit.
+  {
+    ASSERT_TRUE(oracle.ObserveEventAndDecideCapture(
+        VideoCaptureOracle::kCompositorUpdate, gfx::Rect(), t));
+    ASSERT_EQ(k720pSize, oracle.capture_size());
+    base::TimeTicks ignored;
+    const int frame_number = oracle.next_frame_number();
+    oracle.RecordCapture(0.25);  // Low buffer utilization.
+    ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
+    oracle.RecordConsumerFeedback(frame_number, media::VideoFrameFeedback());
+    t += event_increment;
+  }
+}
+
+// Tests that VideoCaptureOracle respects resource_utilization feedback over
+// max_pixels feedback.
+TEST(VideoCaptureOracleTest, IgnoresMaxPixelsFeedbackIfAutoThrottlingIsOn) {
+  VideoCaptureOracle oracle(true);
+  oracle.SetMinCapturePeriod(k30HzPeriod);
+  oracle.SetCaptureSizeConstraints(kSmallestNonEmptySize, k720pSize, false);
+  oracle.SetSourceSize(k720pSize);
+
+  // Run 1 second with no feedback and expect no capture size changes.
+  base::TimeTicks t = kInitialTestTimeTicks;
+  const base::TimeDelta event_increment = k30HzPeriod * 2;
+  base::TimeTicks end_t = t + base::TimeDelta::FromSeconds(1);
+  for (; t < end_t; t += event_increment) {
+    ASSERT_TRUE(oracle.ObserveEventAndDecideCapture(
+        VideoCaptureOracle::kCompositorUpdate, gfx::Rect(), t));
+    ASSERT_EQ(k720pSize, oracle.capture_size());
+    base::TimeTicks ignored;
+    const int frame_number = oracle.next_frame_number();
+    oracle.RecordCapture(0.25);  // Low buffer utilization.
+    ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
+    oracle.RecordConsumerFeedback(frame_number,
+                                  media::VideoFrameFeedback(0.25));
+  }
+
+  // Now run with a new 360p pixel limit returned in the feedback.
+  {
+    ASSERT_TRUE(oracle.ObserveEventAndDecideCapture(
+        VideoCaptureOracle::kCompositorUpdate, gfx::Rect(), t));
+    ASSERT_EQ(k720pSize, oracle.capture_size());
+    base::TimeTicks ignored;
+    const int frame_number = oracle.next_frame_number();
+    oracle.RecordCapture(0.25);  // Low buffer utilization.
+    ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
+    oracle.RecordConsumerFeedback(
+        frame_number,
+        media::VideoFrameFeedback(0.25, std::numeric_limits<float>::infinity(),
+                                  k360pSize.GetArea()));
+    t += event_increment;
+  }
+
+  // Capture another frame. Size should still be 720p, since the autothrottling
+  // was enabled by the previous feedback.
+  {
+    ASSERT_TRUE(oracle.ObserveEventAndDecideCapture(
+        VideoCaptureOracle::kCompositorUpdate, gfx::Rect(), t));
+    ASSERT_EQ(k720pSize, oracle.capture_size());
+    base::TimeTicks ignored;
+    const int frame_number = oracle.next_frame_number();
+    oracle.RecordCapture(0.25);  // Low buffer utilization.
+    ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
+    oracle.RecordConsumerFeedback(frame_number, media::VideoFrameFeedback());
+    t += event_increment;
+  }
+}
+
+// Tests that VideoCaptureOracle respects the max framerate requested by the
+// consumer.
+TEST(VideoCaptureOracleTest, RespectsMaxFrameRateFeedback) {
+  constexpr base::TimeDelta vsync_interval = base::TimeDelta::FromHz(60);
+  constexpr base::TimeDelta k5HzPeriod = base::TimeDelta::FromHz(5);
+  constexpr base::TimeDelta kAllowedError =
+      base::TimeDelta::FromMilliseconds(1);
+  constexpr float k5Fps = 5.0;
+  constexpr float kNoResourceUtilization = -1.0;
+  constexpr float kNoFpsLimit = std::numeric_limits<float>::infinity();
+
+  VideoCaptureOracle oracle(false);
+  oracle.SetMinCapturePeriod(k30HzPeriod);
+  oracle.SetCaptureSizeConstraints(k720pSize, k720pSize, false);
+
+  // Have the oracle observe some compositor events.  Simulate that each capture
+  // completes successfully.
+  base::TimeTicks t = kInitialTestTimeTicks;
+  base::TimeTicks ignored;
+  int frame_number;
+
+  // As if previous frame was captured at 30 fps.
+  base::Optional<base::TimeTicks> last_capture_time;
+  for (int i = 0; i < 100; ++i) {
+    t += vsync_interval;
+    if (oracle.ObserveEventAndDecideCapture(
+            VideoCaptureOracle::kCompositorUpdate, gfx::Rect(), t)) {
+      frame_number = oracle.next_frame_number();
+      oracle.RecordCapture(0.0);
+      ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
+      if (last_capture_time) {
+        EXPECT_GE(t - *last_capture_time, k30HzPeriod - kAllowedError);
+        EXPECT_LE(t - *last_capture_time, k30HzPeriod + kAllowedError);
+      }
+      last_capture_time = t;
+    }
+  }
+
+  // 100 vsync periods is more than enough to capture something.
+  ASSERT_TRUE(last_capture_time.has_value());
+
+  // Receive feedback on the very last frame.
+  oracle.RecordConsumerFeedback(
+      frame_number, media::VideoFrameFeedback(kNoResourceUtilization, k5Fps));
+
+  // Don't measure frame-rate across different target frame-rates.
+  last_capture_time = base::nullopt;
+  // Continue capturing frames, observe that frame-rate limit is respected.
+  for (int i = 0; i < 100; ++i) {
+    t += vsync_interval;
+    if (oracle.ObserveEventAndDecideCapture(
+            VideoCaptureOracle::kCompositorUpdate, gfx::Rect(), t)) {
+      frame_number = oracle.next_frame_number();
+      oracle.RecordCapture(0.0);
+      ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
+      if (last_capture_time) {
+        EXPECT_GE(t - *last_capture_time, k5HzPeriod - kAllowedError);
+        EXPECT_LE(t - *last_capture_time, k5HzPeriod + kAllowedError);
+      }
+      last_capture_time = t;
+    }
+  }
+
+  // 100 vsync periods is more than enough to capture something.
+  ASSERT_TRUE(last_capture_time.has_value());
+
+  // Receive feedback with no limit.
+  oracle.RecordConsumerFeedback(
+      frame_number,
+      media::VideoFrameFeedback(kNoResourceUtilization, kNoFpsLimit));
+
+  // Don't measure frame-rate across different target frame-rates.
+  last_capture_time = base::nullopt;
+  // Continue capturing frames, observe that original min capture period is
+  // respected.
+  for (int i = 0; i < 100; ++i) {
+    t += vsync_interval;
+    if (oracle.ObserveEventAndDecideCapture(
+            VideoCaptureOracle::kCompositorUpdate, gfx::Rect(), t)) {
+      frame_number = oracle.next_frame_number();
+      oracle.RecordCapture(0.0);
+      ASSERT_TRUE(oracle.CompleteCapture(frame_number, true, &ignored));
+      if (last_capture_time) {
+        EXPECT_GE(t - *last_capture_time, k30HzPeriod - kAllowedError);
+        EXPECT_LE(t - *last_capture_time, k30HzPeriod + kAllowedError);
+      }
+      last_capture_time = t;
+    }
+  }
+
+  // 100 vsync periods is more than enough to capture something.
+  ASSERT_TRUE(last_capture_time.has_value());
 }
 
 }  // namespace media

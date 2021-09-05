@@ -5,6 +5,7 @@
 package org.chromium.components.paintpreview.player;
 
 import android.content.Context;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.view.View;
 import android.view.ViewGroup;
@@ -12,7 +13,6 @@ import android.view.ViewGroup.LayoutParams;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.TraceEvent;
@@ -29,59 +29,105 @@ import java.util.Map;
  * the outer world. Users should call {@link #destroy()}  to ensure the native part is destroyed.
  */
 public class PlayerManager {
+    /**
+     * Users of the {@link PlayerManager} class have to implement and pass this interface in the
+     * constructor.
+     */
+    public interface Listener {
+        /**
+         * Called when the compositor cannot be successfully initialized.
+         */
+        void onCompositorError(@CompositorStatus int status);
+
+        /**
+         * Called when the view is ready. Will not be called if onCompositorError is called prior to
+         * the view being ready.
+         */
+        void onViewReady();
+
+        /**
+         * Called when the first paint event happens.
+         */
+        void onFirstPaint();
+
+        /**
+         * Called when the use interacts with the paint preview.
+         */
+        void onUserInteraction();
+
+        /**
+         * Called when a frustrated behavior is detected.
+         */
+        void onUserFrustration();
+
+        /**
+         * Called when the a pull to refresh gesture is performed.
+         */
+        void onPullToRefresh();
+
+        /**
+         * Called with a url to trigger a navigation.
+         */
+        void onLinkClick(GURL url);
+    }
+
+    private static PlayerCompositorDelegate.Factory sCompositorDelegateFactoryForTesting;
+
     private Context mContext;
-    private PlayerCompositorDelegateImpl mDelegate;
+    private PlayerCompositorDelegate mDelegate;
     private PlayerFrameCoordinator mRootFrameCoordinator;
     private FrameLayout mHostView;
-    private Runnable mViewReadyCallback;
     private static final String sInitEvent = "paint_preview PlayerManager init";
     private PlayerSwipeRefreshHandler mPlayerSwipeRefreshHandler;
     private PlayerGestureListener mPlayerGestureListener;
     private boolean mIgnoreInitialScrollOffset;
+    private Listener mListener;
 
     /**
      * Creates a new {@link PlayerManager}.
-     * @param url The url for the stored content that should be shown.
+     *
+     * @param url                               The url for the stored content that should be
+     *                                          shown.
+     * @param context                           An instance of current Android {@link Context}.
      * @param nativePaintPreviewServiceProvider The native paint preview service.
-     * @param directoryKey The key for the directory storing the data.
-     * @param linkClickHandler Called with a url to trigger a navigation.
-     * @param refreshCallback Called when the paint preview should be refreshed.
-     * @param viewReadyCallback Called when the view is ready. Will not be called if compositorError
-     *     is called prior to the view being ready.
-     * @param userInteractionCallback Called when the use interacts with the paint preview.
-     * @param backgroundColor The color used for the background.
-     * @param compositorErrorCallback Called when the compositor has had an error (either during
-     *     initialization or due to a disconnect).
-     * @param ignoreInitialScrollOffset If true the initial scroll state that is recorded at capture
-     *     time is ignored.
+     * @param directoryKey                      The key for the directory storing the data.
+     * @param listener                          Interface that includes a number of callbacks.
+     * @param ignoreInitialScrollOffset         If true the initial scroll state that is recorded at
+     *                                          capture time is ignored.
      */
     public PlayerManager(GURL url, Context context,
             NativePaintPreviewServiceProvider nativePaintPreviewServiceProvider,
-            String directoryKey, @NonNull LinkClickHandler linkClickHandler,
-            @Nullable Runnable refreshCallback, Runnable viewReadyCallback,
-            Runnable userInteractionCallback, int backgroundColor, Runnable compositorErrorCallback,
+            String directoryKey, @NonNull Listener listener, int backgroundColor,
             boolean ignoreInitialScrollOffset) {
         TraceEvent.startAsync(sInitEvent, hashCode());
         mContext = context;
-        mDelegate = new PlayerCompositorDelegateImpl(nativePaintPreviewServiceProvider, url,
-                directoryKey, this::onCompositorReady, compositorErrorCallback);
+        mListener = listener;
+        mDelegate = getCompositorDelegateFactory().create(nativePaintPreviewServiceProvider, url,
+                directoryKey, this::onCompositorReady, mListener::onCompositorError);
         mHostView = new FrameLayout(mContext);
-        if (refreshCallback != null) {
-            mPlayerSwipeRefreshHandler = new PlayerSwipeRefreshHandler(mContext, refreshCallback);
-        }
-        mPlayerGestureListener =
-                new PlayerGestureListener(linkClickHandler, userInteractionCallback);
+        mPlayerSwipeRefreshHandler =
+                new PlayerSwipeRefreshHandler(mContext, mListener::onPullToRefresh);
+        mPlayerGestureListener = new PlayerGestureListener(
+                mListener::onLinkClick, mListener::onUserInteraction, mListener::onUserFrustration);
         mHostView.setLayoutParams(
                 new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         mHostView.setBackgroundColor(backgroundColor);
-        mViewReadyCallback = viewReadyCallback;
         mIgnoreInitialScrollOffset = ignoreInitialScrollOffset;
     }
 
-    public void setUserFrustrationCallback(Runnable userFrustrationCallback) {
-        PlayerUserFrustrationDetector userFrustrationDetector =
-                new PlayerUserFrustrationDetector(userFrustrationCallback);
-        mPlayerGestureListener.setUserFrustrationDetector(userFrustrationDetector);
+    public void setAcceptUserInput(boolean acceptUserInput) {
+        if (mRootFrameCoordinator == null) return;
+
+        mRootFrameCoordinator.setAcceptUserInput(acceptUserInput);
+    }
+
+    /**
+     * @return Current scroll position of the main frame. null if the player is not initialized.
+     */
+    public Point getScrollPosition() {
+        if (mRootFrameCoordinator == null) return null;
+
+        return mRootFrameCoordinator.getScrollPosition();
     }
 
     /**
@@ -99,7 +145,7 @@ public class PlayerManager {
         mRootFrameCoordinator = new PlayerFrameCoordinator(mContext, mDelegate, rootFrame.getGuid(),
                 rootFrame.getContentWidth(), rootFrame.getContentHeight(),
                 rootFrame.getInitialScrollX(), rootFrame.getInitialScrollY(), true,
-                mPlayerSwipeRefreshHandler, mPlayerGestureListener);
+                mPlayerSwipeRefreshHandler, mPlayerGestureListener, mListener::onFirstPaint);
         buildSubFrameCoordinators(mRootFrameCoordinator, rootFrame);
         mHostView.addView(mRootFrameCoordinator.getView(),
                 new FrameLayout.LayoutParams(
@@ -108,7 +154,7 @@ public class PlayerManager {
             mHostView.addView(mPlayerSwipeRefreshHandler.getView());
         }
         TraceEvent.finishAsync(sInitEvent, hashCode());
-        mViewReadyCallback.run();
+        mListener.onViewReady();
     }
 
     /**
@@ -168,7 +214,7 @@ public class PlayerManager {
             PlayerFrameCoordinator childCoordinator = new PlayerFrameCoordinator(mContext,
                     mDelegate, childFrame.getGuid(), childFrame.getContentWidth(),
                     childFrame.getContentHeight(), childFrame.getInitialScrollX(),
-                    childFrame.getInitialScrollY(), false, null, mPlayerGestureListener);
+                    childFrame.getInitialScrollY(), false, null, mPlayerGestureListener, null);
             buildSubFrameCoordinators(childCoordinator, childFrame);
             frameCoordinator.addSubFrame(childCoordinator, frame.getSubFrameClips()[i]);
         }
@@ -191,8 +237,19 @@ public class PlayerManager {
         return mHostView;
     }
 
+    private PlayerCompositorDelegate.Factory getCompositorDelegateFactory() {
+        return (sCompositorDelegateFactoryForTesting != null) ? sCompositorDelegateFactoryForTesting
+                                                              : PlayerCompositorDelegateImpl::new;
+    }
+
     @VisibleForTesting
     public boolean checkRequiredBitmapsLoadedForTest() {
         return mRootFrameCoordinator.checkRequiredBitmapsLoadedForTest();
+    }
+
+    @VisibleForTesting
+    public static void overrideCompositorDelegateFactoryForTesting(
+            PlayerCompositorDelegate.Factory factory) {
+        sCompositorDelegateFactoryForTesting = factory;
     }
 }

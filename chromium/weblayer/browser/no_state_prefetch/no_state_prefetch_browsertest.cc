@@ -20,6 +20,7 @@
 #include "weblayer/browser/no_state_prefetch/prerender_manager_factory.h"
 #include "weblayer/browser/profile_impl.h"
 #include "weblayer/browser/tab_impl.h"
+#include "weblayer/public/prerender_controller.h"
 #include "weblayer/shell/browser/shell.h"
 #include "weblayer/test/weblayer_browser_test.h"
 #include "weblayer/test/weblayer_browser_test_utils.h"
@@ -68,21 +69,17 @@ class NoStatePrefetchBrowserTest : public WebLayerBrowserTest {
   std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
       const net::test_server::HttpRequest& request) {
     if (request.GetURL().path().find("prerendered_page") != std::string::npos) {
-      if (prerendered_page_fetched_)
-        prerendered_page_fetched_->Quit();
+      prerendered_page_fetched_->Quit();
+      prerendered_page_was_fetched_ = true;
     }
     if (request.GetURL().path().find("prefetch.js") != std::string::npos) {
       script_fetched_ = true;
       auto iter = request.headers.find("Purpose");
       purpose_header_value_ = iter->second;
-      if (script_resource_fetched_)
-        script_resource_fetched_->Quit();
+      script_resource_fetched_->Quit();
     }
     if (request.GetURL().path().find("prefetch_meta.js") != std::string::npos) {
       script_executed_ = true;
-    }
-    if (request.GetURL().path().find("alert.html") != std::string::npos) {
-      link_rel_next_started_ = true;
     }
 
     // The default handlers will take care of this request.
@@ -106,7 +103,7 @@ class NoStatePrefetchBrowserTest : public WebLayerBrowserTest {
 
   std::unique_ptr<base::RunLoop> prerendered_page_fetched_;
   std::unique_ptr<base::RunLoop> script_resource_fetched_;
-  bool link_rel_next_started_ = false;
+  bool prerendered_page_was_fetched_ = false;
   bool script_fetched_ = false;
   bool script_executed_ = false;
   std::string purpose_header_value_;
@@ -199,14 +196,43 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest,
   prerendered_page_fetched_->Run();
 }
 
-// link-rel="next" doesn't happen when NoStatePrefetch has been disabled.
+// link-rel="next" happens even when NoStatePrefetch has been disabled.
 IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, LinkRelNextWithNSPDisabled) {
   GetProfile()->SetBooleanSetting(SettingType::NETWORK_PREDICTION_ENABLED,
                                   false);
+  NavigateAndWaitForCompletion(
+      GURL(https_server_->GetURL("/link_rel_next_parent.html")), shell());
+
+  prerendered_page_fetched_->Run();
+}
+
+// Non-web initiated prerender succeeds and subsequent navigations reuse
+// previously downloaded resources.
+IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, ExternalPrerender) {
+  // std::unique_ptr<PrerenderControllerImpl> controller =
+  //     PrerenderControllerImpl::Create(shell()->browser());
+  GetProfile()->GetPrerenderController()->Prerender(
+      GURL(https_server_->GetURL("/prerendered_page.html")));
+
+  script_resource_fetched_->Run();
+
+  // Navigate to the prerendered page and wait for its title to change.
+  script_fetched_ = false;
   NavigateToPageAndWaitForTitleChange(
-      GURL(https_server_->GetURL("/parent_page.html")),
-      base::ASCIIToUTF16("Parent Page"));
-  EXPECT_FALSE(link_rel_next_started_);
+      GURL(https_server_->GetURL("/prerendered_page.html")),
+      base::ASCIIToUTF16("Prefetch Page"));
+  EXPECT_FALSE(script_fetched_);
+}
+
+// Non-web initiated prerender fails when the user has opted out.
+IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest,
+                       ExternalPrerenderWhenOptedOut) {
+  GetProfile()->SetBooleanSetting(SettingType::NETWORK_PREDICTION_ENABLED,
+                                  false);
+  GetProfile()->GetPrerenderController()->Prerender(
+      GURL(https_server_->GetURL("/prerendered_page.html")));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(prerendered_page_was_fetched_);
 }
 
 }  // namespace weblayer

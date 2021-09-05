@@ -41,9 +41,9 @@
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_menu_model.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
-#include "chrome/browser/web_applications/components/app_shortcut_manager.h"
 #include "chrome/browser/web_applications/components/external_install_options.h"
 #include "chrome/browser/web_applications/components/install_manager.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
@@ -199,16 +199,16 @@ class HostedOrWebAppTest : public extensions::ExtensionBrowserTest,
   }
 
  protected:
-  void SetupAppWithURL(const GURL& app_url) {
+  void SetupAppWithURL(const GURL& start_url) {
     if (GetParam() == AppType::HOSTED_APP) {
       extensions::TestExtensionDir test_app_dir;
       test_app_dir.WriteManifest(
-          base::StringPrintf(kAppDotComManifest, app_url.spec().c_str()));
+          base::StringPrintf(kAppDotComManifest, start_url.spec().c_str()));
       SetupApp(test_app_dir.UnpackedPath());
     } else {
       auto web_app_info = std::make_unique<WebApplicationInfo>();
-      web_app_info->app_url = app_url;
-      web_app_info->scope = app_url.GetWithoutFilename();
+      web_app_info->start_url = start_url;
+      web_app_info->scope = start_url.GetWithoutFilename();
       web_app_info->open_as_window = true;
       app_id_ = web_app::InstallWebApp(profile(), std::move(web_app_info));
 
@@ -281,8 +281,8 @@ class HostedOrWebAppTest : public extensions::ExtensionBrowserTest,
     cert_verifier_.mock_cert_verifier()->set_default_result(net::OK);
 
     web_app::WebAppProviderBase::GetProviderBase(profile())
-        ->shortcut_manager()
-        .SuppressShortcutsForTesting();
+        ->os_integration_manager()
+        .SuppressOsHooksForTesting();
 
     app_service_test_.SetUp(profile());
   }
@@ -689,7 +689,7 @@ IN_PROC_BROWSER_TEST_P(BookmarkAppTest, InstallFromSync) {
   const web_app::AppId app_id = web_app::GenerateAppIdFromURL(app_url);
 
   auto web_app_info = std::make_unique<WebApplicationInfo>();
-  web_app_info->app_url = app_url;
+  web_app_info->start_url = app_url;
   web_app_info->scope = app_url.GetWithoutFilename();
 
   base::RunLoop run_loop;

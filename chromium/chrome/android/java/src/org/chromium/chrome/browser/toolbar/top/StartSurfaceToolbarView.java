@@ -19,23 +19,17 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.appcompat.content.res.AppCompatResources;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.device.DeviceClassManager;
-import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
-import org.chromium.chrome.browser.toolbar.IncognitoStateProvider;
+import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.toolbar.NewTabButton;
-import org.chromium.chrome.browser.toolbar.menu_button.MenuButton;
-import org.chromium.chrome.browser.ui.appmenu.AppMenuButtonHelper;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.animation.Interpolators;
-import org.chromium.ui.util.ColorUtils;
 
 /** View of the StartSurfaceToolbar */
 class StartSurfaceToolbarView extends RelativeLayout {
     private NewTabButton mNewTabButton;
     private View mIncognitoSwitch;
-    private MenuButton mMenuButton;
     private View mLogo;
     @Nullable
     private ImageButton mIdentityDiscButton;
@@ -60,7 +54,6 @@ class StartSurfaceToolbarView extends RelativeLayout {
         super.onFinishInflate();
         mNewTabButton = findViewById(R.id.new_tab_button);
         mIncognitoSwitch = findViewById(R.id.incognito_switch);
-        mMenuButton = findViewById(R.id.menu_button_wrapper);
         mLogo = findViewById(R.id.logo);
         mIdentityDiscButton = findViewById(R.id.identity_disc_button);
         updatePrimaryColorAndTint(false);
@@ -89,16 +82,6 @@ class StartSurfaceToolbarView extends RelativeLayout {
     }
 
     /**
-     * @param appMenuButtonHelper The {@link AppMenuButtonHelper} for managing menu button
-     *         interactions.
-     */
-    void setAppMenuButtonHelper(AppMenuButtonHelper appMenuButtonHelper) {
-        mMenuButton.getImageButton().setOnTouchListener(appMenuButtonHelper);
-        mMenuButton.getImageButton().setAccessibilityDelegate(
-                appMenuButtonHelper.getAccessibilityDelegate());
-    }
-
-    /**
      * Sets the {@link OnClickListener} that will be notified when the New Tab button is pressed.
      * @param listener The callback that will be notified when the New Tab button is pressed.
      */
@@ -118,7 +101,6 @@ class StartSurfaceToolbarView extends RelativeLayout {
      * @param isVisible Whether the menu button is visible.
      */
     void setMenuButtonVisibility(boolean isVisible) {
-        mMenuButton.setVisibility(isVisible ? View.VISIBLE : View.GONE);
         final int buttonPaddingLeft = getContext().getResources().getDimensionPixelOffset(
                 R.dimen.start_surface_toolbar_button_padding_to_button);
         final int buttonPaddingRight =
@@ -148,7 +130,6 @@ class StartSurfaceToolbarView extends RelativeLayout {
     void setButtonClickableState(boolean isClickable) {
         mNewTabButton.setClickable(isClickable);
         mIncognitoSwitch.setClickable(isClickable);
-        mMenuButton.setClickable(isClickable);
     }
 
     /**
@@ -240,7 +221,9 @@ class StartSurfaceToolbarView extends RelativeLayout {
      * */
     void setStartSurfaceMode(boolean inStartSurfaceMode) {
         mInStartSurfaceMode = inStartSurfaceMode;
-        showStartSurfaceToolbar(mInStartSurfaceMode && mShouldShow, true);
+        // When showing or hiding toolbar from a tab, the fade-in and fade-out animations are not
+        // needed. (eg: cold start, changing theme, changing incognito status...)
+        showStartSurfaceToolbar(mInStartSurfaceMode && mShouldShow, false);
     }
 
     /**
@@ -249,15 +232,17 @@ class StartSurfaceToolbarView extends RelativeLayout {
      * */
     void setToolbarVisibility(boolean shouldShowStartSurfaceToolbar) {
         mShouldShow = shouldShowStartSurfaceToolbar;
-        showStartSurfaceToolbar(mInStartSurfaceMode && mShouldShow, false);
+        // When simply setting visibility, the animations should be shown. (eg: search box has
+        // focus)
+        showStartSurfaceToolbar(mInStartSurfaceMode && mShouldShow, true);
     }
 
     /**
      * Start animation to show or hide toolbar.
      * @param showStartSurfaceToolbar Whether or not toolbar should be shown or hidden.
-     * @param animateToTab Whether or not animation is from or to tab.
+     * @param showAnimation Whether or not to show the animation.
      */
-    private void showStartSurfaceToolbar(boolean showStartSurfaceToolbar, boolean animateToTab) {
+    private void showStartSurfaceToolbar(boolean showStartSurfaceToolbar, boolean showAnimation) {
         if (showStartSurfaceToolbar == mIsShowing) return;
 
         if (mVisibilityAnimator != null) {
@@ -272,21 +257,24 @@ class StartSurfaceToolbarView extends RelativeLayout {
             return;
         }
 
-        setAlpha(showStartSurfaceToolbar ? 0.0f : 1.0f);
-        setVisibility(View.VISIBLE);
+        // TODO(https://crbug.com/1139024): Show the fade-in animation when
+        // TabUiFeatureUtilities#isTabToGtsAnimationEnabled is true.
+        if (!showAnimation) {
+            setVisibility(showStartSurfaceToolbar ? View.VISIBLE : View.GONE);
+            return;
+        }
 
-        boolean showZoomingAnimation =
-                animateToTab && TabUiFeatureUtilities.isTabToGtsAnimationEnabled();
-        final long duration = showZoomingAnimation
-                ? TopToolbarCoordinator.TAB_SWITCHER_MODE_GTS_ANIMATION_DURATION_MS
-                : TopToolbarCoordinator.TAB_SWITCHER_MODE_NORMAL_ANIMATION_DURATION_MS;
+        // Show the fade-in and fade-out animation. Set visibility as VISIBLE here to show the
+        // animation. The visibility will be finally set in finishAnimation().
+        setVisibility(View.VISIBLE);
+        setAlpha(showStartSurfaceToolbar ? 0.0f : 1.0f);
+
+        final long duration = TopToolbarCoordinator.TAB_SWITCHER_MODE_NORMAL_ANIMATION_DURATION_MS;
 
         mVisibilityAnimator =
                 animate()
                         .alpha(showStartSurfaceToolbar ? 1.0f : 0.0f)
                         .setDuration(duration)
-                        .setStartDelay(
-                                showZoomingAnimation && showStartSurfaceToolbar ? duration : 0)
                         .setInterpolator(Interpolators.LINEAR_INTERPOLATOR)
                         .withEndAction(() -> { finishAnimation(showStartSurfaceToolbar); });
     }
@@ -307,9 +295,5 @@ class StartSurfaceToolbarView extends RelativeLayout {
             mDarkIconTint = AppCompatResources.getColorStateList(
                     getContext(), R.color.default_icon_color_tint_list);
         }
-
-        boolean useLightIcons = ColorUtils.shouldUseLightForegroundOnBackground(primaryColor);
-        ColorStateList tintList = useLightIcons ? mLightIconTint : mDarkIconTint;
-        ApiCompatibilityUtils.setImageTintList(mMenuButton.getImageButton(), tintList);
     }
 }

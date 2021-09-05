@@ -1588,7 +1588,9 @@ CommandHandler.COMMANDS_['invoke-sharesheet'] = new class extends Command {
     const entries = fileManager.selectionHandler.selection.entries;
 
     if (!util.isSharesheetEnabled() || !entries || entries.length === 0 ||
-        entries.some(entry => entry.isDirectory)) {
+        (entries.some(entry => entry.isDirectory) &&
+         (!CommandUtil.isDriveEntries(entries, fileManager.volumeManager) ||
+          entries.length > 1))) {
       event.canExecute = false;
       event.command.setHidden(true);
       event.command.disabled = true;
@@ -1605,6 +1607,87 @@ CommandHandler.COMMANDS_['invoke-sharesheet'] = new class extends Command {
       event.command.setHidden(!hasTargets);
       event.canExecute = hasTargets;
       event.command.disabled = !hasTargets;
+    });
+  }
+};
+
+CommandHandler.COMMANDS_['toggle-holding-space'] = new class extends Command {
+  constructor() {
+    super();
+    /**
+     * Whether the command adds or removed items from holding space. The value
+     * is set in <code>canExecute()</code>. It will be true unless all selected
+     * items are already in the holding space.
+     * @private {boolean|undefined}
+     */
+    this.addsItems_;
+  }
+
+  execute(event, fileManager) {
+    if (this.addsItems_ === undefined) {
+      return;
+    }
+
+    const entries = fileManager.selectionHandler.selection.entries;
+    chrome.fileManagerPrivate.toggleAddedToHoldingSpace(
+        entries, this.addsItems_);
+  }
+
+  /** @override */
+  canExecute(event, fileManager) {
+    const command = event.command;
+
+    if (!util.isHoldingSpaceEnabled()) {
+      event.canExecute = false;
+      command.setHidden(true);
+      return;
+    }
+
+    const allowedVolumeTypes = [
+      VolumeManagerCommon.VolumeType.MY_FILES,
+      VolumeManagerCommon.VolumeType.DOWNLOADS,
+      VolumeManagerCommon.VolumeType.DRIVE,
+      VolumeManagerCommon.VolumeType.CROSTINI,
+      VolumeManagerCommon.VolumeType.ANDROID_FILES,
+    ];
+
+    const currentVolumeInfo = fileManager.directoryModel.getCurrentVolumeInfo();
+    if (!currentVolumeInfo ||
+        !allowedVolumeTypes.includes(currentVolumeInfo.volumeType)) {
+      event.canExecute = false;
+      command.setHidden(true);
+      return;
+    }
+
+    const entries = fileManager.selectionHandler.selection.entries;
+
+    if (!entries || entries.length === 0) {
+      event.canExecute = false;
+      command.setHidden(true);
+      return;
+    }
+
+    event.canExecute = true;
+    command.setHidden(false);
+
+    // Update the command to add or remove holding space items depending on the
+    // current holding space state - the command will remove items only if all
+    // currently selected items are already in the holding space.
+    chrome.fileManagerPrivate.getHoldingSpaceState((state) => {
+      if (!state) {
+        command.setHidden(true);
+        return;
+      }
+
+      const itemsSet = {};
+      state.itemUrls.forEach((item) => itemsSet[item] = true);
+
+      const selectedUrls = util.entriesToURLs(entries);
+      this.addsItems_ = selectedUrls.some(url => !itemsSet[url]);
+
+      command.label = this.addsItems_ ?
+          str('HOLDING_SPACE_PIN_TO_SHELF_COMMAND_LABEL') :
+          str('HOLDING_SPACE_UNPIN_FROM_SHELF_COMMAND_LABEL');
     });
   }
 };
@@ -1721,7 +1804,7 @@ CommandHandler.COMMANDS_['volume-switch-9'] =
  */
 CommandHandler.COMMANDS_['toggle-pinned'] = new class extends Command {
   execute(event, fileManager) {
-    const entries = CommandUtil.getCommandEntries(fileManager, event.target);
+    const entries = fileManager.getSelection().entries;
     const actionsController = fileManager.actionsController;
 
     actionsController.getActionsForEntries(entries).then(
@@ -1734,7 +1817,10 @@ CommandHandler.COMMANDS_['toggle-pinned'] = new class extends Command {
           const offlineNotNeededAction = actionsModel.getAction(
               ActionsModel.CommonActionId.OFFLINE_NOT_NECESSARY);
           // Saving for offline has a priority if both actions are available.
-          const action = saveForOfflineAction || offlineNotNeededAction;
+          let action = offlineNotNeededAction;
+          if (saveForOfflineAction && saveForOfflineAction.canExecute()) {
+            action = saveForOfflineAction;
+          }
           if (action) {
             actionsController.executeAction(action);
           }
@@ -1743,7 +1829,7 @@ CommandHandler.COMMANDS_['toggle-pinned'] = new class extends Command {
 
   /** @override */
   canExecute(event, fileManager) {
-    const entries = CommandUtil.getCommandEntries(fileManager, event.target);
+    const entries = fileManager.getSelection().entries;
     const command = event.command;
     const actionsController = fileManager.actionsController;
 
@@ -1763,8 +1849,12 @@ CommandHandler.COMMANDS_['toggle-pinned'] = new class extends Command {
           actionsModel.getAction(ActionsModel.CommonActionId.SAVE_FOR_OFFLINE);
       const offlineNotNeededAction = actionsModel.getAction(
           ActionsModel.CommonActionId.OFFLINE_NOT_NECESSARY);
-      const action = saveForOfflineAction || offlineNotNeededAction;
-      command.checked = !!offlineNotNeededAction && !saveForOfflineAction;
+      let action = offlineNotNeededAction;
+      command.checked = !!offlineNotNeededAction;
+      if (saveForOfflineAction && saveForOfflineAction.canExecute()) {
+        action = saveForOfflineAction;
+        command.checked = false;
+      }
       event.canExecute = action && action.canExecute();
       command.disabled = !event.canExecute;
     }

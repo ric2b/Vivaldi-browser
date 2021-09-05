@@ -99,12 +99,14 @@ class CORE_EXPORT SVGElement : public Element {
                                SVGPropertyBase*);
   void ClearWebAnimatedAttributes();
 
-  ElementSMILAnimations* GetSMILAnimations();
+  ElementSMILAnimations* GetSMILAnimations() const;
   ElementSMILAnimations& EnsureSMILAnimations();
   const ComputedStyle* BaseComputedStyleForSMIL();
 
   void SetAnimatedAttribute(const QualifiedName&, SVGPropertyBase*);
   void ClearAnimatedAttribute(const QualifiedName&);
+
+  bool HasMainThreadAnimations() const;
 
   SVGSVGElement* ownerSVGElement() const;
   SVGElement* viewportElement() const;
@@ -261,7 +263,7 @@ class CORE_EXPORT SVGElement : public Element {
   bool HasFocusEventListeners() const;
 
   void AddedEventListener(const AtomicString& event_type,
-                          RegisteredEventListener&) final;
+                          RegisteredEventListener&) override;
   void RemovedEventListener(const AtomicString& event_type,
                             const RegisteredEventListener&) final;
 

@@ -67,6 +67,8 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
     // layout tests. This will still get called in the latter case, but we don't
     // need to record UKM in that case.
   }
+  void SetUkmSmoothnessDestination(
+      base::WritableSharedMemoryMapping ukm_smoothness_data) override {}
   void ClearHistory() override;
   void SetRenderFrameObserver(
       std::unique_ptr<RenderFrameMetadataObserver> observer) override;
@@ -136,10 +138,6 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   void NotifyPaintWorkletStateChange(
       Scheduler::PaintWorkletState state) override;
   void NotifyThroughputTrackerResults(CustomTrackerResults results) override;
-  void SubmitThroughputData(ukm::SourceId source_id,
-                            int aggregated_percent,
-                            int impl_percent,
-                            base::Optional<int> main_percent) override {}
 
   void RequestNewLayerTreeFrameSink();
 

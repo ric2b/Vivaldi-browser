@@ -2854,8 +2854,6 @@ AtkRole AXPlatformNodeAuraLinux::GetAtkRole() const {
       return ATK_ROLE_MARQUEE;
     case ax::mojom::Role::kMenu:
       return ATK_ROLE_MENU;
-    case ax::mojom::Role::kMenuButton:
-      return ATK_ROLE_MENU_ITEM;
     case ax::mojom::Role::kMenuBar:
       return ATK_ROLE_MENU_BAR;
     case ax::mojom::Role::kMenuItem:
@@ -3276,6 +3274,9 @@ AXPlatformNodeAuraLinux::~AXPlatformNodeAuraLinux() {
 
   DestroyAtkObjects();
 
+  if (window_activate_event_postponed_)
+    AtkUtilAuraLinux::GetInstance()->CancelPostponedEventsFor(this);
+
   SetWeakGPtrToAtkObject(&document_parent_, nullptr);
 }
 
@@ -3298,6 +3299,21 @@ bool AXPlatformNodeAuraLinux::IsPlatformCheckable() const {
     return false;
 
   return AXPlatformNodeBase::IsPlatformCheckable();
+}
+
+base::Optional<int> AXPlatformNodeAuraLinux::GetIndexInParent() {
+  AXPlatformNode* parent =
+      AXPlatformNode::FromNativeViewAccessible(GetParent());
+  // Even though the node doesn't have its parent, GetParent() could return the
+  // application. Since the detached view has the kUnknown role and the
+  // restriction is kDisabled, it early returns before finding the index.
+  if (parent == AXPlatformNodeAuraLinux::application() &&
+      GetData().role == ax::mojom::Role::kUnknown &&
+      GetData().GetRestriction() == ax::mojom::Restriction::kDisabled) {
+    return base::nullopt;
+  }
+
+  return AXPlatformNodeBase::GetIndexInParent();
 }
 
 void AXPlatformNodeAuraLinux::EnsureAtkObjectIsValid() {
@@ -3992,6 +4008,13 @@ void AXPlatformNodeAuraLinux::OnAlertShown() {
                                  ATK_STATE_SHOWING, TRUE);
 }
 
+void AXPlatformNodeAuraLinux::RunPostponedEvents() {
+  if (window_activate_event_postponed_) {
+    OnWindowActivated();
+    window_activate_event_postponed_ = false;
+  }
+}
+
 void AXPlatformNodeAuraLinux::NotifyAccessibilityEvent(
     ax::mojom::Event event_type) {
   if (!GetOrCreateAtkObject())
@@ -4043,10 +4066,20 @@ void AXPlatformNodeAuraLinux::NotifyAccessibilityEvent(
       OnInvalidStatusChanged();
       break;
     case ax::mojom::Event::kWindowActivated:
-      OnWindowActivated();
+      if (AtkUtilAuraLinux::GetInstance()->IsAtSpiReady()) {
+        OnWindowActivated();
+      } else {
+        AtkUtilAuraLinux::GetInstance()->PostponeEventsFor(this);
+        window_activate_event_postponed_ = true;
+      }
       break;
     case ax::mojom::Event::kWindowDeactivated:
-      OnWindowDeactivated();
+      if (AtkUtilAuraLinux::GetInstance()->IsAtSpiReady()) {
+        OnWindowDeactivated();
+      } else {
+        AtkUtilAuraLinux::GetInstance()->CancelPostponedEventsFor(this);
+        window_activate_event_postponed_ = false;
+      }
       break;
     case ax::mojom::Event::kWindowVisibilityChanged:
       OnWindowVisibilityChanged();
@@ -4855,6 +4888,9 @@ int AXPlatformNodeAuraLinux::FindStartOfStyle(
   DCHECK(!offset_to_text_attributes_.empty());
 
   switch (direction) {
+    case ax::mojom::MoveDirection::kNone:
+      NOTREACHED();
+      return start_offset;
     case ax::mojom::MoveDirection::kBackward: {
       auto iterator = offset_to_text_attributes_.upper_bound(start_offset);
       --iterator;

@@ -152,6 +152,7 @@
 <translation id="6165508094623778733">Weitere Informationen</translation>
 <translation id="6177128806592000436">Die Verbindung zu dieser Website ist nicht sicher</translation>
 <translation id="6203231073485539293">Überprüfen Sie Ihre Internetverbindung.</translation>
+<translation id="6225522625585012689">Unter &lt;strong&gt;vivaldi://policy&lt;/strong&gt; finden Sie eine Liste mit blockierten URLs und andere Richtlinien, die von Ihrem Systemadministrator festgelegt wurden.</translation>
 <translation id="625755898061068298">Sie haben die Sicherheitswarnmeldungen für diese Website deaktiviert.</translation>
 <translation id="6264485186158353794">Zurück zu sicherer Website</translation>
 <translation id="6305205051461490394"><ph name="URL" /> ist nicht erreichbar.</translation>
@@ -192,7 +193,7 @@
 <translation id="7716147886133743102">Von Ihrem Administrator blockiert</translation>
 <translation id="7716424297397655342">Diese Website kann nicht aus dem Cache geladen werden</translation>
 <translation id="7758069387465995638">Möglicherweise wurde die Verbindung von einer Firewall oder Antivirensoftware blockiert.</translation>
-<translation id="7800304661137206267">Die Verbindung ist mit <ph name="CIPHER" /> verschlüsselt; für die Nachrichtenauthentifizierung wird <ph name="MAC" /> verwendet und als Mechanismus für den Schlüsselaustausch <ph name="KX" />.</translation>
+<translation id="7800304661137206267">Die Verbindung ist mit <ph name="CIPHER" /> verschlüsselt, für die Nachrichtenauthentifizierung wird <ph name="MAC" /> und als Schlüsselaustausch-Mechanismus <ph name="KX" /> verwendet.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> schützt Ihre Daten in der Regel durch Verschlüsselung. Als Vivaldi dieses Mal versuchte, eine Verbindung zu <ph name="SITE" /> herzustellen, sendete die Website ungewöhnliche und falsche Informationen zurück, um sich zu identifizieren. Entweder versucht ein Angreifer, sich als <ph name="SITE" /> auszugeben, oder die Verbindung wurde durch eine WLAN-Anmeldeseite unterbrochen. Da Vivaldi die Verbindung vor dem Austausch von Daten unterbrochen hat, sind Ihre Informationen weiterhin sicher.</translation>
 <translation id="7878562273885520351">Ihr Passwort könnte kompromittiert sein</translation>
 <translation id="7951415247503192394">(32-Bit)</translation>
@@ -201,7 +202,6 @@
 <translation id="8041940743680923270">Globalen Standard verwenden (Nachfragen)</translation>
 <translation id="808894953321890993">Passwort ändern</translation>
 <translation id="8119307142152921512">Tracker und Werbung</translation>
-<translation id="8142868475871995937">Unter &lt;strong&gt;vivaldi://policy&lt;/strong&gt; finden Sie eine Liste der blockierten URLs und andere Richtlinien, die durch Ihren Systemadministrator in Kraft gesetzt wurden.</translation>
 <translation id="8149426793427495338">Ihr Computer geht in den Ruhemodus.</translation>
 <translation id="8150722005171944719">Die Datei unter <ph name="URL" /> kann nicht gelesen werden. Sie wurde möglicherweise entfernt oder verschoben oder die Dateiberechtigungen verhindern den Zugriff.</translation>
 <translation id="8184538546369750125">Globalen Standard verwenden (Zulassen)</translation>

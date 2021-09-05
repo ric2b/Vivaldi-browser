@@ -271,7 +271,8 @@ class SelectToSpeak {
     let selectedNode = firstPosition.node;
     if (selectedNode.name && firstPosition.offset < selectedNode.name.length &&
         !NodeUtils.shouldIgnoreNode(
-            selectedNode, /* include offscreen */ true)) {
+            selectedNode, /* include offscreen */ true) &&
+        !NodeUtils.isNotSelectable(selectedNode)) {
       // Initialize to the first node in the list if it's valid and inside
       // of the offset bounds.
       nodes.push(selectedNode);
@@ -304,7 +305,8 @@ class SelectToSpeak {
         }
       }
       if (!NodeUtils.shouldIgnoreNode(
-              selectedNode, /* include offscreen */ true)) {
+              selectedNode, /* include offscreen */ true) &&
+          !NodeUtils.isNotSelectable(selectedNode)) {
         nodes.push(selectedNode);
       }
     }
@@ -364,12 +366,22 @@ class SelectToSpeak {
         // If the user wants a certain scroll position we will respect that.
         this.scrollToSpokenNode_ = false;
 
-        // Now remove this event listener, we no longer need it.
+        // Now remove these event listeners, we no longer need them.
         root.removeEventListener(
             EventType.SCROLL_POSITION_CHANGED, listener, false);
+        root.removeEventListener(
+            EventType.SCROLL_HORIZONTAL_POSITION_CHANGED, listener, false);
+        root.removeEventListener(
+            EventType.SCROLL_VERTICAL_POSITION_CHANGED, listener, false);
       }
     };
+    // ARC++ fires the first event, Views/Web fire the horizontal/vertical
+    // scroll position changed events via AXEventGenerator.
     root.addEventListener(EventType.SCROLL_POSITION_CHANGED, listener, false);
+    root.addEventListener(
+        EventType.SCROLL_HORIZONTAL_POSITION_CHANGED, listener, false);
+    root.addEventListener(
+        EventType.SCROLL_VERTICAL_POSITION_CHANGED, listener, false);
   }
 
   /**
@@ -516,7 +528,7 @@ class SelectToSpeak {
     chrome.accessibilityPrivate.onSelectToSpeakStateChangeRequested.addListener(
         this.onStateChangeRequested_.bind(this));
     // Initialize the state to SelectToSpeakState.INACTIVE.
-    chrome.accessibilityPrivate.onSelectToSpeakStateChanged(this.state_);
+    chrome.accessibilityPrivate.setSelectToSpeakState(this.state_);
   }
 
   /**
@@ -526,7 +538,7 @@ class SelectToSpeak {
     // Switch Select-to-Speak states on request.
     // We will need to track the current state and toggle from one state to
     // the next when this function is called, and then call
-    // accessibilityPrivate.onSelectToSpeakStateChanged with the new state.
+    // accessibilityPrivate.setSelectToSpeakState with the new state.
     switch (this.state_) {
       case SelectToSpeakState.INACTIVE:
         // Start selection.
@@ -586,6 +598,28 @@ class SelectToSpeak {
    */
   startSpeechQueue_(nodes, opt_startIndex, opt_endIndex) {
     this.prepareForSpeech_();
+
+    if (nodes.length === 0) {
+      return;
+    }
+
+    // Remember the original first and last node in the given list, as
+    // opt_startIndex and opt_endIndex pertain to them. If, after SVG
+    // resorting, the first or last nodes are re-ordered, do not clip them.
+    const originalFirstNode = nodes[0];
+    const originalLastNode = nodes[nodes.length - 1];
+
+    // Sort any SVG child nodes, if present, by visual reading order.
+    NodeUtils.sortSvgNodesByReadingOrder(nodes);
+
+    // Override start or end index if original nodes were sorted.
+    if (originalFirstNode !== nodes[0]) {
+      opt_startIndex = undefined;
+    }
+    if (originalLastNode !== nodes[nodes.length - 1]) {
+      opt_endIndex = undefined;
+    }
+
     for (var i = 0; i < nodes.length; i++) {
       const nodeGroup = ParagraphUtils.buildNodeGroup(
           nodes, i, this.enableLanguageDetectionIntegration_);
@@ -595,18 +629,15 @@ class SelectToSpeak {
         // the start index so that it is not spoken.
         // Backfill with spaces so that index counting functions don't get
         // confused.
-        // Must check opt_startIndex in its own if statement to make the
-        // Closure compiler happy.
-        if (opt_startIndex !== undefined) {
-          if (nodeGroup.nodes.length > 0 && nodeGroup.nodes[0].hasInlineText) {
-            // The first node is inlineText type. Find the start index in
-            // its staticText parent.
-            const startIndexInParent =
-                ParagraphUtils.getStartCharIndexInParent(nodes[0]);
-            opt_startIndex += startIndexInParent;
-            nodeGroup.text = ' '.repeat(opt_startIndex) +
-                nodeGroup.text.substr(opt_startIndex);
-          }
+        if (opt_startIndex !== undefined && nodeGroup.nodes.length > 0 &&
+            nodeGroup.nodes[0].hasInlineText) {
+          // The first node is inlineText type. Find the start index in
+          // its staticText parent.
+          const startIndexInParent =
+              ParagraphUtils.getStartCharIndexInParent(nodes[0]);
+          opt_startIndex += startIndexInParent;
+          nodeGroup.text = ' '.repeat(opt_startIndex) +
+              nodeGroup.text.substr(opt_startIndex);
         }
       }
       const isFirst = i == 0;
@@ -805,7 +836,7 @@ class SelectToSpeak {
         this.clearFocusRingAndNode_();
       }
       // Send state change event to Chrome.
-      chrome.accessibilityPrivate.onSelectToSpeakStateChanged(state);
+      chrome.accessibilityPrivate.setSelectToSpeakState(state);
       this.state_ = state;
     }
   }
@@ -1063,13 +1094,13 @@ class SelectToSpeak {
 }
 
 /** @const {number} */
-SelectToSpeak.SEARCH_KEY_CODE = 91;
+SelectToSpeak.SEARCH_KEY_CODE = KeyCode.SEARCH;
 
 /** @const {number} */
-SelectToSpeak.CONTROL_KEY_CODE = 17;
+SelectToSpeak.CONTROL_KEY_CODE = KeyCode.CONTROL;
 
 /** @const {number} */
-SelectToSpeak.READ_SELECTION_KEY_CODE = 83;
+SelectToSpeak.READ_SELECTION_KEY_CODE = KeyCode.S;
 
 /**
  * How often (in ms) to check that the currently spoken node is

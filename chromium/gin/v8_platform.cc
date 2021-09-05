@@ -202,10 +202,10 @@ class PageAllocator : public v8::PageAllocator {
   ~PageAllocator() override = default;
 
   size_t AllocatePageSize() override {
-    return base::kPageAllocationGranularity;
+    return base::PageAllocationGranularity();
   }
 
-  size_t CommitPageSize() override { return base::kSystemPageSize; }
+  size_t CommitPageSize() override { return base::SystemPageSize(); }
 
   void SetRandomMmapSeed(int64_t seed) override {
     base::SetMmapSeedForTesting(seed);
@@ -284,6 +284,7 @@ class JobDelegateImpl : public v8::JobDelegate {
     delegate_->NotifyConcurrencyIncrease();
   }
   uint8_t GetTaskId() override { return delegate_->GetTaskId(); }
+  bool IsJoiningThread() const override { return delegate_->IsJoiningThread(); }
 
  private:
   base::JobDelegate* delegate_;

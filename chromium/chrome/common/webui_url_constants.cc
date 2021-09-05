@@ -68,7 +68,9 @@ const char kChromeUIDownloadInternalsHost[] = "download-internals";
 const char kChromeUIDownloadsHost[] = "downloads";
 const char kChromeUIDownloadsURL[] = "chrome://downloads/";
 const char kChromeUIDriveInternalsHost[] = "drive-internals";
-const char kChromeUIEDUCoexistenceLoginURL[] = "chrome://chrome-signin/edu";
+const char kChromeUIEDUCoexistenceLoginURLV1[] = "chrome://chrome-signin/edu";
+const char kChromeUIEDUCoexistenceLoginURLV2[] =
+    "chrome://chrome-signin/edu-coexistence";
 const char kChromeUIExtensionIconHost[] = "extension-icon";
 const char kChromeUIExtensionIconURL[] = "chrome://extension-icon/";
 const char kChromeUIExtensionsHost[] = "extensions";
@@ -196,6 +198,8 @@ const char kChromeUINativeHistoryURL[] = "chrome-native://history/";
 const char kChromeUINativeNewTabURL[] = "chrome-native://newtab/";
 const char kChromeUIOfflineInternalsHost[] = "offline-internals";
 const char kChromeUISnippetsInternalsHost[] = "snippets-internals";
+const char kChromeUIUntrustedVideoPlayerUrl[] =
+    "chrome-untrusted://video-tutorials/";
 const char kChromeUIWebApksHost[] = "webapks";
 #else
 const char kChromeUINearbyInternalsHost[] = "nearby-internals";
@@ -241,7 +245,6 @@ const char kChromeUICrostiniUpgraderUrl[] = "chrome://crostini-upgrader";
 const char kChromeUICryptohomeHost[] = "cryptohome";
 const char kChromeUIDeviceEmulatorHost[] = "device-emulator";
 const char kChromeUIDiscoverURL[] = "chrome://oobe/discover";
-const char kChromeUIFileManagerHost[] = "file-manager";
 const char kChromeUIFirstRunHost[] = "first-run";
 const char kChromeUIFirstRunURL[] = "chrome://first-run/";
 const char kChromeUIIntenetConfigDialogURL[] =
@@ -252,6 +255,8 @@ const char kChromeUIInternetConfigDialogHost[] = "internet-config-dialog";
 const char kChromeUIInternetDetailDialogHost[] = "internet-detail-dialog";
 const char kChromeUICrostiniCreditsHost[] = "crostini-credits";
 const char kChromeUICrostiniCreditsURL[] = "chrome://crostini-credits/";
+const char kChromeUILockScreenStartReauthHost[] = "lock-reauth";
+const char kChromeUILockScreenStartReauthURL[] = "chrome://lock-reauth";
 const char kChromeUIMachineLearningInternalsHost[] =
     "machine-learning-internals";
 const char kChromeUIMobileSetupHost[] = "mobilesetup";
@@ -312,6 +317,7 @@ bool IsSystemWebUIHost(base::StringPiece host) {
       kChromeUIFirstRunHost,
       kChromeUIInternetConfigDialogHost,
       kChromeUIInternetDetailDialogHost,
+      kChromeUILockScreenStartReauthHost,
       kChromeUIMobileSetupHost,
       kChromeUIMultiDeviceSetupHost,
       kChromeUINetworkHost,
@@ -341,6 +347,7 @@ const char kChromeUIHatsURL[] = "chrome://hats/";
 #if !defined(OS_CHROMEOS)
 const char kChromeUIProfilePickerHost[] = "profile-picker";
 const char kChromeUIProfilePickerUrl[] = "chrome://profile-picker/";
+const char kChromeUIProfilePickerStartupQuery[] = "startup";
 #endif
 #endif
 
@@ -379,6 +386,8 @@ const char kChromeUITabStripURL[] = "chrome://tab-strip";
 #endif
 
 #if !defined(OS_ANDROID)
+const char kChromeUICommanderHost[] = "commander";
+const char kChromeUICommanderURL[] = "chrome://commander";
 const char kChromeUITabSearchHost[] = "tab-search";
 const char kChromeUITabSearchURL[] = "chrome://tab-search/";
 #endif
@@ -412,6 +421,7 @@ const char kPrintingSettingsSubPage[] = "printing";
 const char kPrivacySubPage[] = "privacy";
 const char kResetSubPage[] = "reset";
 const char kResetProfileSettingsSubPage[] = "resetProfileSettings";
+const char kSafeBrowsingEnhancedProtectionSubPage[] = "security?q=enhanced";
 const char kSafetyCheckSubPage[] = "safetyCheck";
 const char kSearchSubPage[] = "search";
 const char kSearchEnginesSubPage[] = "searchEngines";

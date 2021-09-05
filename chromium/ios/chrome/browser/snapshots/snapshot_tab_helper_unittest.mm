@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 
+#include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #import "ios/chrome/browser/snapshots/fake_snapshot_generator_delegate.h"
@@ -92,7 +93,10 @@ class SnapshotTabHelperTest : public PlatformTest {
     SnapshotTabHelper::FromWebState(&web_state_)->SetDelegate(delegate_);
 
     // Set custom snapshot cache.
-    snapshot_cache_ = [[SnapshotCache alloc] init];
+    EXPECT_TRUE(scoped_temp_directory_.CreateUniqueTempDir());
+    base::FilePath directory_name = scoped_temp_directory_.GetPath();
+    snapshot_cache_ =
+        [[SnapshotCache alloc] initWithStoragePath:directory_name];
     SnapshotTabHelper::FromWebState(&web_state_)
         ->SetSnapshotCache(snapshot_cache_);
 
@@ -126,6 +130,7 @@ class SnapshotTabHelperTest : public PlatformTest {
 
  protected:
   web::WebTaskEnvironment task_environment_;
+  base::ScopedTempDir scoped_temp_directory_;
   TabHelperSnapshotGeneratorDelegate* delegate_ = nil;
   SnapshotCache* snapshot_cache_ = nil;
   NSString* snapshot_id_ = nil;
@@ -285,14 +290,24 @@ TEST_F(SnapshotTabHelperTest, RetrieveGreySnapshotGenerate) {
   EXPECT_EQ(delegate_.snapshotTakenCount, 1u);
 }
 
-// Tests that UpdateSnapshot ignores any cached snapshots, generate a new one
-// and updates the cache.
-TEST_F(SnapshotTabHelperTest, UpdateSnapshot) {
+// Tests that UpdateSnapshotWithCallback ignores any cached snapshots, generate
+// a new one and updates the cache.
+TEST_F(SnapshotTabHelperTest, UpdateSnapshotWithCallback) {
   SetCachedSnapshot(
       UIImageWithSizeAndSolidColor(kDefaultSnapshotSize, [UIColor greenColor]));
+  UIImage* original_cached_snapshot = GetCachedSnapshot();
 
-  UIImage* snapshot =
-      SnapshotTabHelper::FromWebState(&web_state_)->UpdateSnapshot();
+  base::RunLoop run_loop;
+  base::RunLoop* run_loop_ptr = &run_loop;
+
+  __block UIImage* snapshot = nil;
+  SnapshotTabHelper::FromWebState(&web_state_)
+      ->UpdateSnapshotWithCallback(^(UIImage* image) {
+        snapshot = image;
+        run_loop_ptr->Quit();
+      });
+
+  run_loop.Run();
 
   ASSERT_TRUE(snapshot);
   EXPECT_TRUE(CGSizeEqualToSize(snapshot.size, kWebStateViewSize));
@@ -300,6 +315,7 @@ TEST_F(SnapshotTabHelperTest, UpdateSnapshot) {
 
   UIImage* cached_snapshot = GetCachedSnapshot();
   EXPECT_TRUE(UIImagesAreEqual(snapshot, cached_snapshot));
+  EXPECT_FALSE(UIImagesAreEqual(snapshot, original_cached_snapshot));
   EXPECT_EQ(delegate_.snapshotTakenCount, 1u);
 }
 

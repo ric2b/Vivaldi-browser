@@ -64,6 +64,13 @@ class MagnificationManager
   // Loads the Fullscreen magnifier scale from the pref.
   double GetSavedScreenMagnifierScale() const;
 
+  // Updates for a new focus rect (eg, from ARC++) if a magnifier is enabled.
+  void HandleFocusedRectChangedIfEnabled(const gfx::Rect& bounds_in_screen,
+                                         bool is_editable);
+
+  // Move magnifier to ensure rect is within viewport if a magnifier is enabled.
+  void HandleMoveMagnifierToRectIfEnabled(const gfx::Rect& rect);
+
   // ProfileObserver:
   void OnProfileWillBeDestroyed(Profile* profile) override;
 

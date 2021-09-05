@@ -4,7 +4,10 @@
 
 #include "pdf/test/test_client.h"
 
+#include <memory>
+
 #include "pdf/document_layout.h"
+#include "pdf/ppapi_migration/url_loader.h"
 
 namespace chrome_pdf {
 
@@ -33,8 +36,8 @@ std::string TestClient::GetURL() {
   return std::string();
 }
 
-pp::URLLoader TestClient::CreateURLLoader() {
-  return pp::URLLoader();
+std::unique_ptr<UrlLoader> TestClient::CreateUrlLoader() {
+  return nullptr;
 }
 
 std::vector<PDFEngine::Client::SearchStringResult> TestClient::SearchString(

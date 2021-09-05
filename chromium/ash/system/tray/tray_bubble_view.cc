@@ -8,6 +8,7 @@
 #include <numeric>
 
 #include "ash/public/cpp/ash_features.h"
+#include "ash/style/ash_color_provider.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/unified/unified_system_tray_view.h"
 #include "base/macros.h"
@@ -236,7 +237,7 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
   bubble_border_->set_avoid_shadow_overlap(true);
   set_parent_window(params_.parent_window);
   SetCanActivate(false);
-  set_notify_enter_exit_on_child(true);
+  SetNotifyEnterExitOnChild(true);
   set_close_on_deactivate(init_params.close_on_deactivate);
   set_margins(gfx::Insets());
 
@@ -247,11 +248,11 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
 
     layer()->SetRoundedCornerRadius(
         gfx::RoundedCornersF{kUnifiedTrayCornerRadius});
-    layer()->SetColor(UnifiedSystemTrayView::GetBackgroundColor());
+    layer()->SetColor(AshColorProvider::Get()->GetBaseLayerColor(
+        AshColorProvider::BaseLayerType::kTransparent80));
     layer()->SetFillsBoundsOpaquely(false);
     layer()->SetIsFastRoundedCorner(true);
-    if (features::IsBackgroundBlurEnabled())
-      layer()->SetBackgroundBlur(kUnifiedMenuBackgroundBlur);
+    layer()->SetBackgroundBlur(kUnifiedMenuBackgroundBlur);
   } else {
     // Create a layer so that the layer for FocusRing stays in this view's
     // layer. Without it, the layer for FocusRing goes above the

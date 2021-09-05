@@ -8,10 +8,9 @@
 #include <memory>
 
 #include "base/optional.h"
+#include "base/time/time.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/views/bubble/bubble_border.h"
-
-class FeaturePromoBubbleTimeout;
 
 // Describes the content and appearance of an in-product help bubble.
 // |body_string_specifier|, |anchor_view|, and |arrow| are required, all
@@ -21,7 +20,7 @@ struct FeaturePromoBubbleParams {
   FeaturePromoBubbleParams();
   ~FeaturePromoBubbleParams();
 
-  FeaturePromoBubbleParams(FeaturePromoBubbleParams&&);
+  FeaturePromoBubbleParams(const FeaturePromoBubbleParams&);
 
   // Promo contents:
 
@@ -52,17 +51,23 @@ struct FeaturePromoBubbleParams {
   // possible.
   base::Optional<int> preferred_width;
 
-  enum class ActivationAction {
-    DO_NOT_ACTIVATE,
-    ACTIVATE,
-  };
+  // Determines if this bubble can be focused. If true, it will get
+  // focused on creation.
+  bool allow_focus = false;
 
-  // Determines whether the bubble's widget can be activated, and
-  // activates it on creation if so.
-  ActivationAction activation_action = ActivationAction::DO_NOT_ACTIVATE;
+  // Determines if this bubble will be dismissed when it loses focus.
+  // Only meaningful when |allow_focus| is true. When |allow_focus|
+  // is false, the bubble will always persist because it will never
+  // get blurred.
+  bool persist_on_blur = false;
+
+  // Determines if this IPH can be snoozed and reactivated later.
+  // If true, |allow_focus| must be true for keyboard accessibility.
+  bool allow_snooze = false;
 
   // Changes the bubble timeout. Intended for tests, avoid use.
-  std::unique_ptr<FeaturePromoBubbleTimeout> timeout;
+  base::Optional<base::TimeDelta> timeout_default;
+  base::Optional<base::TimeDelta> timeout_short;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_IN_PRODUCT_HELP_FEATURE_PROMO_BUBBLE_PARAMS_H_

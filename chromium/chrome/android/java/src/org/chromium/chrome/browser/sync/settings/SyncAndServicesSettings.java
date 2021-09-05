@@ -38,8 +38,8 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.SyncFirstSetupCompleteSource;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchFieldTrial;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
+import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.metrics.UmaSessionStats;
 import org.chromium.chrome.browser.password_manager.settings.PasswordUIView;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
@@ -274,7 +274,10 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if (wasSigninFlowInterrupted()) {
+        // The user might also sign out from this page. Check to see if the user is signed in
+        // before going through this flow.
+        if (wasSigninFlowInterrupted()
+                && mSigninPreference.getState() == SignInPreference.State.SIGNED_IN) {
             // If the setup flow was previously interrupted, and now the user dismissed the page
             // without turning sync on, then mark first setup as complete (so that we won't show the
             // error again), but turn sync off.
@@ -301,7 +304,7 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
             showCancelSyncDialog();
             return true;
         } else if (item.getItemId() == R.id.menu_id_targeted_help) {
-            HelpAndFeedback.getInstance().show(getActivity(),
+            HelpAndFeedbackLauncherImpl.getInstance().show(getActivity(),
                     getString(R.string.help_context_sync_and_services), getProfile(), null);
             return true;
         }
@@ -535,7 +538,8 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
                             ()
                                     -> IdentityServicesProvider.get()
                                                .getSigninManager(getProfile())
-                                               .signIn(SigninAccessPoint.SYNC_ERROR_CARD, account,
+                                               .signinAndEnableSync(
+                                                       SigninAccessPoint.SYNC_ERROR_CARD, account,
                                                        null),
                             false);
             return;

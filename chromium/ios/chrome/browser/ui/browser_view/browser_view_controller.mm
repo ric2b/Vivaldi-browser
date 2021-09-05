@@ -89,6 +89,7 @@
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_element.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_updater.h"
+#import "ios/chrome/browser/ui/gestures/view_revealing_animatee.h"
 #import "ios/chrome/browser/ui/image_util/image_copier.h"
 #import "ios/chrome/browser/ui/image_util/image_saver.h"
 #import "ios/chrome/browser/ui/infobars/infobar_container_coordinator.h"
@@ -112,11 +113,14 @@
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_util.h"
 #import "ios/chrome/browser/ui/side_swipe/side_swipe_controller.h"
 #import "ios/chrome/browser/ui/side_swipe/swipe_view.h"
+#import "ios/chrome/browser/ui/tab_strip/tab_strip_coordinator.h"
 #import "ios/chrome/browser/ui/tabs/background_tab_animation_view.h"
 #import "ios/chrome/browser/ui/tabs/foreground_tab_animation_view.h"
 #import "ios/chrome/browser/ui/tabs/requirements/tab_strip_presentation.h"
 #import "ios/chrome/browser/ui/tabs/switch_to_tab_animation_view.h"
+#import "ios/chrome/browser/ui/tabs/tab_strip_containing.h"
 #import "ios/chrome/browser/ui/tabs/tab_strip_legacy_coordinator.h"
+#import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
 #import "ios/chrome/browser/ui/toolbar/accessory/toolbar_accessory_presenter.h"
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_coordinator.h"
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_view_controller.h"
@@ -130,6 +134,7 @@
 #import "ios/chrome/browser/ui/toolbar/toolbar_coordinator_adaptor.h"
 #import "ios/chrome/browser/ui/toolbar_container/toolbar_container_coordinator.h"
 #import "ios/chrome/browser/ui/toolbar_container/toolbar_container_features.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/keyboard_observer_helper.h"
 #import "ios/chrome/browser/ui/util/multi_window_support.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
@@ -180,6 +185,7 @@
 #import "ios/web/public/ui/crw_web_view_proxy.h"
 #import "ios/web/public/web_state_delegate_bridge.h"
 #import "ios/web/public/web_state_observer_bridge.h"
+#include "ui/base/device_form_factor.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -329,6 +335,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
                                      CaptivePortalDetectorTabHelperDelegate,
                                      CRWWebStateDelegate,
                                      CRWWebStateObserver,
+                                     FindBarPresentationDelegate,
                                      FullscreenUIElement,
                                      InfobarPositioner,
                                      KeyCommandsPlumbing,
@@ -345,11 +352,11 @@ NSString* const kBrowserViewControllerSnackbarCategory =
                                      SigninPresenter,
                                      SnapshotGeneratorDelegate,
                                      TabStripPresentation,
-                                     FindBarPresentationDelegate,
                                      ToolbarHeightProviderForFullscreen,
-                                     WebStateListObserving,
                                      UIGestureRecognizerDelegate,
-                                     URLLoadingObserver> {
+                                     URLLoadingObserver,
+                                     ViewRevealingAnimatee,
+                                     WebStateListObserving> {
   // The dependency factory passed on initialization.  Used to vend objects used
   // by the BVC.
   BrowserViewControllerDependencyFactory* _dependencyFactory;
@@ -489,6 +496,9 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 // Whether BVC prefers to hide the status bar. This value is used to determine
 // the response from the |prefersStatusBarHidden| method.
 @property(nonatomic, assign) BOOL hideStatusBar;
+// Whether the BVC is positioned at the bottom of the window, for example after
+// switching from thumb strip to tab grid.
+@property(nonatomic, assign) BOOL bottomPosition;
 // Coordinator for displaying a modal overlay with activity indicator to prevent
 // the user from interacting with the browser view.
 @property(nonatomic, strong)
@@ -498,12 +508,17 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 @property(nonatomic, strong, nullable)
     ProceduralBlock foregroundTabWasAddedCompletionBlock;
 // Coordinator for tablet tab strip.
-@property(nonatomic, strong) TabStripLegacyCoordinator* tabStripCoordinator;
+@property(nonatomic, strong)
+    TabStripLegacyCoordinator* legacyTabStripCoordinator;
+// Coordinator for the new tablet tab strip.
+@property(nonatomic, strong) TabStripCoordinator* tabStripCoordinator;
 // Coordinator for Infobars.
 @property(nonatomic, strong)
     InfobarContainerCoordinator* infobarContainerCoordinator;
 // A weak reference to the view of the tab strip on tablet.
-@property(nonatomic, weak) UIView* tabStripView;
+@property(nonatomic, weak) UIView<TabStripContaining>* tabStripView;
+// A snapshot of the tab strip used on the thumb strip reveal/hide animation.
+@property(nonatomic, strong) UIView* tabStripSnapshot;
 // Helper for saving images.
 @property(nonatomic, strong) ImageSaver* imageSaver;
 // Helper for copying images.
@@ -687,6 +702,8 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 
 @implementation BrowserViewController
 
+@synthesize thumbStripPanHandler = _thumbStripPanHandler;
+
 #pragma mark - Object lifecycle
 
 - (instancetype)initWithBrowser:(Browser*)browser
@@ -830,7 +847,9 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     _sideSwipeController.secondaryToolbarSnapshotProvider =
         self.secondaryToolbarCoordinator;
     [_sideSwipeController setSwipeDelegate:self];
-    [_sideSwipeController setTabStripDelegate:self.tabStripCoordinator];
+    if (!base::FeatureList::IsEnabled(kModernTabStrip)) {
+      [_sideSwipeController setTabStripDelegate:self.legacyTabStripCoordinator];
+    }
   }
   return _sideSwipeController;
 }
@@ -1301,9 +1320,14 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 
   // Disconnect child coordinators.
   [self.popupMenuCoordinator stop];
-  [self.tabStripCoordinator stop];
-  self.tabStripCoordinator = nil;
-  self.tabStripView = nil;
+  if (base::FeatureList::IsEnabled(kModernTabStrip)) {
+    [self.tabStripCoordinator stop];
+    self.tabStripCoordinator = nil;
+  } else {
+    [self.legacyTabStripCoordinator stop];
+    self.legacyTabStripCoordinator = nil;
+    self.tabStripView = nil;
+  }
 
   [self.commandDispatcher stopDispatchingToTarget:self.bubblePresenter];
   self.bubblePresenter = nil;
@@ -1545,9 +1569,14 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     _locationBarModelDelegate = nil;
     _locationBarModel = nil;
     self.helper = nil;
-    [self.tabStripCoordinator stop];
-    self.tabStripCoordinator = nil;
-    self.tabStripView = nil;
+    if (base::FeatureList::IsEnabled(kModernTabStrip)) {
+      [self.tabStripCoordinator stop];
+      self.tabStripCoordinator = nil;
+    } else {
+      [self.legacyTabStripCoordinator stop];
+      self.legacyTabStripCoordinator = nil;
+      self.tabStripView = nil;
+    }
     _sideSwipeController = nil;
   }
 }
@@ -1589,7 +1618,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   // mode accordingly. Hide the findbar here and it will be reshown in [self
   // updateToobar];
   if (ShouldShowCompactToolbar(previousTraitCollection) !=
-      ShouldShowCompactToolbar()) {
+      ShouldShowCompactToolbar(self)) {
     [self.dispatcher hideFindUI];
     [self.textZoomHandler hideTextZoomUI];
   }
@@ -1598,18 +1627,20 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   [self updateToolbar];
 
   // Update the tab strip visibility.
-  if (self.tabStripView) {
-    [self showTabStripView:self.tabStripView];
-    [self.tabStripView layoutSubviews];
-    [self.tabStripCoordinator hideTabStrip:![self canShowTabStrip]];
-    _fakeStatusBarView.hidden = ![self canShowTabStrip];
-    [self addConstraintsToPrimaryToolbar];
-    // If tabstrip is coming back due to a window resize or screen rotation,
-    // reset the full screen controller to adjust the tabstrip position.
-    if (ShouldShowCompactToolbar(previousTraitCollection) &&
-        !ShouldShowCompactToolbar()) {
-      [self
-          updateForFullscreenProgress:self.fullscreenController->GetProgress()];
+  if (!base::FeatureList::IsEnabled(kModernTabStrip)) {
+    if (self.tabStripView) {
+      [self showTabStripView:self.tabStripView];
+      [self.tabStripView layoutSubviews];
+      [self.legacyTabStripCoordinator hideTabStrip:![self canShowTabStrip]];
+      _fakeStatusBarView.hidden = ![self canShowTabStrip];
+      [self addConstraintsToPrimaryToolbar];
+      // If tabstrip is coming back due to a window resize or screen rotation,
+      // reset the full screen controller to adjust the tabstrip position.
+      if (ShouldShowCompactToolbar(previousTraitCollection) &&
+          !ShouldShowCompactToolbar(self)) {
+        [self updateForFullscreenProgress:self.fullscreenController
+                                              ->GetProgress()];
+      }
     }
   }
 
@@ -1635,11 +1666,27 @@ NSString* const kBrowserViewControllerSnackbarCategory =
       }
       completion:^(id<UIViewControllerTransitionCoordinatorContext> context) {
         BrowserViewController* strongSelf = weakSelf;
-        weakSelf.fullscreenController->ResizeViewport();
-        if (strongSelf.tabStripView) {
-          [strongSelf.tabStripCoordinator tabStripSizeDidChange];
+        // Resize horizontal viewport if Smooth Scrolling is on for multiwindow.
+        if (fullscreen::features::ShouldUseSmoothScrolling() &&
+            ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
+          strongSelf.fullscreenController->ResizeHorizontalViewport();
+        }
+        if (!base::FeatureList::IsEnabled(kModernTabStrip)) {
+          if (strongSelf.tabStripView) {
+            [strongSelf.legacyTabStripCoordinator tabStripSizeDidChange];
+          }
         }
       }];
+
+  if (IsThumbStripEnabled()) {
+    CGFloat baseViewHeight = size.height;
+    self.thumbStripPanHandler.baseViewHeight = baseViewHeight;
+    // On rotation, reposition the BVC container if positioned at the bottom.
+    if (self.bottomPosition) {
+      self.view.superview.transform = CGAffineTransformMakeTranslation(
+          0, self.thumbStripPanHandler.revealedHeight);
+    }
+  }
 }
 
 - (void)dismissViewControllerAnimated:(BOOL)flag
@@ -1832,6 +1879,13 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 }
 
 - (void)installFakeStatusBar {
+  if (IsThumbStripEnabled()) {
+    // A fake status bar on the browser view is not necessary when the thumb
+    // strip feature is enabled because the view behind the browser view already
+    // has a dark background. Adding a fake status bar would block the
+    // visibility of the thumb strip thumbnails when moving the browser view.
+    return;
+  }
   CGRect statusBarFrame = CGRectMake(0, 0, CGRectGetWidth(self.view.bounds), 0);
   _fakeStatusBarView = [[UIView alloc] initWithFrame:statusBarFrame];
   [_fakeStatusBarView setAutoresizingMask:UIViewAutoresizingFlexibleWidth];
@@ -1906,18 +1960,22 @@ NSString* const kBrowserViewControllerSnackbarCategory =
         static_cast<id<LoadQueryCommands>>(self.commandDispatcher));
 
   if (IsIPadIdiom()) {
-    self.tabStripCoordinator = [[TabStripLegacyCoordinator alloc]
-        initWithBaseViewController:self
-                           browser:self.browser];
-    self.tabStripCoordinator.presentationProvider = self;
-    self.tabStripCoordinator.animationWaitDuration =
-        kLegacyFullscreenControllerToolbarAnimationDuration;
-    self.tabStripCoordinator.longPressDelegate = self.popupMenuCoordinator;
+    if (base::FeatureList::IsEnabled(kModernTabStrip)) {
+      self.tabStripCoordinator =
+          [[TabStripCoordinator alloc] initWithBrowser:self.browser];
+      [self.tabStripCoordinator start];
+    } else {
+      self.legacyTabStripCoordinator = [[TabStripLegacyCoordinator alloc]
+          initWithBaseViewController:self
+                             browser:self.browser];
+      self.legacyTabStripCoordinator.presentationProvider = self;
+      self.legacyTabStripCoordinator.animationWaitDuration =
+          kLegacyFullscreenControllerToolbarAnimationDuration;
+      self.legacyTabStripCoordinator.longPressDelegate =
+          self.popupMenuCoordinator;
 
-    UILayoutGuide* guide =
-        [[NamedGuide alloc] initWithName:kTabStripTabSwitcherGuide];
-    [self.view addLayoutGuide:guide];
-    [self.tabStripCoordinator start];
+      [self.legacyTabStripCoordinator start];
+    }
   }
 
   if (!base::FeatureList::IsEnabled(kInfobarOverlayUI)) {
@@ -1948,7 +2006,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 - (CGFloat)primaryToolbarHeightWithInset {
   UIView* primaryToolbar = self.primaryToolbarCoordinator.viewController.view;
   CGFloat intrinsicHeight = primaryToolbar.intrinsicContentSize.height;
-  if (!IsSplitToolbarMode()) {
+  if (!IsSplitToolbarMode(self)) {
     // When the adaptive toolbar is unsplit, add a margin.
     intrinsicHeight += kTopToolbarUnsplitMargin;
   }
@@ -2126,7 +2184,10 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   self.primaryToolbarCoordinator.longPressDelegate = self.popupMenuCoordinator;
   self.secondaryToolbarCoordinator.longPressDelegate =
       self.popupMenuCoordinator;
-  self.tabStripCoordinator.longPressDelegate = self.popupMenuCoordinator;
+  if (!base::FeatureList::IsEnabled(kModernTabStrip)) {
+    self.legacyTabStripCoordinator.longPressDelegate =
+        self.popupMenuCoordinator;
+  }
 
   self.omniboxHandler =
       HandlerForProtocol(self.browser->GetCommandDispatcher(), OmniboxCommands);
@@ -2173,12 +2234,13 @@ NSString* const kBrowserViewControllerSnackbarCategory =
       }
     }
 
-    // Add the primary toolbar.  On iPad, it should be behind the tab strip.
+    // Add the primary toolbar. On iPad, it should be in front of the tab strip
+    // because the tab strip slides behind it when showing the thumb strip.
     UIView* primaryToolbarView =
         self.primaryToolbarCoordinator.viewController.view;
     if (IsIPadIdiom()) {
       [self.view insertSubview:primaryToolbarView
-                  belowSubview:self.tabStripView];
+                  aboveSubview:self.tabStripView];
     } else {
       [self.view addSubview:primaryToolbarView];
     }
@@ -2309,15 +2371,24 @@ NSString* const kBrowserViewControllerSnackbarCategory =
       UIViewController* viewController =
           _ntpCoordinatorsForWebStates[webState].viewController;
       viewController.view.frame = [self ntpFrameForWebState:webState];
+      [viewController.view layoutIfNeeded];
       // TODO(crbug.com/873729): For a newly created WebState, the session will
       // not be restored until LoadIfNecessary call. Remove when fixed.
       webState->GetNavigationManager()->LoadIfNecessary();
       self.browserContainerViewController.contentView = nil;
       self.browserContainerViewController.contentViewController =
           viewController;
+      [_ntpCoordinatorsForWebStates[webState]
+          constrainDiscoverHeaderMenuButtonNamedGuide];
+      [self.bubblePresenter presentDiscoverFeedHeaderTipBubble];
     } else {
       self.browserContainerViewController.contentView =
           [self viewForWebState:webState];
+    }
+    // Resize horizontal viewport if Smooth Scrolling is on for multiwindow.
+    if (fullscreen::features::ShouldUseSmoothScrolling() &&
+        ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
+      self.fullscreenController->ResizeHorizontalViewport();
     }
   }
   [self updateToolbar];
@@ -2430,7 +2501,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   DCHECK(NTPHelper && NTPHelper->IsActive());
   // NTP is laid out only in the visible part of the screen.
   UIEdgeInsets viewportInsets = UIEdgeInsetsZero;
-  if (!IsRegularXRegularSizeClass())
+  if (!IsRegularXRegularSizeClass(self))
     viewportInsets.bottom = [self bottomToolbarHeight];
   if (!IsSplitToolbarMode(self))
     viewportInsets.top = [self expandedTopToolbarHeight];
@@ -2693,7 +2764,79 @@ NSString* const kBrowserViewControllerSnackbarCategory =
                          IDS_IOS_READING_LIST_SNACKBAR_MESSAGE)];
 }
 
+#pragma mark - Private Methods: Thumb Strip
+
+// Sets up the thumb strip pan gesture handler.
+- (void)setUpThumbStrip {
+  [self.thumbStripPanHandler
+      addAnimatee:self.primaryToolbarCoordinator.animatee];
+  [self.thumbStripPanHandler addAnimatee:self];
+
+  self.primaryToolbarCoordinator.panGestureHandler = self.thumbStripPanHandler;
+  if (!base::FeatureList::IsEnabled(kModernTabStrip)) {
+    self.legacyTabStripCoordinator.panGestureHandler =
+        self.thumbStripPanHandler;
+  }
+}
+
 #pragma mark - ** Protocol Implementations and Helpers **
+
+#pragma mark - ThumbStripAttacher
+
+- (void)setThumbStripPanHandler:
+    (ViewRevealingVerticalPanHandler*)thumbStripPanHandler {
+  _thumbStripPanHandler = thumbStripPanHandler;
+  [self setUpThumbStrip];
+}
+
+#pragma mark - ViewRevealingAnimatee
+
+- (void)willAnimateViewReveal:(ViewRevealState)currentViewRevealState {
+  // Hide the tab strip and take a snapshot of it. If a snapshot of a hidden
+  // view is taken, the snapshot will be a blank view. However, if the view's
+  // parent is hidden but the view itself is not, the snapshot will not be a
+  // blank view.
+  self.tabStripSnapshot = [self.tabStripView screenshotForAnimation];
+  self.tabStripSnapshot.transform =
+      currentViewRevealState == ViewRevealState::Hidden
+          ? CGAffineTransformIdentity
+          : CGAffineTransformMakeTranslation(
+                0, self.tabStripView.frame.size.height);
+  self.tabStripView.hidden = YES;
+  [self.contentArea addSubview:self.tabStripSnapshot];
+}
+
+- (void)animateViewReveal:(ViewRevealState)nextViewRevealState {
+  switch (nextViewRevealState) {
+    case ViewRevealState::Hidden:
+      self.view.superview.transform = CGAffineTransformIdentity;
+      self.view.transform = CGAffineTransformIdentity;
+      self.tabStripSnapshot.transform = CGAffineTransformIdentity;
+      break;
+    case ViewRevealState::Peeked:
+      self.view.superview.transform = CGAffineTransformMakeTranslation(
+          0, self.thumbStripPanHandler.peekedHeight);
+      self.view.transform = CGAffineTransformMakeTranslation(
+          0, -self.tabStripView.frame.size.height - self.headerOffset);
+      self.tabStripSnapshot.transform = CGAffineTransformMakeTranslation(
+          0, self.tabStripView.frame.size.height);
+      break;
+    case ViewRevealState::Revealed:
+      self.view.superview.transform = CGAffineTransformMakeTranslation(
+          0, self.thumbStripPanHandler.revealedHeight);
+      self.view.transform = CGAffineTransformMakeTranslation(
+          0, -self.tabStripView.frame.size.height - self.headerOffset);
+      self.tabStripSnapshot.transform = CGAffineTransformMakeTranslation(
+          0, self.tabStripView.frame.size.height);
+      break;
+  }
+}
+
+- (void)didAnimateViewReveal:(ViewRevealState)viewRevealState {
+  self.tabStripView.hidden = (viewRevealState != ViewRevealState::Hidden);
+  [self.tabStripSnapshot removeFromSuperview];
+  self.bottomPosition = (viewRevealState == ViewRevealState::Revealed);
+}
 
 #pragma mark - BubblePresenterDelegate
 
@@ -2801,6 +2944,12 @@ NSString* const kBrowserViewControllerSnackbarCategory =
       overlayContainerViewController.presentedViewController.view;
   if (presentedOverlayView) {
     [overlays addObject:presentedOverlayView];
+  }
+
+  UIView* screenTimeView =
+      self.browserContainerViewController.screenTimeViewController.view;
+  if (screenTimeView) {
+    [overlays addObject:screenTimeView];
   }
 
   UIView* childOverlayView =
@@ -3968,7 +4117,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   }
 }
 
-- (void)bookmarkPage {
+- (void)bookmarkCurrentPage {
   [self initializeBookmarkInteractionController];
   [_bookmarkInteractionController
       presentBookmarkEditorForWebState:self.currentWebState
@@ -4262,8 +4411,16 @@ NSString* const kBrowserViewControllerSnackbarCategory =
       dispatch_async(dispatch_get_main_queue(), ^{
         // Test existence again as the block may have been deleted.
         if (self.foregroundTabWasAddedCompletionBlock) {
-          self.foregroundTabWasAddedCompletionBlock();
+          // Clear the property before executing the completion, in case the
+          // completion calls appendTabAddedCompletion:tabAddedCompletion.
+          // Clearing the property after running the completion would cause any
+          // newly appended completion to be immediately cleared without ever
+          // getting run. An example where this would happen is when opening
+          // multiple tabs via the "Open URLs in Chrome" Siri Shortcut.
+          ProceduralBlock completion =
+              self.foregroundTabWasAddedCompletionBlock;
           self.foregroundTabWasAddedCompletionBlock = nil;
+          completion();
         }
       });
     }
@@ -4316,6 +4473,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     newPage = [self viewForWebState:webState];
     newPage.userInteractionEnabled = NO;
     newPage.frame = self.view.bounds;
+    [newPage layoutIfNeeded];
   } else {
     [self viewForWebState:webState].frame = self.contentArea.bounds;
     // Setting the frame here doesn't trigger a layout pass. Trigger it manually
@@ -4589,7 +4747,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   return ([self currentHeaderOffset] == 0.0f);
 }
 
-- (void)showTabStripView:(UIView*)tabStripView {
+- (void)showTabStripView:(UIView<TabStripContaining>*)tabStripView {
   DCHECK([self isViewLoaded]);
   DCHECK(tabStripView);
   self.tabStripView = tabStripView;
@@ -4601,7 +4759,10 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   tabStripFrame.origin.y = self.headerOffset;
   tabStripFrame.size.width = CGRectGetWidth([self view].bounds);
   [self.tabStripView setFrame:tabStripFrame];
-  [[self view] addSubview:tabStripView];
+  // The tab strip should be behind the toolbar, because it slides behind the
+  // toolbar during the transition to the thumb strip.
+  [self.view insertSubview:tabStripView
+              belowSubview:self.primaryToolbarCoordinator.viewController.view];
 }
 
 #pragma mark - FindBarPresentationDelegate
@@ -4632,6 +4793,13 @@ NSString* const kBrowserViewControllerSnackbarCategory =
       ios::AccountReconcilorFactory::GetForBrowserState(self.browserState)
           ->GetState());
   [self.dispatcher showAccountsSettingsFromViewController:self];
+}
+
+- (void)onShowConsistencyPromo {
+  signin_metrics::LogAccountReconcilorStateOnGaiaResponse(
+      ios::AccountReconcilorFactory::GetForBrowserState(self.browserState)
+          ->GetState());
+  [self.dispatcher showConsistencyPromoFromViewController:self];
 }
 
 - (void)onAddAccount {

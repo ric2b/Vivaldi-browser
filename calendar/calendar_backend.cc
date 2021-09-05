@@ -196,26 +196,26 @@ void CalendarBackend::GetEvents(EventRows rows,
       events_with_exceptions.insert(exception_row.parent_event_id);
     }
 
-    const bool has_exception = events_with_exceptions.find(eventRow.id()) !=
+    const bool has_exception = events_with_exceptions.find(eventRow.id) !=
                                events_with_exceptions.end();
 
     if (has_exception) {
       RecurrenceExceptionRows exception_rows;
       for (auto& exception : recurrence_exception_rows) {
-        if (exception.parent_event_id == eventRow.id()) {
+        if (exception.parent_event_id == eventRow.id) {
           exception_rows.push_back(exception);
         }
       }
-      eventRow.set_recurrence_exceptions(exception_rows);
+      eventRow.recurrence_exceptions = exception_rows;
     }
 
     NotificationRows notification_rows;
-    db_->GetAllNotificationsForEvent(eventRow.id(), &notification_rows);
-    eventRow.set_notifications(notification_rows);
+    db_->GetAllNotificationsForEvent(eventRow.id, &notification_rows);
+    eventRow.notifications = notification_rows;
 
     InviteRows invite_rows;
-    db_->GetInvitesForEvent(eventRow.id(), &invite_rows);
-    eventRow.set_invites(invite_rows);
+    db_->GetInvitesForEvent(eventRow.id, &invite_rows);
+    eventRow.invites = invite_rows;
 
     EventResult result(eventRow);
     results->AppendEventBySwapping(&result);
@@ -254,7 +254,7 @@ void CalendarBackend::CreateCalendarEvents(
 void CalendarBackend::CreateCalendarEvent(
     EventRow ev,
     std::shared_ptr<EventResultCB> result) {
-  if (!db_->DoesCalendarIdExist(ev.calendar_id())) {
+  if (!db_->DoesCalendarIdExist(ev.calendar_id)) {
     result->success = false;
     result->message = "Calendar does not exist.";
     return;
@@ -263,18 +263,18 @@ void CalendarBackend::CreateCalendarEvent(
   EventID id = db_->CreateCalendarEvent(ev);
 
   if (id) {
-    ev.set_id(id);
-    if (ev.event_exceptions().size() > 0) {
-      for (const auto& exception : ev.event_exceptions()) {
+    ev.id = id;
+    if (ev.event_exceptions.size() > 0) {
+      for (const auto& exception : ev.event_exceptions) {
         EventID exception_event_id = 0;
         if (!exception.cancelled) {
           EventRow exception_event;
           exception_event = *exception.event;
-          exception_event.set_calendar_id(ev.calendar_id());
+          exception_event.calendar_id = ev.calendar_id;
           exception_event_id = db_->CreateCalendarEvent(exception_event);
 
-          if (exception_event.invites_to_create().size() > 0) {
-            for (const auto& invite : exception_event.invites_to_create()) {
+          if (exception_event.invites_to_create.size() > 0) {
+            for (const auto& invite : exception_event.invites_to_create) {
               InviteRow invite_row;
               invite_row.event_id = exception_event_id;
               invite_row.name = invite.name;
@@ -294,8 +294,8 @@ void CalendarBackend::CreateCalendarEvent(
       }
     }
 
-    if (ev.notifications_to_create().size() > 0) {
-      for (const auto& notification : ev.notifications_to_create()) {
+    if (ev.notifications_to_create.size() > 0) {
+      for (const auto& notification : ev.notifications_to_create) {
         NotificationRow notification_row;
         notification_row.event_id = id;
         notification_row.name = notification.name;
@@ -304,8 +304,8 @@ void CalendarBackend::CreateCalendarEvent(
       }
     }
 
-    if (ev.invites_to_create().size() > 0) {
-      for (const auto& invite : ev.invites_to_create()) {
+    if (ev.invites_to_create.size() > 0) {
+      for (const auto& invite : ev.invites_to_create) {
         InviteRow invite_row;
         invite_row.event_id = id;
         invite_row.name = invite.name;
@@ -329,11 +329,11 @@ EventResult CalendarBackend::FillEvent(EventID id) {
   db_->GetRowForEvent(id, &event_row);
   NotificationRows notification_rows;
   db_->GetAllNotificationsForEvent(id, &notification_rows);
-  event_row.set_notifications(notification_rows);
+  event_row.notifications = notification_rows;
 
   InviteRows invite_rows;
   db_->GetInvitesForEvent(id, &invite_rows);
-  event_row.set_invites(invite_rows);
+  event_row.invites = invite_rows;
 
   EventResult res(event_row);
   return res;
@@ -358,7 +358,7 @@ void CalendarBackend::CreateRecurrenceException(
 
     EventRow event_row;
     if (db_->GetRowForEvent(parent_event_id, &event_row)) {
-      event_row.set_recurrence_exceptions(exception_rows);
+      event_row.recurrence_exceptions = exception_rows;
       NotifyEventModified(event_row);
     }
     result->success = true;
@@ -380,15 +380,59 @@ void CalendarBackend::GetAllNotifications(
 
 void CalendarBackend::CreateNotification(
     calendar::NotificationRow row,
-    std::shared_ptr<CreateNotificationResult> result) {
+    std::shared_ptr<NotificationResult> result) {
   NotificationID id = db_->CreateNotification(row);
   if (id) {
     row.id = id;
     result->success = true;
-    result->createdRow = row;
+    result->notification_row = row;
     NotifyNotificationChanged(row);
   } else {
     result->success = false;
+  }
+}
+
+void CalendarBackend::UpdateNotification(
+    calendar::UpdateNotificationRow row,
+    std::shared_ptr<NotificationResult> result) {
+  NotificationRow notification_row;
+  if (db_->GetNotificationRow(row.notification_row.id, &notification_row)) {
+    if (row.updateFields & calendar::NOTIFICATION_NAME) {
+      notification_row.name = row.notification_row.name;
+    }
+
+    if (row.updateFields & calendar::NOTIFICATION_DESCRIPTION) {
+      notification_row.description = row.notification_row.description;
+    }
+
+    if (row.updateFields & calendar::NOTIFICATION_WHEN) {
+      notification_row.when = row.notification_row.when;
+    }
+
+    if (row.updateFields & calendar::NOTIFICATION_PERIOD) {
+      notification_row.period = row.notification_row.period;
+    }
+
+    if (row.updateFields & calendar::NOTIFICATION_DELAY) {
+      notification_row.delay = row.notification_row.delay;
+    }
+
+    result->success = db_->UpdateNotificationRow(notification_row);
+
+    if (result->success) {
+      NotificationRow notification_changed_row;
+      if (db_->GetNotificationRow(row.notification_row.id,
+                                  &notification_changed_row)) {
+        result->success = true;
+        result->notification_row = notification_changed_row;
+        NotifyCalendarChanged();
+      }
+    }
+  } else {
+    result->success = false;
+    result->message = "Could not find notification  row in DB";
+    NOTREACHED() << "Could not find notification row in DB";
+    return;
   }
 }
 
@@ -487,7 +531,7 @@ void CalendarBackend::GetAllCalendars(
 }
 
 void CalendarBackend::UpdateEvent(EventID event_id,
-                                  const CalendarEvent& event,
+                                  const EventRow& event,
                                   std::shared_ptr<UpdateEventResult> result) {
   if (!db_) {
     result->success = false;
@@ -497,95 +541,127 @@ void CalendarBackend::UpdateEvent(EventID event_id,
   EventRow event_row;
   if (db_->GetRowForEvent(event_id, &event_row)) {
     if (event.updateFields & calendar::CALENDAR_ID) {
-      event_row.set_calendar_id(event.calendar_id);
+      event_row.calendar_id = event.calendar_id;
     }
 
     if (event.updateFields & calendar::TITLE) {
-      event_row.set_title(event.title);
+      event_row.title = event.title;
     }
 
     if (event.updateFields & calendar::DESCRIPTION) {
-      event_row.set_description(event.description);
+      event_row.description = event.description;
     }
 
     if (event.updateFields & calendar::START) {
-      event_row.set_start(event.start);
+      event_row.start = event.start;
     }
 
     if (event.updateFields & calendar::END) {
-      event_row.set_end(event.end);
+      event_row.end = event.end;
     }
 
     if (event.updateFields & calendar::ALLDAY) {
-      event_row.set_all_day(event.all_day);
+      event_row.all_day = event.all_day;
     }
 
     if (event.updateFields & calendar::ISRECURRING) {
-      event_row.set_is_recurring(event.is_recurring);
+      event_row.is_recurring = event.is_recurring;
     }
 
     if (event.updateFields & calendar::STARTRECURRING) {
-      event_row.set_start_recurring(event.start_recurring);
+      event_row.start_recurring = event.start_recurring;
     }
 
     if (event.updateFields & calendar::ENDRECURRING) {
-      event_row.set_end_recurring(event.end_recurring);
+      event_row.end_recurring = event.end_recurring;
     }
 
     if (event.updateFields & calendar::LOCATION) {
-      event_row.set_location(event.location);
+      event_row.location = event.location;
     }
 
     if (event.updateFields & calendar::URL) {
-      event_row.set_url(event.url);
+      event_row.url = event.url;
     }
 
     if (event.updateFields & calendar::ETAG) {
-      event_row.set_etag(event.etag);
+      event_row.etag = event.etag;
     }
 
     if (event.updateFields & calendar::HREF) {
-      event_row.set_href(event.href);
+      event_row.href = event.href;
     }
 
     if (event.updateFields & calendar::UID) {
-      event_row.set_uid(event.uid);
+      event_row.uid = event.uid;
     }
 
     if (event.updateFields & calendar::EVENT_TYPE_ID) {
-      event_row.set_event_type_id(event.event_type_id);
+      event_row.event_type_id = event.event_type_id;
     }
 
     if (event.updateFields & calendar::TASK) {
-      event_row.set_task(event.task);
+      event_row.task = event.task;
     }
 
     if (event.updateFields & calendar::COMPLETE) {
-      event_row.set_complete(event.complete);
+      event_row.complete = event.complete;
     }
 
     if (event.updateFields & calendar::TRASH) {
-      event_row.set_trash(event.trash);
+      event_row.trash = event.trash;
     }
 
     if (event.updateFields & calendar::SEQUENCE) {
-      event_row.set_sequence(event.sequence);
+      event_row.sequence = event.sequence;
     }
 
     if (event.updateFields & calendar::ICAL) {
-      event_row.set_ical(event.ical);
+      event_row.ical = event.ical;
     }
 
     if (event.updateFields & calendar::RRULE) {
-      event_row.set_rrule(event.rrule);
+      event_row.rrule = event.rrule;
     }
 
     if (event.updateFields & calendar::ORGANIZER) {
-      event_row.set_organizer(event.organizer);
+      event_row.organizer = event.organizer;
     }
 
     if (event.updateFields & calendar::TIMEZONE) {
-      event_row.set_timezone(event.timezone);
+      event_row.timezone = event.timezone;
+    }
+
+    if (event.updateFields & calendar::DUE) {
+      event_row.due = event.due;
+    }
+
+    if (event.updateFields & calendar::PRIORITY) {
+      event_row.priority = event.priority;
+    }
+
+    if (event.updateFields & calendar::STATUS) {
+      event_row.status = event.status;
+    }
+
+    if (event.updateFields & calendar::PERCENTAGE_COMPLETE) {
+      event_row.percentage_complete = event.percentage_complete;
+    }
+
+    if (event.updateFields & calendar::CATEGORIES) {
+      event_row.categories = event.categories;
+    }
+
+    if (event.updateFields & calendar::COMPONENT_CLASS) {
+      event_row.component_class = event.component_class;
+    }
+
+    if (event.updateFields & calendar::ATTACHMENT) {
+      event_row.attachment = event.attachment;
+    }
+
+    if (event.updateFields & calendar::COMPLETED) {
+      event_row.completed = event.completed;
     }
 
     result->success = db_->UpdateEventRow(event_row);
@@ -773,6 +849,11 @@ void CalendarBackend::UpdateCalendar(
       calendar_row.set_timezone(calendar.timezone);
     }
 
+    if (calendar.updateFields & calendar::CALENDAR_SUPPORTED_COMPONENT_SET) {
+      calendar_row.set_supported_component_set(
+          calendar.supported_component_set);
+    }
+
     result->success = db_->UpdateCalendarRow(calendar_row);
 
     if (result->success) {
@@ -799,6 +880,7 @@ void CalendarBackend::DeleteCalendar(
   CalendarRow calendar_row;
   if (db_->GetRowForCalendar(calendar_id, &calendar_row)) {
     db_->DeleteRecurrenceExceptionsForCalendar(calendar_id);
+    db_->DeleteNotificationsForCalendar(calendar_id);
     db_->DeleteEventsForCalendar(calendar_id);
     result->success = db_->DeleteCalendar(calendar_id);
     NotifyCalendarDeleted(calendar_row);

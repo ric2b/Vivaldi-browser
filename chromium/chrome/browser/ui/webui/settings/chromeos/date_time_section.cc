@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/webui/settings/chromeos/date_time_section.h"
 
-#include "base/feature_list.h"
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -13,7 +12,6 @@
 #include "chrome/browser/ui/webui/settings/chromeos/date_time_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/webui_util.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/settings/cros_settings_names.h"
@@ -50,12 +48,12 @@ const std::vector<SearchConcept>& GetDateTimeSearchConcepts() {
 
 const std::vector<SearchConcept>& GetFineGrainedTimeZoneSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      {IDS_OS_SETTINGS_TAG_DATE_TIME_ZONE_SUBPAGE,
+      {IDS_OS_SETTINGS_TAG_DATE_TIME_ZONE,
        mojom::kTimeZoneSubpagePath,
        mojom::SearchResultIcon::kClock,
        mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSubpage,
-       {.subpage = mojom::Subpage::kTimeZone}},
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kChangeTimeZone}},
   });
   return *tags;
 }
@@ -130,9 +128,6 @@ void DateTimeSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddString(
       "timeZoneID",
       system::TimezoneSettings::GetInstance()->GetCurrentTimezoneID());
-  html_source->AddBoolean(
-      "timeActionsProtectedForChild",
-      base::FeatureList::IsEnabled(features::kParentAccessCodeForTimeChange));
 
   bool is_child = user_manager::UserManager::Get()->GetActiveUser()->IsChild();
   html_source->AddBoolean("isChild", is_child);
@@ -156,6 +151,12 @@ mojom::SearchResultIcon DateTimeSection::GetSectionIcon() const {
 
 std::string DateTimeSection::GetSectionPath() const {
   return mojom::kDateAndTimeSectionPath;
+}
+
+bool DateTimeSection::LogMetric(mojom::Setting setting,
+                                base::Value& value) const {
+  // Unimplemented.
+  return false;
 }
 
 void DateTimeSection::RegisterHierarchy(HierarchyGenerator* generator) const {

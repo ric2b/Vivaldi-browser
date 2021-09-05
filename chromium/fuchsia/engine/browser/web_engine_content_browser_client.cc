@@ -15,7 +15,6 @@
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/user_agent.h"
-#include "content/public/common/web_preferences.h"
 #include "fuchsia/base/fuchsia_dir_scheme.h"
 #include "fuchsia/engine/browser/url_request_rewrite_rules_manager.h"
 #include "fuchsia/engine/browser/web_engine_browser_context.h"
@@ -27,6 +26,7 @@
 #include "fuchsia/engine/switches.h"
 #include "media/base/media_switches.h"
 #include "services/network/public/mojom/network_service.mojom.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 
 namespace {
 
@@ -109,7 +109,7 @@ std::string WebEngineContentBrowserClient::GetUserAgent() {
 
 void WebEngineContentBrowserClient::OverrideWebkitPrefs(
     content::RenderViewHost* rvh,
-    content::WebPreferences* web_prefs) {
+    blink::web_pref::WebPreferences* web_prefs) {
   // Disable WebSQL support since it's being removed from the web platform.
   web_prefs->databases_enabled = false;
 
@@ -118,7 +118,8 @@ void WebEngineContentBrowserClient::OverrideWebkitPrefs(
 
   // Allow media to autoplay.
   // TODO(crbug.com/1067101): Provide a FIDL API to configure AutoplayPolicy.
-  web_prefs->autoplay_policy = content::AutoplayPolicy::kNoUserGestureRequired;
+  web_prefs->autoplay_policy =
+      blink::web_pref::AutoplayPolicy::kNoUserGestureRequired;
 }
 
 void WebEngineContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
@@ -131,11 +132,12 @@ void WebEngineContentBrowserClient::
     RegisterNonNetworkNavigationURLLoaderFactories(
         int frame_tree_node_id,
         base::UkmSourceId ukm_source_id,
+        NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
         NonNetworkURLLoaderFactoryMap* factories) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kContentDirectories)) {
-    (*factories)[cr_fuchsia::kFuchsiaDirScheme] =
-        std::make_unique<ContentDirectoryLoaderFactory>();
+    factories->emplace(cr_fuchsia::kFuchsiaDirScheme,
+                       ContentDirectoryLoaderFactory::Create());
   }
 }
 
@@ -143,12 +145,21 @@ void WebEngineContentBrowserClient::
     RegisterNonNetworkSubresourceURLLoaderFactories(
         int render_process_id,
         int render_frame_id,
+        NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
         NonNetworkURLLoaderFactoryMap* factories) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kContentDirectories)) {
-    (*factories)[cr_fuchsia::kFuchsiaDirScheme] =
-        std::make_unique<ContentDirectoryLoaderFactory>();
+    factories->emplace(cr_fuchsia::kFuchsiaDirScheme,
+                       ContentDirectoryLoaderFactory::Create());
   }
+}
+
+bool WebEngineContentBrowserClient::ShouldEnableStrictSiteIsolation() {
+  constexpr base::Feature kSitePerProcess{"site-per-process",
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
+  static bool enable_strict_isolation =
+      base::FeatureList::IsEnabled(kSitePerProcess);
+  return enable_strict_isolation;
 }
 
 void WebEngineContentBrowserClient::AppendExtraCommandLineSwitches(
@@ -165,6 +176,7 @@ void WebEngineContentBrowserClient::AppendExtraCommandLineSwitches(
       switches::kForceProtectedVideoOutputBuffers,
       switches::kMaxDecodedImageSizeMb,
       switches::kPlayreadyKeySystem,
+      switches::kUseOverlaysForVideo,
   };
 
   command_line->CopySwitchesFrom(*base::CommandLine::ForCurrentProcess(),

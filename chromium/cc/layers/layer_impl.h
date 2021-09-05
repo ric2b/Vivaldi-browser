@@ -41,7 +41,7 @@
 
 namespace viz {
 class ClientResourceProvider;
-class RenderPass;
+class CompositorRenderPass;
 }
 
 namespace cc {
@@ -131,7 +131,7 @@ class CC_EXPORT LayerImpl {
   // the layer is destroyed.
   virtual bool WillDraw(DrawMode draw_mode,
                         viz::ClientResourceProvider* resource_provider);
-  virtual void AppendQuads(viz::RenderPass* render_pass,
+  virtual void AppendQuads(viz::CompositorRenderPass* render_pass,
                            AppendQuadsData* append_quads_data) {}
   virtual void DidDraw(viz::ClientResourceProvider* resource_provider);
 
@@ -387,11 +387,6 @@ class CC_EXPORT LayerImpl {
   void NoteLayerPropertyChanged();
   void NoteLayerPropertyChangedFromPropertyTrees();
 
-  void SetHasWillChangeTransformHint(bool has_will_change);
-  bool has_will_change_transform_hint() const {
-    return has_will_change_transform_hint_;
-  }
-
   ElementListType GetElementTypeForAnimation() const;
 
   void set_needs_show_scrollbars(bool yes) { needs_show_scrollbars_ = yes; }
@@ -424,11 +419,11 @@ class CC_EXPORT LayerImpl {
   // Get the color and size of the layer's debug border.
   virtual void GetDebugBorderProperties(SkColor* color, float* width) const;
 
-  void AppendDebugBorderQuad(viz::RenderPass* render_pass,
+  void AppendDebugBorderQuad(viz::CompositorRenderPass* render_pass,
                              const gfx::Rect& quad_rect,
                              const viz::SharedQuadState* shared_quad_state,
                              AppendQuadsData* append_quads_data) const;
-  void AppendDebugBorderQuad(viz::RenderPass* render_pass,
+  void AppendDebugBorderQuad(viz::CompositorRenderPass* render_pass,
                              const gfx::Rect& quad_rect,
                              const viz::SharedQuadState* shared_quad_state,
                              AppendQuadsData* append_quads_data,
@@ -525,7 +520,6 @@ class CC_EXPORT LayerImpl {
   // |touch_action_region_|.
   mutable std::unique_ptr<Region> all_touch_action_regions_;
 
-  bool has_will_change_transform_hint_ : 1;
   bool needs_push_properties_ : 1;
   bool scrollbars_hidden_ : 1;
 

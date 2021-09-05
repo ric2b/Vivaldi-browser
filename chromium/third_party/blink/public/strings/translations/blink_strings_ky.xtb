@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">түшүндүрмө</translation>
 <translation id="1281252709823657822">диалог</translation>
 <translation id="1306460908038601864">Өчүк</translation>
+<translation id="1311894908970423688">Мааниси <ph name="VALUE_DATE_OR_TIME" /> болуш керек.</translation>
 <translation id="1335095011850992622">китептин чыгышы жөнүндөгү маалыматтар</translation>
 <translation id="1342835525016946179">article</translation>
 <translation id="1359897965706325498">баннер</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> нерсе</translation>
 <translation id="1480676835519562650">бир нечесин тандаса болот, <ph name="COUNT" /> ичинен <ph name="SELECTED" /> тандалды.</translation>
 <translation id="1589122976691792535">аймак</translation>
 <translation id="1591562245178063882">Үстүбүздөгү ай</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033"><ph name="WEEKNUMBER" />-апта, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904"><ph name="NUMBER" />-трек</translation>
 <translation id="2291999235780842123">белгилөө кутучасы</translation>
+<translation id="2307576640803031502">тизмеде, <ph name="COUNT" /> ичинен <ph name="INDEX" />-нерсе</translation>
 <translation id="2311842470354187719">барактардын үзүлгөн жери</translation>
 <translation id="2335594187091864976">күн жана убакыт тандагыч</translation>
 <translation id="2393030564806080191">Он алты түстүү код</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">дагы параметрлер</translation>
 <translation id="576709008726043716">киришүү</translation>
 <translation id="57838592816432529">Үнсүз</translation>
+<translation id="5860033963881614850">Өчүк</translation>
 <translation id="588258955323874662">Толук экран</translation>
 <translation id="5888666972993069672">Азыр <ph name="DEVICE_FRIENDLY_NAME" /> экранына чыгарылууда</translation>
 <translation id="591047860372322273">издөө кутучасы</translation>
+<translation id="5916664084637901428">Күйүк</translation>
 <translation id="5939518447894949180">Кайра коюу</translation>
 <translation id="5966707198760109579">Апта</translation>
 <translation id="5987525920412732405">тегеретүү баскычы</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">Тазалоо</translation>
 <translation id="668171684555832681">Башка…</translation>
 <translation id="6692633176391053278">арыштагыч</translation>
+<translation id="6709093583001123835">Мааниси <ph name="VALUE" /> болуш керек.</translation>
 <translation id="6709570249143506788">Ойнотуу сапаты начар</translation>
 <translation id="6755330956360078551">калкып чыгуучу кеңеш</translation>
 <translation id="6790428901817661496">Ойнотуу</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, <ph name="WEEK_START_DATE" /> күнү башталат</translation>
 <translation id="916607977885256133">Сүрөт ичиндеги сүрөт</translation>
 <translation id="9168329111483466115">шилтеме</translation>
+<translation id="945780513535800434">Бир пункт тандалды</translation>
 <translation id="954003015749068518">сүрөт ичиндеги сүрөт режимине кирүү</translation>
 <translation id="966787709310836684">меню</translation>
 </translationbundle>

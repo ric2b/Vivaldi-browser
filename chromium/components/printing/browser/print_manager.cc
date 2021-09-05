@@ -18,11 +18,7 @@ struct PrintManager::FrameDispatchHelper {
 
   bool Send(IPC::Message* msg) { return render_frame_host->Send(msg); }
 
-  void OnGetDefaultPrintSettings(IPC::Message* reply_msg) {
-    manager->OnGetDefaultPrintSettings(render_frame_host, reply_msg);
-  }
-
-  void OnScriptedPrint(const PrintHostMsg_ScriptedPrint_Params& scripted_params,
+  void OnScriptedPrint(const mojom::ScriptedPrintParams& scripted_params,
                        IPC::Message* reply_msg) {
     manager->OnScriptedPrint(render_frame_host, scripted_params, reply_msg);
   }
@@ -85,15 +81,10 @@ bool PrintManager::OnMessageReceived(
   FrameDispatchHelper helper = {this, render_frame_host};
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(PrintManager, message)
-    IPC_MESSAGE_FORWARD_DELAY_REPLY(
-        PrintHostMsg_GetDefaultPrintSettings, &helper,
-        FrameDispatchHelper::OnGetDefaultPrintSettings)
     IPC_MESSAGE_FORWARD_DELAY_REPLY(PrintHostMsg_ScriptedPrint, &helper,
                                     FrameDispatchHelper::OnScriptedPrint)
     IPC_MESSAGE_FORWARD_DELAY_REPLY(PrintHostMsg_DidPrintDocument, &helper,
                                     FrameDispatchHelper::OnDidPrintDocument);
-
-    IPC_MESSAGE_HANDLER(PrintHostMsg_PrintingFailed, OnPrintingFailed)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -105,9 +96,9 @@ void PrintManager::RenderFrameDeleted(
 }
 
 void PrintManager::DidGetPrintedPagesCount(int32_t cookie,
-                                           int32_t number_pages) {
+                                           uint32_t number_pages) {
   DCHECK_GT(cookie, 0);
-  DCHECK_GT(number_pages, 0);
+  DCHECK_GT(number_pages, 0u);
   number_pages_ = number_pages;
 }
 
@@ -115,7 +106,17 @@ void PrintManager::DidGetDocumentCookie(int32_t cookie) {
   cookie_ = cookie;
 }
 
-void PrintManager::OnPrintingFailed(int cookie) {
+#if BUILDFLAG(ENABLE_TAGGED_PDF)
+void PrintManager::SetAccessibilityTree(
+    int32_t cookie,
+    const ui::AXTreeUpdate& accessibility_tree) {}
+#endif
+
+void PrintManager::DidShowPrintDialog() {}
+
+void PrintManager::ShowInvalidPrinterSettingsError() {}
+
+void PrintManager::PrintingFailed(int32_t cookie) {
   if (cookie != cookie_) {
     NOTREACHED();
     return;

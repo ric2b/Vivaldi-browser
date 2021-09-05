@@ -14,7 +14,6 @@
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/modules/font_access/font_metadata.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
-#include "third_party/blink/renderer/platform/fonts/font_cache.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
@@ -30,15 +29,8 @@ FontIterator::FontIterator(ExecutionContext* context)
 ScriptPromise FontIterator::next(ScriptState* script_state) {
   if (permission_status_ == PermissionStatus::ASK) {
     if (!pending_resolver_) {
-#if defined(OS_MAC)
-      remote_manager_->RequestPermission(WTF::Bind(
-          &FontIterator::DidGetPermissionResponse, WrapWeakPersistent(this)));
-      pending_resolver_ =
-          MakeGarbageCollected<ScriptPromiseResolver>(script_state);
-#else
       remote_manager_->EnumerateLocalFonts(WTF::Bind(
           &FontIterator::DidGetEnumerationResponse, WrapWeakPersistent(this)));
-#endif
       pending_resolver_ =
           MakeGarbageCollected<ScriptPromiseResolver>(script_state);
     }
@@ -75,39 +67,26 @@ FontIteratorEntry* FontIterator::GetNextEntry() {
   return result;
 }
 
-void FontIterator::DidGetPermissionResponse(PermissionStatus status) {
-  permission_status_ = status;
-
-  if (permission_status_ != PermissionStatus::GRANTED) {
-    pending_resolver_->Reject(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kNotAllowedError, "Permission Error"));
-    pending_resolver_.Clear();
-    return;
-  }
-
-  FontCache* font_cache = FontCache::GetFontCache();
-  auto metadata = font_cache->EnumerateAvailableFonts();
-  for (const auto& entry : metadata) {
-    entries_.push_back(FontMetadata::Create(entry));
-  }
-
-  pending_resolver_->Resolve(GetNextEntry());
-  pending_resolver_.Clear();
-}
-
 void FontIterator::DidGetEnumerationResponse(
     FontEnumerationStatus status,
     base::ReadOnlySharedMemoryRegion region) {
   switch (status) {
+    case FontEnumerationStatus::kOk:
+      break;
     case FontEnumerationStatus::kUnimplemented:
       pending_resolver_->Reject(MakeGarbageCollected<DOMException>(
           DOMExceptionCode::kNotSupportedError,
           "Not yet supported on this platform."));
       pending_resolver_.Clear();
       return;
-    case FontEnumerationStatus::kUnexpectedError:
+    case FontEnumerationStatus::kNeedsUserActivation:
       pending_resolver_->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kUnknownError, "An unexpected error occured."));
+          DOMExceptionCode::kSecurityError, "User activation is required."));
+      pending_resolver_.Clear();
+      return;
+    case FontEnumerationStatus::kNotVisible:
+      pending_resolver_->Reject(MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kSecurityError, "Page needs to be visible."));
       pending_resolver_.Clear();
       return;
     case FontEnumerationStatus::kPermissionDenied:
@@ -116,8 +95,12 @@ void FontIterator::DidGetEnumerationResponse(
           DOMExceptionCode::kNotAllowedError, "Permission not granted."));
       pending_resolver_.Clear();
       return;
+    case FontEnumerationStatus::kUnexpectedError:
     default:
-      break;
+      pending_resolver_->Reject(MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kUnknownError, "An unexpected error occured."));
+      pending_resolver_.Clear();
+      return;
   }
   permission_status_ = PermissionStatus::GRANTED;
 

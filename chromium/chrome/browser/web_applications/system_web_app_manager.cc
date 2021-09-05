@@ -22,7 +22,7 @@
 #include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/app_registry_controller.h"
 #include "chrome/browser/web_applications/components/external_install_options.h"
-#include "chrome/browser/web_applications/components/file_handler_manager.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
 #include "chrome/browser/web_applications/components/web_app_ui_manager.h"
@@ -45,9 +45,14 @@
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/policy/system_features_disable_list_policy_handler.h"
+#include "chrome/browser/chromeos/web_applications/camera_system_web_app_info.h"
 #include "chrome/browser/chromeos/web_applications/default_web_app_ids.h"
+#include "chrome/browser/chromeos/web_applications/diagnostics_system_web_app_info.h"
+#include "chrome/browser/chromeos/web_applications/help_app_web_app_info.h"
+#include "chrome/browser/chromeos/web_applications/media_web_app_info.h"
 #include "chrome/browser/chromeos/web_applications/scanning_system_web_app_info.h"
 #include "chrome/browser/chromeos/web_applications/terminal_source.h"
+#include "chrome/browser/chromeos/web_applications/terminal_system_web_app_info.h"
 #include "chromeos/components/help_app_ui/url_constants.h"
 #include "chromeos/components/media_app_ui/url_constants.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -56,7 +61,9 @@
 #include "extensions/common/constants.h"
 
 #if !defined(OFFICIAL_BUILD)
+#include "chrome/browser/chromeos/web_applications/file_manager_web_app_info.h"
 #include "chrome/browser/chromeos/web_applications/sample_system_web_app_info.h"
+#include "chrome/browser/chromeos/web_applications/telemetry_extension_web_app_info.h"
 #endif  // !defined(OFFICIAL_BUILD)
 
 #endif  // defined(OS_CHROMEOS)
@@ -72,10 +79,6 @@ const char kFileHandlingOriginTrial[] = "FileHandling";
 // Number of attempts to install a given version & locale of the SWAs before
 // bailing out.
 const int kInstallFailureAttempts = 3;
-
-// When set to |true|, SystemWebAppManager will enable all registered System
-// Apps, regardless of their respective feature flag.
-bool g_enable_all_system_web_apps_for_testing = false;
 
 // Use #if defined to avoid compiler error on unused function.
 #if defined(OS_CHROMEOS)
@@ -110,9 +113,10 @@ base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps() {
   }
 
   if (SystemWebAppManager::IsAppEnabled(SystemAppType::CAMERA)) {
-    infos.emplace(
-        SystemAppType::CAMERA,
-        SystemAppInfo("Camera", GURL("chrome://camera-app/pwa.html")));
+    infos.emplace(SystemAppType::CAMERA,
+                  SystemAppInfo("Camera", GURL("chrome://camera-app"),
+                                base::BindRepeating(
+                                    &CreateWebAppInfoForCameraSystemWebApp)));
     infos.at(SystemAppType::CAMERA).uninstall_and_replace = {
         extension_misc::kCameraAppId};
     // We need "FileHandling" to use File Handling API to set launch directory.
@@ -120,6 +124,15 @@ base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps() {
     infos.at(SystemAppType::CAMERA).enabled_origin_trials =
         OriginTrialsMap({{GetOrigin("chrome://camera-app"),
                           {"FileHandling", "NativeFileSystem2"}}});
+    infos.at(SystemAppType::CAMERA).capture_navigations = true;
+  }
+
+  if (SystemWebAppManager::IsAppEnabled(SystemAppType::DIAGNOSTICS)) {
+    infos.emplace(
+        SystemAppType::DIAGNOSTICS,
+        SystemAppInfo(
+            "Diagnostics", GURL("chrome://diagnostics"),
+            base::BindRepeating(&CreateWebAppInfoForDiagnosticsSystemWebApp)));
   }
 
   infos.emplace(
@@ -133,22 +146,28 @@ base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps() {
   if (SystemWebAppManager::IsAppEnabled(SystemAppType::TERMINAL)) {
     infos.emplace(
         SystemAppType::TERMINAL,
-        SystemAppInfo("Terminal",
-                      GURL("chrome-untrusted://terminal/html/pwa.html")));
+        SystemAppInfo(
+            "Terminal", GURL(chrome::kChromeUIUntrustedTerminalURL),
+            base::BindRepeating(&CreateWebAppInfoForTerminalSystemWebApp)));
     infos.at(SystemAppType::TERMINAL).single_window = false;
   }
 
   if (SystemWebAppManager::IsAppEnabled(SystemAppType::HELP)) {
-    infos.emplace(SystemAppType::HELP,
-                  SystemAppInfo("Help", GURL("chrome://help-app/pwa.html")));
+    infos.emplace(
+        SystemAppType::HELP,
+        SystemAppInfo("Help", GURL("chrome://help-app/pwa.html"),
+                      base::BindRepeating(&CreateWebAppInfoForHelpWebApp)));
     infos.at(SystemAppType::HELP).additional_search_terms = {
         IDS_GENIUS_APP_NAME, IDS_HELP_APP_PERKS, IDS_HELP_APP_OFFERS};
     infos.at(SystemAppType::HELP).minimum_window_size = {600, 320};
+    infos.at(SystemAppType::HELP).capture_navigations = true;
   }
 
   if (SystemWebAppManager::IsAppEnabled(SystemAppType::MEDIA)) {
-    infos.emplace(SystemAppType::MEDIA,
-                  SystemAppInfo("Media", GURL("chrome://media-app/pwa.html")));
+    infos.emplace(
+        SystemAppType::MEDIA,
+        SystemAppInfo("Media", GURL("chrome://media-app/pwa.html"),
+                      base::BindRepeating(&CreateWebAppInfoForMediaWebApp)));
     infos.at(SystemAppType::MEDIA).include_launch_directory = true;
     infos.at(SystemAppType::MEDIA).show_in_launcher = false;
     infos.at(SystemAppType::MEDIA).show_in_search = false;
@@ -176,9 +195,20 @@ base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps() {
 
 #if !defined(OFFICIAL_BUILD)
   if (SystemWebAppManager::IsAppEnabled(SystemAppType::TELEMETRY)) {
-    infos.emplace(SystemAppType::TELEMETRY,
-                  SystemAppInfo("Telemetry",
-                                GURL("chrome://telemetry-extension/pwa.html")));
+    infos.emplace(
+        SystemAppType::TELEMETRY,
+        SystemAppInfo(
+            "Telemetry", GURL("chrome://telemetry-extension"),
+            base::BindRepeating(&CreateWebAppInfoForTelemetryExtension)));
+  }
+
+  if (SystemWebAppManager::IsAppEnabled(SystemAppType::FILE_MANAGER)) {
+    infos.emplace(
+        SystemAppType::FILE_MANAGER,
+        SystemAppInfo("File Manager", GURL("chrome://file-manager"),
+                      base::BindRepeating(&CreateWebAppInfoForFileManager)));
+    infos.at(SystemAppType::FILE_MANAGER).capture_navigations = true;
+    infos.at(SystemAppType::FILE_MANAGER).single_window = false;
   }
 
   infos.emplace(
@@ -215,6 +245,7 @@ ExternalInstallOptions CreateInstallOptionsForSystemApp(
   ExternalInstallOptions install_options(
       info.install_url, DisplayMode::kStandalone,
       ExternalInstallSource::kSystemInstalled);
+  install_options.only_use_app_info_factory = !!info.app_info_factory;
   install_options.app_info_factory = info.app_info_factory;
   install_options.add_to_applications_menu = info.show_in_launcher;
   install_options.add_to_desktop = false;
@@ -254,6 +285,9 @@ std::set<SystemAppType> GetDisabledSystemWebApps() {
       case policy::SystemFeature::OS_SETTINGS:
         disabled_system_apps.insert(SystemAppType::SETTINGS);
         break;
+      case policy::SystemFeature::SCANNING:
+        disabled_system_apps.insert(SystemAppType::SCANNING);
+        break;
     }
   }
 #endif  // defined(OS_CHROMEOS)
@@ -263,14 +297,14 @@ std::set<SystemAppType> GetDisabledSystemWebApps() {
 
 }  // namespace
 
-SystemAppInfo::SystemAppInfo(const std::string& name_for_logging,
+SystemAppInfo::SystemAppInfo(const std::string& internal_name,
                              const GURL& install_url)
-    : name_for_logging(name_for_logging), install_url(install_url) {}
+    : internal_name(internal_name), install_url(install_url) {}
 
-SystemAppInfo::SystemAppInfo(const std::string& name_for_logging,
+SystemAppInfo::SystemAppInfo(const std::string& internal_name,
                              const GURL& install_url,
                              const WebApplicationInfoFactory& app_info_factory)
-    : name_for_logging(name_for_logging),
+    : internal_name(internal_name),
       install_url(install_url),
       app_info_factory(app_info_factory) {}
 
@@ -284,7 +318,7 @@ const char SystemWebAppManager::kInstallDurationHistogramName[];
 
 // static
 bool SystemWebAppManager::IsAppEnabled(SystemAppType type) {
-  if (g_enable_all_system_web_apps_for_testing)
+  if (base::FeatureList::IsEnabled(features::kEnableAllSystemWebApps))
     return true;
 
 #if defined(OS_CHROMEOS)
@@ -307,10 +341,14 @@ bool SystemWebAppManager::IsAppEnabled(SystemAppType type) {
           chromeos::features::kPrintJobManagementApp);
     case SystemAppType::SCANNING:
       return base::FeatureList::IsEnabled(chromeos::features::kScanningUI);
+    case SystemAppType::DIAGNOSTICS:
+      return base::FeatureList::IsEnabled(chromeos::features::kDiagnosticsApp);
 #if !defined(OFFICIAL_BUILD)
     case SystemAppType::TELEMETRY:
       return base::FeatureList::IsEnabled(
           chromeos::features::kTelemetryExtension);
+    case SystemAppType::FILE_MANAGER:
+      return base::FeatureList::IsEnabled(chromeos::features::kFilesSWA);
     case SystemAppType::SAMPLE:
       NOTREACHED();
       return false;
@@ -319,11 +357,6 @@ bool SystemWebAppManager::IsAppEnabled(SystemAppType type) {
 #else
   return false;
 #endif  // OS_CHROMEOS
-}
-
-// static
-void SystemWebAppManager::EnableAllSystemAppsForTesting() {
-  g_enable_all_system_web_apps_for_testing = true;
 }
 
 SystemWebAppManager::SystemWebAppManager(Profile* profile)
@@ -363,12 +396,12 @@ void SystemWebAppManager::SetSubsystems(
     AppRegistrar* registrar,
     AppRegistryController* registry_controller,
     WebAppUiManager* ui_manager,
-    FileHandlerManager* file_handler_manager) {
+    OsIntegrationManager* os_integration_manager) {
   pending_app_manager_ = pending_app_manager;
   registrar_ = registrar;
   registry_controller_ = registry_controller;
   ui_manager_ = ui_manager;
-  file_handler_manager_ = file_handler_manager;
+  os_integration_manager_ = os_integration_manager;
 }
 
 void SystemWebAppManager::Start() {
@@ -401,19 +434,17 @@ void SystemWebAppManager::Start() {
 #endif  // defined(OS_CHROMEOS)
 
   std::vector<ExternalInstallOptions> install_options_list;
-  const bool needs_update = NeedsUpdate();
-  if (needs_update) {
+  const bool should_force_install_apps = ShouldForceInstallApps();
+  if (should_force_install_apps) {
     UpdateLastAttemptedInfo();
   }
-  if (IsEnabled()) {
-    const auto disabled_system_apps = GetDisabledSystemWebApps();
 
-    // Skipping this will uninstall all System Apps currently installed.
-    for (const auto& app : system_app_infos_) {
-      install_options_list.push_back(CreateInstallOptionsForSystemApp(
-          app.second, needs_update,
-          base::Contains(disabled_system_apps, app.first)));
-    }
+  const auto disabled_system_apps = GetDisabledSystemWebApps();
+
+  for (const auto& app : system_app_infos_) {
+    install_options_list.push_back(CreateInstallOptionsForSystemApp(
+        app.second, should_force_install_apps,
+        base::Contains(disabled_system_apps, app.first)));
   }
 
   const bool exceeded_retries = CheckAndIncrementRetryAttempts();
@@ -422,7 +453,8 @@ void SystemWebAppManager::Start() {
         std::move(install_options_list),
         ExternalInstallSource::kSystemInstalled,
         base::BindOnce(&SystemWebAppManager::OnAppsSynchronized,
-                       weak_ptr_factory_.GetWeakPtr(), install_start_time));
+                       weak_ptr_factory_.GetWeakPtr(),
+                       should_force_install_apps, install_start_time));
   }
 #if defined(OS_CHROMEOS)
   PrefService* const local_state = g_browser_process->local_state();
@@ -450,6 +482,11 @@ void SystemWebAppManager::InstallSystemAppsForTesting() {
   base::RunLoop run_loop;
   on_apps_synchronized().Post(FROM_HERE, run_loop.QuitClosure());
   run_loop.Run();
+}
+
+const base::flat_map<SystemAppType, SystemAppInfo>&
+SystemWebAppManager::GetRegisteredSystemAppsForTesting() const {
+  return system_app_infos_;
 }
 
 base::Optional<AppId> SystemWebAppManager::GetAppIdForSystemApp(
@@ -614,11 +651,6 @@ void SystemWebAppManager::ResetOnAppsSynchronizedForTesting() {
 }
 
 // static
-bool SystemWebAppManager::IsEnabled() {
-  return base::FeatureList::IsEnabled(features::kSystemWebApps);
-}
-
-// static
 void SystemWebAppManager::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterStringPref(prefs::kSystemWebAppLastUpdateVersion, "");
@@ -636,35 +668,56 @@ const std::string& SystemWebAppManager::CurrentLocale() const {
   return g_browser_process->GetApplicationLocale();
 }
 
-void SystemWebAppManager::RecordSystemWebAppInstallMetrics(
-    const std::map<GURL, InstallResultCode>& install_results,
+void SystemWebAppManager::RecordSystemWebAppInstallDuration(
     const base::TimeDelta& install_duration) const {
   // Install duration should be non-negative. A low resolution clock could
   // result in a |install_duration| of 0.
   DCHECK_GE(install_duration.InMilliseconds(), 0);
 
-  // Record the time spent to install system web apps.
   if (!shutting_down_) {
     base::UmaHistogramMediumTimes(kInstallDurationHistogramName,
                                   install_duration);
   }
+}
 
-  // Record aggregate result.
-  for (const auto& url_and_result : install_results)
+void SystemWebAppManager::RecordSystemWebAppInstallResults(
+    const std::map<GURL, InstallResultCode>& install_results) const {
+  // Report install result codes. Exclude kSuccessAlreadyInstalled from metrics.
+  // This result means the installation pipeline is a no-op (which happens every
+  // time user logs in, and if there hasn't been a version upgrade). This skews
+  // the install success rate.
+  std::map<GURL, InstallResultCode> results_to_report;
+  std::copy_if(install_results.begin(), install_results.end(),
+               std::inserter(results_to_report, results_to_report.end()),
+               [](const auto& url_and_result) {
+                 return url_and_result.second !=
+                        InstallResultCode::kSuccessAlreadyInstalled;
+               });
+
+  for (const auto& url_and_result : results_to_report) {
+    // Record aggregate result.
     base::UmaHistogramEnumeration(
         kInstallResultHistogramName,
         shutting_down_
             ? InstallResultCode::kCancelledOnWebAppProviderShuttingDown
             : url_and_result.second);
 
+    // Record per-profile result.
+    base::UmaHistogramEnumeration(
+        install_result_per_profile_histogram_name_,
+        shutting_down_
+            ? InstallResultCode::kCancelledOnWebAppProviderShuttingDown
+            : url_and_result.second);
+  }
+
   // Record per-app result.
   for (const auto& type_and_app_info : system_app_infos_) {
     const GURL& install_url = type_and_app_info.second.install_url;
-    const auto url_and_result = install_results.find(install_url);
-    if (url_and_result != install_results.cend()) {
+    const auto url_and_result = results_to_report.find(install_url);
+    if (url_and_result != results_to_report.cend()) {
       const std::string app_histogram_name =
           std::string(kInstallResultHistogramName) + ".Apps." +
-          type_and_app_info.second.name_for_logging;
+          type_and_app_info.second.internal_name;
       base::UmaHistogramEnumeration(
           app_histogram_name,
           shutting_down_
@@ -672,18 +725,10 @@ void SystemWebAppManager::RecordSystemWebAppInstallMetrics(
               : url_and_result->second);
     }
   }
-
-  // Record per-profile result.
-  for (const auto& url_and_result : install_results) {
-    base::UmaHistogramEnumeration(
-        install_result_per_profile_histogram_name_,
-        shutting_down_
-            ? InstallResultCode::kCancelledOnWebAppProviderShuttingDown
-            : url_and_result.second);
-  }
 }
 
 void SystemWebAppManager::OnAppsSynchronized(
+    bool did_force_install_apps,
     const base::TimeTicks& install_start_time,
     std::map<GURL, InstallResultCode> install_results,
     std::map<GURL, bool> uninstall_results) {
@@ -697,9 +742,10 @@ void SystemWebAppManager::OnAppsSynchronized(
       continue;
 
     if (AppHasFileHandlingOriginTrial(type)) {
-      file_handler_manager_->ForceEnableFileHandlingOriginTrial(app_id.value());
+      os_integration_manager_->ForceEnableFileHandlingOriginTrial(
+          app_id.value());
     } else {
-      file_handler_manager_->DisableForceEnabledFileHandlingOriginTrial(
+      os_integration_manager_->DisableForceEnabledFileHandlingOriginTrial(
           app_id.value());
     }
   }
@@ -715,7 +761,12 @@ void SystemWebAppManager::OnAppsSynchronized(
                            CurrentLocale());
   pref_service_->SetInteger(prefs::kSystemWebAppInstallFailureCount, 0);
 
-  RecordSystemWebAppInstallMetrics(install_results, install_duration);
+  // Report install duration only if the install pipeline actually installs
+  // all the apps (e.g. on version upgrade).
+  if (did_force_install_apps)
+    RecordSystemWebAppInstallDuration(install_duration);
+
+  RecordSystemWebAppInstallResults(install_results);
 
   // Build the map from installed app id to app type.
   for (const auto& it : system_app_infos_) {
@@ -733,7 +784,13 @@ void SystemWebAppManager::OnAppsSynchronized(
   }
 }
 
-bool SystemWebAppManager::NeedsUpdate() const {
+bool SystemWebAppManager::ShouldForceInstallApps() const {
+  if (base::FeatureList::IsEnabled(features::kAlwaysReinstallSystemWebApps))
+    return true;
+
+  if (update_policy_ == UpdatePolicy::kAlwaysUpdate)
+    return true;
+
   base::Version current_installed_version(
       pref_service_->GetString(prefs::kSystemWebAppLastUpdateVersion));
 
@@ -749,17 +806,7 @@ bool SystemWebAppManager::NeedsUpdate() const {
   // are in sync with current language.
   const bool localeIsDifferent = current_installed_locale != CurrentLocale();
 
-  const bool should_update = versionIsDifferent || localeIsDifferent;
-
-  if (should_update) {
-    return true;
-  }
-
-  if (update_policy_ == UpdatePolicy::kAlwaysUpdate) {
-    return true;
-  }
-
-  return false;
+  return versionIsDifferent || localeIsDifferent;
 }
 
 void SystemWebAppManager::UpdateLastAttemptedInfo() {

@@ -12,6 +12,7 @@ import androidx.preference.Preference;
 
 import org.chromium.base.IntentUtils;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.safe_browsing.SafeBrowsingBridge;
 import org.chromium.chrome.browser.safe_browsing.SafeBrowsingState;
@@ -24,8 +25,7 @@ import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
 import org.chromium.components.browser_ui.settings.TextMessagePreference;
 
 /**
- * Fragment containing security settings.
- * TODO(crbug.com/1097310): Rename it to SafeBrowsingSettingsFragment.
+ * Fragment containing Safe Browsing settings.
  */
 public class SecuritySettingsFragment extends SafeBrowsingSettingsFragmentBase
         implements FragmentSettingsLauncher,
@@ -83,7 +83,8 @@ public class SecuritySettingsFragment extends SafeBrowsingSettingsFragmentBase
         mSafeBrowsingPreference = findPreference(PREF_SAFE_BROWSING);
         mSafeBrowsingPreference.init(SafeBrowsingBridge.getSafeBrowsingState(),
                 ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.SAFE_BROWSING_ENHANCED_PROTECTION_ENABLED));
+                        ChromeFeatureList.SAFE_BROWSING_ENHANCED_PROTECTION_ENABLED),
+                mAccessPoint);
         mSafeBrowsingPreference.setSafeBrowsingModeDetailsRequestedListener(this);
         mSafeBrowsingPreference.setManagedPreferenceDelegate(managedPreferenceDelegate);
         mSafeBrowsingPreference.setOnPreferenceChangeListener(this);
@@ -220,11 +221,47 @@ public class SecuritySettingsFragment extends SafeBrowsingSettingsFragmentBase
             metricsSuffix = "ParentSettings";
         } else if (mAccessPoint == SettingsAccessPoint.SAFETY_CHECK) {
             metricsSuffix = "SafetyCheck";
+        } else if (mAccessPoint == SettingsAccessPoint.SURFACE_EXPLORER_PROMO_SLINGER) {
+            metricsSuffix = "SurfaceExplorerPromoSlinger";
+        } else if (mAccessPoint == SettingsAccessPoint.SECURITY_INTERSTITIAL) {
+            metricsSuffix = "SecurityInterstitial";
         } else {
             metricsSuffix = "Default";
         }
         RecordHistogram.recordEnumeratedHistogram(
                 "SafeBrowsing.Settings.UserAction." + metricsSuffix, userAction,
                 UserAction.MAX_VALUE + 1);
+
+        String userActionSuffix;
+        switch (userAction) {
+            case UserAction.SHOWED:
+                userActionSuffix = "ShowedFrom" + metricsSuffix;
+                break;
+            case UserAction.ENHANCED_PROTECTION_CLICKED:
+                userActionSuffix = "EnhancedProtectionClicked";
+                break;
+            case UserAction.STANDARD_PROTECTION_CLICKED:
+                userActionSuffix = "StandardProtectionClicked";
+                break;
+            case UserAction.DISABLE_SAFE_BROWSING_CLICKED:
+                userActionSuffix = "DisableSafeBrowsingClicked";
+                break;
+            case UserAction.ENHANCED_PROTECTION_EXPAND_ARROW_CLICKED:
+                userActionSuffix = "EnhancedProtectionExpandArrowClicked";
+                break;
+            case UserAction.STANDARD_PROTECTION_EXPAND_ARROW_CLICKED:
+                userActionSuffix = "StandardProtectionExpandArrowClicked";
+                break;
+            case UserAction.DISABLE_SAFE_BROWSING_DIALOG_CONFIRMED:
+                userActionSuffix = "DisableSafeBrowsingDialogConfirmed";
+                break;
+            case UserAction.DISABLE_SAFE_BROWSING_DIALOG_DENIED:
+                userActionSuffix = "DisableSafeBrowsingDialogDenied";
+                break;
+            default:
+                assert false : "Should not be reached.";
+                userActionSuffix = "";
+        }
+        RecordUserAction.record("SafeBrowsing.Settings." + userActionSuffix);
     }
 }

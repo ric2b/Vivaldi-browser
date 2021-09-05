@@ -41,6 +41,10 @@ namespace rappor {
 class RapporServiceImpl;
 }
 
+namespace ui {
+class Event;
+}
+
 // The hierarchy of bubble models:
 //
 // ContentSettingBubbleModel                  - base class
@@ -182,7 +186,7 @@ class ContentSettingBubbleModel {
 
   void set_owner(Owner* owner) { owner_ = owner; }
 
-  virtual void OnListItemClicked(int index, int event_flags) {}
+  virtual void OnListItemClicked(int index, const ui::Event& event) {}
   virtual void OnCustomLinkClicked() {}
   virtual void OnManageButtonClicked() {}
   virtual void OnManageCheckboxChecked(bool is_checked) {}
@@ -528,18 +532,16 @@ class ContentSettingGeolocationBubbleModel
   // ContentSettingBubbleModel:
   void OnManageButtonClicked() override;
   void OnDoneButtonClicked() override;
+  void CommitChanges() override;
 
  private:
   // Initialize the bubble with the elements specific to the scenario when
   // geolocation is disabled on the system (OS) level.
   void InitializeSystemGeolocationPermissionBubble();
 
-  // Whether or not to show the bubble UI specific to when geolocation
+  // Whether or not we are showing the bubble UI specific to when geolocation
   // permissions are turned off on a system level.
-  bool ShouldShowSystemGeolocationPermissions();
-
-  // Boolean indicating if geolocation is allowed by our Content Settings
-  bool is_allowed_ = false;
+  bool show_system_geolocation_bubble_ = false;
 };
 
 #if !defined(OS_ANDROID)
@@ -554,7 +556,7 @@ class ContentSettingFramebustBlockBubbleModel
   ~ContentSettingFramebustBlockBubbleModel() override;
 
   // ContentSettingBubbleModel:
-  void OnListItemClicked(int index, int event_flags) override;
+  void OnListItemClicked(int index, const ui::Event& event) override;
   ContentSettingFramebustBlockBubbleModel* AsFramebustBlockBubbleModel()
       override;
 

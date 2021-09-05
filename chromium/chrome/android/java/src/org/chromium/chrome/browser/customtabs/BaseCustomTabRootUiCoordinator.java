@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.customtabs;
 
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneShotCallback;
+import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.app.ChromeActivity;
@@ -20,7 +21,9 @@ import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.reengagement.ReengagementNotificationController;
 import org.chromium.chrome.browser.share.ShareDelegate;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.ui.RootUiCoordinator;
+import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.components.feature_engagement.Tracker;
 
 /**
@@ -37,11 +40,13 @@ public class BaseCustomTabRootUiCoordinator
             Supplier<CustomTabActivityNavigationController> customTabNavigationController,
             ActivityTabProvider tabProvider, ObservableSupplier<Profile> profileSupplier,
             ObservableSupplier<BookmarkBridge> bookmarkBridgeSupplier,
-            ObservableSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
-            Supplier<ContextualSearchManager> contextualSearchManagerSupplier) {
+            OneshotSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
+            Supplier<ContextualSearchManager> contextualSearchManagerSupplier,
+            ObservableSupplier<TabModelSelector> tabModelSelectorSupplier,
+            OneshotSupplier<StartSurface> startSurfaceSupplier) {
         super(activity, null, shareDelegateSupplier, tabProvider, profileSupplier,
                 bookmarkBridgeSupplier, overviewModeBehaviorSupplier,
-                contextualSearchManagerSupplier);
+                contextualSearchManagerSupplier, tabModelSelectorSupplier, startSurfaceSupplier);
         mToolbarCoordinator = customTabToolbarCoordinator;
         mNavigationController = customTabNavigationController;
     }

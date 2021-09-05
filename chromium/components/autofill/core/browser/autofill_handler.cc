@@ -292,6 +292,8 @@ FormStructure* AutofillHandler::ParseForm(const FormData& form,
       value_from_dynamic_change_form_ = true;
   }
 
+  form_structure->set_page_language(GetPageLanguage());
+
   form_structure->DetermineHeuristicTypes(log_manager_);
 
   // Hold the parsed_form_structure we intend to return. We can use this to
@@ -307,6 +309,10 @@ FormStructure* AutofillHandler::ParseForm(const FormData& form,
       std::move(form_structure);
 
   return parsed_form_structure;
+}
+
+std::string AutofillHandler::GetPageLanguage() const {
+  return std::string();
 }
 
 void AutofillHandler::Reset() {

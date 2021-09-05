@@ -118,6 +118,7 @@
 #include "ui/base/ui_base_features.h"
 #else  // !defined(OS_CHROMEOS)
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
+#include "chrome/browser/ui/webui/customize_themes/chrome_customize_themes_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_default_browser_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_manage_profile_handler.h"
 #include "chrome/browser/ui/webui/settings/system_handler.h"
@@ -155,7 +156,13 @@ web_app::AppRegistrar& GetRegistrarForProfile(Profile* profile) {
 }
 
 SettingsUI::SettingsUI(content::WebUI* web_ui)
-    : content::WebUIController(web_ui),
+    :
+#if !defined(OS_CHROMEOS)
+      ui::MojoWebUIController(web_ui, /*enable_chrome_send=*/true),
+      customize_themes_factory_receiver_(this),
+#else  // !defined(OS_CHROMEOS)
+      content::WebUIController(web_ui),
+#endif
       webui_load_timer_(web_ui->GetWebContents(),
                         "Settings.LoadDocumentTime.MD",
                         "Settings.LoadCompletedTime.MD") {
@@ -264,17 +271,14 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
       base::FeatureList::IsEnabled(safe_browsing::kEnhancedProtection));
 
   html_source->AddBoolean(
-      "navigateToGooglePasswordManager",
-      ShouldManagePasswordsinGooglePasswordManager(profile));
-
-  html_source->AddBoolean(
-      "enablePasswordCheck",
-      base::FeatureList::IsEnabled(password_manager::features::kPasswordCheck));
+      "passwordsWeaknessCheck",
+      base::FeatureList::IsEnabled(
+          password_manager::features::kPasswordsWeaknessCheck));
 
   html_source->AddBoolean(
       "editPasswordsInSettings",
       base::FeatureList::IsEnabled(
-          password_manager::features::kEditPasswordsInDesktopSettings));
+          password_manager::features::kEditPasswordsInSettings));
 
   html_source->AddBoolean("showImportPasswords",
                           base::FeatureList::IsEnabled(
@@ -284,10 +288,6 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
       "enableAccountStorage",
       base::FeatureList::IsEnabled(
           password_manager::features::kEnablePasswordsAccountStorage));
-
-  html_source->AddBoolean(
-      "syncSetupFriendlySettings",
-      base::FeatureList::IsEnabled(features::kSyncSetupFriendlySettings));
 
   html_source->AddBoolean(
       "enableContentSettingsRedesign",
@@ -314,7 +314,11 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
 
   // This is the browser settings page.
   html_source->AddBoolean("isOSSettings", false);
-#endif
+#else   // defined(OS_CHROMEOS)
+  html_source->AddBoolean(
+      "profileThemeSelectorEnabled",
+      base::FeatureList::IsEnabled(features::kProfilesUIRevamp));
+#endif  // !defined(OS_CHROMEOS)
 
   AddSettingsPageUIHandler(std::make_unique<AboutHandler>(profile));
   AddSettingsPageUIHandler(std::make_unique<ResetSettingsHandler>(profile));
@@ -323,6 +327,10 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   auto plural_string_handler = std::make_unique<PluralStringHandler>();
   plural_string_handler->AddLocalizedString(
       "compromisedPasswords", IDS_SETTINGS_COMPROMISED_PASSWORDS_COUNT);
+  plural_string_handler->AddLocalizedString(
+      "insecurePasswords", IDS_SETTINGS_INSECURE_PASSWORDS_COUNT);
+  plural_string_handler->AddLocalizedString("weakPasswords",
+                                            IDS_SETTINGS_WEAK_PASSWORDS_COUNT);
   web_ui->AddMessageHandler(std::move(plural_string_handler));
 
   // Add the metrics handler to write uma stats.
@@ -418,8 +426,9 @@ void SettingsUI::InitBrowserSettingsWebUIHandlers() {
             profile->GetPrefs(),
             chromeos::multidevice_setup::MultiDeviceSetupClientFactory::
                 GetForProfile(profile),
-            phone_hub_manager ? phone_hub_manager->notification_access_manager()
-                              : nullptr,
+            phone_hub_manager
+                ? phone_hub_manager->GetNotificationAccessManager()
+                : nullptr,
             android_sms_service
                 ? android_sms_service->android_sms_pairing_state_tracker()
                 : nullptr,
@@ -430,7 +439,16 @@ void SettingsUI::InitBrowserSettingsWebUIHandlers() {
   web_ui()->AddMessageHandler(
       std::make_unique<chromeos::settings::AndroidAppsHandler>(profile));
 }
-#endif  // defined(OS_CHROMEOS)
+#else   // defined(OS_CHROMEOS)
+void SettingsUI::BindInterface(
+    mojo::PendingReceiver<
+        customize_themes::mojom::CustomizeThemesHandlerFactory>
+        pending_receiver) {
+  if (customize_themes_factory_receiver_.is_bound())
+    customize_themes_factory_receiver_.reset();
+  customize_themes_factory_receiver_.Bind(std::move(pending_receiver));
+}
+#endif  // !defined(OS_CHROMEOS)
 
 void SettingsUI::AddSettingsPageUIHandler(
     std::unique_ptr<content::WebUIMessageHandler> handler) {
@@ -447,5 +465,19 @@ void SettingsUI::TryShowHatsSurveyWithTimeout() {
         kHatsSurveyTriggerSettings, web_ui()->GetWebContents(), 20000);
   }
 }
+
+#if !defined(OS_CHROMEOS)
+void SettingsUI::CreateCustomizeThemesHandler(
+    mojo::PendingRemote<customize_themes::mojom::CustomizeThemesClient>
+        pending_client,
+    mojo::PendingReceiver<customize_themes::mojom::CustomizeThemesHandler>
+        pending_handler) {
+  customize_themes_handler_ = std::make_unique<ChromeCustomizeThemesHandler>(
+      std::move(pending_client), std::move(pending_handler),
+      web_ui()->GetWebContents(), Profile::FromWebUI(web_ui()));
+}
+#endif  // !defined(OS_CHROMEOS)
+
+WEB_UI_CONTROLLER_TYPE_IMPL(SettingsUI)
 
 }  // namespace settings

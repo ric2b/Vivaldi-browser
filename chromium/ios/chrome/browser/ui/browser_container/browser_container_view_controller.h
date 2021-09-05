@@ -9,6 +9,8 @@
 
 #import "ios/chrome/browser/ui/browser_container/browser_container_consumer.h"
 
+@protocol LinkToTextDelegate;
+
 // UIViewController which allows displaying and removing a content view.
 @interface BrowserContainerViewController
     : UIViewController <BrowserContainerConsumer>
@@ -16,6 +18,14 @@
 // The UIViewController used to display overlay UI over the web content area.
 @property(nonatomic, strong, readonly)
     UIViewController* webContentsOverlayContainerViewController;
+
+// The UIViewController used to display the ScreenTime blocker above the web
+// content area.
+@property(nonatomic, strong, readonly)
+    UIViewController* screenTimeViewController;
+
+// The delegate to handle link to text button selection.
+@property(nonatomic, weak) id<LinkToTextDelegate> linkToTextDelegate;
 
 @end
 

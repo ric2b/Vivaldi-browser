@@ -6,9 +6,10 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "content/browser/child_process_security_policy_impl.h"
-#include "content/browser/frame_host/frame_tree_node.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/common/frame.mojom.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/content_switches.h"
@@ -43,6 +44,13 @@ content::mojom::OpenURLParamsPtr CreateOpenURLParams(const GURL& url) {
   params->should_replace_current_entry = false;
   params->user_gesture = true;
   return params;
+}
+
+bool DoesURLRequireDedicatedProcess(const IsolationContext& isolation_context,
+                                    const GURL& url) {
+  return SiteInstanceImpl::DoesSiteInfoRequireDedicatedProcess(
+      isolation_context,
+      SiteInstanceImpl::ComputeSiteInfoForTesting(isolation_context, url));
 }
 
 }  // namespace
@@ -404,14 +412,14 @@ IN_PROC_BROWSER_TEST_F(WebUINavigationBrowserTest,
                             ->GetFrameTree()
                             ->root();
   EXPECT_EQ(1U, root->child_count());
-  RenderFrameHost* child = root->child_at(0)->current_frame_host();
+  RenderFrameHostImpl* child = root->child_at(0)->current_frame_host();
   EXPECT_EQ("about:blank", child->GetLastCommittedURL());
 
   // Simulate an IPC message to navigate the subframe to a chrome:// URL.
   // This bypasses the renderer-side check that would have stopped the
   // navigation.
   TestNavigationObserver observer(shell()->web_contents());
-  static_cast<content::RenderFrameHostImpl*>(child)->OpenURL(
+  static_cast<mojom::FrameHost*>(child)->OpenURL(
       CreateOpenURLParams(GetWebUIURL("web-ui/title1.html?noxfo=true")));
   observer.Wait();
 
@@ -442,15 +450,14 @@ IN_PROC_BROWSER_TEST_F(
                             ->GetFrameTree()
                             ->root();
   EXPECT_EQ(1U, root->child_count());
-  RenderFrameHost* child = root->child_at(0)->current_frame_host();
+  RenderFrameHostImpl* child = root->child_at(0)->current_frame_host();
   EXPECT_EQ("about:blank", child->GetLastCommittedURL());
 
   // Simulate a Mojo message to navigate the subframe to a chrome-untrusted://
   // URL.
   TestNavigationObserver observer(shell()->web_contents());
-  static_cast<content::RenderFrameHostImpl*>(child)->OpenURL(
-      CreateOpenURLParams(
-          GetChromeUntrustedUIURL("test-iframe-host/title1.html")));
+  static_cast<mojom::FrameHost*>(child)->OpenURL(CreateOpenURLParams(
+      GetChromeUntrustedUIURL("test-iframe-host/title1.html")));
   observer.Wait();
 
   child = root->child_at(0)->current_frame_host();
@@ -920,8 +927,8 @@ IN_PROC_BROWSER_TEST_F(WebUINavigationBrowserTest,
   // chrome:// URLs should require a dedicated process.
   WebContents* web_contents = shell()->web_contents();
   BrowserContext* browser_context = web_contents->GetBrowserContext();
-  EXPECT_TRUE(SiteInstanceImpl::DoesSiteRequireDedicatedProcess(
-      IsolationContext(browser_context), chrome_url));
+  EXPECT_TRUE(DoesURLRequireDedicatedProcess(IsolationContext(browser_context),
+                                             chrome_url));
 
   // Navigate to a WebUI page.
   EXPECT_TRUE(NavigateToURL(shell(), chrome_url));
@@ -943,8 +950,8 @@ IN_PROC_BROWSER_TEST_F(WebUINavigationBrowserTest,
 
   // Verify that the blob also requires a dedicated process and that it would
   // use the same site url as the original page.
-  EXPECT_TRUE(SiteInstanceImpl::DoesSiteRequireDedicatedProcess(
-      IsolationContext(browser_context), blob_url));
+  EXPECT_TRUE(DoesURLRequireDedicatedProcess(IsolationContext(browser_context),
+                                             blob_url));
   EXPECT_EQ(expected_site_url,
             SiteInstance::GetSiteForURL(browser_context, blob_url));
 }
@@ -961,8 +968,8 @@ IN_PROC_BROWSER_TEST_F(WebUINavigationBrowserTest,
   // chrome-untrusted:// URLs should require a dedicated process.
   WebContents* web_contents = shell()->web_contents();
   BrowserContext* browser_context = web_contents->GetBrowserContext();
-  EXPECT_TRUE(SiteInstanceImpl::DoesSiteRequireDedicatedProcess(
-      IsolationContext(browser_context), chrome_untrusted_url));
+  EXPECT_TRUE(DoesURLRequireDedicatedProcess(IsolationContext(browser_context),
+                                             chrome_untrusted_url));
 
   // Navigate to a chrome-untrusted:// page.
   EXPECT_TRUE(NavigateToURL(shell(), chrome_untrusted_url));
@@ -984,8 +991,8 @@ IN_PROC_BROWSER_TEST_F(WebUINavigationBrowserTest,
 
   // Verify that the blob also requires a dedicated process and that it would
   // use the same site url as the original page.
-  EXPECT_TRUE(SiteInstanceImpl::DoesSiteRequireDedicatedProcess(
-      IsolationContext(browser_context), blob_url));
+  EXPECT_TRUE(DoesURLRequireDedicatedProcess(IsolationContext(browser_context),
+                                             blob_url));
   EXPECT_EQ(expected_site_url,
             SiteInstance::GetSiteForURL(browser_context, blob_url));
 }

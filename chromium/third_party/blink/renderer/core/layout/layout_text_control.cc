@@ -26,6 +26,7 @@
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
+#include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 
@@ -39,15 +40,18 @@ LayoutTextControl::LayoutTextControl(TextControlElement* element)
 LayoutTextControl::~LayoutTextControl() = default;
 
 TextControlElement* LayoutTextControl::GetTextControlElement() const {
+  NOT_DESTROYED();
   return ToTextControl(GetNode());
 }
 
 TextControlInnerEditorElement* LayoutTextControl::InnerEditorElement() const {
+  NOT_DESTROYED();
   return GetTextControlElement()->InnerEditorElement();
 }
 
 void LayoutTextControl::StyleDidChange(StyleDifference diff,
                                        const ComputedStyle* old_style) {
+  NOT_DESTROYED();
   LayoutBlockFlow::StyleDidChange(diff, old_style);
   TextControlInnerEditorElement* inner_editor = InnerEditorElement();
   if (!inner_editor)
@@ -78,6 +82,7 @@ void LayoutTextControl::StyleDidChange(StyleDifference diff,
 }
 
 int LayoutTextControl::ScrollbarThickness() const {
+  NOT_DESTROYED();
   return GetDocument().GetPage()->GetScrollbarTheme().ScrollbarThickness(
       GetDocument().GetPage()->GetChromeClient().WindowToViewportScalar(
           GetFrame(), 1.0f));
@@ -87,6 +92,7 @@ void LayoutTextControl::ComputeLogicalHeight(
     LayoutUnit logical_height,
     LayoutUnit logical_top,
     LogicalExtentComputedValues& computed_values) const {
+  NOT_DESTROYED();
   HTMLElement* inner_editor = InnerEditorElement();
   DCHECK(inner_editor);
   if (LayoutBox* inner_editor_box = inner_editor->GetLayoutBox()) {
@@ -119,6 +125,7 @@ void LayoutTextControl::HitInnerEditorElement(
     HitTestResult& result,
     const HitTestLocation& hit_test_location,
     const PhysicalOffset& accumulated_offset) {
+  NOT_DESTROYED();
   HTMLElement* inner_editor = InnerEditorElement();
   if (!inner_editor->GetLayoutObject())
     return;
@@ -201,9 +208,10 @@ bool LayoutTextControl::HasValidAvgCharWidth(const SimpleFontData* font_data,
   return !font_families_with_invalid_char_width_map->Contains(family);
 }
 
-float LayoutTextControl::GetAvgCharWidth(const AtomicString& family) const {
-  const Font& font = StyleRef().GetFont();
-
+// static
+float LayoutTextControl::GetAvgCharWidth(const ComputedStyle& style) {
+  const Font& font = style.GetFont();
+  const AtomicString family = font.GetFontDescription().Family().Family();
   const SimpleFontData* primary_font = font.PrimaryFont();
   if (primary_font && HasValidAvgCharWidth(primary_font, family))
     return roundf(primary_font->AvgCharWidth());
@@ -211,19 +219,17 @@ float LayoutTextControl::GetAvgCharWidth(const AtomicString& family) const {
   const UChar kCh = '0';
   const String str = String(&kCh, 1);
   TextRun text_run =
-      ConstructTextRun(font, str, StyleRef(), TextRun::kAllowTrailingExpansion);
+      ConstructTextRun(font, str, style, TextRun::kAllowTrailingExpansion);
   return font.Width(text_run);
 }
 
 MinMaxSizes LayoutTextControl::ComputeIntrinsicLogicalWidths() const {
+  NOT_DESTROYED();
   MinMaxSizes sizes;
   sizes += BorderAndPaddingLogicalWidth();
 
   // Use average character width. Matches IE.
-  AtomicString family =
-      StyleRef().GetFont().GetFontDescription().Family().Family();
-  sizes.max_size += PreferredContentLogicalWidth(
-      const_cast<LayoutTextControl*>(this)->GetAvgCharWidth(family));
+  sizes.max_size += PreferredContentLogicalWidth(GetAvgCharWidth(StyleRef()));
   if (InnerEditorElement()) {
     if (LayoutBox* inner_editor_layout_box =
             InnerEditorElement()->GetLayoutBox()) {
@@ -239,12 +245,14 @@ MinMaxSizes LayoutTextControl::ComputeIntrinsicLogicalWidths() const {
 void LayoutTextControl::AddOutlineRects(Vector<PhysicalRect>& rects,
                                         const PhysicalOffset& additional_offset,
                                         NGOutlineType) const {
+  NOT_DESTROYED();
   rects.emplace_back(additional_offset, Size());
 }
 
 LayoutObject* LayoutTextControl::LayoutSpecialExcludedChild(
     bool relayout_children,
     SubtreeLayoutScope& layout_scope) {
+  NOT_DESTROYED();
   HTMLElement* placeholder = ToTextControl(GetNode())->PlaceholderElement();
   LayoutObject* placeholder_layout_object =
       placeholder ? placeholder->GetLayoutObject() : nullptr;
@@ -256,6 +264,7 @@ LayoutObject* LayoutTextControl::LayoutSpecialExcludedChild(
 }
 
 LayoutUnit LayoutTextControl::FirstLineBoxBaseline() const {
+  NOT_DESTROYED();
   if (ShouldApplyLayoutContainment())
     return LayoutUnit(-1);
 

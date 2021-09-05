@@ -17,8 +17,8 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
-#include "chrome/browser/web_applications/components/app_shortcut_manager.h"
 #include "chrome/browser/web_applications/components/install_finalizer.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/test/test_web_app_ui_manager.h"
@@ -130,14 +130,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementApiTest, NoPermission) {
   ASSERT_TRUE(RunExtensionSubtest("management/no_permission", "test.html"));
 }
 
-// Disabled: http://crbug.com/174411
-#if defined(OS_WIN)
-#define MAYBE_Uninstall DISABLED_Uninstall
-#else
-#define MAYBE_Uninstall Uninstall
-#endif
-
-IN_PROC_BROWSER_TEST_F(ExtensionManagementApiTest, MAYBE_Uninstall) {
+IN_PROC_BROWSER_TEST_F(ExtensionManagementApiTest, Uninstall) {
   LoadExtensions();
   // Confirmation dialog will be shown for uninstallations except for self.
   extensions::ScopedTestDialogAutoConfirm auto_confirm(
@@ -203,8 +196,8 @@ class InstallReplacementWebAppApiTest : public ExtensionManagementApiTest {
     ASSERT_TRUE(https_test_server_.Start());
 
     web_app::WebAppProviderBase::GetProviderBase(profile())
-        ->shortcut_manager()
-        .SuppressShortcutsForTesting();
+        ->os_integration_manager()
+        .SuppressOsHooksForTesting();
   }
 
   void RunTest(const char* manifest,

@@ -168,7 +168,7 @@ chrome::MessageBoxResult MessageBoxDialog::Show(
 }
 
 void MessageBoxDialog::OnDialogAccepted() {
-  if (!message_box_view_->HasCheckBox() ||
+  if (!message_box_view_->HasVisibleCheckBox() ||
       message_box_view_->IsCheckBoxSelected()) {
     Done(chrome::MESSAGE_BOX_RESULT_YES);
   } else {
@@ -178,14 +178,6 @@ void MessageBoxDialog::OnDialogAccepted() {
 
 base::string16 MessageBoxDialog::GetWindowTitle() const {
   return window_title_;
-}
-
-void MessageBoxDialog::DeleteDelegate() {
-  delete this;
-}
-
-ui::ModalType MessageBoxDialog::GetModalType() const {
-  return is_system_modal_ ? ui::MODAL_TYPE_SYSTEM : ui::MODAL_TYPE_WINDOW;
 }
 
 views::View* MessageBoxDialog::GetContentsView() {
@@ -214,9 +206,13 @@ MessageBoxDialog::MessageBoxDialog(const base::string16& title,
                                    bool is_system_modal)
     : window_title_(title),
       type_(type),
-      message_box_view_(new views::MessageBoxView(
-          views::MessageBoxView::InitParams(message))),
-      is_system_modal_(is_system_modal) {
+      message_box_view_(new views::MessageBoxView(message)) {
+#if defined(OS_CHROMEOS)
+  SetModalType(is_system_modal ? ui::MODAL_TYPE_SYSTEM : ui::MODAL_TYPE_WINDOW);
+#else
+  DCHECK(!is_system_modal);
+  SetModalType(ui::MODAL_TYPE_WINDOW);
+#endif
   SetButtons(type_ == chrome::MESSAGE_BOX_TYPE_QUESTION
                  ? ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL
                  : ui::DIALOG_BUTTON_OK);
@@ -229,6 +225,7 @@ MessageBoxDialog::MessageBoxDialog(const base::string16& title,
   SetCloseCallback(base::BindOnce(&MessageBoxDialog::Done,
                                   base::Unretained(this),
                                   chrome::MESSAGE_BOX_RESULT_NO));
+  SetOwnedByWidget(true);
 
   base::string16 ok_text = yes_text;
   if (ok_text.empty()) {

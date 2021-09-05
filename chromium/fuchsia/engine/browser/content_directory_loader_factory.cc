@@ -20,6 +20,7 @@
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
@@ -251,11 +252,12 @@ class ContentDirectoryURLLoader : public network::mojom::URLLoader {
     // If a MIME type wasn't specified, then fall back on inferring the type
     // from the file's contents.
     if (!mime_type) {
-      if (!net::SniffMimeType(reinterpret_cast<char*>(mmap_.data()),
-                              std::min(mmap_.length(), kMaxBytesToSniff),
-                              request.url, {} /* type_hint */,
-                              net::ForceSniffFileUrlsForHtml::kDisabled,
-                              &mime_type.emplace())) {
+      if (!net::SniffMimeType(
+              base::StringPiece(reinterpret_cast<char*>(mmap_.data()),
+                                std::min(mmap_.length(), kMaxBytesToSniff)),
+              request.url, {} /* type_hint */,
+              net::ForceSniffFileUrlsForHtml::kDisabled,
+              &mime_type.emplace())) {
         if (!mime_type) {
           // Only set the fallback type if SniffMimeType completely gave up on
           // generating a suggestion.
@@ -348,8 +350,23 @@ class ContentDirectoryURLLoader : public network::mojom::URLLoader {
 
 }  // namespace
 
-ContentDirectoryLoaderFactory::ContentDirectoryLoaderFactory()
-    : task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
+// static
+mojo::PendingRemote<network::mojom::URLLoaderFactory>
+ContentDirectoryLoaderFactory::Create() {
+  mojo::PendingRemote<network::mojom::URLLoaderFactory> pending_remote;
+
+  // The ContentDirectoryLoaderFactory will delete itself when there are no more
+  // receivers - see the NonNetworkURLLoaderFactoryBase::OnDisconnect method.
+  new ContentDirectoryLoaderFactory(
+      pending_remote.InitWithNewPipeAndPassReceiver());
+
+  return pending_remote;
+}
+
+ContentDirectoryLoaderFactory::ContentDirectoryLoaderFactory(
+    mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory_receiver)
+    : content::NonNetworkURLLoaderFactoryBase(std::move(factory_receiver)),
+      task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
           {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})) {}
 
@@ -441,11 +458,6 @@ void ContentDirectoryLoaderFactory::CreateLoaderAndStart(
                                 base::Passed(std::move(client)),
                                 base::Passed(std::move(file_handle)),
                                 base::Passed(std::move(metadata_handle))));
-}
-
-void ContentDirectoryLoaderFactory::Clone(
-    mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader) {
-  receivers_.Add(this, std::move(loader));
 }
 
 void ContentDirectoryLoaderFactory::SetContentDirectoriesForTest(

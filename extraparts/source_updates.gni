@@ -1,4 +1,5 @@
 import("//build/config/chrome_build.gni")
+import("//vivaldi/testing/testing.gni")
 
 _main_dll_targets = []
 if (is_win || is_mac) {

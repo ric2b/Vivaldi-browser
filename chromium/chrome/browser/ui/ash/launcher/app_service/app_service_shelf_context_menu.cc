@@ -163,7 +163,7 @@ void AppServiceShelfContextMenu::ExecuteCommand(int command_id,
         auto* provider = web_app::WebAppProvider::Get(controller()->profile());
         DCHECK(provider);
         provider->registry_controller().SetExperimentalTabbedWindowMode(
-            item().id.app_id, true);
+            item().id.app_id, true, /*is_user_action=*/true);
       }
       return;
     case ash::LAUNCH_TYPE_PINNED_TAB:
@@ -249,6 +249,8 @@ bool AppServiceShelfContextMenu::IsCommandIdChecked(int command_id) const {
     case apps::mojom::AppType::kBuiltIn:
       FALLTHROUGH;
     case apps::mojom::AppType::kPluginVm:
+      FALLTHROUGH;
+    case apps::mojom::AppType::kBorealis:
       FALLTHROUGH;
     default:
       return ShelfContextMenu::IsCommandIdChecked(command_id);
@@ -432,9 +434,9 @@ void AppServiceShelfContextMenu::SetLaunchType(int command_id) {
         auto* provider = web_app::WebAppProvider::Get(controller()->profile());
         DCHECK(provider);
         provider->registry_controller().SetExperimentalTabbedWindowMode(
-            item().id.app_id, false);
+            item().id.app_id, false, /*is_user_action=*/true);
         provider->registry_controller().SetAppUserDisplayMode(
-            item().id.app_id, user_display_mode);
+            item().id.app_id, user_display_mode, /*is_user_action=*/true);
       }
       return;
     }
@@ -448,6 +450,8 @@ void AppServiceShelfContextMenu::SetLaunchType(int command_id) {
     case apps::mojom::AppType::kBuiltIn:
       FALLTHROUGH;
     case apps::mojom::AppType::kPluginVm:
+      FALLTHROUGH;
+    case apps::mojom::AppType::kBorealis:
       FALLTHROUGH;
     default:
       return;
@@ -513,7 +517,6 @@ bool AppServiceShelfContextMenu::ShouldAddPinMenu() {
       return false;
     }
     case apps::mojom::AppType::kPluginVm:
-      FALLTHROUGH;
     case apps::mojom::AppType::kBuiltIn: {
       bool show_in_launcher = false;
       apps::AppServiceProxy* proxy =
@@ -526,19 +529,20 @@ bool AppServiceShelfContextMenu::ShouldAddPinMenu() {
       return show_in_launcher;
     }
     case apps::mojom::AppType::kCrostini:
-      FALLTHROUGH;
     case apps::mojom::AppType::kExtension:
-      FALLTHROUGH;
-    case apps::mojom::AppType::kLacros:
-      FALLTHROUGH;
     case apps::mojom::AppType::kWeb:
       return true;
-    case apps::mojom::AppType::kUnknown:
-      FALLTHROUGH;
-    case apps::mojom::AppType::kMacNative:
+    case apps::mojom::AppType::kLacros:
+      // Lacros behaves like the Chrome browser icon and cannot be unpinned.
       return false;
-    default:
-      NOTREACHED() << "All AppType must decide if pin menu should be added.";
+    case apps::mojom::AppType::kUnknown:
+      // Type kUnknown is used for "unregistered" Crostini apps, which do not
+      // have a .desktop file and can only be closed, not pinned.
+      return false;
+    case apps::mojom::AppType::kMacNative:
+    case apps::mojom::AppType::kRemote:
+    case apps::mojom::AppType::kBorealis:
+      NOTREACHED() << "Type " << app_type_ << " should not appear in shelf.";
       return false;
   }
 }

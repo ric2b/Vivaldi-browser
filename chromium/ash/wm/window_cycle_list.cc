@@ -11,10 +11,12 @@
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/frame_throttler/frame_throttling_controller.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/metrics_util.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
+#include "ash/shell_delegate.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/wm/window_mini_view.h"
 #include "ash/wm/window_preview_view.h"
@@ -37,6 +39,7 @@
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
+#include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/window_animations.h"
 
 namespace ash {
@@ -120,6 +123,7 @@ class WindowCycleItemView : public WindowMiniView {
  public:
   explicit WindowCycleItemView(aura::Window* window) : WindowMiniView(window) {
     SetFocusBehavior(FocusBehavior::ALWAYS);
+    SetNotifyEnterExitOnChild(true);
   }
   WindowCycleItemView(const WindowCycleItemView&) = delete;
   WindowCycleItemView& operator=(const WindowCycleItemView&) = delete;
@@ -134,6 +138,36 @@ class WindowCycleItemView : public WindowMiniView {
     UpdateIconView();
     SetShowPreview(/*show=*/true);
     UpdatePreviewRoundedCorners(/*show=*/true);
+  }
+
+  // views::View:
+  void OnMouseEntered(const ui::MouseEvent& event) override {
+    Shell::Get()->window_cycle_controller()->SetFocusedWindow(source_window());
+  }
+
+  bool OnMousePressed(const ui::MouseEvent& event) override {
+    Shell::Get()->window_cycle_controller()->SetFocusedWindow(source_window());
+    Shell::Get()->window_cycle_controller()->CompleteCycling();
+    return true;
+  }
+
+  void OnGestureEvent(ui::GestureEvent* event) override {
+    switch (event->type()) {
+      case ui::ET_GESTURE_TAP:
+      case ui::ET_GESTURE_DOUBLE_TAP:
+      case ui::ET_GESTURE_TAP_DOWN:
+      case ui::ET_GESTURE_TAP_UNCONFIRMED:
+      case ui::ET_GESTURE_LONG_PRESS:
+      case ui::ET_GESTURE_LONG_TAP:
+      case ui::ET_GESTURE_TWO_FINGER_TAP: {
+        WindowCycleController* controller =
+            Shell::Get()->window_cycle_controller();
+        controller->SetFocusedWindow(source_window());
+        break;
+      }
+      default:
+        break;
+    }
   }
 
  private:
@@ -222,8 +256,7 @@ class WindowCycleView : public views::WidgetDelegateView,
     SetPaintToLayer(ui::LAYER_SOLID_COLOR);
     ui::Layer* layer = this->layer();
     SkColor background_color = AshColorProvider::Get()->GetBaseLayerColor(
-        AshColorProvider::BaseLayerType::kTransparent80,
-        AshColorProvider::AshColorMode::kDark);
+        AshColorProvider::BaseLayerType::kTransparent80);
     layer->SetColor(background_color);
     layer->SetBackgroundBlur(kBackgroundBlurSigma);
     layer->SetBackdropFilterQuality(kBackgroundBlurQuality);
@@ -267,6 +300,25 @@ class WindowCycleView : public views::WidgetDelegateView,
   WindowCycleView& operator=(const WindowCycleView&) = delete;
   ~WindowCycleView() override = default;
 
+  void UpdateWindows(const WindowCycleList::WindowList& windows) {
+    for (auto* window : windows) {
+      auto* view = mirror_container_->AddChildView(
+          std::make_unique<WindowCycleItemView>(window));
+      window_view_map_[window] = view;
+
+      no_previews_set_.insert(view);
+    }
+
+    // Resize the widget.
+    aura::Window* root_window = Shell::GetRootWindowForNewWindows();
+    gfx::Rect widget_rect = root_window->GetBoundsInScreen();
+    widget_rect.ClampToCenteredSize(GetPreferredSize());
+    GetWidget()->SetBounds(widget_rect);
+
+    SetTargetWindow(windows[0]);
+    ScrollToWindow(windows[0]);
+  }
+
   void FadeInLayer() {
     DCHECK(GetWidget());
 
@@ -284,6 +336,14 @@ class WindowCycleView : public views::WidgetDelegateView,
     layer()->SetOpacity(1.f);
   }
 
+  void ScrollToWindow(aura::Window* target) {
+    current_window_ = target;
+
+    if (GetWidget()) {
+      Layout();
+    }
+  }
+
   void SetTargetWindow(aura::Window* target) {
     // Hide the focus border of the previous target window and show the focus
     // border of the new one.
@@ -297,11 +357,8 @@ class WindowCycleView : public views::WidgetDelegateView,
     if (target_it != window_view_map_.end())
       target_it->second->UpdateBorderState(/*show=*/true);
 
-    if (GetWidget()) {
-      Layout();
-      if (target_window_)
-        window_view_map_[target_window_]->RequestFocus();
-    }
+    if (GetWidget() && target_window_)
+      window_view_map_[target_window_]->RequestFocus();
   }
 
   void HandleWindowDestruction(aura::Window* destroying_window,
@@ -315,17 +372,19 @@ class WindowCycleView : public views::WidgetDelegateView,
     delete preview;
 
     // With one of its children now gone, we must re-layout
-    // |mirror_container_|. This must happen before SetTargetWindow() to make
+    // |mirror_container_|. This must happen before ScrollToWindow() to make
     // sure our own Layout() works correctly when it's calculating highlight
     // bounds.
     parent->Layout();
     SetTargetWindow(new_target);
+    ScrollToWindow(new_target);
   }
 
   void DestroyContents() {
     window_view_map_.clear();
     no_previews_set_.clear();
     target_window_ = nullptr;
+    current_window_ = nullptr;
     RemoveAllChildViews(true);
   }
 
@@ -335,7 +394,7 @@ class WindowCycleView : public views::WidgetDelegateView,
   }
 
   void Layout() override {
-    if (!target_window_ || bounds().IsEmpty())
+    if (!target_window_ || !current_window_ || bounds().IsEmpty())
       return;
 
     const bool first_layout = mirror_container_->bounds().IsEmpty();
@@ -351,7 +410,7 @@ class WindowCycleView : public views::WidgetDelegateView,
         layer()->SetRoundedCornerRadius(kBackgroundCornerRadius);
     }
 
-    views::View* target_view = window_view_map_[target_window_];
+    views::View* target_view = window_view_map_[current_window_];
     gfx::RectF target_bounds(target_view->GetLocalBounds());
     views::View::ConvertRectToTarget(target_view, mirror_container_,
                                      &target_bounds);
@@ -409,8 +468,18 @@ class WindowCycleView : public views::WidgetDelegateView,
     }
   }
 
+  aura::Window* GetTargetWindow() { return target_window_; }
+
   View* GetInitiallyFocusedView() override {
     return window_view_map_[target_window_];
+  }
+
+  const views::View::Views& GetPreviewViewsForTesting() const {
+    return mirror_container_->children();
+  }
+
+  const aura::Window* GetTargetWindowForTesting() const {
+    return target_window_;
   }
 
   // ui::ImplicitAnimationObserver:
@@ -421,7 +490,16 @@ class WindowCycleView : public views::WidgetDelegateView,
  private:
   std::map<aura::Window*, WindowCycleItemView*> window_view_map_;
   views::View* mirror_container_ = nullptr;
+
+  // The |target_window_| is the window that has the focus ring. When the user
+  // completes cycling the |target_window_| is activated.
   aura::Window* target_window_ = nullptr;
+
+  // The |current_window_| is the window that the window cycle list uses to
+  // determine the layout and positioning of the list's items. If this window's
+  // preview can equally divide the list it is centered, otherwise it is
+  // off-center.
+  aura::Window* current_window_ = nullptr;
 
   // Set which contains items which have been created but have some of their
   // performance heavy elements not created yet. These elements will be created
@@ -443,6 +521,10 @@ WindowCycleList::WindowCycleList(const WindowList& windows)
     window->AddObserver(this);
 
   if (ShouldShowUi()) {
+    // Disable the tab scrubber so three finger scrolling doesn't scrub tabs as
+    // well.
+    Shell::Get()->shell_delegate()->SetTabScrubberEnabled(false);
+
     if (g_disable_initial_delay) {
       InitWindowCycleView();
     } else {
@@ -456,68 +538,99 @@ WindowCycleList::~WindowCycleList() {
   if (!ShouldShowUi())
     Shell::Get()->mru_window_tracker()->SetIgnoreActivations(false);
 
+  Shell::Get()->shell_delegate()->SetTabScrubberEnabled(true);
+
   for (auto* window : windows_)
     window->RemoveObserver(this);
 
   if (cycle_ui_widget_)
     cycle_ui_widget_->Close();
 
+  // Store the target window before |cycle_view_| is destroyed.
+  aura::Window* target_window = nullptr;
+
   // |this| is responsible for notifying |cycle_view_| when windows are
   // destroyed. Since |this| is going away, clobber |cycle_view_|. Otherwise
   // there will be a race where a window closes after now but before the
   // Widget::Close() call above actually destroys |cycle_view_|. See
   // crbug.com/681207
-  if (cycle_view_)
+  if (cycle_view_) {
+    target_window = cycle_view_->GetTargetWindow();
     cycle_view_->DestroyContents();
+  }
 
   // While the cycler widget is shown, the windows listed in the cycler is
   // marked as force-visible and don't contribute to occlusion. In order to
   // work occlusion calculation properly, we need to activate a window after
   // the widget has been destroyed. See b/138914552.
   if (!windows_.empty() && user_did_accept_) {
-    auto* target_window = windows_[current_index_];
+    if (!target_window)
+      target_window = windows_[current_index_];
     SelectWindow(target_window);
   }
   Shell::Get()->frame_throttling_controller()->EndThrottling();
+}
+
+void WindowCycleList::ReplaceWindows(const WindowList& windows) {
+  if (windows.empty())
+    return;
+
+  RemoveAllWindows();
+  windows_ = windows;
+
+  for (auto* new_window : windows_)
+    new_window->AddObserver(this);
+
+  if (ShouldShowUi() && cycle_view_)
+    cycle_view_->UpdateWindows(windows_);
 }
 
 void WindowCycleList::Step(WindowCycleController::Direction direction) {
   if (windows_.empty())
     return;
 
-  // When there is only one window, we should give feedback to the user. If
-  // the window is minimized, we should also show it.
-  if (windows_.size() == 1) {
-    ::wm::AnimateWindow(windows_[0], ::wm::WINDOW_ANIMATION_TYPE_BOUNCE);
-    SelectWindow(windows_[0]);
+  // If the position of the window cycle list is out-of-sync with the currently
+  // selected item, scroll to the selected item and then step.
+  if (cycle_view_) {
+    aura::Window* selected_window = cycle_view_->GetTargetWindow();
+    Scroll(GetIndexOfWindow(selected_window) - current_index_);
+  }
+
+  const int offset = direction == WindowCycleController::FORWARD ? 1 : -1;
+  SetFocusedWindow(windows_[GetOffsettedWindowIndex(offset)]);
+  Scroll(offset);
+}
+
+void WindowCycleList::ScrollInDirection(
+    WindowCycleController::Direction direction) {
+  if (windows_.empty())
     return;
-  }
 
-  DCHECK(static_cast<size_t>(current_index_) < windows_.size());
+  const int offset = direction == WindowCycleController::FORWARD ? 1 : -1;
+  Scroll(offset);
+}
 
-  if (!cycle_view_ && current_index_ == 0) {
-    // Special case the situation where we're cycling forward but the MRU
-    // window is not active. This occurs when all windows are minimized. The
-    // starting window should be the first one rather than the second.
-    if (direction == WindowCycleController::FORWARD &&
-        !wm::IsActiveWindow(windows_[0]))
-      current_index_ = -1;
-  }
+void WindowCycleList::SetFocusedWindow(aura::Window* window) {
+  if (windows_.empty())
+    return;
 
-  // We're in a valid cycle, so step forward or backward.
-  current_index_ += direction == WindowCycleController::FORWARD ? 1 : -1;
+  if (ShouldShowUi() && cycle_view_)
+    cycle_view_->SetTargetWindow(windows_[GetIndexOfWindow(window)]);
+}
 
-  // Wrap to window list size.
-  current_index_ = (current_index_ + windows_.size()) % windows_.size();
-  DCHECK(windows_[current_index_]);
+bool WindowCycleList::IsEventInCycleView(ui::LocatedEvent* event) {
+  if (!cycle_view_)
+    return false;
 
-  if (ShouldShowUi()) {
-    if (current_index_ > 1)
-      InitWindowCycleView();
+  aura::Window* target = static_cast<aura::Window*>(event->target());
+  aura::Window* event_root = target->GetRootWindow();
+  gfx::Point event_screen_point = event->root_location();
+  wm::ConvertPointToScreen(event_root, &event_screen_point);
+  return cycle_view_->GetBoundsInScreen().Contains(event_screen_point);
+}
 
-    if (cycle_view_)
-      cycle_view_->SetTargetWindow(windows_[current_index_]);
-  }
+bool WindowCycleList::ShouldShowUi() {
+  return windows_.size() > 1u;
 }
 
 // static
@@ -542,6 +655,7 @@ void WindowCycleList::OnWindowDestroying(aura::Window* window) {
     auto* new_target_window =
         windows_.empty() ? nullptr : windows_[current_index_];
     cycle_view_->HandleWindowDestruction(window, new_target_window);
+
     if (windows_.empty()) {
       // This deletes us.
       Shell::Get()->window_cycle_controller()->CancelCycling();
@@ -564,8 +678,17 @@ void WindowCycleList::OnDisplayMetricsChanged(const display::Display& display,
   }
 }
 
-bool WindowCycleList::ShouldShowUi() {
-  return windows_.size() > 1u;
+void WindowCycleList::RemoveAllWindows() {
+  for (auto* window : windows_) {
+    window->RemoveObserver(this);
+
+    if (cycle_view_)
+      cycle_view_->HandleWindowDestruction(window, nullptr);
+  }
+
+  windows_.clear();
+  current_index_ = 0;
+  window_selected_ = false;
 }
 
 void WindowCycleList::InitWindowCycleView() {
@@ -574,11 +697,12 @@ void WindowCycleList::InitWindowCycleView() {
 
   cycle_view_ = new WindowCycleView(windows_);
   cycle_view_->SetTargetWindow(windows_[current_index_]);
+  cycle_view_->ScrollToWindow(windows_[current_index_]);
 
   // We need to activate the widget if ChromeVox is enabled as ChromeVox
   // relies on activation.
   const bool spoken_feedback_enabled =
-      Shell::Get()->accessibility_controller()->spoken_feedback_enabled();
+      Shell::Get()->accessibility_controller()->spoken_feedback().enabled();
 
   views::Widget* widget = new views::Widget();
   views::Widget::InitParams params;
@@ -629,7 +753,7 @@ void WindowCycleList::InitWindowCycleView() {
 
 void WindowCycleList::SelectWindow(aura::Window* window) {
   // If the list has only one window, the window can be selected twice (in
-  // Step() and the destructor). This causes ARC PIP windows to be restored
+  // Scroll() and the destructor). This causes ARC PIP windows to be restored
   // twice, which leads to a wrong window state.
   if (window_selected_)
     return;
@@ -642,6 +766,64 @@ void WindowCycleList::SelectWindow(aura::Window* window) {
   }
 
   window_selected_ = true;
+}
+
+void WindowCycleList::Scroll(int offset) {
+  if (windows_.empty())
+    return;
+
+  // When there is only one window, we should give feedback to the user. If
+  // the window is minimized, we should also show it.
+  if (windows_.size() == 1) {
+    ::wm::AnimateWindow(windows_[0], ::wm::WINDOW_ANIMATION_TYPE_BOUNCE);
+    SelectWindow(windows_[0]);
+    return;
+  }
+
+  DCHECK(static_cast<size_t>(current_index_) < windows_.size());
+
+  if (!cycle_view_ && current_index_ == 0) {
+    // Special case the situation where we're cycling forward but the MRU
+    // window is not active. This occurs when all windows are minimized. The
+    // starting window should be the first one rather than the second.
+    if (offset == 1 && !wm::IsActiveWindow(windows_[0]))
+      current_index_ = -1;
+  }
+
+  current_index_ = GetOffsettedWindowIndex(offset);
+
+  if (ShouldShowUi()) {
+    if (current_index_ > 1)
+      InitWindowCycleView();
+
+    if (cycle_view_)
+      cycle_view_->ScrollToWindow(windows_[current_index_]);
+  }
+}
+
+int WindowCycleList::GetIndexOfWindow(aura::Window* window) const {
+  auto target_window = std::find(windows_.begin(), windows_.end(), window);
+  DCHECK(target_window != windows_.end());
+  return std::distance(windows_.begin(), target_window);
+}
+
+int WindowCycleList::GetOffsettedWindowIndex(int offset) const {
+  DCHECK(!windows_.empty());
+
+  const int offsetted_index =
+      (current_index_ + offset + windows_.size()) % windows_.size();
+  DCHECK(windows_[offsetted_index]);
+
+  return offsetted_index;
+}
+
+const views::View::Views& WindowCycleList::GetWindowCycleItemViewsForTesting()
+    const {
+  return cycle_view_->GetPreviewViewsForTesting();
+}
+
+const aura::Window* WindowCycleList::GetTargetWindowForTesting() const {
+  return cycle_view_->GetTargetWindowForTesting();
 }
 
 }  // namespace ash

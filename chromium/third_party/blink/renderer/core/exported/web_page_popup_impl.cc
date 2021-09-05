@@ -36,7 +36,6 @@
 #include "cc/trees/ukm_manager.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom-blink.h"
 #include "third_party/blink/public/platform/scheduler/web_render_widget_scheduling_state.h"
-#include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/public/web/web_view_client.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache_base.h"
 #include "third_party/blink/renderer/core/dom/context_features.h"
@@ -52,10 +51,11 @@
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/local_frame_ukm_aggregator.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/frame/screen_metrics_emulator.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
-#include "third_party/blink/renderer/core/frame/web_frame_widget_base.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
+#include "third_party/blink/renderer/core/frame/web_view_frame_widget.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
@@ -100,24 +100,21 @@ class PagePopupChromeClient final : public EmptyChromeClient {
   IntRect RootWindowRect(LocalFrame&) override {
     // There is only one frame/widget in a WebPagePopup, so we can ignore the
     // param.
-    return popup_->WindowRectInScreen();
+    return IntRect(popup_->WindowRectInScreen());
   }
 
   IntRect ViewportToScreen(const IntRect& rect,
                            const LocalFrameView*) const override {
-    WebRect rect_in_screen(rect);
-    WebRect window_rect = popup_->WindowRectInScreen();
-    popup_->WidgetClient()->ConvertViewportToWindow(&rect_in_screen);
-    rect_in_screen.x += window_rect.x;
-    rect_in_screen.y += window_rect.y;
-    return rect_in_screen;
+    gfx::Rect window_rect = popup_->WindowRectInScreen();
+    gfx::Rect rect_in_dips =
+        popup_->widget_base_->BlinkSpaceToEnclosedDIPs(gfx::Rect(rect));
+    rect_in_dips.Offset(window_rect.x(), window_rect.y());
+    return IntRect(rect_in_dips);
   }
 
   float WindowToViewportScalar(LocalFrame*,
                                const float scalar_value) const override {
-    WebFloatRect viewport_rect(0, 0, scalar_value, 0);
-    popup_->WidgetClient()->ConvertWindowToViewport(&viewport_rect);
-    return viewport_rect.width;
+    return popup_->widget_base_->DIPsToBlinkSpace(scalar_value);
   }
 
   void AddMessageToConsole(LocalFrame*,
@@ -258,7 +255,9 @@ WebPagePopupImpl::WebPagePopupImpl(
     : web_page_popup_client_(client),
       widget_base_(std::make_unique<WidgetBase>(this,
                                                 std::move(widget_host),
-                                                std::move(widget))) {
+                                                std::move(widget),
+                                                /*hidden=*/false,
+                                                /*never_composited=*/false)) {
   DCHECK(client);
 }
 
@@ -266,12 +265,29 @@ WebPagePopupImpl::~WebPagePopupImpl() {
   DCHECK(!page_);
 }
 
+void WebPagePopupImpl::InitializeForTesting(WebView* web_view) {
+  SetWebView(static_cast<WebViewImpl*>(web_view));
+}
+
+void WebPagePopupImpl::SetWebView(WebViewImpl* web_view) {
+  DCHECK(web_view);
+  DCHECK(!web_view_);
+  web_view_ = web_view;
+  if (auto* widget = web_view->MainFrameViewWidget()) {
+    if (auto* device_emulator = widget->DeviceEmulator()) {
+      opener_widget_screen_origin_ = device_emulator->ViewRectOrigin();
+      opener_original_widget_screen_origin_ =
+          device_emulator->original_view_rect().origin();
+      opener_emulator_scale_ = device_emulator->scale();
+    }
+  }
+}
+
 void WebPagePopupImpl::Initialize(WebViewImpl* web_view,
                                   PagePopupClient* popup_client) {
-  DCHECK(web_view);
   DCHECK(popup_client);
-  web_view_ = web_view;
   popup_client_ = popup_client;
+  SetWebView(web_view);
 
   Page::PageClients page_clients;
   FillWithEmptyClients(page_clients);
@@ -305,7 +321,7 @@ void WebPagePopupImpl::Initialize(WebViewImpl* web_view,
   // default event handlers.
   if (const auto* style = popup_client_->OwnerElement().GetComputedStyle()) {
     page_->GetSettings().SetPreferredColorScheme(
-        style->UsedColorScheme() == WebColorScheme::kDark
+        style->UsedColorScheme() == ColorScheme::kDark
             ? PreferredColorScheme::kDark
             : PreferredColorScheme::kLight);
   }
@@ -327,7 +343,9 @@ void WebPagePopupImpl::Initialize(WebViewImpl* web_view,
 
   auto* frame = MakeGarbageCollected<LocalFrame>(
       empty_local_frame_client, *page_,
-      /* FrameOwner* */ nullptr, base::UnguessableToken::Create(),
+      /* FrameOwner* */ nullptr, /* Frame* parent */ nullptr,
+      /* Frame* previous_sibling */ nullptr,
+      FrameInsertType::kInsertInConstructor, base::UnguessableToken::Create(),
       window_agent_factory,
       /* InterfaceRegistry* */ nullptr);
   frame->SetPagePopupOwner(popup_client_->OwnerElement());
@@ -371,7 +389,6 @@ void WebPagePopupImpl::Initialize(WebViewImpl* web_view,
 }
 
 cc::LayerTreeHost* WebPagePopupImpl::InitializeCompositing(
-    bool never_composited,
     scheduler::WebThreadScheduler* main_thread_scheduler,
     cc::TaskGraphRunner* task_graph_runner,
     bool for_child_local_root_frame,
@@ -381,9 +398,8 @@ cc::LayerTreeHost* WebPagePopupImpl::InitializeCompositing(
   // Careful Initialize() is called after InitializeCompositing, so don't do
   // much work here.
   widget_base_->InitializeCompositing(
-      never_composited, main_thread_scheduler, task_graph_runner,
-      for_child_local_root_frame, screen_info, std::move(ukm_recorder_factory),
-      settings);
+      main_thread_scheduler, task_graph_runner, for_child_local_root_frame,
+      screen_info, std::move(ukm_recorder_factory), settings);
   return widget_base_->LayerTreeHost();
 }
 
@@ -404,7 +420,7 @@ void WebPagePopupImpl::SetHandlingInputEvent(bool handling) {
   widget_base_->input_handler().set_handling_input_event(handling);
 }
 
-void WebPagePopupImpl::ProcessInputEventSynchronously(
+void WebPagePopupImpl::ProcessInputEventSynchronouslyForTesting(
     const WebCoalescedInputEvent& event,
     HandledEventCallback callback) {
   widget_base_->input_handler().HandleInputEvent(event, std::move(callback));
@@ -464,33 +480,34 @@ void WebPagePopupImpl::ApplyVisualProperties(
   widget_base_->UpdateVisualProperties(visual_properties);
 }
 
-void WebPagePopupImpl::UpdateSurfaceAndScreenInfo(
-    const viz::LocalSurfaceIdAllocation& new_local_surface_id_allocation,
-    const gfx::Rect& compositor_viewport_pixel_rect,
-    const ScreenInfo& new_screen_info) {
-  widget_base_->UpdateSurfaceAndScreenInfo(new_local_surface_id_allocation,
-                                           compositor_viewport_pixel_rect,
-                                           new_screen_info);
-}
-
-void WebPagePopupImpl::UpdateScreenInfo(const ScreenInfo& new_screen_info) {
-  widget_base_->UpdateScreenInfo(new_screen_info);
-}
-
-void WebPagePopupImpl::UpdateCompositorViewportAndScreenInfo(
-    const gfx::Rect& compositor_viewport_pixel_rect,
-    const ScreenInfo& new_screen_info) {
-  widget_base_->UpdateCompositorViewportAndScreenInfo(
-      compositor_viewport_pixel_rect, new_screen_info);
-}
-
-void WebPagePopupImpl::UpdateCompositorViewportRect(
-    const gfx::Rect& compositor_viewport_pixel_rect) {
-  widget_base_->UpdateCompositorViewportRect(compositor_viewport_pixel_rect);
-}
-
 const ScreenInfo& WebPagePopupImpl::GetScreenInfo() {
   return widget_base_->GetScreenInfo();
+}
+
+gfx::Rect WebPagePopupImpl::WindowRect() {
+  return widget_base_->WindowRect();
+}
+
+gfx::Rect WebPagePopupImpl::ViewRect() {
+  return widget_base_->ViewRect();
+}
+
+void WebPagePopupImpl::SetScreenRects(const gfx::Rect& widget_screen_rect,
+                                      const gfx::Rect& window_screen_rect) {
+  widget_base_->SetScreenRects(widget_screen_rect, window_screen_rect);
+}
+
+gfx::Size WebPagePopupImpl::VisibleViewportSizeInDIPs() {
+  return widget_base_->VisibleViewportSizeInDIPs();
+}
+
+void WebPagePopupImpl::SetPendingWindowRect(
+    const gfx::Rect* window_screen_rect) {
+  widget_base_->SetPendingWindowRect(window_screen_rect);
+}
+
+bool WebPagePopupImpl::IsHidden() const {
+  return widget_base_->is_hidden();
 }
 
 void WebPagePopupImpl::SetCompositorVisible(bool visible) {
@@ -515,7 +532,7 @@ void WebPagePopupImpl::Update() {
 
   popup_client_->Update(forced_update);
   if (forced_update)
-    SetWindowRect(WindowRectInScreen());
+    SetWindowRect(IntRect(WindowRectInScreen()));
 }
 
 void WebPagePopupImpl::DestroyPage() {
@@ -553,7 +570,15 @@ void WebPagePopupImpl::SetWindowRect(const IntRect& rect_in_screen) {
     }
   }
 
-  WidgetClient()->SetWindowRect(rect_in_screen);
+  gfx::Rect window_rect = rect_in_screen;
+
+  // Popups aren't emulated, but the WidgetScreenRect and WindowScreenRect
+  // given to them are. When they set the WindowScreenRect it is based on those
+  // emulated values, so we reverse the emulation.
+  if (opener_emulator_scale_)
+    EmulatedToScreenRect(window_rect);
+
+  WidgetClient()->SetWindowRect(window_rect);
 }
 
 void WebPagePopupImpl::SetRootLayer(scoped_refptr<cc::Layer> layer) {
@@ -589,17 +614,14 @@ void WebPagePopupImpl::UpdateLifecycle(WebLifecycleUpdate requested_update,
 }
 
 void WebPagePopupImpl::Resize(const WebSize& new_size_in_viewport) {
-  WebRect new_size(0, 0, new_size_in_viewport.width,
-                   new_size_in_viewport.height);
-  WidgetClient()->ConvertViewportToWindow(&new_size);
-
-  WebRect window_rect = WindowRectInScreen();
+  gfx::Size new_size_in_dips =
+      widget_base_->BlinkSpaceToFlooredDIPs(gfx::Size(new_size_in_viewport));
+  gfx::Rect window_rect_in_dips = WindowRectInScreen();
 
   // TODO(bokan): We should only call into this if the bounds actually changed
   // but this reveals a bug in Aura. crbug.com/633140.
-  window_rect.width = new_size.width;
-  window_rect.height = new_size.height;
-  SetWindowRect(window_rect);
+  window_rect_in_dips.set_size(new_size_in_dips);
+  SetWindowRect(IntRect(window_rect_in_dips));
 
   if (page_) {
     MainFrame().View()->Resize(new_size_in_viewport);
@@ -621,6 +643,9 @@ WebInputEventResult WebPagePopupImpl::HandleKeyEvent(
       suppress_next_keypress_event_ = true;
     }
   }
+  LocalFrame::NotifyUserActivation(
+      popup_client_->OwnerElement().GetDocument().GetFrame(),
+      mojom::blink::UserActivationNotificationType::kInteraction);
   return MainFrame().GetEventHandler().KeyEvent(event);
 }
 
@@ -633,7 +658,7 @@ void WebPagePopupImpl::BeginMainFrame(base::TimeTicks last_frame_time) {
 }
 
 bool WebPagePopupImpl::WillHandleGestureEvent(const WebGestureEvent& event) {
-  return WidgetClient()->WillHandleGestureEvent(event);
+  return false;
 }
 
 bool WebPagePopupImpl::WillHandleMouseEvent(const WebMouseEvent& event) {
@@ -645,8 +670,6 @@ void WebPagePopupImpl::ObserveGestureEventAndResult(
     const gfx::Vector2dF& unused_delta,
     const cc::OverscrollBehavior& overscroll_behavior,
     bool event_processed) {
-  WidgetClient()->DidHandleGestureScrollEvent(
-      gesture_event, unused_delta, overscroll_behavior, event_processed);
 }
 
 WebInputEventResult WebPagePopupImpl::HandleCharEvent(
@@ -669,6 +692,9 @@ WebInputEventResult WebPagePopupImpl::HandleGestureEvent(
       Cancel();
       return WebInputEventResult::kNotHandled;
     }
+    LocalFrame::NotifyUserActivation(
+        popup_client_->OwnerElement().GetDocument().GetFrame(),
+        mojom::blink::UserActivationNotificationType::kInteraction);
     CheckScreenPointInOwnerWindowAndCount(
         event.PositionInScreen(),
         WebFeature::kPopupGestureTapExceedsOwnerWindowBounds);
@@ -682,6 +708,9 @@ void WebPagePopupImpl::HandleMouseDown(LocalFrame& main_frame,
                                        const WebMouseEvent& event) {
   if (IsViewportPointInWindow(event.PositionInWidget().x(),
                               event.PositionInWidget().y())) {
+    LocalFrame::NotifyUserActivation(
+        popup_client_->OwnerElement().GetDocument().GetFrame(),
+        mojom::blink::UserActivationNotificationType::kInteraction);
     CheckScreenPointInOwnerWindowAndCount(
         event.PositionInScreen(),
         WebFeature::kPopupMouseDownExceedsOwnerWindowBounds);
@@ -727,11 +756,10 @@ Element* WebPagePopupImpl::FocusedElement() const {
 }
 
 bool WebPagePopupImpl::IsViewportPointInWindow(int x, int y) {
-  WebRect point_in_window(x, y, 0, 0);
-  WidgetClient()->ConvertViewportToWindow(&point_in_window);
-  WebRect window_rect = WindowRectInScreen();
-  return IntRect(0, 0, window_rect.width, window_rect.height)
-      .Contains(IntPoint(point_in_window.x, point_in_window.y));
+  gfx::Point point_in_dips =
+      widget_base_->BlinkSpaceToFlooredDIPs(gfx::Point(x, y));
+  gfx::Rect window_rect = WindowRectInScreen();
+  return gfx::Rect(window_rect.size()).Contains(point_in_dips);
 }
 
 void WebPagePopupImpl::CheckScreenPointInOwnerWindowAndCount(
@@ -771,7 +799,6 @@ void WebPagePopupImpl::FocusChanged(bool enable) {
   if (enable)
     page_->GetFocusController().SetActive(true);
   page_->GetFocusController().SetFocused(enable);
-  WidgetClient()->FocusChanged(enable);
 }
 
 void WebPagePopupImpl::ScheduleAnimation() {
@@ -780,16 +807,19 @@ void WebPagePopupImpl::ScheduleAnimation() {
 
 void WebPagePopupImpl::UpdateVisualProperties(
     const VisualProperties& visual_properties) {
-  WidgetClient()->UpdateVisualProperties(visual_properties);
+  widget_base_->UpdateSurfaceAndScreenInfo(
+      visual_properties.local_surface_id.value_or(viz::LocalSurfaceId()),
+      visual_properties.compositor_viewport_pixel_rect,
+      visual_properties.screen_info);
+  widget_base_->SetVisibleViewportSizeInDIPs(
+      visual_properties.visible_viewport_size);
+
+  Resize(WebSize(
+      widget_base_->DIPsToCeiledBlinkSpace(visual_properties.new_size)));
 }
 
-void WebPagePopupImpl::UpdateScreenRects(const gfx::Rect& widget_screen_rect,
-                                         const gfx::Rect& window_screen_rect) {
-  WidgetClient()->UpdateScreenRects(widget_screen_rect, window_screen_rect);
-}
-
-ScreenInfo WebPagePopupImpl::GetOriginalScreenInfo() {
-  return WidgetClient()->GetOriginalScreenInfo();
+const ScreenInfo& WebPagePopupImpl::GetOriginalScreenInfo() {
+  return widget_base_->GetScreenInfo();
 }
 
 gfx::Rect WebPagePopupImpl::ViewportVisibleRect() {
@@ -881,13 +911,6 @@ LocalDOMWindow* WebPagePopupImpl::Window() {
   return MainFrame().DomWindow();
 }
 
-gfx::Point WebPagePopupImpl::PositionRelativeToOwner() {
-  WebRect root_window_rect = WindowRectInScreen();
-  WebRect window_rect = WindowRectInScreen();
-  return gfx::Point(window_rect.x - root_window_rect.x,
-                    window_rect.y - root_window_rect.y);
-}
-
 WebDocument WebPagePopupImpl::GetDocument() {
   return WebDocument(MainFrame().GetDocument());
 }
@@ -901,8 +924,8 @@ void WebPagePopupImpl::Cancel() {
     popup_client_->CancelPopup();
 }
 
-WebRect WebPagePopupImpl::WindowRectInScreen() const {
-  return WidgetClient()->WindowRect();
+gfx::Rect WebPagePopupImpl::WindowRectInScreen() const {
+  return widget_base_->WindowRect();
 }
 
 void WebPagePopupImpl::InjectGestureScrollEvent(
@@ -913,6 +936,30 @@ void WebPagePopupImpl::InjectGestureScrollEvent(
     WebInputEvent::Type injected_type) {
   widget_base_->input_handler().InjectGestureScrollEvent(
       device, delta, granularity, scrollable_area_element_id, injected_type);
+}
+
+void WebPagePopupImpl::ScreenRectToEmulated(gfx::Rect& screen_rect) {
+  if (!opener_emulator_scale_)
+    return;
+  screen_rect.set_x(
+      opener_widget_screen_origin_.x() +
+      (screen_rect.x() - opener_original_widget_screen_origin_.x()) /
+          opener_emulator_scale_);
+  screen_rect.set_y(
+      opener_widget_screen_origin_.y() +
+      (screen_rect.y() - opener_original_widget_screen_origin_.y()) /
+          opener_emulator_scale_);
+}
+
+void WebPagePopupImpl::EmulatedToScreenRect(gfx::Rect& screen_rect) {
+  if (!opener_emulator_scale_)
+    return;
+  screen_rect.set_x(opener_original_widget_screen_origin_.x() +
+                    (screen_rect.x() - opener_widget_screen_origin_.x()) *
+                        opener_emulator_scale_);
+  screen_rect.set_y(opener_original_widget_screen_origin_.y() +
+                    (screen_rect.y() - opener_widget_screen_origin_.y()) *
+                        opener_emulator_scale_);
 }
 
 // WebPagePopup ----------------------------------------------------------------

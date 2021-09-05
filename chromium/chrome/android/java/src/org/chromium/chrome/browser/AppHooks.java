@@ -20,6 +20,8 @@ import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.directactions.DirectActionCoordinator;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.feedback.FeedbackReporter;
+import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncher;
+import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
 import org.chromium.chrome.browser.gsa.GSAHelper;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.historyreport.AppIndexingReporter;
@@ -45,10 +47,10 @@ import org.chromium.chrome.browser.xsurface.ProcessScope;
 import org.chromium.chrome.browser.xsurface.ProcessScopeDependencyProvider;
 import org.chromium.components.browser_ui.widget.FeatureHighlightProvider;
 import org.chromium.components.external_intents.AuthenticatorNavigationInterceptor;
+import org.chromium.components.policy.AppRestrictionsProvider;
+import org.chromium.components.policy.CombinedPolicyProvider;
 import org.chromium.components.signin.AccountManagerDelegate;
 import org.chromium.components.signin.SystemAccountManagerDelegate;
-import org.chromium.policy.AppRestrictionsProvider;
-import org.chromium.policy.CombinedPolicyProvider;
 
 import java.util.Collections;
 import java.util.List;
@@ -137,14 +139,12 @@ public abstract class AppHooks {
     /**
      * @return An instance of ExternalAuthUtils to be installed as a singleton.
      */
-    public ExternalAuthUtils createExternalAuthUtils() {
+    protected ExternalAuthUtils createExternalAuthUtils() {
         return new ExternalAuthUtils();
     }
 
     /**
      * @return The singleton instance of ExternalAuthUtils.
-     *
-     * TODO(https://crbug.com/1104817): Make createExternalAuthUtils protected.
      */
     public ExternalAuthUtils getExternalAuthUtils() {
         if (mExternalAuthUtils == null) {
@@ -177,6 +177,14 @@ public abstract class AppHooks {
     }
 
     /**
+     * Returns a new instance of HelpAndFeedbackLauncher.
+     */
+    public HelpAndFeedbackLauncher createHelpAndFeedbackLauncher() {
+        return new HelpAndFeedbackLauncherImpl();
+    }
+
+    /**
+     * TODO(crbug.com/1117343): Remove this method when downstream dependency is removed.
      * Returns a new instance of HelpAndFeedback.
      */
     public HelpAndFeedback createHelpAndFeedback() {

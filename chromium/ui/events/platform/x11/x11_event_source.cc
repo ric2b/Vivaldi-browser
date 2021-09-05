@@ -4,11 +4,6 @@
 
 #include "ui/events/platform/x11/x11_event_source.h"
 
-#include <X11/Xlib-xcb.h>
-#include <xcb/xcb.h>
-#include <xcb/xcbext.h>
-#include <xcb/xproto.h>
-
 #include <algorithm>
 #include <memory>
 #include <type_traits>
@@ -182,7 +177,7 @@ x11::Time X11EventSource::GetCurrentServerTime() {
     });
     dummy_atom_ = gfx::GetAtom("CHROMIUM_TIMESTAMP");
     dummy_window_events_ = std::make_unique<XScopedEventSelector>(
-        dummy_window_, PropertyChangeMask);
+        dummy_window_, x11::EventMask::PropertyChange);
     dummy_initialized_ = true;
   }
 

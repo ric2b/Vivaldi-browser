@@ -5,7 +5,6 @@
 #include "ash/system/unified/unified_slider_view.h"
 
 #include "ash/style/ash_color_provider.h"
-#include "ash/style/default_color_constants.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/unified/unified_system_tray_view.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -24,7 +23,6 @@
 namespace ash {
 
 using ContentLayerType = AshColorProvider::ContentLayerType;
-using AshColorMode = AshColorProvider::AshColorMode;
 
 namespace {
 
@@ -44,8 +42,7 @@ SkColor SystemSlider::GetThumbColor() const {
   return AshColorProvider::Get()->GetContentLayerColor(
       (style() == RenderingStyle::kMinimalStyle)
           ? Type::kSliderThumbColorDisabled
-          : Type::kSliderThumbColorEnabled,
-      AshColorProvider::AshColorMode::kDark);
+          : Type::kSliderThumbColorEnabled);
 }
 
 SkColor SystemSlider::GetTroughColor() const {
@@ -109,9 +106,9 @@ const char* UnifiedSliderButton::GetClassName() const {
 
 void UnifiedSliderButton::SetVectorIcon(const gfx::VectorIcon& icon) {
   const SkColor toggled_color = AshColorProvider::Get()->GetContentLayerColor(
-      ContentLayerType::kSystemMenuIconColorToggled, AshColorMode::kDark);
+      ContentLayerType::kButtonIconColorPrimary);
   const SkColor icon_color = AshColorProvider::Get()->GetContentLayerColor(
-      ContentLayerType::kSystemMenuIconColor, AshColorMode::kDark);
+      ContentLayerType::kButtonIconColor);
 
   SetImage(views::Button::STATE_NORMAL,
            gfx::CreateVectorIcon(icon, icon_color));
@@ -132,14 +129,11 @@ void UnifiedSliderButton::PaintButtonContents(gfx::Canvas* canvas) {
   gfx::Rect rect(GetContentsBounds());
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
-  flags.setColor(toggled_ ? AshColorProvider::Get()->GetControlsLayerColor(
-                                AshColorProvider::ControlsLayerType::
-                                    kControlBackgroundColorActive,
-                                AshColorProvider::AshColorMode::kDark)
-                          : AshColorProvider::Get()->GetControlsLayerColor(
-                                AshColorProvider::ControlsLayerType::
-                                    kControlBackgroundColorInactive,
-                                AshColorProvider::AshColorMode::kDark));
+  flags.setColor(AshColorProvider::Get()->GetControlsLayerColor(
+      toggled_
+          ? AshColorProvider::ControlsLayerType::kControlBackgroundColorActive
+          : AshColorProvider::ControlsLayerType::
+                kControlBackgroundColorInactive));
   flags.setStyle(cc::PaintFlags::kFill_Style);
   canvas->DrawCircle(gfx::PointF(rect.CenterPoint()), kTrayItemCornerRadius,
                      flags);
@@ -155,15 +149,12 @@ std::unique_ptr<views::InkDropRipple> UnifiedSliderButton::CreateInkDropRipple()
     const {
   return TrayPopupUtils::CreateInkDropRipple(
       TrayPopupInkDropStyle::FILL_BOUNDS, this,
-      GetInkDropCenterBasedOnLastEvent(),
-      UnifiedSystemTrayView::GetBackgroundColor());
+      GetInkDropCenterBasedOnLastEvent());
 }
 
 std::unique_ptr<views::InkDropHighlight>
 UnifiedSliderButton::CreateInkDropHighlight() const {
-  return TrayPopupUtils::CreateInkDropHighlight(
-      TrayPopupInkDropStyle::FILL_BOUNDS, this,
-      UnifiedSystemTrayView::GetBackgroundColor());
+  return TrayPopupUtils::CreateInkDropHighlight(this);
 }
 
 void UnifiedSliderButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {

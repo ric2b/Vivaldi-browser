@@ -43,12 +43,6 @@ const char kAndroidFontsPath[]          = "android-fonts-path";
 // TODO(enne): remove this once app cache has been removed.
 const char kAppCacheForceEnabled[] = "app-cache-force-enabled";
 
-// Set blink settings. Format is <name>[=<value],<name>[=<value>],...
-// The names are declared in Settings.json5. For boolean type, use "true",
-// "false", or omit '=<value>' part to set to true. For enum type, use the int
-// value of the enum value. Applied after other command line flags and prefs.
-const char kBlinkSettings[]                 = "blink-settings";
-
 // Causes the browser process to crash on startup.
 const char kBrowserCrashTest[]              = "crash-test";
 
@@ -117,6 +111,9 @@ const char kDisableDatabases[]              = "disable-databases";
 // This switch is intended only for tests.
 const char kDisableDomainBlockingFor3DAPIs[] =
     "disable-domain-blocking-for-3d-apis";
+
+// Disables the in-process stack traces.
+const char kDisableInProcessStackTraces[] = "disable-in-process-stack-traces";
 
 // Disable all versions of WebGL.
 const char kDisableWebGL[] = "disable-webgl";
@@ -220,10 +217,6 @@ const char kDisablePepper3DImageChromium[] = "disable-pepper-3d-image-chromium";
 // Disables compositor-accelerated touch-screen pinch gestures.
 const char kDisablePinch[]                  = "disable-pinch";
 
-// Disable the creation of compositing layers when it would prevent LCD text.
-const char kDisablePreferCompositingToLCDText[] =
-    "disable-prefer-compositing-to-lcd-text";
-
 // Disables the Presentation API.
 const char kDisablePresentationAPI[]        = "disable-presentation-api";
 
@@ -275,9 +268,6 @@ const char kDisableTestCerts[]              = "disable-test-root-certs";
 // Disable multithreaded GPU compositing of web content.
 const char kDisableThreadedCompositing[]    = "disable-threaded-compositing";
 
-// Disable multithreaded, compositor scrolling of web content.
-const char kDisableThreadedScrolling[]      = "disable-threaded-scrolling";
-
 // Disable V8 idle tasks.
 const char kDisableV8IdleTasks[]            = "disable-v8-idle-tasks";
 
@@ -309,10 +299,6 @@ const char kDumpBlinkRuntimeCallStats[] = "dump-blink-runtime-call-stats";
 
 // Enables LCD text.
 const char kEnableLCDText[]                 = "enable-lcd-text";
-
-// Enable the creation of compositing layers when it would prevent LCD text.
-const char kEnablePreferCompositingToLCDText[] =
-    "enable-prefer-compositing-to-lcd-text";
 
 // Enable one or more Blink runtime-enabled features.
 // Use names from runtime_enabled_features.json5, separated by commas.
@@ -531,6 +517,9 @@ const char kDisableJavaScriptHarmonyShipping[] =
 // Enables experimental Harmony (ECMAScript 6) features.
 const char kJavaScriptHarmony[]             = "javascript-harmony";
 
+// Enables unsafe fast JS calls between Blink and V8.
+const char kEnableUnsafeFastJSCalls[] = "enable-unsafe-fast-js-calls";
+
 // Specifies the flags passed to JS engine.
 const char kJavaScriptFlags[]               = "js-flags";
 
@@ -574,13 +563,6 @@ const char kMojoCoreLibraryPath[] = "mojo-core-library-path";
 // Use a Mojo-based LocalStorage implementation.
 const char kMojoLocalStorage[]              = "mojo-local-storage";
 
-// Sets the timeout seconds of the network-quiet timers in IdlenessDetector.
-// Used by embedders who want to change the timeout time in order to run web
-// contents on various embedded devices and changeable network bandwidths in
-// different regions. For example, it's useful when using FirstMeaningfulPaint
-// signal to dismiss a splash screen.
-const char kNetworkQuietTimeout[] = "network-quiet-timeout";
-
 // Disables the use of a zygote process for forking child processes. Instead,
 // child processes will be forked and exec'd directly. Note that --no-sandbox
 // should also be used together with this flag because the sandbox needs the
@@ -599,13 +581,6 @@ const char kNumRasterThreads[]              = "num-raster-threads";
 // value to 'never' to disable throttling.
 const char kOverridePluginPowerSaverForTesting[] =
     "override-plugin-power-saver-for-testing";
-
-// Override the default value for the 'passive' field in javascript
-// addEventListener calls. Values are defined as:
-//  'documentonlytrue' to set the default be true only for document level nodes.
-//  'true' to set the default to be true on all nodes (when not specified).
-//  'forcealltrue' to force the value on all nodes.
-const char kPassiveListenersDefault[] = "passive-listeners-default";
 
 // Argument to the process type that indicates a PPAPI broker process type.
 const char kPpapiBrokerProcess[]            = "ppapi-broker";
@@ -706,6 +681,17 @@ const char kRunManualTestsFlag[] = "run-manual";
 // Causes the process to run as a sandbox IPC subprocess.
 const char kSandboxIPCProcess[]             = "sandbox-ipc";
 
+// Describes the file descriptors passed to a child process in the following
+// list format:
+//
+//     <file_id>:<descriptor_id>,<file_id>:<descriptor_id>,...
+//
+// where <file_id> is an ID string from the manifest of the service being
+// launched and <descriptor_id> is the numeric identifier of the descriptor for
+// the child process can use to retrieve the file descriptor from the
+// global descriptor table.
+const char kSharedFiles[] = "shared-files";
+
 // Runs the renderer and plugins in the same process as the browser
 const char kSingleProcess[]                 = "single-process";
 
@@ -774,11 +760,6 @@ const char kTouchEventFeatureDetectionEnabled[] = "enabled";
 //   disabled: touch events are disabled.
 const char kTouchEventFeatureDetectionDisabled[] = "disabled";
 
-// Controls how text selection granularity changes when touch text selection
-// handles are dragged. Should be "character" or "direction". If not specified,
-// the platform default is used.
-const char kTouchTextSelectionStrategy[]    = "touch-selection-strategy";
-
 // Accepts specified file URL of a trustable WebBundle file. This flag
 // should be used only for testing purpose.
 const char kTrustableWebBundleFileUrl[] = "trustable-web-bundles-file-url";
@@ -835,6 +816,9 @@ const char kWebglMSAASampleCount[] = "webgl-msaa-sample-count";
 
 // The prefix used when starting the zygote process. (i.e. 'gdb --args')
 const char kZygoteCmdPrefix[] = "zygote-cmd-prefix";
+
+// Causes the process to run as a zygote.
+const char kZygoteProcess[] = "zygote";
 
 // Enables specified backend for the Web OTP API.
 const char kWebOtpBackend[] = "web-otp-backend";
@@ -914,8 +898,6 @@ const char kWebXrRuntimeNone[] = "no-vr-runtime";
 const char kWebXrRuntimeOrientationSensors[] = "orientation-sensors";
 
 // The following are the runtimes that WebXr supports.
-const char kWebXrRuntimeOculus[] = "oculus";
-const char kWebXrRuntimeOpenVr[] = "openvr";
 const char kWebXrRuntimeOpenXr[] = "openxr";
 const char kWebXrRuntimeWMR[] = "windows-mixed-reality";
 

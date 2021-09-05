@@ -12,9 +12,15 @@ try_.declare_bucket(settings, branch_selector = branches.ALL_RELEASES)
 try_.set_defaults(
     settings,
     add_to_list_view = True,
+    subproject_list_view = "luci.chromium.try",
 )
 
 # Automatically maintained consoles
+
+try_.list_view(
+    name = "luci.chromium.try",
+    branch_selector = branches.ALL_RELEASES,
+)
 
 try_.list_view(
     name = "tryserver.blink",
@@ -121,6 +127,11 @@ try_.blink_mac_builder(
     name = "mac10.15-blink-rel",
 )
 
+try_.blink_mac_builder(
+    name = "mac11.0-blink-rel",
+    builderless = False,
+)
+
 try_.chromium_builder(
     name = "android-official",
     branch_selector = branches.STANDARD_RELEASES,
@@ -140,15 +151,24 @@ try_.chromium_builder(
 )
 
 try_.chromium_builder(
+    name = "mac-official",
+    branch_selector = branches.STANDARD_RELEASES,
+    cores = None,
+    os = os.MAC_ANY,
+)
+
+try_.chromium_builder(
     name = "win-official",
     branch_selector = branches.STANDARD_RELEASES,
     os = os.WINDOWS_DEFAULT,
+    cores = 32,
 )
 
 try_.chromium_builder(
     name = "win32-official",
     branch_selector = branches.STANDARD_RELEASES,
     os = os.WINDOWS_DEFAULT,
+    cores = 32,
 )
 
 try_.chromium_android_builder(
@@ -239,16 +259,18 @@ try_.chromium_android_builder(
 )
 
 try_.chromium_android_builder(
-    name = "android-marshmallow-x86-fyi-rel",
+    name = "android-marshmallow-x86-rel",
+    branch_selector = branches.STANDARD_RELEASES,
+    cores = 16,
+    goma_jobs = goma.jobs.J300,
+    ssd = True,
+    tryjob = try_.job(
+        experiment_percentage = 20,
+    ),
 )
 
 try_.chromium_android_builder(
-    name = "android-marshmallow-x86-rel",
-    branch_selector = branches.STANDARD_RELEASES,
-    goma_jobs = goma.jobs.J150,
-    tryjob = try_.job(
-        experiment_percentage = 5,
-    ),
+    name = "android-marshmallow-x86-rel-non-cq",
 )
 
 # TODO(crbug.com/1111436) Added it back once all Pixel 1s are flashed
@@ -299,10 +321,11 @@ try_.chromium_android_builder(
     cores = 16,
     goma_jobs = goma.jobs.J300,
     ssd = True,
-    # TODO(crbug.com/1111436): Enable on CQ once the maintenance for
-    # Pixel 2 devices are finished.
-    #main_list_view = settings.main_list_view_name,
-    #tryjob = try_.job(),
+    # TODO(crbug.com/1111436): Enable on CQ fully once the tests run fine.
+    main_list_view = settings.main_list_view_name,
+    tryjob = try_.job(
+        experiment_percentage = 60,
+    ),
 )
 
 try_.chromium_android_builder(
@@ -319,7 +342,7 @@ try_.chromium_android_builder(
 )
 
 try_.chromium_android_builder(
-    name = "android-weblayer-pie-arm64-fyi-rel",
+    name = "android-pie-arm64-wpt-rel-non-cq",
 )
 
 try_.chromium_android_builder(
@@ -840,6 +863,10 @@ try_.chromium_linux_builder(
 )
 
 try_.chromium_linux_builder(
+    name = "linux-inverse-fieldtrials-fyi-rel",
+)
+
+try_.chromium_linux_builder(
     name = "linux-lacros-fyi-rel",
 )
 
@@ -890,6 +917,14 @@ try_.chromium_linux_builder(
 )
 
 try_.chromium_linux_builder(
+    name = "linux-rel-builderful",
+    builderless = False,
+    goma_jobs = goma.jobs.J150,
+    tryjob = try_.job(experiment_percentage = 10),
+    use_clang_coverage = True,
+)
+
+try_.chromium_linux_builder(
     name = "linux-trusty-rel",
     goma_jobs = goma.jobs.J150,
     os = os.LINUX_TRUSTY,
@@ -908,6 +943,14 @@ try_.chromium_linux_builder(
 )
 
 try_.chromium_linux_builder(
+    name = "linux-wpt-identity-fyi-rel",
+)
+
+try_.chromium_linux_builder(
+    name = "linux-wpt-payments-fyi-rel",
+)
+
+try_.chromium_linux_builder(
     name = "linux_chromium_analysis",
 )
 
@@ -919,8 +962,8 @@ try_.chromium_linux_builder(
     name = "linux_chromium_asan_rel_ng",
     branch_selector = branches.STANDARD_RELEASES,
     goma_jobs = goma.jobs.J150,
-    main_list_view = settings.main_list_view_name,
     ssd = True,
+    main_list_view = settings.main_list_view_name,
     tryjob = try_.job(),
 )
 
@@ -1077,9 +1120,10 @@ try_.chromium_linux_builder(
 
 try_.chromium_mac_builder(
     name = "mac-coverage-rel",
+    builderless = False,
     use_clang_coverage = True,
     goma_jobs = goma.jobs.J150,
-    tryjob = try_.job(experiment_percentage = 5),
+    tryjob = try_.job(experiment_percentage = 8),
 )
 
 try_.chromium_mac_builder(
@@ -1090,6 +1134,7 @@ try_.chromium_mac_builder(
 try_.chromium_mac_builder(
     name = "mac-rel",
     branch_selector = branches.STANDARD_RELEASES,
+    use_clang_coverage = True,
     goma_jobs = goma.jobs.J150,
     main_list_view = settings.main_list_view_name,
     os = os.MAC_DEFAULT,
@@ -1098,6 +1143,7 @@ try_.chromium_mac_builder(
 
 try_.chromium_mac_builder(
     name = "mac-arm64-rel",
+    branch_selector = branches.STANDARD_RELEASES,
     goma_jobs = goma.jobs.J150,
     os = os.MAC_10_15,
 )
@@ -1143,9 +1189,9 @@ try_.chromium_mac_builder(
     name = "mac_chromium_compile_dbg_ng",
     branch_selector = branches.STANDARD_RELEASES,
     goma_jobs = goma.jobs.J150,
-    main_list_view = settings.main_list_view_name,
     os = os.MAC_DEFAULT,
-    tryjob = try_.job(),
+    main_list_view = settings.main_list_view_name,
+    tryjob = try_.job(cancel_stale = False),
 )
 
 try_.chromium_mac_builder(
@@ -1177,43 +1223,32 @@ try_.chromium_mac_builder(
 
 try_.chromium_mac_ios_builder(
     name = "ios-device",
-    executable = "recipe:chromium_trybot",
 )
 
 try_.chromium_mac_ios_builder(
     name = "ios-simulator",
     branch_selector = branches.STANDARD_RELEASES,
-    executable = "recipe:chromium_trybot",
     main_list_view = settings.main_list_view_name,
-    properties = {
-        "xcode_build_version": "12a7209",
-    },
     tryjob = try_.job(),
 )
 
 try_.chromium_mac_ios_builder(
     name = "ios-simulator-code-coverage",
-    executable = "recipe:chromium_trybot",
     use_clang_coverage = True,
     coverage_exclude_sources = "ios_test_files_and_test_utils",
     coverage_test_types = ["unit"],
     os = os.MAC_10_15,
-    properties = {
-        "xcode_build_version": "12a7209",
-    },
     tryjob = try_.job(experiment_percentage = 3),
 )
 
 try_.chromium_mac_ios_builder(
     name = "ios-simulator-cr-recipe",
-    executable = "recipe:chromium_trybot",
 )
 
 try_.chromium_mac_ios_builder(
     name = "ios-simulator-cronet",
     branch_selector = branches.STANDARD_RELEASES,
     caches = [xcode_cache.x11e146],
-    executable = "recipe:chromium_trybot",
     main_list_view = settings.main_list_view_name,
     properties = {
         "xcode_build_version": "11e146",
@@ -1231,13 +1266,8 @@ try_.chromium_mac_ios_builder(
 )
 
 try_.chromium_mac_ios_builder(
-    name = "ios-simulator-eg",
-)
-
-try_.chromium_mac_ios_builder(
     name = "ios-simulator-full-configs",
     branch_selector = branches.STANDARD_RELEASES,
-    executable = "recipe:chromium_trybot",
     main_list_view = settings.main_list_view_name,
     tryjob = try_.job(
         location_regexp = [
@@ -1248,51 +1278,29 @@ try_.chromium_mac_ios_builder(
 
 try_.chromium_mac_ios_builder(
     name = "ios-simulator-multi-window",
-    executable = "recipe:chromium_trybot",
 )
 
 try_.chromium_mac_ios_builder(
     name = "ios-simulator-noncq",
-    executable = "recipe:chromium_trybot",
 )
 
 try_.chromium_mac_ios_builder(
     name = "ios13-beta-simulator",
-    executable = "recipe:chromium_trybot",
-    caches = [xcode_cache.x12a7209],
-    os = os.MAC_10_15,
-    properties = {
-        "xcode_build_version": "12a7209",
-    },
 )
 
 try_.chromium_mac_ios_builder(
     name = "ios13-sdk-simulator",
-    executable = "recipe:chromium_trybot",
-    caches = [xcode_cache.x12a7209],
-    os = os.MAC_10_15,
-    properties = {
-        "xcode_build_version": "12a7209",
-    },
 )
 
 try_.chromium_mac_ios_builder(
     name = "ios14-beta-simulator",
-    executable = "recipe:chromium_trybot",
-    caches = [xcode_cache.x12a7209],
-    os = os.MAC_10_15,
-    properties = {
-        "xcode_build_version": "12a7209",
-    },
 )
 
 try_.chromium_mac_ios_builder(
     name = "ios14-sdk-simulator",
-    executable = "recipe:chromium_trybot",
-    caches = [xcode_cache.x12a7209],
-    os = os.MAC_10_15,
+    caches = [xcode_cache.x12b5018i],
     properties = {
-        "xcode_build_version": "12a7209",
+        "xcode_build_version": "12b5018i",
     },
 )
 
@@ -1368,6 +1376,12 @@ try_.chromium_win_builder(
 )
 
 try_.chromium_win_builder(
+    name = "win10_chromium_x64_1909_fyi_rel_ng",
+    builderless = False,
+    os = os.WINDOWS_10_1909,
+)
+
+try_.chromium_win_builder(
     name = "win10_chromium_x64_dbg_ng",
     os = os.WINDOWS_10,
 )
@@ -1376,10 +1390,10 @@ try_.chromium_win_builder(
     name = "win10_chromium_x64_rel_ng",
     branch_selector = branches.STANDARD_RELEASES,
     goma_jobs = goma.jobs.J150,
-    main_list_view = settings.main_list_view_name,
     os = os.WINDOWS_10,
     ssd = True,
     use_clang_coverage = True,
+    main_list_view = settings.main_list_view_name,
     tryjob = try_.job(cancel_stale = False),
 )
 
@@ -1418,6 +1432,7 @@ try_.gpu_chromium_android_builder(
             ".+/[+]/media/audio/.+",
             ".+/[+]/media/filters/.+",
             ".+/[+]/media/gpu/.+",
+            ".+/[+]/media/renderers/.+",
             ".+/[+]/services/viz/.+",
             ".+/[+]/testing/trigger_scripts/.+",
             ".+/[+]/third_party/blink/renderer/modules/webgl/.+",
@@ -1441,6 +1456,7 @@ try_.gpu_chromium_linux_builder(
             ".+/[+]/media/audio/.+",
             ".+/[+]/media/filters/.+",
             ".+/[+]/media/gpu/.+",
+            ".+/[+]/media/renderers/.+",
             ".+/[+]/testing/buildbot/chromium.gpu.fyi.json",
             ".+/[+]/testing/trigger_scripts/.+",
             ".+/[+]/third_party/blink/renderer/modules/webgl/.+",
@@ -1464,6 +1480,7 @@ try_.gpu_chromium_mac_builder(
             ".+/[+]/media/audio/.+",
             ".+/[+]/media/filters/.+",
             ".+/[+]/media/gpu/.+",
+            ".+/[+]/media/renderers/.+",
             ".+/[+]/services/shape_detection/.+",
             ".+/[+]/testing/buildbot/chromium.gpu.fyi.json",
             ".+/[+]/testing/trigger_scripts/.+",
@@ -1491,6 +1508,7 @@ try_.gpu_chromium_win_builder(
             ".+/[+]/media/audio/.+",
             ".+/[+]/media/filters/.+",
             ".+/[+]/media/gpu/.+",
+            ".+/[+]/media/renderers/.+",
             ".+/[+]/testing/buildbot/chromium.gpu.fyi.json",
             ".+/[+]/testing/trigger_scripts/.+",
             ".+/[+]/third_party/blink/renderer/modules/vr/.+",
@@ -1554,6 +1572,10 @@ chrome_internal_verifier(
 )
 
 chrome_internal_verifier(
+    builder = "linux-chrome",
+)
+
+chrome_internal_verifier(
     builder = "linux-chrome-beta",
     branch_selector = branches.STANDARD_RELEASES,
 )
@@ -1565,6 +1587,10 @@ chrome_internal_verifier(
 
 chrome_internal_verifier(
     builder = "linux-chromeos-chrome",
+)
+
+chrome_internal_verifier(
+    builder = "linux-chromeos-chrome-easwa",
 )
 
 chrome_internal_verifier(

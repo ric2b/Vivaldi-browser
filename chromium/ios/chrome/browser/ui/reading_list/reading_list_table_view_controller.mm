@@ -12,6 +12,7 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/stl_util.h"
 #include "components/strings/grit/components_strings.h"
+#import "ios/chrome/app/tests_hook.h"
 #include "ios/chrome/browser/drag_and_drop/drag_and_drop_flag.h"
 #import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/table_view_url_drag_drop_handler.h"
@@ -230,7 +231,8 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
     self.dragDropHandler.origin = WindowActivityReadingListOrigin;
     self.dragDropHandler.dragDataSource = self;
     self.tableView.dragDelegate = self.dragDropHandler;
-    self.tableView.dragInteractionEnabled = YES;
+    self.tableView.dragInteractionEnabled =
+        !tests_hook::DisableTableDragAndDrop();
   }
 }
 
@@ -430,6 +432,12 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 
 - (void)markItemRead:(id<ReadingListListItem>)item {
   TableViewModel* model = self.tableViewModel;
+  if (![model hasSectionForSectionIdentifier:SectionIdentifierUnread]) {
+    // Prevent trying to access this section if it has been concurrently
+    // deleted (via another window or Sync).
+    return;
+  }
+
   TableViewItem* tableViewItem = base::mac::ObjCCastStrict<TableViewItem>(item);
   if ([model hasItem:tableViewItem
           inSectionWithIdentifier:SectionIdentifierUnread]) {
@@ -440,6 +448,12 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 
 - (void)markItemUnread:(id<ReadingListListItem>)item {
   TableViewModel* model = self.tableViewModel;
+  if (![model hasSectionForSectionIdentifier:SectionIdentifierRead]) {
+    // Prevent trying to access this section if it has been concurrently
+    // deleted (via another window or Sync).
+    return;
+  }
+
   TableViewItem* tableViewItem = base::mac::ObjCCastStrict<TableViewItem>(item);
   if ([model hasItem:tableViewItem
           inSectionWithIdentifier:SectionIdentifierRead]) {
@@ -961,6 +975,12 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 
 // Called when the table is empty.
 - (void)tableIsEmpty {
+  // It is necessary to reloadData now, before modifying the view which will
+  // force a layout.
+  // If the window is not displayed (e.g. in an inactive scene) the number of
+  // elements may be outdated and the layout triggered by this function will
+  // generate access non-existing items.
+  [self.tableView reloadData];
   if (base::FeatureList::IsEnabled(kIllustratedEmptyStates)) {
     UIImage* emptyImage = [UIImage imageNamed:@"reading_list_empty"];
     NSString* title =

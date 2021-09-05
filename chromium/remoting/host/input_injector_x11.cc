@@ -29,8 +29,10 @@
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
+#include "ui/gfx/x/keysyms/keysyms.h"
 #include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/xinput.h"
+#include "ui/gfx/x/xkb.h"
 #include "ui/gfx/x/xproto.h"
 #include "ui/gfx/x/xtest.h"
 
@@ -55,8 +57,9 @@ enum class ScrollDirection {
 };
 
 ScrollDirection WheelDeltaToScrollDirection(float num) {
-  return (num > 0) ? ScrollDirection::UP
-                   : (num < 0) ? ScrollDirection::DOWN : ScrollDirection::NONE;
+  return (num > 0)   ? ScrollDirection::UP
+         : (num < 0) ? ScrollDirection::DOWN
+                     : ScrollDirection::NONE;
 }
 
 bool IsDomModifierKey(ui::DomCode dom_code) {
@@ -166,7 +169,6 @@ class InputInjectorX11 : public InputInjector {
     // X11 graphics context.
     x11::Connection connection_;
     Display* display_ = connection_.display();
-    Window root_window_ = BadValue;
 
     // Number of buttons we support.
     // Left, Right, Middle, VScroll Up/Down, HScroll Left/Right, back, forward.
@@ -240,12 +242,6 @@ bool InputInjectorX11::Core::Init() {
   if (!task_runner_->BelongsToCurrentThread())
     task_runner_->PostTask(FROM_HERE,
                            base::BindOnce(&Core::InitClipboard, this));
-
-  root_window_ = XRootWindow(display_, DefaultScreen(display_));
-  if (root_window_ == BadValue) {
-    LOG(ERROR) << "Unable to get the root window";
-    return false;
-  }
 
   if (!IgnoreXServerGrabs(&connection_, true)) {
     LOG(ERROR) << "Server does not support XTest.";
@@ -371,38 +367,37 @@ void InputInjectorX11::Core::InitClipboard() {
 }
 
 bool InputInjectorX11::Core::IsAutoRepeatEnabled() {
-  XKeyboardState state;
-  if (!XGetKeyboardControl(display_, &state)) {
-    LOG(ERROR) << "Failed to get keyboard auto-repeat status, assuming ON.";
-    return true;
-  }
-  return state.global_auto_repeat == AutoRepeatModeOn;
+  if (auto reply = connection_.GetKeyboardControl({}).Sync())
+    return reply->global_auto_repeat == x11::AutoRepeatMode::On;
+  LOG(ERROR) << "Failed to get keyboard auto-repeat status, assuming ON.";
+  return true;
 }
 
 void InputInjectorX11::Core::SetAutoRepeatEnabled(bool mode) {
-  XKeyboardControl control;
-  control.auto_repeat_mode = mode ? AutoRepeatModeOn : AutoRepeatModeOff;
-  XChangeKeyboardControl(display_, KBAutoRepeatMode, &control);
-  XFlush(display_);
+  connection_.ChangeKeyboardControl(
+      {.auto_repeat_mode =
+           mode ? x11::AutoRepeatMode::On : x11::AutoRepeatMode::Off});
+  connection_.Flush();
 }
 
 bool InputInjectorX11::Core::IsLockKey(KeyCode keycode) {
-  XkbStateRec state;
-  KeySym keysym;
-  if (XkbGetState(display_, XkbUseCoreKbd, &state) == x11::Success &&
-      XkbLookupKeySym(display_, keycode, XkbStateMods(&state), nullptr,
-                      &keysym) == x11::True) {
-    return keysym == XK_Caps_Lock || keysym == XK_Num_Lock;
-  } else {
+  auto state = connection_.xkb().GetState({}).Sync();
+  if (!state)
     return false;
-  }
+  auto mods = state->baseMods | state->latchedMods | state->lockedMods;
+  auto keysym = static_cast<uint32_t>(
+      connection_.KeycodeToKeysym(keycode, static_cast<unsigned>(mods)));
+  if (state && keysym)
+    return keysym == XK_Caps_Lock || keysym == XK_Num_Lock;
+  else
+    return false;
 }
 
 void InputInjectorX11::Core::SetLockStates(base::Optional<bool> caps_lock,
                                            base::Optional<bool> num_lock) {
   // The lock bits associated with each lock key.
-  unsigned int caps_lock_mask = XkbKeysymToModifiers(display_, XK_Caps_Lock);
-  unsigned int num_lock_mask = XkbKeysymToModifiers(display_, XK_Num_Lock);
+  auto caps_lock_mask = static_cast<unsigned int>(x11::ModMask::Lock);
+  auto num_lock_mask = static_cast<unsigned int>(x11::ModMask::c_2);
 
   unsigned int update_mask = 0;  // The lock bits we want to update
   unsigned int lock_values = 0;  // The value of those bits
@@ -422,7 +417,10 @@ void InputInjectorX11::Core::SetLockStates(base::Optional<bool> caps_lock,
   }
 
   if (update_mask) {
-    XkbLockModifiers(display_, XkbUseCoreKbd, update_mask, lock_values);
+    connection_.xkb().LatchLockState(
+        {static_cast<x11::Xkb::DeviceSpec>(x11::Xkb::Id::UseCoreKbd),
+         static_cast<x11::ModMask>(update_mask),
+         static_cast<x11::ModMask>(lock_values)});
   }
 }
 
@@ -581,14 +579,12 @@ void InputInjectorX11::Core::InitMouseButtonMap() {
   // Instead, try to work around it by reversing the mapping.
   // Note that if a user has a global mapping that completely disables a button
   // (by assigning 0 to it), we won't be able to inject it.
-  int num_buttons = XGetPointerMapping(display_, nullptr, 0);
-  std::unique_ptr<unsigned char[]> pointer_mapping(
-      new unsigned char[num_buttons]);
-  num_buttons =
-      XGetPointerMapping(display_, pointer_mapping.get(), num_buttons);
+  std::vector<uint8_t> pointer_mapping;
+  if (auto reply = connection_.GetPointerMapping({}).Sync())
+    pointer_mapping = std::move(reply->map);
   for (int& i : pointer_button_map_)
     i = -1;
-  for (int i = 0; i < num_buttons; i++) {
+  for (size_t i = 0; i < pointer_mapping.size(); i++) {
     // Reverse the mapping.
     if (pointer_mapping[i] > 0 && pointer_mapping[i] <= kNumPointerButtons)
       pointer_button_map_[pointer_mapping[i] - 1] = i + 1;
@@ -598,11 +594,10 @@ void InputInjectorX11::Core::InitMouseButtonMap() {
       LOG(ERROR) << "Global pointer mapping does not support button " << i + 1;
   }
 
-  int opcode, event, error;
-  if (!XQueryExtension(display_, "XInputExtension", &opcode, &event, &error)) {
+  if (!connection_.QueryExtension({"XInputExtension"}).Sync()) {
     // If XInput is not available, we're done. But it would be very unusual to
     // have a server that supports XTest but not XInput, so log it as an error.
-    LOG(ERROR) << "X Input extension not available: " << error;
+    LOG(ERROR) << "X Input extension not available";
     return;
   }
 

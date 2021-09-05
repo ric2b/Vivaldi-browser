@@ -113,9 +113,7 @@ public class StripLayoutTab implements VirtualView {
     private static final int ANIM_TAB_CLOSE_BUTTON_FADE_MS = 150;
 
     // Close button width
-    private static final int CLOSE_BUTTON_WIDTH_DP = 20;
-    // Vivaldi
-    private static final int CLOSE_BUTTON_WIDTH_TOTAL_DP = 5;
+    private static final int CLOSE_BUTTON_WIDTH_DP = 24;
 
     private int mId = Tab.INVALID_TAB_ID;
 
@@ -613,8 +611,6 @@ public class StripLayoutTab implements VirtualView {
         if (!LocalizationUtils.isLayoutRtl()) {
             mClosePlacement.left = getWidth() - CLOSE_BUTTON_WIDTH_DP;
             mClosePlacement.right = mClosePlacement.left + CLOSE_BUTTON_WIDTH_DP;
-            // Vivaldi
-            mClosePlacement.right -= CLOSE_BUTTON_WIDTH_TOTAL_DP;
         } else {
             mClosePlacement.left = 0;
             mClosePlacement.right = CLOSE_BUTTON_WIDTH_DP;

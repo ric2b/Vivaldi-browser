@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/**
+ * @fileoverview Defines a custom Polymer component for a lesson in the
+ * ChromeVox interactive tutorial.
+ */
+
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
 
@@ -33,12 +38,6 @@ export const TutorialLesson = Polymer({
 
     events: {type: Array},
 
-    hints: {type: Array},
-
-    hintCounter: {type: Number, value: 0},
-
-    hintIntervalId: {type: Number},
-
     goalStateReached: {type: Boolean, value: false},
 
     actions: {type: Array},
@@ -58,6 +57,17 @@ export const TutorialLesson = Polymer({
         this.$.practiceContent.addEventListener(
             evt, this.onPracticeEvent.bind(this), true);
       }
+      this.$.practiceContent.addEventListener('focus', (evt) => {
+        // The practice area has the potential to overflow, so ensure elements
+        // are scrolled into view when focused.
+        evt.target.scrollIntoView();
+      }, true);
+      this.$.practiceContent.addEventListener('click', (evt) => {
+        // Intercept click events. For example, clicking a link will exit the
+        // tutorial without this listener.
+        evt.preventDefault();
+        evt.stopPropagation();
+      }, true);
     }
   },
 
@@ -77,11 +87,20 @@ export const TutorialLesson = Polymer({
   /** @private */
   show() {
     this.$.container.hidden = false;
-    // Shorthand for Polymer.dom(this.root).querySelector(...).
-    const focus = this.$$('[tabindex]');
+    let focus;
+    if (this.autoInteractive) {
+      // Auto interactive lessons immediately initialize the UserActionMonitor,
+      // which will block ChromeVox execution until a desired key sequence is
+      // pressed. To ensure users hear instructions for these lessons, place
+      // focus on the first piece of text content.
+      // Shorthand for Polymer.dom(this.root).querySelector(...).
+      focus = this.$$('p');
+    } else {
+      // Otherwise, we can place focus on the lesson title.
+      focus = this.$$('h1');
+    }
     if (!focus) {
-      throw new Error(
-          'A lesson must have an element which specifies tabindex.');
+      throw new Error('A lesson must have an element to focus.');
     }
     focus.focus();
     if (!focus.isEqualNode(this.shadowRoot.activeElement)) {
@@ -123,14 +142,25 @@ export const TutorialLesson = Polymer({
 
   /** @private */
   startPractice() {
+    this.notifyStartPractice();
     this.$.practice.showModal();
-    this.startHints();
+    this.$.practiceTitle.focus();
   },
 
   /** @private */
   endPractice() {
-    this.stopHints();
+    this.notifyEndPractice();
     this.$.startPractice.focus();
+  },
+
+  /** @private */
+  notifyStartPractice() {
+    this.dispatchEvent(new CustomEvent('startpractice', {composed: true}));
+  },
+
+  /** @private */
+  notifyEndPractice() {
+    this.dispatchEvent(new CustomEvent('endpractice', {composed: true}));
   },
 
 
@@ -185,36 +215,11 @@ export const TutorialLesson = Polymer({
     this.goalStateReached = true;
     if (previousState === false) {
       // Only perform when crossing the threshold from not reached to reached.
-      this.stopHints();
       this.requestSpeech(
           'You have passed this tutorial lesson. Find and press the exit ' +
           'practice area button to continue');
     }
   },
-
-
-  // Methods for managing hints.
-
-  /** @private */
-  startHints() {
-    this.hintCounter = 0;
-    this.hintIntervalId = setInterval(() => {
-      if (this.hintCounter >= this.hints.length) {
-        this.stopHints();
-        return;
-      }
-      this.requestSpeech(this.hints[this.hintCounter]);
-      this.hintCounter += 1;
-    }, 20 * 1000);
-  },
-
-  /** @private */
-  stopHints() {
-    if (this.hintIntervalId) {
-      clearInterval(this.hintIntervalId);
-    }
-  },
-
 
   // Miscellaneous methods.
 
@@ -232,11 +237,12 @@ export const TutorialLesson = Polymer({
   },
 
   /**
-   * Requests speech from the Panel.
    * @param {string} text
    * @private
    */
   requestSpeech(text) {
+    // TODO (akihiroota): Migrate this to i_tutorial.js so that the tutorial
+    // engine controls all speech requests.
     this.dispatchEvent(
         new CustomEvent('requestspeech', {composed: true, detail: {text}}));
   },

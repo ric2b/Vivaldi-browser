@@ -73,7 +73,7 @@ void OptOutOfAccountStorageAndClearSettingsForAccount(
     const std::string& gaia_id);
 
 // Whether it makes sense to ask the user to move a password to their account or
-// about the store when saving a password (i.e. profile or account store). This
+// in which store to save a password (i.e. profile or account store). This
 // is true if the user has opted in already, or hasn't opted in but all other
 // requirements are met (i.e. there is a signed-in user, Sync-the-feature is not
 // enabled, etc). |pref_service| must not be null. |sync_service| may be null
@@ -88,7 +88,7 @@ bool ShouldShowAccountStorageBubbleUi(const PrefService* pref_service,
 // See PasswordFeatureManager::SetDefaultPasswordStore.
 void SetDefaultPasswordStore(PrefService* pref_service,
                              const syncer::SyncService* sync_service,
-                             autofill::PasswordForm::Store default_store);
+                             PasswordForm::Store default_store);
 
 // Returns the default storage location for signed-in but non-syncing users
 // (i.e. will new passwords be saved to locally or to the account by default).
@@ -97,7 +97,7 @@ void SetDefaultPasswordStore(PrefService* pref_service,
 // |sync_service| may be null (commonly the case in incognito mode), in which
 // case this will return kProfileStore.
 // See PasswordFeatureManager::GetDefaultPasswordStore.
-autofill::PasswordForm::Store GetDefaultPasswordStore(
+PasswordForm::Store GetDefaultPasswordStore(
     const PrefService* pref_service,
     const syncer::SyncService* sync_service);
 

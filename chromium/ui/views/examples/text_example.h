@@ -10,18 +10,17 @@
 
 #include "base/macros.h"
 #include "ui/views/controls/button/button.h"
-#include "ui/views/controls/combobox/combobox_listener.h"
 #include "ui/views/examples/example_base.h"
 
 namespace views {
 class Checkbox;
+class Combobox;
 class GridLayout;
 
 namespace examples {
 
 class VIEWS_EXAMPLES_EXPORT TextExample : public ExampleBase,
-                                          public ButtonListener,
-                                          public ComboboxListener {
+                                          public ButtonListener {
  public:
   TextExample();
   ~TextExample() override;
@@ -33,17 +32,22 @@ class VIEWS_EXAMPLES_EXPORT TextExample : public ExampleBase,
   // Creates and adds a check box to the layout.
   Checkbox* AddCheckbox(GridLayout* layout, const char* name);
 
-  // Creates and adds a combobox to the layout.
+  // Creates and adds a combobox to the layout. Sets |this|' instance of
+  // |combobox_callback| as the callback for the created combobox.
   Combobox* AddCombobox(GridLayout* layout,
                         const char* name,
                         const char* const* strings,
-                        int count);
+                        int count,
+                        void (TextExample::*combobox_callback)());
+
+  void AlignComboboxChanged();
+  void TextComboboxChanged();
+  void ElideComboboxChanged();
+  void PrefixComboboxChanged();
+  void WeightComboboxChanged();
 
   // ButtonListener:
   void ButtonPressed(Button* button, const ui::Event& event) override;
-
-  // ComboboxListener:
-  void OnPerformAction(Combobox* combobox) override;
 
   class TextExampleView;
   // The content of the scroll view.

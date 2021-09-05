@@ -12,7 +12,6 @@ GEN('#include "chrome/common/chrome_features.h"');
 GEN('#include "components/autofill/core/common/autofill_features.h"');
 GEN('#include "components/password_manager/core/common/password_manager_features.h"');
 GEN('#include "content/public/test/browser_test.h"');
-GEN('#include "services/network/public/cpp/features.h"');
 
 /** Test fixture for shared Polymer 3 elements. */
 // eslint-disable-next-line no-var
@@ -32,18 +31,16 @@ var CrSettingsV3BrowserTest = class extends PolymerTest {
 
   /** @override */
   get featureList() {
-    return {
-      enabled: [
-        'network::features::kOutOfBlinkCors',
-        ...(this.featureListInternal.enabled || []),
-      ],
-      disabled: this.featureListInternal.disabled || [],
-    };
+    if (!this.featureListInternal.enabled &&
+        !this.featureListInternal.disabled) {
+      return null;
+    }
+    return this.featureListInternal;
   }
 
   /** @return {!{enabled: !Array<string>, disabled: !Array<string>}} */
   get featureListInternal() {
-    return {enabled: [], disabled: []};
+    return {};
   }
 };
 
@@ -101,6 +98,15 @@ GEN('#if BUILDFLAG(GOOGLE_CHROME_BRANDING)');
 TEST_F('CrSettingsLanguagesPageV3Test', 'SpellcheckOfficialBuild', function() {
   mocha.grep(languages_page_tests.TestNames.SpellcheckOfficialBuild).run();
 });
+GEN('#endif');
+
+GEN('#if defined(OS_CHROMEOS)');
+TEST_F(
+    'CrSettingsLanguagesPageV3Test', 'ChromeOSLanguagesSettingsUpdate',
+    function() {
+      mocha.grep(languages_page_tests.TestNames.ChromeOSLanguagesSettingsUpdate)
+          .run();
+    });
 GEN('#endif');
 
 // eslint-disable-next-line no-var
@@ -175,13 +181,6 @@ var CrSettingsAutofillSectionCompanyEnabledV3Test =
   get browsePreload() {
     return 'chrome://settings/test_loader.html?module=settings/autofill_section_test.js';
   }
-
-  /** @override */
-  get featureListInternal() {
-    return {
-      enabled: ['autofill::features::kAutofillEnableCompanyName'],
-    };
-  }
 };
 
 TEST_F('CrSettingsAutofillSectionCompanyEnabledV3Test', 'All', function() {
@@ -193,37 +192,10 @@ TEST_F('CrSettingsAutofillSectionCompanyEnabledV3Test', 'All', function() {
 });
 
 // eslint-disable-next-line no-var
-var CrSettingsAutofillSectionCompanyDisabledV3Test =
-    class extends CrSettingsV3BrowserTest {
-  /** @override */
-  get browsePreload() {
-    return 'chrome://settings/test_loader.html?module=settings/autofill_section_test.js';
-  }
-
-  /** @override */
-  get featureListInternal() {
-    return {disabled: ['autofill::features::kAutofillEnableCompanyName']};
-  }
-};
-
-TEST_F('CrSettingsAutofillSectionCompanyDisabledV3Test', 'All', function() {
-  // Use 'EnableCompanyName' to inform tests that the feature is enabled.
-  const loadTimeDataOverride = {};
-  loadTimeDataOverride['EnableCompanyName'] = false;
-  loadTimeData.overrideValues(loadTimeDataOverride);
-  mocha.run();
-});
-
-// eslint-disable-next-line no-var
 var CrSettingsPasswordsSectionV3Test = class extends CrSettingsV3BrowserTest {
   /** @override */
   get browsePreload() {
     return 'chrome://settings/test_loader.html?module=settings/passwords_section_test.js';
-  }
-
-  /** @override */
-  get featureListInternal() {
-    return {enabled: ['password_manager::features::kPasswordCheck']};
   }
 };
 
@@ -290,11 +262,6 @@ var CrSettingsPasswordsCheckV3Test = class extends CrSettingsV3BrowserTest {
   get browsePreload() {
     return 'chrome://settings/test_loader.html?module=settings/password_check_test.js';
   }
-
-  /** @override */
-  get featureListInternal() {
-    return {enabled: ['password_manager::features::kPasswordCheck']};
-  }
 };
 
 TEST_F('CrSettingsPasswordsCheckV3Test', 'All', function() {
@@ -306,15 +273,6 @@ var CrSettingsSafetyCheckPageV3Test = class extends CrSettingsV3BrowserTest {
   /** @override */
   get browsePreload() {
     return 'chrome://settings/test_loader.html?module=settings/safety_check_page_test.js';
-  }
-
-  /** @override */
-  get featureListInternal() {
-    return {
-      enabled: [
-        'password_manager::features::kPasswordCheck',
-      ],
-    };
   }
 };
 
@@ -385,7 +343,7 @@ var CrSettingsSiteDetailsV3Test = class extends CrSettingsV3BrowserTest {
 // Disabling on debug due to flaky timeout on Win7 Tests (dbg)(1) bot.
 // https://crbug.com/825304 - later for other platforms in crbug.com/1021219.
 // Disabling on Linux CFI due to flaky timeout (crbug.com/1031960).
-GEN('#if (!defined(NDEBUG)) || (defined(OS_LINUX) && defined(IS_CFI))');
+GEN('#if (!defined(NDEBUG)) || ((defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(IS_CFI))');
 GEN('#define MAYBE_SiteDetails DISABLED_SiteDetails');
 GEN('#else');
 GEN('#define MAYBE_SiteDetails SiteDetails');
@@ -424,6 +382,10 @@ var CrSettingsPrivacyPageV3Test = class extends CrSettingsV3BrowserTest {
 
 TEST_F('CrSettingsPrivacyPageV3Test', 'PrivacyPageTests', function() {
   runMochaSuite('PrivacyPage');
+});
+
+TEST_F('CrSettingsPrivacyPageV3Test', 'ContentSettingsRedesign', function() {
+  runMochaSuite('ContentSettingsRedesign');
 });
 
 // TODO(crbug.com/1043665): flaky crash on Linux Tests (dbg).
@@ -502,6 +464,10 @@ TEST_F('CrSettingsAdvancedPageV3Test', 'MAYBE_Load', function() {
  ['AppearanceFontsPage', 'appearance_fonts_page_test.js'],
  ['AppearancePage', 'appearance_page_test.js'],
  ['BasicPage', 'basic_page_test.js'],
+ [
+   'SettingsCategoryDefaultRadioGroup',
+   'settings_category_default_radio_group_tests.js'
+ ],
  ['CategoryDefaultSetting', 'category_default_setting_tests.js'],
  ['CategorySettingExceptions', 'category_setting_exceptions_tests.js'],
  ['Checkbox', 'checkbox_tests.js'],
@@ -519,7 +485,6 @@ TEST_F('CrSettingsAdvancedPageV3Test', 'MAYBE_Load', function() {
  ['Languages', 'languages_tests.js'],
  ['Menu', 'settings_menu_test.js'],
  ['OnStartupPage', 'on_startup_page_tests.js'],
- ['PasswordsLeakDetectionToggle', 'passwords_leak_detection_toggle_test.js'],
  ['PaymentsSection', 'payments_section_test.js'],
  ['PeoplePage', 'people_page_test.js'],
  ['PeoplePageSyncControls', 'people_page_sync_controls_test.js'],
@@ -528,15 +493,15 @@ TEST_F('CrSettingsAdvancedPageV3Test', 'MAYBE_Load', function() {
  ['PrefUtil', 'pref_util_tests.m.js'],
  ['ProtocolHandlers', 'protocol_handlers_tests.js'],
  ['RecentSitePermissions', 'recent_site_permissions_test.js'],
- ['ResetPage', 'reset_page_test.js'],
+ // Flaky on all OSes. TODO(crbug.com/1127733): Enable the test.
+ ['ResetPage', 'reset_page_test.js', 'DISABLED_All'],
  ['ResetProfileBanner', 'reset_profile_banner_test.js'],
  ['SearchEngines', 'search_engines_page_test.js'],
  ['SearchPage', 'search_page_test.js'],
  ['Search', 'search_settings_test.js'],
  ['SecurityKeysSubpage', 'security_keys_subpage_test.js'],
  ['SecureDns', 'secure_dns_test.js'],
- // Copied from P2 test: Disabled for flakiness, see https://crbug.com/1061249
- ['SiteData', 'site_data_test.js', 'DISABLED_All'],
+ ['SiteData', 'site_data_test.js'],
  ['SiteDataDetails', 'site_data_details_subpage_tests.js'],
  ['SiteDetailsPermission', 'site_details_permission_tests.js'],
  ['SiteEntry', 'site_entry_tests.js'],

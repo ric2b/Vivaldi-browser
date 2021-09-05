@@ -170,11 +170,6 @@ void DragHandle::ScheduleShowDragHandleNudge() {
                      base::Unretained(this)));
 }
 
-void DragHandle::SetColorAndOpacity(SkColor color, float opacity) {
-  layer()->SetColor(color);
-  layer()->SetOpacity(opacity);
-}
-
 void DragHandle::HideDragHandleNudge(
     contextual_tooltip::DismissNudgeReason reason) {
   StopDragHandleNudgeShowTimer();
@@ -221,6 +216,11 @@ void DragHandle::SetWindowDragFromShelfInProgress(bool gesture_in_progress) {
     HideDragHandleNudge(
         contextual_tooltip::DismissNudgeReason::kPerformedGesture);
   }
+}
+
+void DragHandle::UpdateColor() {
+  layer()->SetColor(AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kShelfHandleColor));
 }
 
 void DragHandle::OnGestureEvent(ui::GestureEvent* event) {
@@ -287,8 +287,7 @@ void DragHandle::ShowDragHandleTooltip() {
       this, nullptr /*parent_window*/, ContextualNudge::Position::kTop,
       gfx::Insets(), l10n_util::GetStringUTF16(IDS_ASH_DRAG_HANDLE_NUDGE),
       AshColorProvider::Get()->GetContentLayerColor(
-          AshColorProvider::ContentLayerType::kTextColorPrimary,
-          AshColorProvider::AshColorMode::kDark),
+          AshColorProvider::ContentLayerType::kTextColorPrimary),
       base::BindRepeating(&DragHandle::HandleTapOnNudge,
                           weak_factory_.GetWeakPtr()));
   drag_handle_nudge_->GetWidget()->Show();

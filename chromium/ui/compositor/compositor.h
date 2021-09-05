@@ -76,7 +76,7 @@ class DelegatedInkPointRenderer;
 }  // namespace mojom
 class ContextProvider;
 class HostFrameSinkManager;
-class LocalSurfaceIdAllocation;
+class LocalSurfaceId;
 class RasterContextProvider;
 }
 
@@ -205,10 +205,9 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
 #endif
 
   // Sets the compositor's device scale factor and size.
-  void SetScaleAndSize(
-      float scale,
-      const gfx::Size& size_in_pixel,
-      const viz::LocalSurfaceIdAllocation& local_surface_id_allocation);
+  void SetScaleAndSize(float scale,
+                       const gfx::Size& size_in_pixel,
+                       const viz::LocalSurfaceId& local_surface_id);
 
   // Set the output color profile into which this compositor should render. Also
   // sets the SDR white level (in nits) used to scale HDR color space primaries.
@@ -347,10 +346,6 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
       override;
   void NotifyThroughputTrackerResults(
       cc::CustomTrackerResults results) override;
-  void SubmitThroughputData(ukm::SourceId source_id,
-                            int aggregated_percent,
-                            int impl_percent,
-                            base::Optional<int> main_percent) override {}
   void DidObserveFirstScrollDelay(
       base::TimeDelta first_scroll_delay,
       base::TimeTicks first_scroll_timestamp) override {}
@@ -458,6 +453,7 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
   scoped_refptr<cc::Layer> root_web_layer_;
   std::unique_ptr<cc::AnimationHost> animation_host_;
   std::unique_ptr<cc::LayerTreeHost> host_;
+  base::WeakPtr<cc::InputHandler> input_handler_weak_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   // Snapshot of last set vsync parameters, to avoid redundant IPCs.

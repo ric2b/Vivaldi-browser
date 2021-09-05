@@ -14,4 +14,19 @@ bool IsLiteVideoEnabled() {
          blink::WebNetworkStateNotifier::SaveDataEnabled();
 }
 
+bool ShouldDisableLiteVideoForCacheControlNoTransform() {
+  return base::GetFieldTrialParamByFeatureAsBool(
+      ::features::kLiteVideo, "disable_for_cache_control_no_transform", false);
+}
+
+bool ShouldThrottleLiteVideoMissingContentLength() {
+  return base::GetFieldTrialParamByFeatureAsBool(
+      ::features::kLiteVideo, "throttle_missing_content_length", false);
+}
+
+size_t GetMaxActiveThrottles() {
+  return base::GetFieldTrialParamByFeatureAsInt(::features::kLiteVideo,
+                                                "max_active_throttles", 50);
+}
+
 }  // namespace lite_video

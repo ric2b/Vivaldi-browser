@@ -29,7 +29,6 @@ import org.chromium.base.annotations.NativeMethods;
 import org.chromium.components.autofill.AutofillActionModeCallback;
 import org.chromium.components.autofill.AutofillProvider;
 import org.chromium.components.browser_ui.display_cutout.DisplayCutoutController;
-import org.chromium.components.browser_ui.http_auth.LoginPrompt;
 import org.chromium.components.browser_ui.media.MediaSessionHelper;
 import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate;
 import org.chromium.components.browser_ui.util.ComposedBrowserControlsVisibilityDelegate;
@@ -41,6 +40,8 @@ import org.chromium.components.find_in_page.FindMatchRectsDetails;
 import org.chromium.components.find_in_page.FindResultBar;
 import org.chromium.components.infobars.InfoBar;
 import org.chromium.components.url_formatter.UrlFormatter;
+import org.chromium.content_public.browser.GestureListenerManager;
+import org.chromium.content_public.browser.GestureStateListenerWithScroll;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.SelectionClient;
@@ -70,6 +71,8 @@ import org.chromium.weblayer_private.interfaces.IWebMessageCallbackClient;
 import org.chromium.weblayer_private.interfaces.ObjectWrapper;
 import org.chromium.weblayer_private.interfaces.ScrollNotificationType;
 import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
+import org.chromium.weblayer_private.media.MediaSessionManager;
+import org.chromium.weblayer_private.media.MediaStreamManager;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -82,7 +85,7 @@ import java.util.Set;
  * Implementation of ITab.
  */
 @JNINamespace("weblayer")
-public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
+public final class TabImpl extends ITab.Stub {
     private static int sNextId = 1;
     // Map from id to TabImpl.
     private static final Map<Integer, TabImpl> sTabMap = new HashMap<Integer, TabImpl>();
@@ -97,9 +100,10 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
     private FullscreenCallbackProxy mFullscreenCallbackProxy;
     private TabViewAndroidDelegate mViewAndroidDelegate;
     private GoogleAccountsCallbackProxy mGoogleAccountsCallbackProxy;
-    // BrowserImpl this TabImpl is in. This is only null during creation.
+    // BrowserImpl this TabImpl is in. This is null before attached to a Browser. While this is null
+    // before attached, there are code paths that may trigger calling methods before set.
+    @Nullable
     private BrowserImpl mBrowser;
-    private LoginPrompt mLoginPrompt;
     /**
      * The AutofillProvider that integrates with system-level autofill. This is null until
      * updateFromBrowser() is invoked.
@@ -113,7 +117,12 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
     // A list of browser control visibility constraints, indexed by ImplControlsVisibilityReason.
     private List<BrowserControlsVisibilityDelegate> mBrowserControlsDelegates;
     // Computes a net browser control visibility constraint from constituent constraints.
-    private ComposedBrowserControlsVisibilityDelegate mBrowserControlsVisibility;
+    private ComposedBrowserControlsVisibilityDelegate mComposedBrowserControlsVisibility;
+    // Which BrowserControlsVisibilityDelegate is currently controlling the visibility. The active
+    // delegate changes from mComposedBrowserControlsVisibility to the delegate for visibility
+    // reason RENDERER_UNAVAILABLE if onlyExpandControlsAtPageTop is enabled, in which case we don't
+    // want to ever force the controls to be visible unless the renderer isn't responsive.
+    private BrowserControlsVisibilityDelegate mActiveBrowserControlsVisibilityDelegate;
     // Invoked when the computed visibility constraint changes.
     private Callback<Integer> mConstraintsUpdatedCallback;
 
@@ -133,6 +142,9 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
     private WebLayerAccessibilityUtil.Observer mAccessibilityObserver;
 
     private Set<FaviconCallbackProxy> mFaviconCallbackProxies = new HashSet<>();
+
+    // Only non-null if scroll offsets have been requested.
+    private @Nullable GestureStateListenerWithScroll mGestureStateListenerWithScroll;
 
     private static class InternalAccessDelegateImpl
             implements ViewEventSink.InternalAccessDelegate {
@@ -265,16 +277,17 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
         mMediaStreamManager = new MediaStreamManager(this);
 
         mBrowserControlsDelegates = new ArrayList<BrowserControlsVisibilityDelegate>();
-        mBrowserControlsVisibility = new ComposedBrowserControlsVisibilityDelegate();
+        mComposedBrowserControlsVisibility = new ComposedBrowserControlsVisibilityDelegate();
         for (int i = 0; i < ImplControlsVisibilityReason.REASON_COUNT; ++i) {
             BrowserControlsVisibilityDelegate delegate =
                     new BrowserControlsVisibilityDelegate(BrowserControlsState.BOTH);
             mBrowserControlsDelegates.add(delegate);
-            mBrowserControlsVisibility.addDelegate(delegate);
+            mComposedBrowserControlsVisibility.addDelegate(delegate);
         }
         mConstraintsUpdatedCallback =
                 (constraint) -> onBrowserControlsConstraintUpdated(constraint);
-        mBrowserControlsVisibility.addObserver(mConstraintsUpdatedCallback);
+        mActiveBrowserControlsVisibilityDelegate = mComposedBrowserControlsVisibility;
+        mActiveBrowserControlsVisibilityDelegate.addObserver(mConstraintsUpdatedCallback);
 
         mInterceptNavigationDelegateClient = new InterceptNavigationDelegateClientImpl(this);
         mInterceptNavigationDelegate =
@@ -348,11 +361,12 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
                     // Set up |mAutofillProvider| to operate in the new Context. It's safe to assume
                     // the context won't change unless it is first nulled out, since the fragment
                     // must be detached before it can be reattached to a new Context.
-                    mAutofillProvider = new AutofillProvider(
-                            mBrowser.getContext(), mBrowser.getAutofillView(), "WebLayer");
+                    mAutofillProvider = new AutofillProvider(mBrowser.getContext(),
+                            mBrowser.getViewAndroidDelegateContainerView(), "WebLayer");
                     TabImplJni.get().onAutofillProviderChanged(mNativeTab, mAutofillProvider);
                 }
-                mAutofillProvider.onContainerViewChanged(mBrowser.getAutofillView());
+                mAutofillProvider.onContainerViewChanged(
+                        mBrowser.getViewAndroidDelegateContainerView());
                 mAutofillProvider.setWebContents(mWebContents);
 
                 selectionController.setNonSelectionActionModeCallback(
@@ -398,23 +412,23 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
     }
 
     /**
-     * Called when this TabImpl becomes the active TabImpl.
+     * Called when this TabImpl is attached to the BrowserViewController.
      */
-    public void onDidGainActive(
+    public void onAttachedToViewController(
             long topControlsContainerViewHandle, long bottomControlsContainerViewHandle) {
         // attachToFragment() must be called before activate().
         assert mBrowser != null;
         TabImplJni.get().setBrowserControlsContainerViews(
                 mNativeTab, topControlsContainerViewHandle, bottomControlsContainerViewHandle);
-        mInfoBarContainer.onTabDidGainActive();
+        mInfoBarContainer.onTabAttachedToViewController();
         updateWebContentsVisibility();
         updateDisplayCutoutController();
     }
 
     /**
-     * Called when this TabImpl is no longer the active TabImpl.
+     * Called when this TabImpl is detached from the BrowserViewController.
      */
-    public void onDidLoseActive() {
+    public void onDetachedFromViewController() {
         if (mAutofillProvider != null) {
             mAutofillProvider.hidePopup();
         }
@@ -428,7 +442,7 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
         // This method is called as part of the final phase of TabImpl destruction, at which
         // point mInfoBarContainer has already been destroyed.
         if (mInfoBarContainer != null) {
-            mInfoBarContainer.onTabDidLoseActive();
+            mInfoBarContainer.onTabDetachedFromViewController();
         }
 
         TabImplJni.get().setBrowserControlsContainerViews(mNativeTab, 0, 0);
@@ -438,9 +452,24 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
      * Returns whether this Tab is visible.
      */
     public boolean isVisible() {
-        return mBrowser.getActiveTab() == this
+        return isActiveTab()
                 && ((mBrowser.isStarted() && mBrowser.isViewAttachedToWindow())
                         || mBrowser.isFragmentStoppedForConfigurationChange());
+    }
+
+    @CalledByNative
+    public boolean willAutomaticallyReloadAfterCrashImpl() {
+        return !isVisible();
+    }
+
+    @Override
+    public boolean willAutomaticallyReloadAfterCrash() {
+        StrictModeWorkaround.apply();
+        return willAutomaticallyReloadAfterCrashImpl();
+    }
+
+    public boolean isActiveTab() {
+        return mBrowser != null && mBrowser.getActiveTab() == this;
     }
 
     private void updateWebContentsVisibility() {
@@ -553,6 +582,10 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
         }
     }
 
+    public GoogleAccountsCallbackProxy getGoogleAccountsCallbackProxy() {
+        return mGoogleAccountsCallbackProxy;
+    }
+
     @Override
     public IFaviconFetcher createFaviconFetcher(IFaviconFetcherClient client) {
         StrictModeWorkaround.apply();
@@ -564,6 +597,31 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
     @Override
     public void setTranslateTargetLanguage(String targetLanguage) {
         TabImplJni.get().setTranslateTargetLanguage(mNativeTab, targetLanguage);
+    }
+
+    @Override
+    public void setScrollOffsetsEnabled(boolean enabled) {
+        if (enabled) {
+            if (mGestureStateListenerWithScroll == null) {
+                mGestureStateListenerWithScroll = new GestureStateListenerWithScroll() {
+                    @Override
+                    public void onScrollOffsetOrExtentChanged(
+                            int scrollOffsetY, int scrollExtentY) {
+                        try {
+                            mClient.onVerticalScrollOffsetChanged(scrollOffsetY);
+                        } catch (RemoteException e) {
+                            throw new APICallException(e);
+                        }
+                    }
+                };
+                GestureListenerManager.fromWebContents(mWebContents)
+                        .addListener(mGestureStateListenerWithScroll);
+            }
+        } else if (mGestureStateListenerWithScroll != null) {
+            GestureListenerManager.fromWebContents(mWebContents)
+                    .removeListener(mGestureStateListenerWithScroll);
+            mGestureStateListenerWithScroll = null;
+        }
     }
 
     public void removeFaviconCallbackProxy(FaviconCallbackProxy proxy) {
@@ -602,7 +660,9 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
         if (controller == null) return false;
 
         // Refuse to start a find session when the browser controls are forced hidden.
-        if (mBrowserControlsVisibility.get() == BrowserControlsState.HIDDEN) return false;
+        if (mActiveBrowserControlsVisibilityDelegate.get() == BrowserControlsState.HIDDEN) {
+            return false;
+        }
 
         setBrowserControlsVisibilityConstraint(
                 ImplControlsVisibilityReason.FIND_IN_PAGE, BrowserControlsState.SHOWN);
@@ -806,27 +866,6 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
         getBrowser().destroyTab(this);
     }
 
-    @CalledByNative
-    private void showHttpAuthPrompt(String host, String url) {
-        mLoginPrompt = new LoginPrompt(mBrowser.getContext(), host, url, this);
-        mLoginPrompt.show();
-    }
-
-    @CalledByNative
-    private void closeHttpAuthPrompt() {
-        mLoginPrompt = null;
-    }
-
-    @Override
-    public void cancel() {
-        TabImplJni.get().cancelHttpAuth(mNativeTab);
-    }
-
-    @Override
-    public void proceed(String username, String password) {
-        TabImplJni.get().setHttpAuth(mNativeTab, username, password);
-    }
-
     @Override
     public void registerWebMessageCallback(
             String jsObjectName, List<String> allowedOrigins, IWebMessageCallbackClient client) {
@@ -857,6 +896,8 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
         // Ensure that this method isn't called twice.
         assert mInterceptNavigationDelegate != null;
 
+        TabImplJni.get().removeTabFromBrowserBeforeDestroying(mNativeTab);
+
         if (WebLayerFactoryImpl.getClientMajorVersion() >= 84) {
             // Notify the client that this instance is being destroyed to prevent it from calling
             // back into this object if the embedder mistakenly tries to do so.
@@ -866,6 +907,14 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
                 throw new APICallException(e);
             }
         }
+
+        if (mDisplayCutoutController != null) {
+            mDisplayCutoutController.destroy();
+            mDisplayCutoutController = null;
+        }
+
+        // This is called to ensure a listener is removed from the WebContents.
+        setScrollOffsetsEnabled(false);
 
         if (mTabCallbackProxy != null) {
             mTabCallbackProxy.destroy();
@@ -889,6 +938,7 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
         }
 
         mInterceptNavigationDelegateClient.destroy();
+        mInterceptNavigationDelegateClient = null;
         mInterceptNavigationDelegate = null;
 
         mInfoBarContainer.destroy();
@@ -911,7 +961,7 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
         // ObservableSupplierImpl.addObserver() posts a task to notify the observer, ensure the
         // callback isn't run after destroy() is called (otherwise we'll get crashes as the native
         // tab has been deleted).
-        mBrowserControlsVisibility.removeObserver(mConstraintsUpdatedCallback);
+        mActiveBrowserControlsVisibilityDelegate.removeObserver(mConstraintsUpdatedCallback);
         hideFindInPageUiAndNotifyClient();
         mFindInPageCallbackClient = null;
         mNavigationController = null;
@@ -940,6 +990,17 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
         return mBrowserControlsDelegates.get(reason).get();
     }
 
+    public void setOnlyExpandTopControlsAtPageTop(boolean onlyExpandControlsAtPageTop) {
+        BrowserControlsVisibilityDelegate activeDelegate = onlyExpandControlsAtPageTop
+                ? mBrowserControlsDelegates.get(ImplControlsVisibilityReason.RENDERER_UNAVAILABLE)
+                : mComposedBrowserControlsVisibility;
+        if (activeDelegate == mActiveBrowserControlsVisibilityDelegate) return;
+
+        mActiveBrowserControlsVisibilityDelegate.removeObserver(mConstraintsUpdatedCallback);
+        mActiveBrowserControlsVisibilityDelegate = activeDelegate;
+        mActiveBrowserControlsVisibilityDelegate.addObserver(mConstraintsUpdatedCallback);
+    }
+
     @CalledByNative
     public void showRepostFormWarningDialog() {
         BrowserViewController viewController = getViewController();
@@ -964,20 +1025,9 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
                 ObjectWrapper.wrap(nonEmptyOrNull(params.getSrcUrl())));
     }
 
-    @CalledByNative
-    private void onForceBrowserControlsShown() {
-        // At this time, the only place HIDDEN is used is fullscreen, in which case we don't show
-        // the controls.
-        if (mBrowserControlsVisibility.get() == BrowserControlsState.HIDDEN) return;
-
-        if (mBrowser.getActiveTab() != this) return;
-
-        onBrowserControlsConstraintUpdated(mBrowserControlsVisibility.get());
-    }
-
     @VisibleForTesting
     public boolean canBrowserControlsScrollForTesting() {
-        return mBrowserControlsVisibility.get() == BrowserControlsState.BOTH;
+        return mActiveBrowserControlsVisibilityDelegate.get() == BrowserControlsState.BOTH;
     }
 
     @VisibleForTesting
@@ -987,15 +1037,17 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
     }
 
     private void onBrowserControlsConstraintUpdated(int constraint) {
+        // WARNING: this may be called before attached. This means |mBrowser| may be null.
+
         // If something has overridden the FIP's SHOWN constraint, cancel FIP. This causes FIP to
         // dismiss when entering fullscreen.
         if (constraint != BrowserControlsState.SHOWN) {
             hideFindInPageUiAndNotifyClient();
         }
 
-        BrowserViewController viewController = getViewController();
         // Don't animate when hiding the controls unless an animation was requested by
         // BrowserControlsContainerView.
+        BrowserViewController viewController = getViewController();
         boolean animate = constraint != BrowserControlsState.HIDDEN
                 || (viewController != null
                         && viewController.shouldAnimateBrowserControlsHeightChanges());
@@ -1005,7 +1057,7 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
         // happen). For js dialogs, the renderer's update will come when the dialog is hidden, and
         // since that animates from 0 height, it causes a flicker since the override is already set
         // to fully show. Thus, disable animation.
-        if (constraint == BrowserControlsState.SHOWN && mBrowser.getActiveTab() == this
+        if (constraint == BrowserControlsState.SHOWN && isActiveTab()
                 && !TabImplJni.get().isRendererControllingBrowserControlsOffsets(mNativeTab)) {
             mViewAndroidDelegate.setIgnoreRendererUpdates(true);
             if (viewController != null) viewController.showControls();
@@ -1052,7 +1104,8 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
      */
     @Nullable
     private BrowserViewController getViewController() {
-        return (mBrowser.getActiveTab() == this) ? mBrowser.getPossiblyNullViewController() : null;
+        if (!isActiveTab()) return null;
+        return mBrowser.getPossiblyNullViewController();
     }
 
     @VisibleForTesting
@@ -1073,13 +1126,14 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
     @NativeMethods
     interface Natives {
         TabImpl fromWebContents(WebContents webContents);
-        long createTab(long profile, TabImpl caller);
+        long createTab(long tab, TabImpl caller);
+        void removeTabFromBrowserBeforeDestroying(long nativeTabImpl);
+        void deleteTab(long tab);
         void setJavaImpl(long nativeTabImpl, TabImpl impl);
         void onAutofillProviderChanged(long nativeTabImpl, AutofillProvider autofillProvider);
         void setBrowserControlsContainerViews(long nativeTabImpl,
                 long nativeTopBrowserControlsContainerView,
                 long nativeBottomBrowserControlsContainerView);
-        void deleteTab(long tab);
         WebContents getWebContents(long nativeTabImpl);
         void executeScript(long nativeTabImpl, String script, boolean useSeparateIsolate,
                 Callback<String> callback);
@@ -1091,8 +1145,6 @@ public final class TabImpl extends ITab.Stub implements LoginPrompt.Observer {
         boolean setData(long nativeTabImpl, String[] data);
         String[] getData(long nativeTabImpl);
         boolean isRendererControllingBrowserControlsOffsets(long nativeTabImpl);
-        void setHttpAuth(long nativeTabImpl, String username, String password);
-        void cancelHttpAuth(long nativeTabImpl);
         String registerWebMessageCallback(long nativeTabImpl, String jsObjectName,
                 String[] allowedOrigins, IWebMessageCallbackClient client);
         void unregisterWebMessageCallback(long nativeTabImpl, String jsObjectName);

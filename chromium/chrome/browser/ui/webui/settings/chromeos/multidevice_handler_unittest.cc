@@ -66,6 +66,8 @@ GenerateDefaultFeatureStatesMap() {
       {multidevice_setup::mojom::Feature::kPhoneHubNotificationBadge,
        multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost},
       {multidevice_setup::mojom::Feature::kPhoneHubTaskContinuation,
+       multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost},
+      {multidevice_setup::mojom::Feature::kWifiSync,
        multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost}};
 }
 
@@ -132,6 +134,11 @@ void VerifyPageContentDict(
   it = feature_states_map.find(
       multidevice_setup::mojom::Feature::kPhoneHubTaskContinuation);
   EXPECT_EQ(static_cast<int>(it->second), phone_hub_task_continuation_state);
+
+  int wifi_sync_state;
+  EXPECT_TRUE(page_content_dict->GetInteger("wifiSyncState", &wifi_sync_state));
+  it = feature_states_map.find(multidevice_setup::mojom::Feature::kWifiSync);
+  EXPECT_EQ(static_cast<int>(it->second), wifi_sync_state);
 
   std::string host_device_name;
   if (expected_host_device) {
@@ -229,7 +236,7 @@ class MultideviceHandlerTest : public testing::Test {
   }
 
   void CallAttemptNotificationSetup(bool has_access_been_granted) {
-    fake_notification_access_manager()->SetHasAccessBeenGranted(
+    fake_notification_access_manager()->SetHasAccessBeenGrantedInternal(
         has_access_been_granted);
     base::ListValue empty_args;
     test_web_ui()->HandleReceivedMessage("attemptNotificationSetup",
@@ -361,12 +368,18 @@ class MultideviceHandlerTest : public testing::Test {
     fake_notification_access_manager()->SetNotificationSetupOperationStatus(
         status);
 
+    bool completed_successfully = status ==
+                                  phonehub::NotificationAccessSetupOperation::
+                                      Status::kCompletedSuccessfully;
+    if (completed_successfully)
+      call_data_count_before_call++;
+
     EXPECT_EQ(call_data_count_before_call + 1u,
               test_web_ui()->call_data().size());
     const content::TestWebUI::CallData& call_data =
         CallDataAtIndex(call_data_count_before_call);
     EXPECT_EQ("cr.webUIListenerCallback", call_data.function_name());
-    EXPECT_EQ("notification-access-setup-operation-status-changed",
+    EXPECT_EQ("settings.onNotificationAccessSetupStatusChanged",
               call_data.arg1()->GetString());
     EXPECT_EQ(call_data.arg2()->GetInt(), static_cast<int32_t>(status));
   }

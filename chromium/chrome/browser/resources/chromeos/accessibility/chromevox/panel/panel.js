@@ -14,14 +14,17 @@ goog.require('BrailleCommandData');
 goog.require('ChromeVoxKbHandler');
 goog.require('ChromeVoxState');
 goog.require('CommandStore');
+goog.require('EventGenerator');
 goog.require('EventSourceType');
 goog.require('GestureCommandData');
 goog.require('ISearchUI');
+goog.require('KeyCode');
 goog.require('LocaleOutputHelper');
 goog.require('Msgs');
 goog.require('PanelCommand');
 goog.require('PanelMenu');
 goog.require('PanelMenuItem');
+goog.require('QueueMode');
 goog.require('Tutorial');
 goog.require('UserAnnotationHandler');
 
@@ -179,15 +182,6 @@ Panel = class {
     Panel.ownerWindow = window;
 
     /** @private {boolean} */
-    Panel.menuSearchEnabled_ = true;
-
-    chrome.commandLinePrivate.hasSwitch(
-        'disable-experimental-accessibility-chromevox-search-menus',
-        (enabled) => {
-          Panel.menuSearchEnabled_ = !enabled;
-        });
-
-    /** @private {boolean} */
     Panel.iTutorialEnabled_ = false;
     chrome.commandLinePrivate.hasSwitch(
         'enable-experimental-accessibility-chromevox-tutorial', (enabled) => {
@@ -289,6 +283,9 @@ Panel = class {
           Panel.openAnnotationsUI(command.data);
         }
         break;
+      case PanelCommandType.CLOSE_CHROMEVOX:
+        Panel.onClose();
+        break;
     }
   }
 
@@ -363,9 +360,7 @@ Panel = class {
       Panel.pendingCallback_ = null;
 
       // Build the top-level menus.
-      const searchMenu = (Panel.menuSearchEnabled_) ?
-          Panel.addSearchMenu('panel_search_menu') :
-          null;
+      const searchMenu = Panel.addSearchMenu('panel_search_menu');
       const jumpMenu = Panel.addMenu('panel_menu_jump');
       const speechMenu = Panel.addMenu('panel_menu_speech');
       const tabsMenu = Panel.addMenu('panel_menu_tabs');
@@ -377,8 +372,8 @@ Panel = class {
       chromevoxMenu.addMenuItem(
           Msgs.getMsg('open_keyboard_shortcuts_menu'), 'Ctrl+Alt+/', '', '',
           function() {
-            BackgroundKeyboardHandler.sendKeyPress(
-                191, {'ctrl': true, 'alt': true});
+            EventGenerator.sendKeyPress(
+                KeyCode.OEM_2 /* forward slash */, {'ctrl': true, 'alt': true});
           });
 
       // Create a mapping between categories from CommandStore, and our
@@ -1117,7 +1112,7 @@ Panel = class {
       desktop.addEventListener(
           chrome.automation.EventType.FOCUS, onFocus, true);
 
-      // Make sure all menus are cleared to avoid bogous output when we re-open.
+      // Make sure all menus are cleared to avoid bogus output when we re-open.
       Panel.clearMenus();
 
       // Ensure annotations input is cleared.
@@ -1139,7 +1134,7 @@ Panel = class {
       if (!$('i-tutorial')) {
         const curriculum = Panel.sessionState ===
                 chrome.loginState.SessionState.IN_OOBE_SCREEN ?
-            'oobe' :
+            'quick_orientation' :
             null;
         Panel.createITutorial(curriculum);
       }
@@ -1197,11 +1192,24 @@ Panel = class {
       Panel.onCloseTutorial();
     });
     $('i-tutorial').addEventListener('requestspeech', (evt) => {
-      const text = evt.detail.text;
       const background = chrome.extension.getBackgroundPage();
+      /**
+       * @type {{
+       * text: string,
+       * queueMode: QueueMode,
+       * properties: ({doNotInterrupt: boolean}|undefined)}}
+       */
+      const detail = evt.detail;
+      const text = detail.text;
+      const queueMode = detail.queueMode;
+      const properties = detail.properties || {};
+      if (!text || queueMode === undefined) {
+        throw new Error(
+            `Must specify text and queueMode when requesting speech from the
+                tutorial`);
+      }
       const cvox = background['ChromeVox'];
-      cvox.tts.speak(
-          text, background.QueueMode.INTERJECT, {'doNotInterrupt': true});
+      cvox.tts.speak(text, queueMode, properties);
     });
     $('i-tutorial').addEventListener('startinteractivemode', (evt) => {
       const actions = evt.detail.actions;
@@ -1216,6 +1224,11 @@ Panel = class {
       const background =
           chrome.extension.getBackgroundPage()['ChromeVoxState']['instance'];
       background.destroyUserActionMonitor();
+    });
+    $('i-tutorial').addEventListener('requestfullydescribe', (evt) => {
+      const commandHandler =
+          chrome.extension.getBackgroundPage()['CommandHandler'];
+      commandHandler.onCommand('fullyDescribe');
     });
   }
 

@@ -52,12 +52,6 @@ class NearbyInternalsHttpHandler : public content::WebUIMessageHandler,
   void OnListPublicCertificatesResponse(
       const nearbyshare::proto::ListPublicCertificatesResponse& response)
       override;
-  void OnCheckContactsReachabilityRequest(
-      const nearbyshare::proto::CheckContactsReachabilityRequest& request)
-      override;
-  void OnCheckContactsReachabilityResponse(
-      const nearbyshare::proto::CheckContactsReachabilityResponse& response)
-      override;
 
  private:
   // Message handler callback that initializes JavaScript.

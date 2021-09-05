@@ -9,11 +9,11 @@
 <translation id="1163931534039071049">Frame-Quelltext &amp;ahzeige</translation>
 <translation id="1165039591588034296">Fähler</translation>
 <translation id="1175364870820465910">&amp;Drocke...</translation>
-<translation id="1177863135347784049">Eigendi</translation>
 <translation id="1181037720776840403">Wegnäh</translation>
 <translation id="119944043368869598">Alli lösche</translation>
 <translation id="1221825588892235038">Nor Uswahl</translation>
 <translation id="1244303850296295656">Erwiiterigsfähler</translation>
+<translation id="125220115284141797">Standardihstellig</translation>
 <translation id="1274977772557788323">Speicherihstellig för dä Adobe Flash Player</translation>
 <translation id="1297175357211070620">Ziel</translation>
 <translation id="1303101771013849280">Läsezeiche HTML Datei</translation>
@@ -32,8 +32,10 @@
 <translation id="1708338024780164500">(ned verwendet)</translation>
 <translation id="1723824996674794290">&amp;Neus Fenster</translation>
 <translation id="1729533290416704613">Sie kontrolliert au, welli Site bi dä Suechi öber d'Adressleiste ahzegt werd.</translation>
+<translation id="174123615272205933">Eigendi</translation>
 <translation id="1744108098763830590">Hentergrondsite</translation>
 <translation id="176587472219019965">Neus &amp;Fenster</translation>
+<translation id="1779468444204342338">mindestens</translation>
 <translation id="1828901632669367785">Öber s'Systemdialogfeld drocke...</translation>
 <translation id="1886996562706621347">Registrierig vo Internetsite als Standard-Handler för Protokoll zueloh (empfohle)</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
@@ -62,12 +64,11 @@
 <translation id="2379281330731083556">Öber s'Systemdialogfeld drocke... <ph name="SHORTCUT_KEY" /></translation>
 <translation id="2381756643783702095">Vor em Schecke nachefroge (empfohle)</translation>
 <translation id="241082044617551207">Onbekannts Plug-in</translation>
-<translation id="2436707352762155834">mindestens</translation>
 <translation id="2439110203301358333">Es anders Programm uf Ehrem Computer hed en Erwiiterig dezue doh, wo sech vellecht ofd Fonktionswiis vo Viwaldi uswerkt.</translation>
 <translation id="2445081178310039857">Stammverzeichnis vo dä Erwiterig esch erforderlech.</translation>
 <translation id="2470702053775288986">Ned onderstötzti Erwiiterig deaktiviert</translation>
 <translation id="2476578072172137802">Siite-Ihstellige</translation>
-<translation id="2482878487686419369">Benachrichtigunge</translation>
+<translation id="2482878487686419369">Nachricht</translation>
 <translation id="2509495747794740764">Dä Wert för d'Skalierig moss zwösche 10 ond 200 legge.</translation>
 <translation id="26224892172169984">Verarbeitig vo Protokoll för kei Internetsite zueloh</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
@@ -164,7 +165,7 @@
 <translation id="488785315393301722">Details ahzeige</translation>
 <translation id="4907306957610201395">Berechtigungskategorie</translation>
 <translation id="4918086044614829423">Ahnäh</translation>
-<translation id="4927753642311223124">Da gets nüt z'gseh, gang witer.</translation>
+<translation id="4927753642311223124">Da gets nüt z gseh, gang witer.</translation>
 <translation id="4988526792673242964">Site</translation>
 <translation id="4994474651455208930">Registrierig vo Internetsite als Standard-Handler för Protokoll zueloh</translation>
 <translation id="5000922062037820727">Verbote (empfohle)</translation>
@@ -172,7 +173,6 @@
 <translation id="5036662165765606524">Keinere Internetsite erlaube, automatisch mehreri Dateie abezlade</translation>
 <translation id="5039804452771397117">Zueloh</translation>
 <translation id="5063480226653192405">Verwendig</translation>
-<translation id="5068918910148307423">Körzlech gschlossene Internetsite s'Fertigstellevom Dateversand ond -empfang ned erlaube</translation>
 <translation id="5143374789336132547">Weg de Erwiterig <ph name="EXTENSION_NAME" /> het sech d'Site gänderet, wo bem Klick uf "Startsite" chund.</translation>
 <translation id="5154108062446123722">Erwiterti Ihstellige för <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5233231016133573565">Prozess-ID</translation>
@@ -184,6 +184,7 @@
 <translation id="5317780077021120954">Speichere</translation>
 <translation id="5355926466126177564">D'Erwiterig <ph name="EXTENSION_NAME" /> het d'Site veränderet, wo bi dä Suechi öber d'Adressliste ahzeigt werd.</translation>
 <translation id="5362741141255528695">Privati Schlösseldatei uswähle.</translation>
+<translation id="536638840841140142">Keini</translation>
 <translation id="5370819323174483825">&amp;Neu lade</translation>
 <translation id="5398572795982417028">Dä Siteberich escfh z'gross. Die höchst Sitezahl lit be <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5431318178759467895">Farb</translation>
@@ -237,7 +238,7 @@
 <translation id="6550675742724504774">Optione</translation>
 <translation id="6691936601825168937">&amp;Vöre</translation>
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
-<translation id="6817174620439930047">Nachefroge, wenn en Internetsite met systemexklusive Nachrechte uf  MIDI Grät wott zuegrife (empfohle)</translation>
+<translation id="6817174620439930047">Nachefroge, wenn en Internetsite met systemexklusive Nachrechte uf MIDI-Grät wott zuegrife (empfole)</translation>
 <translation id="682123305478866682">Desktop öberträge</translation>
 <translation id="6840155290835956714">Vor em Schecke Nachefroge</translation>
 <translation id="6900284862687837908">Hentergrond-Ahwendig: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -249,7 +250,7 @@
 <translation id="7006634003215061422">Ondere Rand</translation>
 <translation id="7053983685419859001">verbiete</translation>
 <translation id="7175353351958621980">Glade vo:</translation>
-<translation id="7270858098575133036">Nachefroge, wenn en Internetsite met systemexklusive Nachrechte uf  MIDI Grät wott zuegrife</translation>
+<translation id="7270858098575133036">Nachefroge, wenn en Internetsite met systemexklusive Nachrechte uf MIDI-Grät wott zuegrife</translation>
 <translation id="7287143125007575591">Zuegreff verweigeret.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7311079019872751559">Plug-In Zuegreff ohni Sandbox</translation>
@@ -264,7 +265,6 @@
 <translation id="7629827748548208700">Riter: <ph name="TAB_NAME" /></translation>
 <translation id="7661259717474717992">Speichere ond Läse vo Guetzli (Cookie) Date zueloh</translation>
 <translation id="7663719505383602579">Empfänger: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7701040980221191251">Keini</translation>
 <translation id="7704305437604973648">Ufgabe</translation>
 <translation id="7710568461918838723">&amp;Öberträge...</translation>
 <translation id="7751260505918304024">Alli ahzeige</translation>

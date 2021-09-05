@@ -11,6 +11,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/optional.h"
 #include "base/sequence_checker.h"
@@ -149,6 +150,10 @@ class NetworkChangeNotifier::NetworkChangeCalculator
         (pending_connection_type_ == CONNECTION_NONE)) {
       return;
     }
+
+    base::UmaHistogramEnumeration("Net.NetworkChangeNotifier.NewConnectionType",
+                                  pending_connection_type_, CONNECTION_LAST);
+
     have_announced_ = true;
     last_announced_connection_type_ = pending_connection_type_;
     // Immediately before sending out an online signal, send out an offline
@@ -405,14 +410,9 @@ NetworkChangeNotifier::GetSystemDnsConfigNotifier() {
 const char* NetworkChangeNotifier::ConnectionTypeToString(
     ConnectionType type) {
   static const char* const kConnectionTypeNames[] = {
-    "CONNECTION_UNKNOWN",
-    "CONNECTION_ETHERNET",
-    "CONNECTION_WIFI",
-    "CONNECTION_2G",
-    "CONNECTION_3G",
-    "CONNECTION_4G",
-    "CONNECTION_NONE",
-    "CONNECTION_BLUETOOTH"
+      "CONNECTION_UNKNOWN", "CONNECTION_ETHERNET",  "CONNECTION_WIFI",
+      "CONNECTION_2G",      "CONNECTION_3G",        "CONNECTION_4G",
+      "CONNECTION_NONE",    "CONNECTION_BLUETOOTH", "CONNECTION_5G",
   };
   static_assert(base::size(kConnectionTypeNames) ==
                     NetworkChangeNotifier::CONNECTION_LAST + 1,
@@ -445,6 +445,7 @@ bool NetworkChangeNotifier::IsConnectionCellular(ConnectionType type) {
     case CONNECTION_2G:
     case CONNECTION_3G:
     case CONNECTION_4G:
+    case CONNECTION_5G:
       is_cellular =  true;
       break;
     case CONNECTION_UNKNOWN:

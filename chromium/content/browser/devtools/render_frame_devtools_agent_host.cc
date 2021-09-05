@@ -41,8 +41,8 @@
 #include "content/browser/devtools/protocol/storage_handler.h"
 #include "content/browser/devtools/protocol/target_handler.h"
 #include "content/browser/devtools/protocol/tracing_handler.h"
-#include "content/browser/frame_host/navigation_request.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/navigation_request.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/site_instance_impl.h"
@@ -674,6 +674,15 @@ std::string RenderFrameDevToolsAgentHost::GetOpenerId() {
   return opener ? opener->devtools_frame_token().ToString() : std::string();
 }
 
+std::string RenderFrameDevToolsAgentHost::GetOpenerFrameId() {
+  if (!frame_tree_node_)
+    return std::string();
+  const base::Optional<base::UnguessableToken>& opener_devtools_frame_token =
+      frame_tree_node_->opener_devtools_frame_token();
+  return opener_devtools_frame_token ? opener_devtools_frame_token->ToString()
+                                     : std::string();
+}
+
 bool RenderFrameDevToolsAgentHost::CanAccessOpener() {
   return (frame_tree_node_ && frame_tree_node_->opener());
 }
@@ -834,14 +843,21 @@ bool RenderFrameDevToolsAgentHost::ShouldAllowSession(
       !manager->delegate()->AllowInspectingRenderFrameHost(frame_host_)) {
     return false;
   }
+  // In case this is called during the navigation, besides checking the
+  // access to the entire current local tree (below), ensure we can access
+  // the target URL.
+  const GURL& target_url = frame_host_->GetSiteInstance()->GetSiteURL();
+  if (!session->GetClient()->MayAttachToURL(target_url,
+                                            frame_host_->web_ui())) {
+    return false;
+  }
   auto* root = FrameTreeNode::From(frame_host_);
   for (FrameTreeNode* node : root->frame_tree()->SubtreeNodes(root)) {
     // Note this may be called before navigation is committed.
     RenderFrameHostImpl* rfh = node->current_frame_host();
     const GURL& url = rfh->GetSiteInstance()->GetSiteURL();
-    if (!session->GetClient()->MayAttachToURL(url, rfh->web_ui())) {
+    if (!session->GetClient()->MayAttachToURL(url, rfh->web_ui()))
       return false;
-    }
   }
   return true;
 }

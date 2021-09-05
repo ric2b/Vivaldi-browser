@@ -402,8 +402,6 @@ void WebPluginContainerImpl::Copy() {
   LocalFrame* frame = element_->GetDocument().GetFrame();
   frame->GetSystemClipboard()->WriteHTML(web_plugin_->SelectionAsMarkup(),
                                          KURL());
-  // TODO(dsleeps): consider consolidating ReplaceNBSPWithSpace into
-  // WritePlainText. WriteHTML always used ReplaceNBSOWithSpace before writing.
   String text = web_plugin_->SelectionAsText();
   ReplaceNBSPWithSpace(text);
   frame->GetSystemClipboard()->WritePlainText(text);
@@ -683,6 +681,13 @@ gfx::Point WebPluginContainerImpl::LocalToRootFramePoint(
   return ParentFrameView()->ConvertToRootFrame(absolute_point);
 }
 
+bool WebPluginContainerImpl::WasTargetForLastMouseEvent() {
+  auto* frame = element_->GetDocument().GetFrame();
+  if (!frame)
+    return false;
+  return frame->GetEventHandler().GetElementUnderMouse() == element_;
+}
+
 void WebPluginContainerImpl::DidReceiveResponse(
     const ResourceResponse& response) {
   // Make sure that the plugin receives window geometry before data, or else
@@ -862,8 +867,7 @@ void WebPluginContainerImpl::HandleDragEvent(MouseEvent& event) {
 
   DataTransfer* data_transfer = event.getDataTransfer();
   WebDragData drag_data = data_transfer->GetDataObject()->ToWebDragData();
-  WebDragOperationsMask drag_operation_mask =
-      static_cast<WebDragOperationsMask>(data_transfer->SourceOperation());
+  DragOperationsMask drag_operation_mask = data_transfer->SourceOperation();
   gfx::PointF drag_screen_location(event.screenX(), event.screenY());
   IntPoint location(Location());
   gfx::PointF drag_location(event.AbsoluteLocation().X() - location.X(),

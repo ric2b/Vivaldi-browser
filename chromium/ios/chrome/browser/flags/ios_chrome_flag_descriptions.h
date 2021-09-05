@@ -32,10 +32,6 @@ extern const char kAutofillEnableCardNicknameManagementDescription[];
 extern const char kAutofillEnableCardNicknameUpstreamName[];
 extern const char kAutofillEnableCardNicknameUpstreamDescription[];
 
-// Title and description for the flag to control deprecating company name.
-extern const char kAutofillEnableCompanyNameName[];
-extern const char kAutofillEnableCompanyNameDescription[];
-
 // Title and description for the flag to control enabling Google-issued cards in
 // autofill suggestions.
 extern const char kAutofillEnableGoogleIssuedCardName[];
@@ -44,10 +40,6 @@ extern const char kAutofillEnableGoogleIssuedCardDescription[];
 // Title and description for the flag to control offers in downstream.
 extern const char kAutofillEnableOffersInDownstreamName[];
 extern const char kAutofillEnableOffersInDownstreamDescription[];
-
-// Title and description for the flag to control surfacing server card nickname.
-extern const char kAutofillEnableSurfacingServerCardNicknameName[];
-extern const char kAutofillEnableSurfacingServerCardNicknameDescription[];
 
 // Enforcing restrictions to enable/disable autofill small form support.
 extern const char kAutofillEnforceMinRequiredFieldsForHeuristicsName[];
@@ -76,11 +68,6 @@ extern const char kAutofillSaveCardDismissOnNavigationDescription[];
 extern const char kAutofillSaveCardInfobarEditSupportName[];
 extern const char kAutofillSaveCardInfobarEditSupportDescription[];
 
-// Title and description for the flag to control if prefilled value filter
-// profiles.
-extern const char kAutofillShowAllSuggestionsOnPrefilledFormsName[];
-extern const char kAutofillShowAllSuggestionsOnPrefilledFormsDescription[];
-
 // Title and description for the flag to restrict extraction of formless forms
 // to checkout flows.
 extern const char kAutofillRestrictUnownedFieldsToFormlessCheckoutName[];
@@ -95,6 +82,12 @@ extern const char kAutofillRichMetadataQueriesDescription[];
 // suggestions' labels are formatting with a mobile-friendly approach.
 extern const char kAutofillUseMobileLabelDisambiguationName[];
 extern const char kAutofillUseMobileLabelDisambiguationDescription[];
+
+// Title and description for the flag that controls whether Autofill's
+// logic is using numeric unique renderer IDs instead of string IDs for
+// form and field elements.
+extern const char kAutofillUseRendererIDsName[];
+extern const char kAutofillUseRendererIDsDescription[];
 
 // Title and description for the flag that enables Messages UI on
 // Block Popup Infobars.
@@ -115,10 +108,6 @@ extern const char kSyntheticCrashReportsForUteDescription[];
 // reports is delayed.
 extern const char kBreakpadNoDelayInitialUploadName[];
 extern const char kBreakpadNoDelayInitialUploadDescription[];
-
-// Title and description for the flag that controls the tab switcher position.
-extern const char kChangeTabSwitcherPositionName[];
-extern const char kChangeTabSwitcherPositionDescription[];
 
 // Title and description for the flag that controls whether Collections are
 // presented using the new iOS13 Card style or the custom legacy one.
@@ -161,6 +150,11 @@ extern const char kDefaultToDesktopOnIPadDescription[];
 // browser.
 extern const char kDefaultBrowserFullscreenPromoName[];
 extern const char kDefaultBrowserFullscreenPromoDescription[];
+
+// Title and description for the flag to control the delay (in minutes) for
+// polling for the existence of Gaia cookies for google.com.
+extern const char kDelayThresholdMinutesToUpdateGaiaCookieName[];
+extern const char kDelayThresholdMinutesToUpdateGaiaCookieDescription[];
 
 // Title and description for the flag to control if a crash report is generated
 // on main thread freeze.
@@ -207,6 +201,11 @@ extern const char kEnableAutofillPasswordReauthIOSDescription[];
 extern const char kEnableClipboardProviderImageSuggestionsName[];
 extern const char kEnableClipboardProviderImageSuggestionsDescription[];
 
+// Title and description for the flag to enable the confirmational action sheet
+// for the tab grid "Close All" action.
+extern const char kEnableCloseAllTabsConfirmationName[];
+extern const char kEnableCloseAllTabsConfirmationDescription[];
+
 // Title and description for the flag to enable fullpage screenshots.
 extern const char kEnableFullPageScreenshotName[];
 extern const char kEnableFullPageScreenshotDescription[];
@@ -232,6 +231,10 @@ extern const char kEnablePersistentDownloadsDescription[];
 // Title and description for the flag to enable an expanded tab strip.
 extern const char kExpandedTabStripName[];
 extern const char kExpandedTabStripDescription[];
+
+// Title and description for the flag to extend Open in toolbar files support.
+extern const char kExtendOpenInFilesSupportName[];
+extern const char kExtendOpenInFilesSupportDescription[];
 
 // Title and description for the flag to trigger the startup sign-in promo.
 extern const char kForceStartupSigninPromoName[];
@@ -304,10 +307,16 @@ extern const char kMarkHttpAsDescription[];
 extern const char kMobileGoogleSRPName[];
 extern const char kMobileGoogleSRPDescription[];
 
-// Title and description for the flag to preserve the default match when an
-// async match updates.
-extern const char kOmniboxPreserveDefaultMatchAgainstAsyncUpdateName[];
-extern const char kOmniboxPreserveDefaultMatchAgainstAsyncUpdateDescription[];
+// Title and description for the flag to enable mobile identity consistency.
+extern const char kMobileIdentityConsistencyName[];
+extern const char kMobileIdentityConsistencyDescription[];
+
+// TODO(crbug.com/1128242): Remove this flag after the refactoring work is
+// finished.
+// Title and description for the flag used to test the newly
+// implemented tabstrip.
+extern const char kModernTabStripName[];
+extern const char kModernTabStripDescription[];
 
 // Title and description for the flag to change the max number of autocomplete
 // matches in the omnibox popup.
@@ -347,11 +356,6 @@ extern const char kPointerSupportName[];
 extern const char kPointerSupportDescription[];
 #endif  // defined(__IPHONE_13_4)
 
-// Title and description for the flag that reload the page when the renderer
-// crashes.
-extern const char kReloadSadTabName[];
-extern const char kReloadSadTabDescription[];
-
 // Title and description for the flag that makes Safe Browsing available.
 extern const char kSafeBrowsingAvailableName[];
 extern const char kSafeBrowsingAvailableDescription[];
@@ -368,6 +372,11 @@ extern const char kSafetyCheckIOSDescription[];
 // SaveCard Infobars.
 extern const char kSaveCardInfobarMessagesUIName[];
 extern const char kSaveCardInfobarMessagesUIDescription[];
+
+// Title and description for the flag to enable integration with the ScreenTime
+// system.
+extern const char kScreenTimeIntegrationName[];
+extern const char kScreenTimeIntegrationDescription[];
 
 // Title and description for the flag to enable the Scroll to Text feature.
 extern const char kScrollToTextIOSName[];
@@ -405,11 +414,6 @@ extern const char kSnapshotDrawViewDescription[];
 // Title and description for the flag to enable SSL committed interstitials.
 extern const char kSSLCommittedInterstitialsName[];
 extern const char kSSLCommittedInterstitialsDescription[];
-
-// Title and description for the flag to allow syncing DeviceInfo in
-// transport-only mode.
-extern const char kSyncDeviceInfoInTransportModeName[];
-extern const char kSyncDeviceInfoInTransportModeDescription[];
 
 // Title and description for the flag to control if Chrome Sync should use the
 // sandbox servers.
@@ -449,8 +453,16 @@ extern const char kWebPageDefaultZoomFromDynamicTypeDescription[];
 extern const char kWebPageTextAccessibilityName[];
 extern const char kWebPageTextAccessibilityDescription[];
 
+// Title and description for the flag to enable a different method of zooming
+// web pages.
+extern const char kWebPageAlternativeTextZoomName[];
+extern const char kWebPageAlternativeTextZoomDescription[];
+
 extern const char kWellKnownChangePasswordName[];
 extern const char kWellKnownChangePasswordDescription[];
+
+extern const char kRestoreGaiaCookiesIfDeletedName[];
+extern const char kRestoreGaiaCookiesIfDeletedDescription[];
 
 // Please add names and descriptions above in alphabetical order.
 

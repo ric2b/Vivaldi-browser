@@ -28,7 +28,8 @@ class LiteService : public Service {
       std::unique_ptr<Service> service_impl,
       const std::string& trigger_script_path,
       base::OnceCallback<void(Metrics::LiteScriptFinishedState)>
-          notify_finished_callback);
+          notify_finished_callback,
+      base::RepeatingCallback<void(bool)> notify_script_running_callback);
   // If the destructor is called before |GetNextActions|, the script was
   // terminated before finishing (user cancelled, closed the tab, etc.).
   ~LiteService() override;
@@ -70,9 +71,9 @@ class LiteService : public Service {
                     bool result,
                     const std::string& response);
 
-  // Stops the script and closes autobot without showing an error message.
-  // This is done by running an explicit stop action, followed by an empty
-  // response in |GetNextActions|.
+  // Stops the script and closes autofill assistant without showing an error
+  // message. This is done by running an explicit stop action, followed by an
+  // empty response in |GetNextActions|.
   void StopWithoutErrorMessage(ResponseCallback callback,
                                Metrics::LiteScriptFinishedState state);
 
@@ -80,6 +81,7 @@ class LiteService : public Service {
   std::unique_ptr<Service> service_impl_;
   // The script path to fetch actions from.
   std::string trigger_script_path_;
+
   // Notifies the java bridge of the finished state.
   //
   // Note that this callback will be run BEFORE the controller shuts down. This
@@ -94,6 +96,10 @@ class LiteService : public Service {
   // controller will terminate gracefully with an explicit stop action.
   base::OnceCallback<void(Metrics::LiteScriptFinishedState)>
       notify_finished_callback_;
+  // Notifies the java bridge that the script is running. The bool parameter
+  // indicates whether the UI is being shown or not.
+  base::RepeatingCallback<void(bool)> notify_script_running_callback_;
+
   // The second part of the trigger script, i.e., the actions that should be run
   // after a successful prompt(browse) action in the first part of the script.
   std::unique_ptr<ActionsResponseProto> trigger_script_second_part_;

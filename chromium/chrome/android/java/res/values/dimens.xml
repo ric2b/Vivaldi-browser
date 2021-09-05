@@ -91,7 +91,6 @@
 
     <!-- Preview tab dimensions -->
     <dimen name="preview_tab_favicon_size">24dp</dimen>
-    <dimen name="preview_tab_security_icon_size">22dp</dimen>
 
     <!-- Sheet tab toolbar dimensions -->
     <dimen name="sheet_tab_toolbar_height">70dp</dimen>
@@ -237,8 +236,7 @@
     <dimen name="location_bar_url_text_size">16sp</dimen>
     <dimen name="location_bar_icon_width">28dp</dimen>
     <dimen name="location_bar_action_icon_width">48dp</dimen>
-    <dimen name="location_bar_start_icon_width">28dp</dimen>
-    <dimen name="location_bar_start_icon_margin_end">4dp</dimen>
+    <dimen name="location_bar_icon_margin_end">4dp</dimen>
     <dimen name="location_bar_lateral_padding">10dp</dimen>
     <!--  When the url action container is shown, the location bar end padding is built in to its
     actions, so the action container itself uses a negative offset to properly align with the end
@@ -267,19 +265,10 @@
     <dimen name="sei_location_bar_status_extra_padding_width">4dp</dimen>
 
     <dimen name="tablet_toolbar_start_padding">4dp</dimen>
-    <dimen name="tablet_toolbar_end_padding">6dp</dimen>
     <dimen name="toolbar_optional_button_animation_translation">10dp</dimen>
 
-    <!-- Bottom toolbar dimensions -->
-    <dimen name="bottom_toolbar_height">@dimen/min_touch_target_size</dimen>
-    <dimen name="bottom_toolbar_height_with_shadow">56dp</dimen>
-    <dimen name="labeled_bottom_toolbar_height">68dp</dimen>
-    <dimen name="labeled_bottom_toolbar_height_with_shadow">76dp</dimen>
-    <dimen name="bottom_toolbar_padding">12dp</dimen>
-    <dimen name="search_accelerator_width">64dp</dimen>
-    <dimen name="search_accelerator_height">36dp</dimen>
-    <dimen name="search_accelerator_height_padding">6dp</dimen>
-    <dimen name="search_accelerator_width_margin">4dp</dimen>
+    <!-- Bottom controls dimensions -->
+    <dimen name="bottom_controls_height">@dimen/min_touch_target_size</dimen>
 
     <!-- Start surface toolbar dimensions -->
     <dimen name="start_surface_toolbar_button_padding_to_button">8dp</dimen>
@@ -297,10 +286,7 @@
     <dimen name="omnibox_suggestion_semicompact_padding">8dp</dimen>
     <dimen name="omnibox_suggestion_compact_padding">6dp</dimen>
     <dimen name="omnibox_suggestion_list_padding_bottom">8dp</dimen>
-    <dimen name="omnibox_suggestion_first_line_text_size">16sp</dimen>
-    <dimen name="omnibox_suggestion_second_line_text_size">14sp</dimen>
     <dimen name="omnibox_suggestion_start_offset_without_icon">18dp</dimen>
-    <dimen name="omnibox_suggestion_start_offset_with_icon">56dp</dimen>
 
     <dimen name="omnibox_suggestion_36dp_icon_size">36dp</dimen>
     <dimen name="omnibox_suggestion_24dp_icon_size">24dp</dimen>
@@ -313,8 +299,8 @@
     <dimen name="omnibox_suggestion_icon_area_size">56dp</dimen>
 
     <dimen name="omnibox_suggestion_action_icon_width">48dp</dimen>
-    <dimen name="omnibox_suggestion_text_vertical_padding">5dp</dimen>
     <dimen name="omnibox_suggestion_refine_view_modern_end_padding">4dp</dimen>
+    <dimen name="omnibox_suggestion_carousel_horizontal_spacing">8dp</dimen>
 
     <!-- Adding search engine logo to the omnibox. -->
     <!-- Max size which will fit completely in the composed/rounded bg. -->
@@ -409,7 +395,6 @@
     <dimen name="explore_sites_dense_title_right_icon_margin_start">4dp</dimen>
     <dimen name="explore_sites_dense_title_right_tile_view_width">108dp</dimen>
     <dimen name="explore_sites_dense_title_right_tile_view_height">40dp</dimen>
-    <dimen name="explore_sites_dense_title_right_title_height">32dp</dimen>
     <dimen name="explore_sites_dense_title_right_title_margin_start">40dp</dimen>
     <dimen name="explore_sites_dense_title_right_title_margin_top">4dp</dimen>
 
@@ -449,20 +434,6 @@
     <dimen name="custom_tabs_screenshot_height">300dp</dimen>
     <dimen name="custom_tabs_screenshot_width">190dp</dimen>
 
-    <!-- Contact Picker dimensions -->
-    <dimen name="contact_picker_icon_size">36dp</dimen>
-
-    <!-- Photo Picker dimensions -->
-    <dimen name="photo_picker_label_gap">10dp</dimen>
-    <dimen name="photo_picker_tile_min_size">100dp</dimen>
-    <dimen name="photo_picker_tile_gap">4dp</dimen>
-    <dimen name="photo_picker_grainy_thumbnail_size">12dp</dimen>
-    <dimen name="photo_picker_play_button_size">84dp</dimen>
-    <dimen name="photo_picker_seek_bar_thickness">4dp</dimen>
-    <dimen name="photo_picker_seek_bar_edge_radius">2dp</dimen>
-    <dimen name="photo_picker_seek_bar_thumb_size">12dp</dimen>
-    <dimen name="photo_picker_video_duration_offset">16dp</dimen>
-
     <!-- Account chooser dialog dimensions -->
     <dimen name="account_chooser_dialog_margin">24dp</dimen>
     <dimen name="account_chooser_dialog_item_margin">24dp</dimen>
@@ -494,7 +465,6 @@
     <dimen name="pref_autofill_dropdown_bottom_margin">16dp</dimen>
     <dimen name="pref_autofill_touch_target_padding">15dp</dimen>
 
-    <dimen name="pref_list_padding_kitkat">16dp</dimen>
     <dimen name="pref_spinner_padding_end">8dp</dimen>
 
     <dimen name="pref_languages_add_button_padding">24dp</dimen>
@@ -518,6 +488,15 @@
     <dimen name="history_item_remove_button_lateral_padding">18dp</dimen>
 
     <!-- Revamped Context Menu Dimensions -->
+    <!-- Prevent the chip from reaching the edges of the screen for long translations. -->
+    <dimen name="context_menu_chip_max_width">338dp</dimen>
+    <dimen name="context_menu_chip_vertical_margin">24dp</dimen>
+    <dimen name="context_menu_chip_lateral_padding">16dp</dimen>
+    <!-- The chip touch target is 48dp. This reduces the chip size by 8dp to get to the desired
+         40dp height (24dp for content + 4dp of padding at the top and bottom. -->
+    <dimen name="context_menu_chip_vertical_inset">4dp</dimen>
+    <dimen name="context_menu_chip_icon_size">24dp</dimen>
+
     <dimen name="context_menu_max_width">500dp</dimen>
     <dimen name="revamped_context_menu_lateral_margin">40dp</dimen>
     <dimen name="revamped_context_menu_vertical_margin">20dp</dimen>
@@ -549,8 +528,6 @@
     <dimen name="download_manager_horizontal_margin">16dp</dimen>
     <dimen name="download_manager_prefetch_vertical_margin">12dp</dimen>
     <dimen name="download_manager_section_title_padding_top">16dp</dimen>
-    <dimen name="download_manager_section_title_padding_bottom">0dp</dimen>
-    <dimen name="download_manager_section_title_padding_image">8dp</dimen>
     <!-- The corner radius is calculated by subtracting the hairline border width from the
          background card corner radius. -->
     <dimen name="download_manager_thumbnail_corner_radius">7dp</dimen>
@@ -567,8 +544,6 @@
 
     <!-- History Navigation UI Item -->
     <dimen name="navigation_bubble_size">44dp</dimen>
-    <dimen name="navigation_bubble_radius">22dp</dimen>
-    <dimen name="navigation_bubble_shadow_padding">1dp</dimen>
     <dimen name="navigation_bubble_arrow_size">32dp</dimen>
     <dimen name="navigation_bubble_start_padding">2dp</dimen>
     <dimen name="navigation_bubble_top_padding">4dp</dimen>
@@ -608,4 +583,9 @@
     <dimen name="overflow_menu_update_min_height">40sp</dimen>
     <dimen name="overflow_menu_update_padding">12dp</dimen>
 
+    <!-- Sharing Hub dimensions -->
+    <dimen name="sharing_hub_preview_icon_padding">12dp</dimen>
+    <dimen name="sharing_hub_preview_icon_rounded_corner_radius">4dp</dimen>
+    <dimen name="sharing_hub_preview_icon_size">48dp</dimen>
+    <dimen name="sharing_hub_preview_inner_icon_size">24dp</dimen>
 </resources>

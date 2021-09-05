@@ -12,6 +12,7 @@
 
 #include "base/base64.h"
 #include "base/feature_list.h"
+#include "base/ios/ios_util.h"
 #include "base/macros.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/metrics/statistics_recorder.h"
@@ -311,6 +312,17 @@ void AddAutoCompleteFieldToForm(const std::string& type, FormData& form) {
   form.fields.push_back(field);
 }
 
+std::string SerializeAndEncode(const AutofillQueryResponse& response) {
+  std::string unencoded_response_string;
+  if (!response.SerializeToString(&unencoded_response_string)) {
+    LOG(ERROR) << "Cannot serialize the response proto";
+    return "";
+  }
+  std::string response_string;
+  base::Base64Encode(unencoded_response_string, &response_string);
+  return response_string;
+}
+
 class MockAutofillClient : public TestAutofillClient {
  public:
   MockAutofillClient() {}
@@ -348,6 +360,12 @@ class AutofillMetricsTest : public testing::Test {
   // Creates a masked server card with a nickname, and adds it to existing
   // credit card list.
   void AddMaskedServerCreditCardWithNickname();
+
+  void AddMaskedServerCreditCardWithOffer(std::string guid,
+                                          std::string offer_reward_amount,
+                                          GURL url,
+                                          int64_t id,
+                                          bool offer_expired = false);
 
   // If set to true, then user is capable of using FIDO authentication for card
   // unmasking.
@@ -412,6 +430,8 @@ void AutofillMetricsTest::SetUp() {
           personal_data_.get(), "en-US");
   autofill_client_.set_test_form_data_importer(
       std::unique_ptr<TestFormDataImporter>(test_form_data_importer));
+  autofill_client_.set_autofill_offer_manager(
+      std::make_unique<AutofillOfferManager>(personal_data_.get()));
 
   autofill_manager_ = std::make_unique<TestAutofillManager>(
       autofill_driver_.get(), &autofill_client_, personal_data_.get(),
@@ -432,10 +452,12 @@ void AutofillMetricsTest::SetUp() {
 }
 
 void AutofillMetricsTest::TearDown() {
-  // Order of destruction is important as AutofillManager relies on
-  // PersonalDataManager to be around when it gets destroyed.
+  // Order of destruction is important as AutofillManager and
+  // AutofillOfferManager rely on PersonalDataManager to be around when they
+  // gets destroyed.
   autofill_manager_.reset();
   autofill_driver_.reset();
+  autofill_client_.set_autofill_offer_manager(nullptr);
   personal_data_.reset();
   test_ukm_recorder_->Purge();
 }
@@ -523,16 +545,18 @@ void AutofillMetricsTest::RecreateCreditCards(
   }
   if (include_masked_server_credit_card) {
     CreditCard masked_server_credit_card(CreditCard::MASKED_SERVER_CARD,
-                                         "server_id");
+                                         "server_id_1");
     masked_server_credit_card.set_guid("10000000-0000-0000-0000-000000000002");
+    masked_server_credit_card.set_instrument_id(1);
     masked_server_credit_card.SetNetworkForMaskedCard(kDiscoverCard);
     masked_server_credit_card.SetNumber(ASCIIToUTF16("9424"));
     personal_data_->AddServerCreditCard(masked_server_credit_card);
   }
   if (include_full_server_credit_card) {
     CreditCard full_server_credit_card(CreditCard::FULL_SERVER_CARD,
-                                       "server_id");
+                                       "server_id_2");
     full_server_credit_card.set_guid("10000000-0000-0000-0000-000000000003");
+    full_server_credit_card.set_instrument_id(2);
     personal_data_->AddFullServerCreditCard(full_server_credit_card);
   }
   personal_data_->Refresh();
@@ -542,6 +566,35 @@ void AutofillMetricsTest::AddMaskedServerCreditCardWithNickname() {
   CreditCard masked_server_credit_card =
       test::GetMaskedServerCardWithNickname();
   personal_data_->AddServerCreditCard(masked_server_credit_card);
+  personal_data_->Refresh();
+}
+
+void AutofillMetricsTest::AddMaskedServerCreditCardWithOffer(
+    std::string guid,
+    std::string offer_reward_amount,
+    GURL url,
+    int64_t id,
+    bool offer_expired) {
+  CreditCard masked_server_credit_card(CreditCard::MASKED_SERVER_CARD,
+                                       "server_id_offer");
+  masked_server_credit_card.set_guid(guid);
+  masked_server_credit_card.set_instrument_id(id);
+  masked_server_credit_card.SetNetworkForMaskedCard(kDiscoverCard);
+  masked_server_credit_card.SetNumber(ASCIIToUTF16("9424"));
+  personal_data_->AddServerCreditCard(masked_server_credit_card);
+
+  AutofillOfferData offer_data;
+  offer_data.offer_id = id;
+  offer_data.offer_reward_amount = offer_reward_amount;
+  if (offer_expired) {
+    offer_data.expiry = AutofillClock::Now() - base::TimeDelta::FromDays(2);
+  } else {
+    offer_data.expiry = AutofillClock::Now() + base::TimeDelta::FromDays(2);
+  }
+  offer_data.merchant_domain = {url};
+  offer_data.eligible_instrument_id = {
+      masked_server_credit_card.instrument_id()};
+  personal_data_->AddCreditCardOfferData(offer_data);
   personal_data_->Refresh();
 }
 
@@ -582,59 +635,6 @@ class AutofillMetricsIFrameTest : public AutofillMetricsTest,
 
 INSTANTIATE_TEST_SUITE_P(AutofillMetricsTest,
                          AutofillMetricsIFrameTest,
-                         testing::Bool());
-
-// Test parameter indicates if the metrics are being logged for a form
-// with a companyname field specified.
-class AutofillMetricsCompanyTest : public AutofillMetricsTest,
-                                   public testing::WithParamInterface<bool> {
- public:
-  AutofillMetricsCompanyTest() : company_name_enabled_(GetParam()) {}
-
-  void SetUp() override {
-    scoped_feature_list_.InitWithFeatureState(
-        features::kAutofillEnableCompanyName, company_name_enabled_);
-    AutofillMetricsTest::SetUp();
-  }
-
- protected:
-  const bool company_name_enabled_;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-INSTANTIATE_TEST_SUITE_P(AutofillMetricsTest,
-                         AutofillMetricsCompanyTest,
-                         testing::Bool());
-
-// Test parameter indicates if surfacing server nickname is enabled. The
-// nickname-related metrics are always being logged when a server nickname is
-// available. Note that depending on the experimental setup, the user may not be
-// shown the nickname.
-class AutofillMetricsServerNicknameTest
-    : public AutofillMetricsTest,
-      public testing::WithParamInterface<bool> {
- public:
-  AutofillMetricsServerNicknameTest()
-      : is_surfacing_server_card_nickname_enabled_(GetParam()) {}
-
-  void SetUp() override {
-    scoped_feature_list_.InitWithFeatureState(
-        features::kAutofillEnableSurfacingServerCardNickname,
-        is_surfacing_server_card_nickname_enabled_);
-    AutofillMetricsTest::SetUp();
-  }
-
- protected:
-  const bool is_surfacing_server_card_nickname_enabled_;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-INSTANTIATE_TEST_SUITE_P(AutofillMetricsTest,
-                         AutofillMetricsServerNicknameTest,
                          testing::Bool());
 
 // Test that we log quality metrics appropriately.
@@ -1992,6 +1992,18 @@ TEST_F(AutofillMetricsTest, LogHiddenRepresentationalFieldSkipDecision) {
          false}}});
 }
 
+namespace {
+void AddFieldSuggestionToForm(
+    ::autofill::AutofillQueryResponse_FormSuggestion* form_suggestion,
+    autofill::FormFieldData field_data,
+    ServerFieldType field_type) {
+  auto* field_suggestion = form_suggestion->add_field_suggestions();
+  field_suggestion->set_field_signature(
+      CalculateFieldSignatureForField(field_data).value());
+  field_suggestion->set_primary_type_prediction(field_type);
+}
+}  // namespace
+
 // Test that we log the address line fields whose server types are rationalized
 TEST_F(AutofillMetricsTest, LogRepeatedAddressTypeRationalized) {
   // Set up our form data.
@@ -2035,17 +2047,16 @@ TEST_F(AutofillMetricsTest, LogRepeatedAddressTypeRationalized) {
   // |form_structure| will be owned by |autofill_manager_|.
   autofill_manager_->AddSeenForm(form, field_types, field_types);
 
-  AutofillQueryResponseContents response;
-  response.add_field()->set_overall_type_prediction(NAME_FULL);
-  response.add_field()->set_overall_type_prediction(
-      ADDRESS_HOME_STREET_ADDRESS);
-  response.add_field()->set_overall_type_prediction(
-      ADDRESS_HOME_STREET_ADDRESS);
+  AutofillQueryResponse response;
+  auto* form_suggestion = response.add_form_suggestions();
+  AddFieldSuggestionToForm(form_suggestion, form.fields[0], NAME_FULL);
+  AddFieldSuggestionToForm(form_suggestion, form.fields[1],
+                           ADDRESS_HOME_STREET_ADDRESS);
+  AddFieldSuggestionToForm(form_suggestion, form.fields[2],
+                           ADDRESS_HOME_STREET_ADDRESS);
 
-  std::string response_string;
-  ASSERT_TRUE(response.SerializeToString(&response_string));
-
-  FormStructure::ParseQueryResponse(
+  std::string response_string = SerializeAndEncode(response);
+  FormStructure::ParseApiQueryResponse(
       response_string, forms, test::GetEncodedSignatures(forms),
       autofill_manager_->form_interactions_ukm_logger_for_test());
 
@@ -2152,16 +2163,18 @@ TEST_F(AutofillMetricsTest, LogRepeatedStateCountryTypeRationalized) {
   // |form_structure| will be owned by |autofill_manager_|.
   autofill_manager_->AddSeenForm(form, field_types, field_types);
 
-  AutofillQueryResponseContents response;
-  response.add_field()->set_overall_type_prediction(ADDRESS_HOME_COUNTRY);
-  response.add_field()->set_overall_type_prediction(NAME_FULL);
-  response.add_field()->set_overall_type_prediction(ADDRESS_HOME_COUNTRY);
-  response.add_field()->set_overall_type_prediction(ADDRESS_HOME_COUNTRY);
+  AutofillQueryResponse response;
+  auto* form_suggestion = response.add_form_suggestions();
+  AddFieldSuggestionToForm(form_suggestion, form.fields[0],
+                           ADDRESS_HOME_COUNTRY);
+  AddFieldSuggestionToForm(form_suggestion, form.fields[1], NAME_FULL);
+  AddFieldSuggestionToForm(form_suggestion, form.fields[2],
+                           ADDRESS_HOME_COUNTRY);
+  AddFieldSuggestionToForm(form_suggestion, form.fields[3],
+                           ADDRESS_HOME_COUNTRY);
 
-  std::string response_string;
-  ASSERT_TRUE(response.SerializeToString(&response_string));
-
-  FormStructure::ParseQueryResponse(
+  std::string response_string = SerializeAndEncode(response);
+  FormStructure::ParseApiQueryResponse(
       response_string, forms, test::GetEncodedSignatures(forms),
       autofill_manager_->form_interactions_ukm_logger_for_test());
 
@@ -3064,28 +3077,21 @@ TEST_F(AutofillMetricsTest, QualityMetrics_BasedOnAutocomplete) {
   AutofillQueryResponse response;
   auto* form_suggestion = response.add_form_suggestions();
   // Server response will match with autocomplete.
-  form_suggestion->add_field_suggestions()->set_primary_type_prediction(
-      NAME_LAST);
+  AddFieldSuggestionToForm(form_suggestion, form.fields[0], NAME_LAST);
   // Server response will NOT match with autocomplete.
-  form_suggestion->add_field_suggestions()->set_primary_type_prediction(
-      NAME_FIRST);
+  AddFieldSuggestionToForm(form_suggestion, form.fields[1], NAME_FIRST);
   // Server response will have no data.
-  form_suggestion->add_field_suggestions()->set_primary_type_prediction(
-      NO_SERVER_DATA);
+  AddFieldSuggestionToForm(form_suggestion, form.fields[2], NO_SERVER_DATA);
   // Not logged.
-  form_suggestion->add_field_suggestions()->set_primary_type_prediction(
-      NAME_MIDDLE);
+  AddFieldSuggestionToForm(form_suggestion, form.fields[3], NAME_MIDDLE);
 
-  std::string response_string;
-  ASSERT_TRUE(response.SerializeToString(&response_string));
-  std::string encoded_response_string;
-  base::Base64Encode(response_string, &encoded_response_string);
-
+  std::string response_string = SerializeAndEncode(response);
   base::HistogramTester histogram_tester;
   autofill_manager_->OnLoadedServerPredictionsForTest(
-      encoded_response_string, test::GetEncodedSignatures(*form_structure_ptr));
+      response_string, test::GetEncodedSignatures(*form_structure_ptr));
 
-  // Verify that FormStructure::ParseQueryResponse was called (here and below).
+  // Verify that FormStructure::ParseApiQueryResponse was called (here and
+  // below).
   histogram_tester.ExpectBucketCount("Autofill.ServerQueryResponse",
                                      AutofillMetrics::QUERY_RESPONSE_RECEIVED,
                                      1);
@@ -4141,6 +4147,31 @@ TEST_F(AutofillMetricsTest, LogStoredCreditCardWithNicknameMetrics) {
       "Autofill.StoredCreditCardCount.Server.Masked.WithNickname", 2, 1);
 }
 
+TEST_F(AutofillMetricsTest, LogStoredOfferMetrics) {
+  std::vector<std::unique_ptr<AutofillOfferData>> offers;
+  AutofillOfferData offer1 = test::GetCardLinkedOfferData1();
+  AutofillOfferData offer2 = test::GetCardLinkedOfferData2();
+  offer2.eligible_instrument_id.emplace_back(999999);
+  offer2.eligible_instrument_id.emplace_back(888888);
+  offer2.merchant_domain.emplace_back("www.example3.com");
+  offers.push_back(std::make_unique<AutofillOfferData>(offer1));
+  offers.push_back(std::make_unique<AutofillOfferData>(offer2));
+
+  base::HistogramTester histogram_tester;
+  AutofillMetrics::LogStoredOfferMetrics(offers);
+
+  // Validate the count metrics.
+  histogram_tester.ExpectBucketCount("Autofill.Offer.StoredOfferCount", 2, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.Offer.StoredOfferRelatedMerchantCount", 1, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.Offer.StoredOfferRelatedMerchantCount", 2, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.Offer.StoredOfferRelatedCardCount", 1, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.Offer.StoredOfferRelatedCardCount", 3, 1);
+}
+
 // Test that we correctly log when Profile Autofill is enabled at startup.
 TEST_F(AutofillMetricsTest, AutofillProfileIsEnabledAtStartup) {
   base::HistogramTester histogram_tester;
@@ -4275,7 +4306,7 @@ TEST_F(AutofillMetricsTest, AddressSuggestionsCount) {
 
 // Test that we log the correct number of Company Name Autofill suggestions when
 // filling a form.
-TEST_P(AutofillMetricsCompanyTest, CompanyNameSuggestions) {
+TEST_F(AutofillMetricsTest, CompanyNameSuggestions) {
   // Set up our form data.
   FormData form;
   form.unique_renderer_id = MakeFormRendererId();
@@ -4306,12 +4337,8 @@ TEST_P(AutofillMetricsCompanyTest, CompanyNameSuggestions) {
     autofill_manager_->OnQueryFormFieldAutofill(
         0, form, field, gfx::RectF(), /*autoselect_first_suggestion=*/false);
 
-    if (company_name_enabled_) {
-      histogram_tester.ExpectUniqueSample("Autofill.AddressSuggestionsCount", 2,
-                                          1);
-    } else {
-      histogram_tester.ExpectTotalCount("Autofill.AddressSuggestionsCount", 0);
-    }
+    histogram_tester.ExpectUniqueSample("Autofill.AddressSuggestionsCount", 2,
+                                        1);
   }
 }
 
@@ -6638,11 +6665,9 @@ TEST_P(AutofillMetricsIFrameTest, CreditCardWillSubmitFormEvents) {
   }
 }
 
-// Test that we log form events for masked server card nickname. When
-// surfacing-server-nickname flag is off (we won't display the nickname), we
-// still log when user has a masked server card with nickname in order to
-// compare the selection rate on the same group of user.
-TEST_P(AutofillMetricsServerNicknameTest, LogServerNicknameFormEvents) {
+// Test that we log form events for masked server card nickname.
+// TODO(crbug.com/1059087): Remove histogram logging for server nickname.
+TEST_F(AutofillMetricsTest, LogServerNicknameFormEvents) {
   // Set up our form data.
   FormData form;
   form.name = ASCIIToUTF16("TestForm");
@@ -6787,11 +6812,9 @@ TEST_P(AutofillMetricsServerNicknameTest, LogServerNicknameFormEvents) {
 }
 
 // Test that we log suggestion selection duration for masked server card
-// nickname. When surfacing-server-nickname flag is off (we won't display the
-// nickname), we still log when user has a masked server card with nickname in
-// order to compare the selection duration on the same group of user when server
-// nickname is displayed or not.
-TEST_P(AutofillMetricsServerNicknameTest, LogServerNicknameSelectionDuration) {
+// nickname.
+// TODO(crbug.com/1059087): Remove histogram logging for server nickname.
+TEST_F(AutofillMetricsTest, LogServerNicknameSelectionDuration) {
   base::TimeTicks now = AutofillTickClock::NowTicks();
   TestAutofillTickClock test_clock;
   test_clock.SetNowTicks(now);
@@ -6982,6 +7005,260 @@ TEST_P(AutofillMetricsServerNicknameTest, LogServerNicknameSelectionDuration) {
     histogram_tester.ExpectTimeBucketCount(
         "Autofill.FormEvents.CreditCard.WithServerNickname.SelectionDuration",
         first_suggestion_delta, 1);
+  }
+}
+
+// Test that we log form events for masked server card with offers.
+TEST_F(AutofillMetricsTest, LogServerOfferFormEvents) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillEnableOffersInDownstream);
+
+  // Set up our form data.
+  FormData form;
+  form.name = ASCIIToUTF16("TestForm");
+  form.url = GURL("http://example.com/form.html");
+  form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin = url::Origin::Create(autofill_client_.form_origin());
+
+  FormFieldData field;
+  std::vector<ServerFieldType> field_types;
+  test::CreateTestFormField("Month", "card_month", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_EXP_MONTH);
+  test::CreateTestFormField("Year", "card_year", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_EXP_2_DIGIT_YEAR);
+  test::CreateTestFormField("Credit card", "card", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_NUMBER);
+
+  // Creating all kinds of cards. None of them have offers.
+  RecreateCreditCards(true /* include_local_credit_card */,
+                      true /* include_masked_server_credit_card */,
+                      true /* include_full_server_credit_card */);
+
+  // Simulate having seen this form on page load.
+  autofill_manager_->AddSeenForm(form, field_types, field_types);
+
+  {
+    // Simulating activating the autofill popup for the credit card field, new
+    // popup being shown and filling a local card suggestion.
+    base::HistogramTester histogram_tester;
+    autofill_manager_->OnQueryFormFieldAutofill(
+        0, form, field, gfx::RectF(), /*autoselect_first_suggestion=*/false);
+    autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
+    std::string guid("10000000-0000-0000-0000-000000000001");  // local card
+    autofill_manager_->FillOrPreviewForm(
+        AutofillDriver::FORM_DATA_ACTION_FILL, 0, form, form.fields.front(),
+        autofill_manager_->MakeFrontendIDForTest(guid, std::string()));
+    histogram_tester.ExpectBucketCount("Autofill.FormEvents.CreditCard",
+                                       FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+    histogram_tester.ExpectBucketCount("Autofill.FormEvents.CreditCard",
+                                       FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+    histogram_tester.ExpectBucketCount("Autofill.FormEvents.CreditCard",
+                                       FORM_EVENT_LOCAL_SUGGESTION_FILLED, 1);
+    // Check that the offer sub-histogram was not recorded.
+    // ExpectBucketCount() can't be used here because it expects the histogram
+    // to exist.
+    EXPECT_EQ(0, histogram_tester.GetTotalCountsForPrefix(
+                     "Autofill.FormEvents.CreditCard")
+                     ["Autofill.FormEvents.CreditCard.WithOffer"]);
+
+    // Ensure offers were not shown.
+    histogram_tester.ExpectUniqueSample(
+        "Autofill.Offer.SuggestedCardsHaveOffer",
+        /*suggestions with offers=*/0, 1);
+
+    // Since no offers were shown, we should not track offer selection or
+    // submission.
+    EXPECT_EQ(0, histogram_tester.GetTotalCountsForPrefix(
+                     "Autofill.Offer")["Autofill.Offer.SelectedCardHasOffer"]);
+    EXPECT_EQ(0, histogram_tester.GetTotalCountsForPrefix(
+                     "Autofill.Offer")["Autofill.Offer.SubmittedCardHasOffer"]);
+  }
+
+  // Add another masked server card, this time with a linked offer.
+  std::string guid("12340000-0000-0000-0000-000000000001");
+  AddMaskedServerCreditCardWithOffer(guid, "$4", autofill_client_.form_origin(),
+                                     /*id=*/0x4fff);
+  // Reset the autofill manager state.
+  autofill_manager_->Reset();
+  autofill_manager_->AddSeenForm(form, field_types, field_types);
+
+  {
+    // A masked server card with linked offers.
+    // Simulating activating the autofill popup for the credit card field, new
+    // popup being shown, selecting a masked card server suggestion and
+    // submitting the form. Verify that all related form events are correctly
+    // logged to offer sub-histogram.
+    base::HistogramTester histogram_tester;
+    autofill_manager_->OnQueryFormFieldAutofill(
+        0, form, field, gfx::RectF(), /*autoselect_first_suggestion=*/false);
+    autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
+    // Select the masked server card with the linked offer.
+    autofill_manager_->FillOrPreviewForm(
+        AutofillDriver::FORM_DATA_ACTION_FILL, 0, form, form.fields.back(),
+        autofill_manager_->MakeFrontendIDForTest(guid, std::string()));
+    OnDidGetRealPan(AutofillClient::SUCCESS, "6011000990139424");
+    autofill_manager_->OnFormSubmitted(form, false,
+                                       SubmissionSource::FORM_SUBMISSION);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard.WithOffer",
+        FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard.WithOffer",
+        FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard.WithOffer",
+        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_SELECTED, 1);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard.WithOffer",
+        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_SELECTED_ONCE, 1);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard.WithOffer",
+        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_FILLED, 1);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard.WithOffer",
+        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_FILLED_ONCE, 1);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard.WithOffer",
+        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_SUBMITTED_ONCE, 1);
+
+    // Ensure we count the correct number of offers shown.
+    histogram_tester.ExpectUniqueSample(
+        "Autofill.Offer.SuggestedCardsHaveOffer",
+        /*suggestions with offers=*/1, 1);
+
+    // Should track card was selected and form was submitted with that card.
+    histogram_tester.ExpectUniqueSample("Autofill.Offer.SelectedCardHasOffer",
+                                        /*selected=*/true, 1);
+    histogram_tester.ExpectUniqueSample("Autofill.Offer.SubmittedCardHasOffer",
+                                        /*submitted=*/true, 1);
+  }
+
+  // Reset the autofill manager state.
+  autofill_manager_->Reset();
+  autofill_manager_->AddSeenForm(form, field_types, field_types);
+
+  {
+    // A masked server card with linked offers.
+    // Simulating activating the autofill popup for the credit card field, new
+    // popup being shown, selecting a masked card server suggestion and
+    // submitting the form. Verify that all related form events are correctly
+    // logged to offer sub-histogram.
+    base::HistogramTester histogram_tester;
+    autofill_manager_->OnQueryFormFieldAutofill(
+        0, form, field, gfx::RectF(), /*autoselect_first_suggestion=*/false);
+    autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
+    // Select another card, and still log to offer
+    // sub-histogram because user has another masked server card with offer.
+    guid = "10000000-0000-0000-0000-000000000002";
+    autofill_manager_->FillOrPreviewForm(
+        AutofillDriver::FORM_DATA_ACTION_FILL, 0, form, form.fields.back(),
+        autofill_manager_->MakeFrontendIDForTest(guid, std::string()));
+    OnDidGetRealPan(AutofillClient::SUCCESS, "6011000990139424");
+    autofill_manager_->OnFormSubmitted(form, false,
+                                       SubmissionSource::FORM_SUBMISSION);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard.WithOffer",
+        FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard.WithOffer",
+        FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard.WithOffer",
+        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_SELECTED, 1);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard.WithOffer",
+        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_SELECTED_ONCE, 1);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard.WithOffer",
+        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_FILLED, 1);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard.WithOffer",
+        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_FILLED_ONCE, 1);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard.WithOffer",
+        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_SUBMITTED_ONCE, 1);
+
+    // Ensure we count the correct number of offers shown.
+    histogram_tester.ExpectUniqueSample(
+        "Autofill.Offer.SuggestedCardsHaveOffer",
+        /*suggestions with offers=*/1, 1);
+
+    // Should track card was not selected.
+    histogram_tester.ExpectUniqueSample("Autofill.Offer.SelectedCardHasOffer",
+                                        /*selected=*/false, 1);
+    histogram_tester.ExpectUniqueSample("Autofill.Offer.SubmittedCardHasOffer",
+                                        /*submitted=*/false, 1);
+  }
+
+  // Recreate cards and add card that is linked to an expired offer.
+  RecreateCreditCards(true /* include_local_credit_card */,
+                      true /* include_masked_server_credit_card */,
+                      true /* include_full_server_credit_card */);
+  guid = "12340000-0000-0000-0000-000000000002";
+  AddMaskedServerCreditCardWithOffer(guid, "$4", autofill_client_.form_origin(),
+                                     /*id=*/0x3fff, /*expired=*/true);
+
+  // Reset the autofill manager state.
+  autofill_manager_->Reset();
+  autofill_manager_->AddSeenForm(form, field_types, field_types);
+
+  {
+    // Simulating activating the autofill popup for the credit card field,
+    // new popup being shown and filling a local card suggestion.
+    base::HistogramTester histogram_tester;
+    autofill_manager_->OnQueryFormFieldAutofill(
+        0, form, field, gfx::RectF(), /*autoselect_first_suggestion=*/false);
+    autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
+    // Select the card with linked offer, though metrics should not record it
+    // since the offer is expired.
+    autofill_manager_->FillOrPreviewForm(
+        AutofillDriver::FORM_DATA_ACTION_FILL, 0, form, form.fields.back(),
+        autofill_manager_->MakeFrontendIDForTest(guid, std::string()));
+    OnDidGetRealPan(AutofillClient::SUCCESS, "6011000990139424");
+    autofill_manager_->OnFormSubmitted(form, false,
+                                       SubmissionSource::FORM_SUBMISSION);
+    // Histograms without ".WithOffer" should be recorded.
+    histogram_tester.ExpectBucketCount("Autofill.FormEvents.CreditCard",
+                                       FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+    histogram_tester.ExpectBucketCount("Autofill.FormEvents.CreditCard",
+                                       FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard",
+        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_SELECTED, 1);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard",
+        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_SELECTED_ONCE, 1);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard",
+        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_FILLED, 1);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard",
+        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_FILLED_ONCE, 1);
+    histogram_tester.ExpectBucketCount(
+        "Autofill.FormEvents.CreditCard",
+        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_SUBMITTED_ONCE, 1);
+
+    // Check that the offer sub-histogram was not recorded.
+    // ExpectBucketCount() can't be used here because it expects the
+    // histogram to exist.
+    EXPECT_EQ(0, histogram_tester.GetTotalCountsForPrefix(
+                     "Autofill.FormEvents.CreditCard")
+                     ["Autofill.FormEvents.CreditCard.WithOffer"]);
+
+    // Ensure offers were not shown.
+    histogram_tester.ExpectUniqueSample(
+        "Autofill.Offer.SuggestedCardsHaveOffer",
+        /*suggestions with offers=*/0, 1);
+
+    // Since no offers were shown, we should not track offer selection or
+    // submission.
+    EXPECT_EQ(0, histogram_tester.GetTotalCountsForPrefix(
+                     "Autofill.Offer")["Autofill.Offer.SelectedCardHasOffer"]);
+    EXPECT_EQ(0, histogram_tester.GetTotalCountsForPrefix(
+                     "Autofill.Offer")["Autofill.Offer.SubmittedCardHasOffer"]);
   }
 }
 
@@ -9608,18 +9885,33 @@ class AutofillMetricsParseQueryResponseTest : public testing::Test {
   std::vector<FormStructure*> forms_;
 };
 
+namespace {
+void AddFieldSuggestionToForm(
+    ::autofill::AutofillQueryResponse_FormSuggestion* form_suggestion,
+    autofill::FieldSignature field_signature,
+    int field_type) {
+  auto* field_suggestion = form_suggestion->add_field_suggestions();
+  field_suggestion->set_field_signature(field_signature.value());
+  field_suggestion->set_primary_type_prediction(field_type);
+}
+}  // namespace
+
 TEST_F(AutofillMetricsParseQueryResponseTest, ServerHasData) {
-  AutofillQueryResponseContents response;
-  response.add_field()->set_overall_type_prediction(7);
-  response.add_field()->set_overall_type_prediction(30);
-  response.add_field()->set_overall_type_prediction(9);
-  response.add_field()->set_overall_type_prediction(0);
+  AutofillQueryResponse response;
+  auto* form_suggestion = response.add_form_suggestions();
+  AddFieldSuggestionToForm(form_suggestion,
+                           forms_[0]->field(0)->GetFieldSignature(), 7);
+  AddFieldSuggestionToForm(form_suggestion,
+                           forms_[0]->field(1)->GetFieldSignature(), 30);
+  form_suggestion = response.add_form_suggestions();
+  AddFieldSuggestionToForm(form_suggestion,
+                           forms_[1]->field(0)->GetFieldSignature(), 9);
+  AddFieldSuggestionToForm(form_suggestion,
+                           forms_[1]->field(1)->GetFieldSignature(), 0);
 
-  std::string response_string;
-  ASSERT_TRUE(response.SerializeToString(&response_string));
-
+  std::string response_string = SerializeAndEncode(response);
   base::HistogramTester histogram_tester;
-  FormStructure::ParseQueryResponse(
+  FormStructure::ParseApiQueryResponse(
       response_string, forms_, test::GetEncodedSignatures(forms_), nullptr);
   EXPECT_THAT(
       histogram_tester.GetAllSamples("Autofill.ServerResponseHasDataForForm"),
@@ -9629,17 +9921,20 @@ TEST_F(AutofillMetricsParseQueryResponseTest, ServerHasData) {
 // If the server returns NO_SERVER_DATA for one of the forms, expect proper
 // logging.
 TEST_F(AutofillMetricsParseQueryResponseTest, OneFormNoServerData) {
-  AutofillQueryResponseContents response;
-  response.add_field()->set_overall_type_prediction(0);
-  response.add_field()->set_overall_type_prediction(0);
-  response.add_field()->set_overall_type_prediction(9);
-  response.add_field()->set_overall_type_prediction(0);
-
-  std::string response_string;
-  ASSERT_TRUE(response.SerializeToString(&response_string));
-
+  AutofillQueryResponse response;
+  auto* form_suggestion = response.add_form_suggestions();
+  AddFieldSuggestionToForm(form_suggestion,
+                           forms_[0]->field(0)->GetFieldSignature(), 0);
+  AddFieldSuggestionToForm(form_suggestion,
+                           forms_[0]->field(1)->GetFieldSignature(), 0);
+  form_suggestion = response.add_form_suggestions();
+  AddFieldSuggestionToForm(form_suggestion,
+                           forms_[1]->field(0)->GetFieldSignature(), 9);
+  AddFieldSuggestionToForm(form_suggestion,
+                           forms_[1]->field(1)->GetFieldSignature(), 0);
+  std::string response_string = SerializeAndEncode(response);
   base::HistogramTester histogram_tester;
-  FormStructure::ParseQueryResponse(
+  FormStructure::ParseApiQueryResponse(
       response_string, forms_, test::GetEncodedSignatures(forms_), nullptr);
   EXPECT_THAT(
       histogram_tester.GetAllSamples("Autofill.ServerResponseHasDataForForm"),
@@ -9649,16 +9944,19 @@ TEST_F(AutofillMetricsParseQueryResponseTest, OneFormNoServerData) {
 // If the server returns NO_SERVER_DATA for both of the forms, expect proper
 // logging.
 TEST_F(AutofillMetricsParseQueryResponseTest, AllFormsNoServerData) {
-  AutofillQueryResponseContents response;
-  for (int i = 0; i < 4; ++i) {
-    response.add_field()->set_overall_type_prediction(0);
+  AutofillQueryResponse response;
+  for (int form_idx = 0; form_idx < 2; ++form_idx) {
+    auto* form_suggestion = response.add_form_suggestions();
+    for (int field_idx = 0; field_idx < 2; ++field_idx) {
+      AddFieldSuggestionToForm(
+          form_suggestion,
+          forms_[form_idx]->field(field_idx)->GetFieldSignature(), 0);
+    }
   }
 
-  std::string response_string;
-  ASSERT_TRUE(response.SerializeToString(&response_string));
-
+  std::string response_string = SerializeAndEncode(response);
   base::HistogramTester histogram_tester;
-  FormStructure::ParseQueryResponse(
+  FormStructure::ParseApiQueryResponse(
       response_string, forms_, test::GetEncodedSignatures(forms_), nullptr);
   EXPECT_THAT(
       histogram_tester.GetAllSamples("Autofill.ServerResponseHasDataForForm"),
@@ -9668,17 +9966,21 @@ TEST_F(AutofillMetricsParseQueryResponseTest, AllFormsNoServerData) {
 // If the server returns NO_SERVER_DATA for only some of the fields, expect the
 // UMA metric to say there is data.
 TEST_F(AutofillMetricsParseQueryResponseTest, PartialNoServerData) {
-  AutofillQueryResponseContents response;
-  response.add_field()->set_overall_type_prediction(0);
-  response.add_field()->set_overall_type_prediction(10);
-  response.add_field()->set_overall_type_prediction(0);
-  response.add_field()->set_overall_type_prediction(11);
+  AutofillQueryResponse response;
+  auto* form_suggestion = response.add_form_suggestions();
+  AddFieldSuggestionToForm(form_suggestion,
+                           forms_[0]->field(0)->GetFieldSignature(), 0);
+  AddFieldSuggestionToForm(form_suggestion,
+                           forms_[0]->field(1)->GetFieldSignature(), 10);
+  form_suggestion = response.add_form_suggestions();
+  AddFieldSuggestionToForm(form_suggestion,
+                           forms_[1]->field(0)->GetFieldSignature(), 0);
+  AddFieldSuggestionToForm(form_suggestion,
+                           forms_[1]->field(1)->GetFieldSignature(), 11);
 
-  std::string response_string;
-  ASSERT_TRUE(response.SerializeToString(&response_string));
-
+  std::string response_string = SerializeAndEncode(response);
   base::HistogramTester histogram_tester;
-  FormStructure::ParseQueryResponse(
+  FormStructure::ParseApiQueryResponse(
       response_string, forms_, test::GetEncodedSignatures(forms_), nullptr);
   EXPECT_THAT(
       histogram_tester.GetAllSamples("Autofill.ServerResponseHasDataForForm"),
@@ -10421,9 +10723,9 @@ TEST_F(AutofillMetricsTest,
 // Verify that we don't log Autofill.WebOTP.OneTimeCode.FromAutocomplete if the
 // frame has no form.
 TEST_F(AutofillMetricsTest, FrameHasNoForm) {
+  base::HistogramTester histogram_tester;
   autofill_manager_.reset();
-  EXPECT_FALSE(base::StatisticsRecorder::FindHistogram(
-      "Autofill.WebOTP.OneTimeCode.FromAutocomplete"));
+  histogram_tester.ExpectTotalCount("Autofill.WebOTP.OneTimeCode.FromAutocomplete", 0);
 }
 
 // Verify that we correctly log metrics if a frame has
@@ -11377,6 +11679,49 @@ TEST_F(AutofillMetricsTest, GetFieldTypeUserEditStatusMetric) {
   int actual_result =
       autofill::GetFieldTypeUserEditStatusMetric(server_type, metric);
   EXPECT_EQ(expected_result, actual_result);
+}
+
+// Validate that correct page language values are taken from
+// |AutofillClient| and logged upon form submission.
+TEST_F(AutofillMetricsTest, PageLanguageMetricsExpectedCase) {
+  FormData form;
+  CreateSimpleForm(autofill_client_.form_origin(), form);
+
+  // Set up language state.
+  autofill_client_.GetLanguageState()->SetOriginalLanguage("ub");
+  autofill_client_.GetLanguageState()->SetCurrentLanguage("ub");
+  int language_code = 'u' * 256 + 'b';
+
+  // Simulate form submission.
+  base::HistogramTester histogram_tester;
+  autofill_manager_->OnFormSubmitted(form, false,
+                                     SubmissionSource::FORM_SUBMISSION);
+
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.ParsedFieldTypesUsingTranslatedPageLanguage", language_code, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.ParsedFieldTypesWasPageTranslated", false, 1);
+}
+
+// Validate that invalid language codes (with disallowed symbols in this case)
+// get logged as invalid.
+TEST_F(AutofillMetricsTest, PageLanguageMetricsInvalidLanguage) {
+  FormData form;
+  CreateSimpleForm(autofill_client_.form_origin(), form);
+
+  // Set up language state.
+  autofill_client_.GetLanguageState()->SetOriginalLanguage("!ab");
+  autofill_client_.GetLanguageState()->SetCurrentLanguage("other");
+
+  // Simulate form submission.
+  base::HistogramTester histogram_tester;
+  autofill_manager_->OnFormSubmitted(form, false,
+                                     SubmissionSource::FORM_SUBMISSION);
+
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.ParsedFieldTypesUsingTranslatedPageLanguage", 0, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.ParsedFieldTypesWasPageTranslated", true, 1);
 }
 
 }  // namespace autofill

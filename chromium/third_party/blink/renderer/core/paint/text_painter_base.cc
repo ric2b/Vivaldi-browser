@@ -31,10 +31,6 @@ namespace {
 // implementation.
 constexpr float kDecorationClipMaxDilation = 13;
 
-float DoubleOffsetFromThickness(float thickness_pixels) {
-  return thickness_pixels + 1.0f;
-}
-
 }  // anonymous namespace
 
 TextPainterBase::TextPainterBase(GraphicsContext& context,
@@ -240,30 +236,38 @@ void TextPainterBase::PaintDecorationsExceptLineThrough(
     context.SetStrokeThickness(resolved_thickness);
 
     if (has_underline && decoration_info.FontData()) {
+      // Don't apply text-underline-offset to overline.
+      Length line_offset =
+          flip_underline_and_overline ? Length() : decoration.UnderlineOffset();
+
       const int paint_underline_offset =
           decoration_offset.ComputeUnderlineOffset(
               underline_position, decoration_info.Style().ComputedFontSize(),
-              decoration_info.FontData()->GetFontMetrics(),
-              decoration.UnderlineOffset(), resolved_thickness);
+              decoration_info.FontData()->GetFontMetrics(), line_offset,
+              resolved_thickness);
       decoration_info.SetPerLineData(
           TextDecoration::kUnderline, paint_underline_offset,
-          DoubleOffsetFromThickness(resolved_thickness), 1);
+          TextDecorationInfo::DoubleOffsetFromThickness(resolved_thickness), 1);
       PaintDecorationUnderOrOverLine(context, decoration_info,
                                      TextDecoration::kUnderline);
     }
 
     if (has_overline && decoration_info.FontData()) {
+      // Don't apply text-underline-offset to overline.
+      Length line_offset =
+          flip_underline_and_overline ? decoration.UnderlineOffset() : Length();
+
       FontVerticalPositionType position =
           flip_underline_and_overline ? FontVerticalPositionType::TopOfEmHeight
                                       : FontVerticalPositionType::TextTop;
       const int paint_overline_offset =
           decoration_offset.ComputeUnderlineOffsetForUnder(
-              decoration_info.Style().TextUnderlineOffset(),
-              decoration_info.Style().ComputedFontSize(), resolved_thickness,
-              position);
+              line_offset, decoration_info.Style().ComputedFontSize(),
+              resolved_thickness, position);
       decoration_info.SetPerLineData(
           TextDecoration::kOverline, paint_overline_offset,
-          -DoubleOffsetFromThickness(resolved_thickness), 1);
+          -TextDecorationInfo::DoubleOffsetFromThickness(resolved_thickness),
+          1);
       PaintDecorationUnderOrOverLine(context, decoration_info,
                                      TextDecoration::kOverline);
     }
@@ -314,7 +318,9 @@ void TextPainterBase::PaintDecorationsOnlyLineThrough(
       // GraphicsContext::DrawLineForText.
       decoration_info.SetPerLineData(
           TextDecoration::kLineThrough, line_through_offset,
-          floorf(DoubleOffsetFromThickness(resolved_thickness)), 0);
+          floorf(TextDecorationInfo::DoubleOffsetFromThickness(
+              resolved_thickness)),
+          0);
       AppliedDecorationPainter decoration_painter(context, decoration_info,
                                                   TextDecoration::kLineThrough);
       // No skip: ink for line-through,
@@ -335,7 +341,9 @@ void TextPainterBase::PaintDecorationUnderOrOverLine(
   AppliedDecorationPainter decoration_painter(context, decoration_info, line);
   if (decoration_info.Style().TextDecorationSkipInk() ==
       ETextDecorationSkipInk::kAuto) {
+    // In order to ignore intersects less than 0.5px, inflate by -0.5.
     FloatRect decoration_bounds = decoration_info.BoundsForLine(line);
+    decoration_bounds.InflateY(-0.5);
     ClipDecorationsStripe(
         decoration_info.InkSkipClipUpper(decoration_bounds.Y()),
         decoration_bounds.Height(),

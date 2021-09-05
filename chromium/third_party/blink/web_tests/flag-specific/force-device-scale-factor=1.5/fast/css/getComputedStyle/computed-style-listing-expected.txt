@@ -216,7 +216,8 @@ marker-start: none
 mask: none
 mask-source-type: alpha
 mask-type: luminance
-math-style: inline
+math-depth: 0
+math-style: normal
 math-superscript-shift-style: display
 max-block-size: none
 max-height: none

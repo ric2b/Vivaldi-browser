@@ -375,7 +375,10 @@ Browser::CreateParams::CreateParams(Profile* profile, bool user_gesture)
 Browser::CreateParams::CreateParams(Type type,
                                     Profile* profile,
                                     bool user_gesture)
-    : type(type), profile(profile), user_gesture(user_gesture),
+    : type(type),
+      profile(profile),
+      user_gesture(user_gesture),
+      can_resize(!chrome::IsRunningInForcedAppMode()),
       is_vivaldi(vivaldi::IsVivaldiRunning()) {}
 
 Browser::CreateParams::CreateParams(const CreateParams& other) = default;
@@ -481,6 +484,7 @@ Browser::Browser(const CreateParams& params)
       bookmark_bar_state_(BookmarkBar::HIDDEN),
       command_controller_(new chrome::BrowserCommandController(this)),
       window_has_shown_(false),
+      user_title_(params.user_title),
       signin_view_controller_(this)
 #if BUILDFLAG(ENABLE_EXTENSIONS)
       ,
@@ -693,7 +697,7 @@ GURL Browser::GetNewTabURL() const {
     return GURL(vivaldi::kVivaldiNewTabURL);
   }
   if (app_controller_)
-    return app_controller_->GetAppLaunchURL();
+    return app_controller_->GetAppStartUrl();
   return GURL(chrome::kChromeUINewTabURL);
 }
 
@@ -710,6 +714,8 @@ gfx::Image Browser::GetCurrentPageIcon() const {
 
 base::string16 Browser::GetWindowTitleForCurrentTab(
     bool include_app_name) const {
+  if (!user_title_.empty())
+    return base::UTF8ToUTF16(user_title_);
   return GetWindowTitleFromWebContents(
       include_app_name, tab_strip_model_->GetActiveWebContents());
 }
@@ -747,6 +753,19 @@ base::string16 Browser::GetWindowTitleForMenu() const {
   static constexpr unsigned int kWindowTitleForMenuMaxWidth = 400;
   static constexpr unsigned int kMinTitleCharacters = 4;
   const gfx::FontList font_list;
+
+  if (!user_title_.empty()) {
+    base::string16 title = base::UTF8ToUTF16(user_title_);
+    base::string16 pixel_elided_title =
+        gfx::ElideText(title, font_list, kWindowTitleForMenuMaxWidth,
+                       gfx::ElideBehavior::ELIDE_TAIL);
+    base::string16 character_elided_title =
+        gfx::TruncateString(title, kMinTitleCharacters, gfx::CHARACTER_BREAK);
+    return pixel_elided_title.size() > character_elided_title.size()
+               ? pixel_elided_title
+               : character_elided_title;
+  }
+
   const auto num_more_tabs = tab_strip_model_->count() - 1;
   int title_pixel_width = kWindowTitleForMenuMaxWidth;
   const base::string16 format_string = l10n_util::GetPluralStringFUTF16(
@@ -787,11 +806,11 @@ base::string16 Browser::GetWindowTitleForMenu() const {
 base::string16 Browser::GetWindowTitleFromWebContents(
     bool include_app_name,
     content::WebContents* contents) const {
-  base::string16 title;
+  base::string16 title = base::UTF8ToUTF16(user_title_);
 
   // |contents| can be NULL because GetWindowTitleForCurrentTab is called by the
   // window during the window's creation (before tabs have been added).
-  if (contents) {
+  if (title.empty() && contents) {
     title = FormatTitleForDisplay(app_controller_ ? app_controller_->GetTitle()
                                                   : contents->GetTitle());
 #if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
@@ -904,6 +923,15 @@ bool Browser::ShouldRunUnloadListenerBeforeClosing(
 bool Browser::RunUnloadListenerBeforeClosing(
     content::WebContents* web_contents) {
   return unload_controller_.RunUnloadEventsHelper(web_contents);
+}
+
+void Browser::SetWindowUserTitle(const std::string& user_title) {
+  user_title_ = user_title;
+  window_->UpdateTitleBar();
+  SessionService* const session_service =
+      SessionServiceFactory::GetForProfile(profile_);
+  if (session_service)
+    session_service->SetWindowUserTitle(session_id(), user_title);
 }
 
 void Browser::OnWindowClosing() {
@@ -1384,11 +1412,11 @@ bool Browser::PreHandleGestureEvent(content::WebContents* source,
 
 bool Browser::CanDragEnter(content::WebContents* source,
                            const content::DropData& data,
-                           blink::WebDragOperationsMask operations_allowed) {
+                           blink::DragOperationsMask operations_allowed) {
 #if defined(OS_CHROMEOS)
   // Disallow drag-and-drop navigation for Settings windows which do not support
   // external navigation.
-  if ((operations_allowed & blink::kWebDragOperationLink) &&
+  if ((operations_allowed & blink::kDragOperationLink) &&
       chrome::SettingsWindowManager::GetInstance()->IsSettingsBrowser(this)) {
     return false;
   }
@@ -1460,34 +1488,14 @@ bool Browser::ShouldAllowRunningInsecureContent(
   if (allowed_per_prefs)
     return true;
 
-  if (base::FeatureList::IsEnabled(features::kMixedContentSiteSetting)) {
-    Profile* profile =
-        Profile::FromBrowserContext(web_contents->GetBrowserContext());
-    HostContentSettingsMap* content_settings =
-        HostContentSettingsMapFactory::GetForProfile(profile);
-    return content_settings->GetContentSetting(
-               web_contents->GetLastCommittedURL(), GURL(),
-               ContentSettingsType::MIXEDSCRIPT,
-               std::string()) == CONTENT_SETTING_ALLOW;
-  }
-  MixedContentSettingsTabHelper* mixed_content_settings =
-      MixedContentSettingsTabHelper::FromWebContents(web_contents);
-  DCHECK(mixed_content_settings);
-  bool allowed = mixed_content_settings->IsRunningInsecureContentAllowed();
-  if (!allowed && !origin.host().empty()) {
-    // Note: this is a browser-side-translation of the call to
-    // DidBlockContentType from inside
-    // ContentSettingsObserver::allowRunningInsecureContent.
-    // TODO(https://crbug.com/1103176): Plumb the actual frame reference here
-    // (MixedContentNavigationThrottle::ShouldBlockNavigation has
-    // |mixed_content_frame| reference)
-    content_settings::PageSpecificContentSettings* page_settings =
-        content_settings::PageSpecificContentSettings::GetForFrame(
-            web_contents->GetMainFrame());
-    DCHECK(page_settings);
-    page_settings->OnContentBlocked(ContentSettingsType::MIXEDSCRIPT);
-  }
-  return allowed;
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  HostContentSettingsMap* content_settings =
+      HostContentSettingsMapFactory::GetForProfile(profile);
+  return content_settings->GetContentSetting(
+             web_contents->GetLastCommittedURL(), GURL(),
+             ContentSettingsType::MIXEDSCRIPT,
+             std::string()) == CONTENT_SETTING_ALLOW;
 }
 
 void Browser::OnDidBlockNavigation(
@@ -2807,7 +2815,7 @@ bool Browser::CanCloseWithInProgressDownloads() {
   // that's ok.
   cancel_download_confirmation_state_ = WAITING_FOR_RESPONSE;
   window_->ConfirmBrowserCloseWithPendingDownloads(
-      num_downloads_blocking, dialog_type, false,
+      num_downloads_blocking, dialog_type,
       base::Bind(&Browser::InProgressDownloadResponse,
                  weak_factory_.GetWeakPtr()));
 

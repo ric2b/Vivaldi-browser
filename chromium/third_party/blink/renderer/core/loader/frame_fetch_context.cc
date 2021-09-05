@@ -237,11 +237,13 @@ ResourceFetcher* FrameFetchContext::CreateFetcherForCommittedDocument(
       *MakeGarbageCollected<FrameResourceFetcherProperties>(loader, document));
   LocalFrame* frame = document.GetFrame();
   DCHECK(frame);
+  auto* frame_fetch_context =
+      MakeGarbageCollected<FrameFetchContext>(loader, document, properties);
   ResourceFetcherInit init(
-      properties,
-      MakeGarbageCollected<FrameFetchContext>(loader, document, properties),
+      properties, frame_fetch_context,
       frame->GetTaskRunner(TaskType::kNetworking),
-      MakeGarbageCollected<LoaderFactoryForFrame>(loader, *frame->DomWindow()));
+      MakeGarbageCollected<LoaderFactoryForFrame>(loader, *frame->DomWindow()),
+      frame->DomWindow());
   init.use_counter =
       MakeGarbageCollected<DetachableUseCounter>(frame->DomWindow());
   init.console_logger = MakeGarbageCollected<DetachableConsoleLogger>(
@@ -252,6 +254,7 @@ ResourceFetcher* FrameFetchContext::CreateFetcherForCommittedDocument(
       ResourceLoadScheduler::ThrottlingPolicy::kTight;
   init.frame_or_worker_scheduler = frame->GetFrameScheduler();
   init.archive = loader.Archive();
+  init.loading_behavior_observer = frame_fetch_context;
   ResourceFetcher* fetcher = MakeGarbageCollected<ResourceFetcher>(init);
   fetcher->SetResourceLoadObserver(
       MakeGarbageCollected<ResourceLoadObserverForFrame>(
@@ -694,7 +697,7 @@ void FrameFetchContext::PopulateResourceRequest(
   AddClientHintsIfNecessary(hints_preferences, resource_width, request);
 
   const ContentSecurityPolicy* csp =
-      GetContentSecurityPolicyForWorld(options.world.get());
+      GetContentSecurityPolicyForWorld(options.world_for_csp.get());
   if (csp && csp->ShouldSendCSPHeader(type))
     // TODO(crbug.com/993769): Test if this header returns duplicated values
     // (i.e. "CSP: active, active") on asynchronous "stale-while-revalidate"
@@ -1097,6 +1100,13 @@ mojo::PendingReceiver<mojom::blink::WorkerTimingContainer>
 FrameFetchContext::TakePendingWorkerTimingReceiver(int request_id) {
   DCHECK(!GetResourceFetcherProperties().IsDetached());
   return document_loader_->TakePendingWorkerTimingReceiver(request_id);
+}
+
+void FrameFetchContext::DidObserveLoadingBehavior(
+    LoadingBehaviorFlag behavior) {
+  if (GetResourceFetcherProperties().IsDetached())
+    return;
+  GetFrame()->Loader().GetDocumentLoader()->DidObserveLoadingBehavior(behavior);
 }
 
 mojom::blink::ContentSecurityNotifier&

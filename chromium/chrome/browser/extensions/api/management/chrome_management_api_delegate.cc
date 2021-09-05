@@ -236,7 +236,7 @@ class ChromeAppForLinkDelegate : public extensions::AppForLinkDelegate {
       const favicon_base::FaviconImageResult& image_result) {
     auto web_app_info = std::make_unique<WebApplicationInfo>();
     web_app_info->title = base::UTF8ToUTF16(title);
-    web_app_info->app_url = launch_url;
+    web_app_info->start_url = launch_url;
     web_app_info->display_mode = web_app::DisplayMode::kBrowser;
     web_app_info->open_as_window = false;
 
@@ -273,7 +273,7 @@ class ChromeAppForLinkDelegate : public extensions::AppForLinkDelegate {
     info.is_app = true;
     info.type = extensions::api::management::EXTENSION_TYPE_HOSTED_APP;
     info.app_launch_url =
-        std::make_unique<std::string>(registrar.GetAppLaunchURL(app_id).spec());
+        std::make_unique<std::string>(registrar.GetAppStartUrl(app_id).spec());
 
     info.icons =
         std::make_unique<std::vector<extensions::api::management::IconInfo>>();

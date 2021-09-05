@@ -3,8 +3,16 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//build/config/ui.gni")
 import("//media/media_options.gni")
 import("//testing/test.gni")
+
+# This file depends on the legacy global sources assignment filter. It should
+# be converted to check target platform before assigning source files to the
+# sources variable. Remove this import and set_sources_assignment_filter call
+# when the file has been converted. See https://crbug.com/1018739 for details.
+import("//build/config/deprecated_default_sources_assignment_filter.gni")
+set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
 
 group("capture") {
   public_deps = [
@@ -161,8 +169,15 @@ component("capture_lib") {
 
   if (is_mac) {
     sources += [
+      "video/mac/pixel_buffer_pool_mac.cc",
+      "video/mac/pixel_buffer_pool_mac.h",
+      "video/mac/video_capture_device_avfoundation_legacy_mac.h",
+      "video/mac/video_capture_device_avfoundation_legacy_mac.mm",
       "video/mac/video_capture_device_avfoundation_mac.h",
       "video/mac/video_capture_device_avfoundation_mac.mm",
+      "video/mac/video_capture_device_avfoundation_protocol_mac.h",
+      "video/mac/video_capture_device_avfoundation_utils_mac.h",
+      "video/mac/video_capture_device_avfoundation_utils_mac.mm",
       "video/mac/video_capture_device_decklink_mac.h",
       "video/mac/video_capture_device_decklink_mac.mm",
       "video/mac/video_capture_device_factory_mac.h",
@@ -181,6 +196,8 @@ component("capture_lib") {
       "CoreMedia.framework",
       "CoreVideo.framework",
       "Foundation.framework",
+      "IOSurface.framework",
+      "VideoToolbox.framework",
     ]
   }
 
@@ -207,15 +224,19 @@ component("capture_lib") {
       "video/win/video_capture_device_utils_win.h",
       "video/win/video_capture_device_win.cc",
       "video/win/video_capture_device_win.h",
+      "video/win/video_capture_dxgi_device_manager.cc",
+      "video/win/video_capture_dxgi_device_manager.h",
     ]
     deps += [ "//media/base/win:media_foundation_util" ]
     libs = [
+      "d3d11.lib",
       "mf.lib",
       "mfplat.lib",
       "mfreadwrite.lib",
       "mfuuid.lib",
     ]
     ldflags = [
+      "/DELAYLOAD:d3d11.dll",
       "/DELAYLOAD:mf.dll",
       "/DELAYLOAD:mfplat.dll",
       "/DELAYLOAD:mfreadwrite.dll",
@@ -329,10 +350,16 @@ source_set("test_support") {
   testonly = true
 
   sources = [
+    "video/linux/fake_device_provider.cc",
+    "video/linux/fake_device_provider.h",
+    "video/linux/fake_v4l2_impl.cc",
+    "video/linux/fake_v4l2_impl.h",
     "video/mock_device.cc",
     "video/mock_device.h",
     "video/mock_device_factory.cc",
     "video/mock_device_factory.h",
+    "video/mock_gpu_memory_buffer_manager.cc",
+    "video/mock_gpu_memory_buffer_manager.h",
     "video/mock_video_capture_device_client.cc",
     "video/mock_video_capture_device_client.h",
     "video/mock_video_frame_receiver.cc",
@@ -342,6 +369,8 @@ source_set("test_support") {
   deps = [
     ":capture_lib",
     "//base/test:test_support",
+    "//gpu/command_buffer/client",
+    "//gpu/command_buffer/common:common",
     "//media:test_support",
     "//media/capture/mojom:image_capture",
     "//media/capture/mojom:image_capture_types",
@@ -349,10 +378,27 @@ source_set("test_support") {
     "//ui/gfx:test_support",
   ]
 
+  if (is_chromeos) {
+    sources += [
+      "video/chromeos/mock_camera_module.cc",
+      "video/chromeos/mock_camera_module.h",
+      "video/chromeos/mock_vendor_tag_ops.cc",
+      "video/chromeos/mock_vendor_tag_ops.h",
+      "video/chromeos/mock_video_capture_client.cc",
+      "video/chromeos/mock_video_capture_client.h",
+    ]
+    deps += [
+      "//media/capture/video/chromeos/mojom:cros_camera",
+      "//media/capture/video/chromeos/public",
+    ]
+  }
+
   testonly = true
 }
 
 test("capture_unittests") {
+  use_xvfb = use_xvfb_in_this_config
+
   sources = [
     "content/animated_content_sampler_unittest.cc",
     "content/capture_resolution_chooser_unittest.cc",
@@ -362,13 +408,16 @@ test("capture_unittests") {
     "video/fake_video_capture_device_unittest.cc",
     "video/file_video_capture_device_unittest.cc",
     "video/linux/camera_config_chromeos_unittest.cc",
-    "video/linux/fake_v4l2_impl.cc",
-    "video/linux/fake_v4l2_impl.h",
     "video/linux/v4l2_capture_delegate_unittest.cc",
     "video/linux/video_capture_device_factory_linux_unittest.cc",
+    "video/mac/pixel_buffer_pool_mac_unittest.mm",
+    "video/mac/test/mock_video_capture_device_avfoundation_frame_receiver_mac.h",
+    "video/mac/test/mock_video_capture_device_avfoundation_frame_receiver_mac.mm",
+    "video/mac/test/video_capture_test_utils_mac.h",
+    "video/mac/test/video_capture_test_utils_mac.mm",
+    "video/mac/video_capture_device_avfoundation_mac_unittest.mm",
     "video/mac/video_capture_device_factory_mac_unittest.mm",
-    "video/mock_gpu_memory_buffer_manager.cc",
-    "video/mock_gpu_memory_buffer_manager.h",
+    "video/mac/video_capture_device_mac_unittest.mm",
     "video/video_capture_device_client_unittest.cc",
     "video/video_capture_device_unittest.cc",
     "video_capture_types_unittest.cc",
@@ -410,6 +459,14 @@ test("capture_unittests") {
     ]
   }
 
+  if (is_mac) {
+    frameworks = [
+      "AVFoundation.framework",
+      "CoreMedia.framework",
+      "CoreVideo.framework",
+    ]
+  }
+
   if (is_win) {
     sources += [
       "video/win/video_capture_device_factory_win_unittest.cc",
@@ -442,12 +499,6 @@ test("capture_unittests") {
       "video/chromeos/camera_device_delegate_unittest.cc",
       "video/chromeos/camera_hal_delegate_unittest.cc",
       "video/chromeos/camera_hal_dispatcher_impl_unittest.cc",
-      "video/chromeos/mock_camera_module.cc",
-      "video/chromeos/mock_camera_module.h",
-      "video/chromeos/mock_vendor_tag_ops.cc",
-      "video/chromeos/mock_vendor_tag_ops.h",
-      "video/chromeos/mock_video_capture_client.cc",
-      "video/chromeos/mock_video_capture_client.h",
       "video/chromeos/request_manager_unittest.cc",
     ]
     deps += [

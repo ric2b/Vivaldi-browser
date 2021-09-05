@@ -2,8 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
+// #import 'chrome://resources/mojo/services/network/public/mojom/ip_address.mojom-lite.js';
+// #import 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-lite.js';
+// #import 'chrome://resources/mojo/mojo/public/mojom/base/time.mojom-lite.js';
+// #import 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-lite.js';
+
 // #import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
-// #import {loadTimeData} from '../../../js/load_time_data.m.js';
+// #import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+// cland-format on
 
 /**
  * @fileoverview Utilities supporting network_config.mojom types. The strings
@@ -1094,6 +1102,37 @@
     }
     return a.lockType === b.lockType && a.lockEnabled === b.lockEnabled &&
         a.retriesLeft === b.retriesLeft;
+  }
+
+  /**
+   * Returns true if the APN properties match.
+   * @param {chromeos.networkConfig.mojom.ApnProperties} a
+   * @param {chromeos.networkConfig.mojom.ApnProperties} b
+   * @return {boolean}
+   */
+  static apnMatch(a, b) {
+    if (!a || !b) {
+      return !!a === !!b;
+    }
+    return a.accessPointName === b.accessPointName &&
+           a.name === b.name && a.username === b.username &&
+           a.password === b.password;
+  }
+
+  /**
+   * Returns true if the APN List matches.
+   * @param {Array<!chromeos.networkConfig.mojom.ApnProperties>|undefined} a
+   * @param {Array<!chromeos.networkConfig.mojom.ApnProperties>|undefined} b
+   * @return {boolean}
+   */
+  static apnListMatch(a, b) {
+    if (!a || !b) {
+      return !!a === !!b;
+    }
+    if (a.length !== b.length) {
+      return false;
+    }
+    return a.every((apn, index) => OncMojo.apnMatch(apn, b[index]));
   }
 }
 

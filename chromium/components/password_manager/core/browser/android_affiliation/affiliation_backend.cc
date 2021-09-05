@@ -20,6 +20,7 @@
 #include "components/password_manager/core/browser/android_affiliation/affiliation_fetch_throttler.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_fetcher.h"
 #include "components/password_manager/core/browser/android_affiliation/facet_manager.h"
+#include "components/password_manager/core/browser/site_affiliation/affiliation_fetcher_factory_impl.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace password_manager {
@@ -31,6 +32,7 @@ AffiliationBackend::AffiliationBackend(
     : task_runner_(task_runner),
       clock_(time_source),
       tick_clock_(time_tick_source),
+      fetcher_factory_(std::make_unique<AffiliationFetcherFactoryImpl>()),
       construction_time_(clock_->Now()) {
   DCHECK_LT(base::Time(), clock_->Now());
   DETACH_FROM_SEQUENCE(sequence_checker_);
@@ -114,6 +116,11 @@ void AffiliationBackend::DeleteCache(const base::FilePath& db_path) {
   AffiliationDatabase::Delete(db_path);
 }
 
+void AffiliationBackend::SetFetcherFactoryForTesting(
+    std::unique_ptr<AffiliationFetcherFactory> fetcher_factory) {
+  fetcher_factory_ = std::move(fetcher_factory);
+}
+
 FacetManager* AffiliationBackend::GetOrCreateFacetManager(
     const FacetURI& facet_uri) {
   std::unique_ptr<FacetManager>& facet_manager = facet_managers_[facet_uri];
@@ -175,6 +182,7 @@ void AffiliationBackend::RequestNotificationAtTime(const FacetURI& facet_uri,
 }
 
 void AffiliationBackend::OnFetchSucceeded(
+    AffiliationFetcherInterface* fetcher,
     std::unique_ptr<AffiliationFetcherDelegate::Result> result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -222,7 +230,7 @@ void AffiliationBackend::OnFetchSucceeded(
   }
 }
 
-void AffiliationBackend::OnFetchFailed() {
+void AffiliationBackend::OnFetchFailed(AffiliationFetcherInterface* fetcher) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   fetcher_.reset();
@@ -237,11 +245,12 @@ void AffiliationBackend::OnFetchFailed() {
   }
 }
 
-void AffiliationBackend::OnMalformedResponse() {
+void AffiliationBackend::OnMalformedResponse(
+    AffiliationFetcherInterface* fetcher) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // TODO(engedy): Potentially handle this case differently. crbug.com/437865.
-  OnFetchFailed();
+  OnFetchFailed(fetcher);
 }
 
 bool AffiliationBackend::OnCanSendNetworkRequest() {
@@ -256,8 +265,8 @@ bool AffiliationBackend::OnCanSendNetworkRequest() {
   if (requested_facet_uris.empty())
     return false;
 
-  fetcher_.reset(AffiliationFetcher::Create(url_loader_factory_, this));
-  fetcher_->StartRequest(requested_facet_uris);
+  fetcher_ = fetcher_factory_->CreateInstance(url_loader_factory_, this);
+  fetcher_->StartRequest(requested_facet_uris, {.branding_info = true});
   ReportStatistics(requested_facet_uris.size());
   return true;
 }

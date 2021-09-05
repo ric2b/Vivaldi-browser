@@ -49,7 +49,7 @@ const hasActionableDescendant = function(node) {
 const nodeNameContainedInStaticTextChildren = function(node) {
   const name = node.name;
   let child = node.firstChild;
-  if (!child) {
+  if (name === undefined || !child) {
     return false;
   }
   let nameIndex = 0;
@@ -293,7 +293,10 @@ AutomationPredicate = class {
    * @return {boolean}
    */
   static linebreak(first, second) {
-    // TODO(dtseng): Use next/previousOnLine once available.
+    if (first.nextOnLine == second) {
+      return false;
+    }
+
     const fl = first.unclippedLocation;
     const sl = second.unclippedLocation;
     return fl.top != sl.top || (fl.top + fl.height != sl.top + sl.height);

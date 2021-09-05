@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Wyświetl źródło ramki</translation>
 <translation id="1165039591588034296">Błąd</translation>
 <translation id="1175364870820465910">&amp;Drukuj...</translation>
-<translation id="1177863135347784049">Niestandardowe</translation>
 <translation id="1181037720776840403">Usuń</translation>
 <translation id="1187722533808055681">Wznowienia z bezczynności</translation>
 <translation id="119944043368869598">Wyczyść wszystko</translation>
 <translation id="1221825588892235038">Tylko zaznaczenie</translation>
 <translation id="1244303850296295656">Błąd rozszerzenia</translation>
+<translation id="125220115284141797">Domyślne</translation>
 <translation id="1274977772557788323">Ustawienia pamięci Adobe Flash Playera</translation>
 <translation id="1297175357211070620">Drukarka</translation>
 <translation id="1303101771013849280">Plik HTML z zakładkami</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Nowe okno</translation>
 <translation id="1725149567830788547">Pokaż elementy sterują&amp;ce</translation>
 <translation id="1729533290416704613">Kontroluje także to, jaka strona wyświetla się przy wyszukiwaniu w polu adresu.</translation>
+<translation id="174123615272205933">Niestandardowe</translation>
 <translation id="1744108098763830590">strona tła</translation>
 <translation id="176587472219019965">&amp;Nowe okno</translation>
 <translation id="1769104665586091481">Otwórz link w nowym &amp;oknie</translation>
+<translation id="1779468444204342338">Minimalne</translation>
 <translation id="1815083418640426271">Wklej jako zwykły tekst</translation>
 <translation id="1828901632669367785">Drukuj w oknie systemowym…</translation>
 <translation id="1850508293116537636">Obróć w &amp;prawo</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Pytaj przed wysłaniem (zalecane)</translation>
 <translation id="241082044617551207">Nieznana wtyczka</translation>
 <translation id="2423578206845792524">Zapisz &amp;obraz jako...</translation>
-<translation id="2436707352762155834">Minimalne</translation>
 <translation id="2439110203301358333">Inny program na twoim komputerze dodał rozszerzenie, które może zmienić działanie Vivaldi.</translation>
 <translation id="2445081178310039857">Katalog główny rozszerzenia jest wymagany.</translation>
 <translation id="2470702053775288986">Wyłączono nieobsługiwane rozszerzenia</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Wstępne renderowanie: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Wybierz katalog główny rozszerzenia, które chcesz umieścić w pakiecie. Aby zaktualizować rozszerzenie, wybierz również plik kluczy prywatnych do ponownego użycia.</translation>
+<translation id="3266179261140759675">Nie zezwalaj zamkniętym stronom na wysyłanie i odbieranie danych</translation>
 <translation id="3280237271814976245">Zapisz &amp;jako...</translation>
 <translation id="3285322247471302225">Nowa &amp;karta</translation>
 <translation id="3288047731229977326">Rozszerzenia działające w trybie programisty mogą uszkodzić twój komputer. Jeśli nie jesteś programistą, wyłącz je dla bezpieczeństwa.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Zezwalaj</translation>
 <translation id="5057110919553308744">Gdy klikniesz w rozszerzenie</translation>
 <translation id="5063480226653192405">Wykorzystanie</translation>
-<translation id="5068918910148307423">Nie zezwalaj niedawno zamkniętym stronom na dokończenie wysyłania i odbierania danych</translation>
 <translation id="5116628073786783676">Za&amp;pisz dźwięk jako...</translation>
 <translation id="5143374789336132547">Rozszerzenie "<ph name="EXTENSION_NAME" />" zmieniło stronę wyświetlaną po kliknięciu przycisku strony głównej.</translation>
 <translation id="5154108062446123722">Ustawienia zaawansowane dla <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">Rozszerzenie "<ph name="EXTENSION_NAME" />" zmieniło stronę wyświetlaną przy wyszukiwaniu w polu adresu.</translation>
 <translation id="5360150013186312835">Pokaż na pasku narzędzi</translation>
 <translation id="5362741141255528695">Wybierz plik kluczy prywatnych.</translation>
+<translation id="536638840841140142">Brak</translation>
 <translation id="5370819323174483825">&amp;Odśwież</translation>
 <translation id="5398572795982417028">Odwołanie do strony spoza zakresu – limit to <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Kontynuuj pobieranie</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Odbiornik ARC: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Zainstalowane przez twojego administratora</translation>
 <translation id="7685049629764448582">Pamięć JavaScript</translation>
-<translation id="7701040980221191251">Brak</translation>
 <translation id="7701869757853594372">Uchwyty USER</translation>
 <translation id="7704305437604973648">Zadanie</translation>
 <translation id="7710568461918838723">&amp;Przesyłaj...</translation>
@@ -456,7 +457,7 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8757090071857742562">Nie udało się przesłać pulpitu. Sprawdź, czy potwierdzono prośbę o rozpoczęcie udostępniania ekranu.</translation>
 <translation id="8774934320277480003">Górny margines</translation>
 <translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; chce udostępnić ci drukarkę &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;.</translation>
-<translation id="8798099450830957504">Domyślne</translation>
+<translation id="8798099450830957504">Domyślny</translation>
 <translation id="8800004011501252845">Pokaż drukarki dla</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8823514049557262177">Kopiuj te&amp;kst linku</translation>

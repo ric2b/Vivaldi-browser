@@ -8,12 +8,11 @@
  *
  * @param {string} id Request ID.
  * @param {ImageCache} cache Cache object.
- * @param {!PiexLoader} piexLoader Piex loader for RAW file.
  * @param {!LoadImageRequest} request Request message as a hash array.
  * @param {function(!LoadImageResponse)} callback Response handler.
  * @constructor
  */
-function ImageRequestTask(id, cache, piexLoader, request, callback) {
+function ImageRequestTask(id, cache, request, callback) {
   /**
    * Global ID (concatenated client ID and client request ID).
    * @type {string}
@@ -26,12 +25,6 @@ function ImageRequestTask(id, cache, piexLoader, request, callback) {
    * @private
    */
   this.cache_ = cache;
-
-  /**
-   * @type {!PiexLoader}
-   * @private
-   */
-  this.piexLoader_ = piexLoader;
 
   /**
    * @type {!LoadImageRequest}
@@ -60,12 +53,20 @@ function ImageRequestTask(id, cache, piexLoader, request, callback) {
   this.contentType_ = null;
 
   /**
-   * IFD data of the fetched image. Only RAW images provide non-null ifd
-   * data at this time; images on Drive might provide ifd in future.
+   * IFD data of the fetched image. Only RAW images provide a non-null
+   * ifd at this time. Drive images might provide an ifd in future.
    * @type {?string}
    * @private
    */
   this.ifd_ = null;
+
+  /**
+   * The color space of the fetched image. Only RAW images provide a
+   * color space at this time, being 'sRgb' or 'adobeRgb'.
+   * @type {?string}
+   * @private
+   */
+  this.colorSpace_ = null;
 
   /**
    * Used to download remote images using http:// or https:// protocols.
@@ -256,13 +257,47 @@ ImageRequestTask.prototype.saveToCache_ = function(width, height, data) {
 };
 
 /**
- * Downloads an image directly or for remote resources using the XmlHttpRequest.
+ * Gets a file thumb from the browser hosted environment. If the thumbnail
+ * is returned it is assigned to this.image_ instance variable, which ultimately
+ * results in onsuccess function associated with the image being called.
+ * @param {string} url The URL of the file entry for which we get a thumbnail.
+ * @param {function()} onFailure a callback invoked if errors occur.
+ */
+ImageRequestTask.prototype.getExternalThumbnail = function(url, onFailure) {
+  window.webkitResolveLocalFileSystemURL(
+      url,
+      entry => {
+        chrome.fileManagerPrivate.getThumbnail(
+            /** @type {FileEntry} */ (entry), !!this.request_.crop,
+            thumbnail => {
+              if (chrome.runtime.lastError) {
+                console.error(chrome.runtime.lastError.message);
+                onFailure();
+              } else if (thumbnail) {
+                this.image_.src = thumbnail;
+                this.contentType_ = 'image/png';
+              } else {
+                onFailure();
+              }
+            });
+      },
+      error => {
+        console.error(error);
+        onFailure();
+      });
+};
+
+/**
+ * Loads |this.image_| with the |this.request_.url| source or the thumbnail
+ * image of the source.
  *
  * @param {function()} onSuccess Success callback.
  * @param {function()} onFailure Failure callback.
  * @private
  */
 ImageRequestTask.prototype.downloadOriginal_ = function(onSuccess, onFailure) {
+  // Load methods below set |this.image_.src|. Call revokeObjectURL(src) to
+  // release resources if the image src was created with createObjectURL().
   this.image_.onload = function() {
     URL.revokeObjectURL(this.image_.src);
     onSuccess();
@@ -272,57 +307,50 @@ ImageRequestTask.prototype.downloadOriginal_ = function(onSuccess, onFailure) {
     onFailure();
   }.bind(this);
 
-  // Download data urls directly since they are not supported by XmlHttpRequest.
+  // Load dataURL sources directly.
   const dataUrlMatches = this.request_.url.match(/^data:([^,;]*)[,;]/);
   if (dataUrlMatches) {
     this.image_.src = this.request_.url;
     this.contentType_ = dataUrlMatches[1];
     return;
   }
+
+  // Load Drive source thumbnail.
   const drivefsUrlMatches = this.request_.url.match(/^drivefs:(.*)/);
   if (drivefsUrlMatches) {
-    window.webkitResolveLocalFileSystemURL(
-        drivefsUrlMatches[1],
-        entry => {
-          chrome.fileManagerPrivate.getThumbnail(
-              /** @type {FileEntry} */ (entry), !!this.request_.crop,
-              thumbnail => {
-                if (!thumbnail) {
-                  onFailure();
-                  return;
-                }
-                this.image_.src = thumbnail;
-                this.contentType_ = 'image/png';
-              });
-        },
-        error => {
-          onFailure();
-        });
+    this.getExternalThumbnail(drivefsUrlMatches[1], onFailure);
+    return;
+  }
+
+  // Load PDF source thumbnail.
+  if (this.request_.url.endsWith('.pdf')) {
+    this.getExternalThumbnail(this.request_.url, onFailure);
     return;
   }
 
   const fileType = FileType.getTypeForName(this.request_.url);
 
-  // Load RAW images by using Piex loader instead of XHR.
+  // Load RAW image source thumbnail.
   if (fileType.type === 'raw') {
-    this.piexLoader_.load(this.request_.url)
+    PiexLoader.load(this.request_.url, chrome.runtime.reload)
         .then(
             function(data) {
-              this.request_.orientation = data.orientation;
-              this.request_.colorSpace = data.colorSpace;
+              this.request_.orientation =
+                  ImageOrientation.fromExifOrientation(data.orientation);
+              this.colorSpace_ = data.colorSpace;
               this.ifd_ = data.ifd;
               this.contentType_ = data.mimeType;
               const blob = new Blob([data.thumbnail], {type: data.mimeType});
               this.image_.src = URL.createObjectURL(blob);
             }.bind(this),
             function() {
-              // The error has already been logged in PiexLoader.
+              // PiexLoader calls console.error on errors.
               onFailure();
             });
     return;
   }
 
-  // Load video thumbnails by using video tag instead of XHR.
+  // Load video source thumbnail.
   if (fileType.type === 'video') {
     this.createVideoThumbnailUrl_(this.request_.url)
         .then(function(url) {
@@ -335,16 +363,11 @@ ImageRequestTask.prototype.downloadOriginal_ = function(onSuccess, onFailure) {
     return;
   }
 
-  // Fetch the image via XHR and parse it.
-  const parseImage = function(contentType, blob) {
-    if (contentType) {
-      this.contentType_ = contentType;
-    }
-    this.image_.src = URL.createObjectURL(blob);
-  }.bind(this);
-
-  // Request raw data via XHR.
-  this.load(this.request_.url, parseImage, onFailure);
+  // Load the source directly.
+  this.load(this.request_.url, (contentType, blob) => {
+    this.image_.src = blob ? URL.createObjectURL(blob) : '!';
+    this.contentType_ = contentType || null;
+  }, onFailure);
 };
 
 /**
@@ -536,24 +559,27 @@ ImageRequestTask.prototype.sendImageData_ = function(width, height, data) {
 };
 
 /**
- * Handler, when contents are loaded into the image element. Performs resizing
- * and finalizes the request process.
+ * Handler, when contents are loaded into the image element. Performs image
+ * processing operations if needed, and finalizes the request process.
  * @private
  */
 ImageRequestTask.prototype.onImageLoad_ = function() {
+  const imageColorSpace = this.colorSpace_ || 'sRgb';
+
   // Perform processing if the url is not a data url, or if there are some
   // operations requested.
+  let imageChanged = false;
   if (!(this.request_.url.match(/^data/) ||
         this.request_.url.match(/^drivefs:/)) ||
       ImageLoaderUtil.shouldProcess(
-          this.image_.width, this.image_.height, this.request_)) {
+          this.image_.width, this.image_.height, this.request_) ||
+      (imageColorSpace !== 'sRgb')) {
     ImageLoaderUtil.resizeAndCrop(this.image_, this.canvas_, this.request_);
-    ImageLoaderUtil.convertColorSpace(
-        this.canvas_, this.request_.colorSpace || ColorSpace.SRGB);
-    this.sendImage_(true);  // Image changed.
-  } else {
-    this.sendImage_(false);  // Image not changed.
+    ImageLoaderUtil.convertColorSpace(this.canvas_, imageColorSpace);
+    imageChanged = true;  // The image is now on the <canvas>.
   }
+
+  this.sendImage_(imageChanged);
   this.cleanup_();
   this.downloadCallback_();
 };

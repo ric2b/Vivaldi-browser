@@ -56,7 +56,9 @@
 #include "chrome/browser/chromeos/dbus/libvda_service_provider.h"
 #include "chrome/browser/chromeos/dbus/lock_to_single_user_service_provider.h"
 #include "chrome/browser/chromeos/dbus/machine_learning_decision_service_provider.h"
+#include "chrome/browser/chromeos/dbus/memory_pressure_service_provider.h"
 #include "chrome/browser/chromeos/dbus/metrics_event_service_provider.h"
+#include "chrome/browser/chromeos/dbus/mojo_connection_service_provider.h"
 #include "chrome/browser/chromeos/dbus/plugin_vm_service_provider.h"
 #include "chrome/browser/chromeos/dbus/printers_service_provider.h"
 #include "chrome/browser/chromeos/dbus/proxy_resolution_service_provider.h"
@@ -144,6 +146,7 @@
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/components/drivefs/fake_drivefs_launcher_client.h"
 #include "chromeos/components/power/dark_resume_controller.h"
+#include "chromeos/components/sensors/sensor_hal_dispatcher.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/cryptohome/async_method_caller.h"
@@ -165,12 +168,14 @@
 #include "chromeos/network/network_cert_loader.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/portal_detector/network_portal_detector_stub.h"
+#include "chromeos/services/cfm/public/buildflags/buildflags.h"  // PLATFORM_CFM
 #include "chromeos/services/cros_healthd/public/cpp/service_connection.h"
 #include "chromeos/system/statistics_provider.h"
 #include "chromeos/tpm/install_attributes.h"
 #include "chromeos/tpm/tpm_token_loader.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_util.h"
+#include "components/arc/enterprise/arc_data_snapshotd_manager.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/metrics/metrics_service.h"
@@ -207,6 +212,10 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/chromeos/events/pref_names.h"
 #include "ui/events/event_utils.h"
+
+#if BUILDFLAG(PLATFORM_CFM)
+#include "chrome/browser/chromeos/cfm/cfm_chrome_services.h"
+#endif
 
 #if BUILDFLAG(ENABLE_RLZ)
 #include "components/rlz/rlz_tracker.h"
@@ -354,6 +363,20 @@ class DBusServices {
         CrosDBusService::CreateServiceProviderList(
             std::make_unique<LockToSingleUserServiceProvider>()));
 
+    memory_pressure_service_ = CrosDBusService::Create(
+        system_bus, memory_pressure::kMemoryPressureServiceName,
+        dbus::ObjectPath(memory_pressure::kMemoryPressureServicePath),
+        CrosDBusService::CreateServiceProviderList(
+            std::make_unique<MemoryPressureServiceProvider>()));
+
+    mojo_connection_service_ = CrosDBusService::Create(
+        system_bus,
+        ::mojo_connection_service::kMojoConnectionServiceServiceName,
+        dbus::ObjectPath(
+            ::mojo_connection_service::kMojoConnectionServiceServicePath),
+        CrosDBusService::CreateServiceProviderList(
+            std::make_unique<MojoConnectionServiceProvider>()));
+
     if (arc::IsArcVmEnabled()) {
       libvda_service_ = CrosDBusService::Create(
           system_bus, libvda::kLibvdaServiceName,
@@ -376,6 +399,8 @@ class DBusServices {
 
     NetworkHandler::Initialize();
 
+    sensors::SensorHalDispatcher::Initialize();
+
     DeviceSettingsService::Get()->SetSessionManager(
         SessionManagerClient::Get(),
         OwnerSettingsServiceChromeOSFactory::GetInstance()->GetOwnerKeyUtil());
@@ -395,6 +420,7 @@ class DBusServices {
   }
 
   ~DBusServices() {
+    sensors::SensorHalDispatcher::Shutdown();
     NetworkHandler::Shutdown();
     cryptohome::AsyncMethodCaller::Shutdown();
     disks::DiskMountManager::Shutdown();
@@ -414,6 +440,8 @@ class DBusServices {
     drive_file_stream_service_.reset();
     cryptohome_key_delegate_service_.reset();
     lock_to_single_user_service_.reset();
+    memory_pressure_service_.reset();
+    mojo_connection_service_.reset();
     ProcessDataCollector::Shutdown();
     PowerDataCollector::Shutdown();
     PowerPolicyController::Shutdown();
@@ -443,6 +471,8 @@ class DBusServices {
   std::unique_ptr<CrosDBusService> machine_learning_decision_service_;
   std::unique_ptr<CrosDBusService> smb_fs_service_;
   std::unique_ptr<CrosDBusService> lock_to_single_user_service_;
+  std::unique_ptr<CrosDBusService> memory_pressure_service_;
+  std::unique_ptr<CrosDBusService> mojo_connection_service_;
 
   DISALLOW_COPY_AND_ASSIGN(DBusServices);
 };
@@ -535,7 +565,7 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopStart() {
   dbus_services_.reset(new internal::DBusServices(parameters()));
 
   // Need to be done after LoginState has been initialized in DBusServices().
-  memory_kills_monitor_ = memory::MemoryKillsMonitor::Initialize();
+  memory::MemoryKillsMonitor::Initialize();
 
   ChromeBrowserMainPartsLinux::PostMainMessageLoopStart();
 }
@@ -620,6 +650,10 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
         system::BreakpadConsentWatcher::Initialize(stats_controller);
   }
 
+#if BUILDFLAG(PLATFORM_CFM)
+  chromeos::cfm::InitializeCfmServices();
+#endif  // BUILDFLAG(PLATFORM_CFM)
+
   ChromeBrowserMainPartsLinux::PreMainMessageLoopRun();
 }
 
@@ -644,6 +678,9 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
 
   g_browser_process->platform_part()->InitializeChromeUserManager();
 
+  arc_data_snapshotd_manager_ =
+      std::make_unique<arc::data_snapshotd::ArcDataSnapshotdManager>(
+          g_browser_process->local_state());
   if (base::FeatureList::IsEnabled(::features::kWilcoDtc))
     wilco_dtc_supportd_manager_ = std::make_unique<WilcoDtcSupportdManager>();
 
@@ -1068,6 +1105,8 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   // This must be shut down before |arc_service_launcher_|.
   if (pre_profile_init_called_)
     NoteTakingHelper::Shutdown();
+
+  arc_data_snapshotd_manager_.reset();
 
   arc_service_launcher_->Shutdown();
 

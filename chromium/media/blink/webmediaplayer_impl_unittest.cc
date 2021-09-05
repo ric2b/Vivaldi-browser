@@ -283,6 +283,8 @@ class MockWebMediaPlayerDelegate : public blink::WebMediaPlayerDelegate {
 
   MOCK_METHOD2(DidAudioOutputSinkChange, void(int, const std::string&));
 
+  MOCK_METHOD1(DidDisableAudioOutputSinkChanges, void(int));
+
  private:
   Observer* observer_ = nullptr;
   int player_id_ = 1234;
@@ -297,7 +299,6 @@ class MockSurfaceLayerBridge : public blink::WebSurfaceLayerBridge {
   MOCK_CONST_METHOD0(GetCcLayer, cc::Layer*());
   MOCK_CONST_METHOD0(GetFrameSinkId, const viz::FrameSinkId&());
   MOCK_CONST_METHOD0(GetSurfaceId, const viz::SurfaceId&());
-  MOCK_CONST_METHOD0(GetLocalSurfaceIdAllocationTime, base::TimeTicks());
   MOCK_METHOD0(ClearSurfaceId, void());
   MOCK_METHOD1(SetContentsOpaque, void(bool));
   MOCK_METHOD0(CreateSurfaceLayer, void());
@@ -318,9 +319,10 @@ class MockVideoFrameCompositor : public VideoFrameCompositor {
       GetLastPresentedFrameMetadata,
       std::unique_ptr<blink::WebMediaPlayer::VideoFramePresentationMetadata>());
   MOCK_METHOD0(GetCurrentFrameOnAnyThread, scoped_refptr<VideoFrame>());
-  MOCK_METHOD4(
-      EnableSubmission,
-      void(const viz::SurfaceId&, base::TimeTicks, media::VideoRotation, bool));
+  MOCK_METHOD1(UpdateCurrentFrameIfStale,
+               void(VideoFrameCompositor::UpdateType));
+  MOCK_METHOD3(EnableSubmission,
+               void(const viz::SurfaceId&, media::VideoRotation, bool));
 };
 
 class WebMediaPlayerImplTest
@@ -356,8 +358,6 @@ class WebMediaPlayerImplTest
     EXPECT_CALL(client_, SetCcLayer(_)).Times(0);
     ON_CALL(*surface_layer_bridge_ptr_, GetSurfaceId())
         .WillByDefault(ReturnRef(surface_id_));
-    ON_CALL(*surface_layer_bridge_ptr_, GetLocalSurfaceIdAllocationTime())
-        .WillByDefault(Return(base::TimeTicks()));
   }
 
   void InitializeWebMediaPlayerImpl() {
@@ -675,6 +675,7 @@ class WebMediaPlayerImplTest
   void GetVideoFramePresentationMetadata() {
     wmpi_->GetVideoFramePresentationMetadata();
   }
+  void UpdateFrameIfStale() { wmpi_->UpdateFrameIfStale(); }
 
   void OnNewFramePresentedCallback() { wmpi_->OnNewFramePresentedCallback(); }
 
@@ -1191,6 +1192,22 @@ TEST_F(WebMediaPlayerImplTest, RequestVideoFrameCallback) {
   RequestVideoFrameCallback();
 }
 
+TEST_F(WebMediaPlayerImplTest, UpdateFrameIfStale) {
+  InitializeWebMediaPlayerImpl();
+
+  base::RunLoop loop;
+  EXPECT_CALL(*compositor_,
+              UpdateCurrentFrameIfStale(
+                  VideoFrameCompositor::UpdateType::kBypassClient))
+      .WillOnce(RunClosure(loop.QuitClosure()));
+
+  UpdateFrameIfStale();
+
+  loop.Run();
+
+  testing::Mock::VerifyAndClearExpectations(compositor_);
+}
+
 TEST_F(WebMediaPlayerImplTest, GetVideoFramePresentationMetadata) {
   InitializeWebMediaPlayerImpl();
 
@@ -1633,7 +1650,7 @@ TEST_F(WebMediaPlayerImplTest, NoStreams) {
   EXPECT_CALL(client_, SetCcLayer(_)).Times(0);
   EXPECT_CALL(*surface_layer_bridge_ptr_, CreateSurfaceLayer()).Times(0);
   EXPECT_CALL(*surface_layer_bridge_ptr_, GetSurfaceId()).Times(0);
-  EXPECT_CALL(*compositor_, EnableSubmission(_, _, _, _)).Times(0);
+  EXPECT_CALL(*compositor_, EnableSubmission(_, _, _)).Times(0);
 
   // Nothing should happen.  In particular, no assertions should fail.
   OnMetadata(metadata);
@@ -1943,10 +1960,8 @@ TEST_F(WebMediaPlayerImplTest, SetContentsLayerGetsWebLayerFromBridge) {
   EXPECT_CALL(*surface_layer_bridge_ptr_, CreateSurfaceLayer());
   EXPECT_CALL(*surface_layer_bridge_ptr_, GetSurfaceId())
       .WillOnce(ReturnRef(surface_id_));
-  EXPECT_CALL(*surface_layer_bridge_ptr_, GetLocalSurfaceIdAllocationTime())
-      .WillOnce(Return(base::TimeTicks()));
   EXPECT_CALL(*surface_layer_bridge_ptr_, SetContentsOpaque(false));
-  EXPECT_CALL(*compositor_, EnableSubmission(_, _, _, _));
+  EXPECT_CALL(*compositor_, EnableSubmission(_, _, _));
 
   // We only call the callback to create the bridge in OnMetadata, so we need
   // to call it.
@@ -1986,9 +2001,7 @@ TEST_F(WebMediaPlayerImplTest, PictureInPictureStateChange) {
   EXPECT_CALL(*surface_layer_bridge_ptr_, CreateSurfaceLayer());
   EXPECT_CALL(*surface_layer_bridge_ptr_, GetSurfaceId())
       .WillRepeatedly(ReturnRef(surface_id_));
-  EXPECT_CALL(*surface_layer_bridge_ptr_, GetLocalSurfaceIdAllocationTime())
-      .WillRepeatedly(Return(base::TimeTicks()));
-  EXPECT_CALL(*compositor_, EnableSubmission(_, _, _, _));
+  EXPECT_CALL(*compositor_, EnableSubmission(_, _, _));
   EXPECT_CALL(*surface_layer_bridge_ptr_, SetContentsOpaque(false));
 
   PipelineMetadata metadata;

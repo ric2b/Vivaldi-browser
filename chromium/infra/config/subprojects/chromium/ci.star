@@ -13,7 +13,6 @@ def main_console_if_on_branch():
 ci.set_defaults(
     settings,
     add_to_console_view = True,
-    bucketed_triggers = settings.is_master,
 )
 
 ci.declare_bucket(settings, branch_selector = branches.ALL_RELEASES)
@@ -123,7 +122,6 @@ ci.console_view(
             "chromeos",
             "iOS",
             "linux",
-            "mojo",
             "recipe",
             "remote_run",
             "site_isolation",
@@ -244,6 +242,10 @@ ci.console_view(
         "linux|asan lsan": "*build-or-test*",
         "linux|webkit": ci.ordering(short_names = ["asn", "msn"]),
     },
+)
+
+ci.console_view(
+    name = "chromium.mojo",
 )
 
 ci.console_view(
@@ -827,6 +829,14 @@ ci.android_builder(
 )
 
 ci.android_builder(
+    name = "android-marshmallow-x86-rel-non-cq",
+    console_view_entry = ci.console_view_entry(
+        category = "builder_tester|x86",
+        short_name = "M_non-cq",
+    ),
+)
+
+ci.android_builder(
     name = "android-nougat-arm64-rel",
     branch_selector = branches.STANDARD_RELEASES,
     console_view_entry = ci.console_view_entry(
@@ -861,19 +871,19 @@ ci.android_builder(
     tree_closing = True,
 )
 
+ci.android_fyi_builder(
+    name = "android-pie-arm64-wpt-rel-non-cq",
+    console_view_entry = ci.console_view_entry(
+        category = "builder_tester|arm64",
+        short_name = "P-WPT",
+    ),
+)
+
 ci.android_builder(
     name = "android-pie-x86-rel",
     console_view_entry = ci.console_view_entry(
         category = "builder_tester|x86",
         short_name = "P",
-    ),
-)
-
-ci.android_fyi_builder(
-    name = "Android WebLayer P FYI (rel)",
-    console_view_entry = ci.console_view_entry(
-        category = "weblayer",
-        short_name = "p-rel",
     ),
 )
 
@@ -891,15 +901,6 @@ ci.android_fyi_builder(
         category = "webview",
         short_name = "p-rel",
     ),
-)
-
-ci.android_fyi_builder(
-    name = "android-marshmallow-x86-fyi-rel",
-    console_view_entry = ci.console_view_entry(
-        category = "emulator|M|x86",
-        short_name = "rel",
-    ),
-    goma_jobs = goma.jobs.J150,
 )
 
 # TODO(hypan): remove this once there is no associated disabled tests
@@ -1025,6 +1026,25 @@ ci.chromium_builder(
 )
 
 ci.chromium_builder(
+    name = "mac-official",
+    builderless = False,
+    # TODO(https://crbug.com/1072012) Use the default console view and add
+    # main_console_view = settings.main_console_name once the build is green
+    console_view = "chromium.fyi",
+    console_view_entry = ci.console_view_entry(
+        category = "mac",
+        short_name = "off",
+    ),
+    # TODO: Change this back down to something reasonable once these builders
+    # have populated their cached by getting through the compile step
+    execution_timeout = 10 * time.hour,
+    main_console_view = main_console_if_on_branch(),
+    tree_closing = False,
+    os = os.MAC_ANY,
+    cores = None,
+)
+
+ci.chromium_builder(
     name = "win-archive-dbg",
     console_view_entry = ci.console_view_entry(
         category = "win|dbg",
@@ -1137,6 +1157,17 @@ ci.chromiumos_builder(
 )
 
 ci.chromiumos_builder(
+    name = "chromeos-amd64-generic-lacros-dbg",
+    branch_selector = branches.STANDARD_RELEASES,
+    console_view_entry = ci.console_view_entry(
+        category = "lacros|x64",
+        short_name = "dbg",
+    ),
+    cq_mirrors_console_view = settings.cq_mirrors_console_name,
+    main_console_view = settings.main_console_name,
+)
+
+ci.chromiumos_builder(
     name = "chromeos-amd64-generic-rel",
     branch_selector = branches.ALL_RELEASES,
     console_view_entry = ci.console_view_entry(
@@ -1197,33 +1228,6 @@ ci.chromiumos_builder(
     ),
     cq_mirrors_console_view = settings.cq_mirrors_console_name,
     main_console_view = settings.main_console_name,
-)
-
-ci.chromiumos_builder(
-    name = "linux-lacros-builder-rel",
-    branch_selector = branches.STANDARD_RELEASES,
-    console_view_entry = ci.console_view_entry(
-        category = "default",
-        short_name = "lcr",
-    ),
-    cq_mirrors_console_view = settings.cq_mirrors_console_name,
-    main_console_view = settings.main_console_name,
-    # TODO(crbug.com/1104291): Enable tree closing.
-    tree_closing = False,
-)
-
-ci.chromiumos_builder(
-    name = "linux-lacros-tester-rel",
-    branch_selector = branches.STANDARD_RELEASES,
-    console_view_entry = ci.console_view_entry(
-        category = "default",
-        short_name = "lcr",
-    ),
-    main_console_view = settings.main_console_name,
-    cq_mirrors_console_view = settings.cq_mirrors_console_name,
-    triggered_by = ["linux-lacros-builder-rel"],
-    # TODO(crbug.com/1104291): Enable tree closing.
-    tree_closing = False,
 )
 
 ci.clang_builder(
@@ -1463,30 +1467,32 @@ ci.clang_builder(
 
 ci.clang_builder(
     name = "ToTiOS",
-    caches = [xcode_cache.x11e146],
+    builderless = False,
+    caches = [xcode_cache.x12a7209],
     console_view_entry = ci.console_view_entry(
         category = "iOS|public",
         short_name = "sim",
     ),
     cores = None,
-    os = os.MAC_10_14,
+    os = os.MAC_10_15,
     properties = {
-        "xcode_build_version": "11e146",
+        "xcode_build_version": "12a7209",
     },
     ssd = True,
 )
 
 ci.clang_builder(
     name = "ToTiOSDevice",
-    caches = [xcode_cache.x11e146],
+    builderless = False,
+    caches = [xcode_cache.x12a7209],
     console_view_entry = ci.console_view_entry(
         category = "iOS|public",
         short_name = "dev",
     ),
     cores = None,
-    os = os.MAC_10_14,
+    os = os.MAC_10_15,
     properties = {
-        "xcode_build_version": "11e146",
+        "xcode_build_version": "12a7209",
     },
     ssd = True,
 )
@@ -2169,30 +2175,6 @@ ci.fyi_builder(
 )
 
 ci.fyi_builder(
-    name = "Mojo Android",
-    console_view_entry = ci.console_view_entry(
-        category = "mojo",
-        short_name = "and",
-    ),
-)
-
-ci.fyi_builder(
-    name = "Mojo ChromiumOS",
-    console_view_entry = ci.console_view_entry(
-        category = "mojo",
-        short_name = "cr",
-    ),
-)
-
-ci.fyi_builder(
-    name = "Mojo Linux",
-    console_view_entry = ci.console_view_entry(
-        category = "mojo",
-        short_name = "lnx",
-    ),
-)
-
-ci.fyi_builder(
     name = "Site Isolation Android",
     console_view_entry = ci.console_view_entry(
         category = "site_isolation",
@@ -2208,14 +2190,6 @@ ci.fyi_builder(
     ),
     cq_mirrors_console_view = settings.cq_mirrors_console_name,
     main_console_view = main_console_if_on_branch(),
-)
-
-ci.fyi_builder(
-    name = "android-mojo-webview-rel",
-    console_view_entry = ci.console_view_entry(
-        category = "mojo",
-        short_name = "aw",
-    ),
 )
 
 ci.fyi_builder(
@@ -2360,6 +2334,46 @@ ci.fyi_builder(
     notifies = ["linux-blink-heap-verification"],
 )
 
+# For testing impact of builderful: https://crbug.com/1123673
+# remove by 2020-10-05 gatong
+ci.fyi_builder(
+    name = "linux-builderful-fast-fyi-rel",
+    console_view_entry = ci.console_view_entry(
+        category = "build test",
+        short_name = "bff",
+    ),
+    builderless = False,
+)
+
+ci.fyi_builder(
+    name = "linux-builderful-slow-fyi-rel",
+    console_view_entry = ci.console_view_entry(
+        category = "build test",
+        short_name = "bfs",
+    ),
+    builderless = False,
+    schedule = "with 2h interval",
+    triggered_by = [],
+)
+
+ci.fyi_builder(
+    name = "linux-builderless-fast-fyi-rel",
+    console_view_entry = ci.console_view_entry(
+        category = "build test",
+        short_name = "blf",
+    ),
+)
+
+ci.fyi_builder(
+    name = "linux-builderless-slow-fyi-rel",
+    console_view_entry = ci.console_view_entry(
+        category = "build test",
+        short_name = "bls",
+    ),
+    schedule = "with 2h interval",
+    triggered_by = [],
+)
+
 ci.fyi_builder(
     name = "linux-chromium-tests-staging-builder",
     console_view_entry = ci.console_view_entry(
@@ -2375,6 +2389,13 @@ ci.fyi_builder(
         short_name = "tst",
     ),
     triggered_by = ["linux-chromium-tests-staging-builder"],
+)
+
+ci.fyi_builder(
+    name = "linux-inverse-fieldtrials-fyi-rel",
+    console_view_entry = ci.console_view_entry(
+        category = "linux",
+    ),
 )
 
 ci.fyi_builder(
@@ -2412,7 +2433,25 @@ ci.fyi_builder(
         category = "linux",
     ),
     experimental = True,
-    goma_backend = None,
+    goma_backend = goma.backend.RBE_PROD,
+)
+
+ci.fyi_builder(
+    name = "linux-wpt-identity-fyi-rel",
+    console_view_entry = ci.console_view_entry(
+        category = "linux",
+    ),
+    experimental = True,
+    goma_backend = goma.backend.RBE_PROD,
+)
+
+ci.fyi_builder(
+    name = "linux-wpt-payments-fyi-rel",
+    console_view_entry = ci.console_view_entry(
+        category = "linux",
+    ),
+    experimental = True,
+    goma_backend = goma.backend.RBE_PROD,
 )
 
 # This is launching & collecting entirely isolated tests.
@@ -2423,7 +2462,7 @@ ci.fyi_builder(
         category = "mac",
         short_name = "beta",
     ),
-    goma_backend = None,
+    goma_backend = goma.backend.RBE_PROD,
     main_console_view = None,
     triggered_by = ["ci/Mac Builder"],
 )
@@ -2677,11 +2716,6 @@ ci.fyi_ios_builder(
         category = "iOS",
         short_name = "asan",
     ),
-    executable = "recipe:chromium",
-    os = os.MAC_10_15,
-    properties = {
-        "xcode_build_version": "12a7209",
-    },
 )
 
 ci.fyi_ios_builder(
@@ -2690,10 +2724,6 @@ ci.fyi_ios_builder(
         category = "iOS",
         short_name = "chr",
     ),
-    executable = "recipe:chromium",
-    properties = {
-        "xcode_build_version": "12a7209",
-    },
 )
 
 ci.fyi_ios_builder(
@@ -2704,7 +2734,6 @@ ci.fyi_ios_builder(
         category = "cronet",
     ),
     cq_mirrors_console_view = settings.cq_mirrors_console_name,
-    executable = "recipe:chromium",
     main_console_view = main_console_if_on_branch(),
     notifies = ["cronet"],
     properties = {
@@ -2718,11 +2747,6 @@ ci.fyi_ios_builder(
         category = "iOS",
         short_name = "mwd",
     ),
-    executable = "recipe:chromium",
-    os = os.MAC_10_15,
-    properties = {
-        "xcode_build_version": "12a7209",
-    },
 )
 
 ci.fyi_ios_builder(
@@ -2732,7 +2756,6 @@ ci.fyi_ios_builder(
         category = "iOS",
         short_name = "wk",
     ),
-    executable = "recipe:chromium",
     properties = {
         "xcode_build_version": "11e608cwk",
     },
@@ -2746,11 +2769,6 @@ ci.fyi_ios_builder(
         category = "iOS|iOS13",
         short_name = "ios13",
     ),
-    executable = "recipe:chromium",
-    os = os.MAC_10_15,
-    properties = {
-        "xcode_build_version": "12a7209",
-    },
     schedule = "0 0,12 * * *",
     triggered_by = [],
 )
@@ -2761,12 +2779,6 @@ ci.fyi_ios_builder(
         category = "iOS|iOS13",
         short_name = "dev",
     ),
-    caches = [xcode_cache.x12a7209],
-    executable = "recipe:chromium",
-    os = os.MAC_10_15,
-    properties = {
-        "xcode_build_version": "12a7209",
-    },
 )
 
 ci.fyi_ios_builder(
@@ -2775,12 +2787,6 @@ ci.fyi_ios_builder(
         category = "iOS|iOS13",
         short_name = "sdk13",
     ),
-    caches = [xcode_cache.x12a7209],
-    executable = "recipe:chromium",
-    os = os.MAC_10_15,
-    properties = {
-        "xcode_build_version": "12a7209",
-    },
     schedule = "0 6,18 * * *",
     triggered_by = [],
 )
@@ -2791,11 +2797,6 @@ ci.fyi_ios_builder(
         category = "iOS|iOS14",
         short_name = "ios14",
     ),
-    executable = "recipe:chromium",
-    os = os.MAC_10_15,
-    properties = {
-        "xcode_build_version": "12a7209",
-    },
 )
 
 ci.fyi_ios_builder(
@@ -2804,11 +2805,9 @@ ci.fyi_ios_builder(
         category = "iOS|iOS14",
         short_name = "sdk14",
     ),
-    caches = [xcode_cache.x12a7209],
-    executable = "recipe:chromium",
-    os = os.MAC_10_15,
+    caches = [xcode_cache.x12b5018i],
     properties = {
-        "xcode_build_version": "12a7209",
+        "xcode_build_version": "12b5018i",
     },
 )
 
@@ -2852,6 +2851,7 @@ ci.fyi_mac_builder(
     cores = None,
     executable = "recipe:swarming/deterministic_build",
     execution_timeout = 6 * time.hour,
+    os = os.MAC_10_15,
 )
 
 ci.fyi_mac_builder(
@@ -2861,15 +2861,6 @@ ci.fyi_mac_builder(
         short_name = "herm",
     ),
     cores = 8,
-)
-
-ci.fyi_mac_builder(
-    name = "mac-mojo-rel",
-    console_view_entry = ci.console_view_entry(
-        category = "mojo",
-        short_name = "mac",
-    ),
-    os = os.MAC_ANY,
 )
 
 ci.fyi_windows_builder(
@@ -2921,14 +2912,6 @@ ci.fyi_windows_builder(
     ),
     execution_timeout = 16 * time.hour,
     notifies = ["annotator-rel"],
-)
-
-ci.fyi_windows_builder(
-    name = "Mojo Windows",
-    console_view_entry = ci.console_view_entry(
-        category = "mojo",
-        short_name = "win",
-    ),
 )
 
 ci.gpu_linux_builder(
@@ -4085,6 +4068,48 @@ ci.linux_builder(
 )
 
 ci.linux_builder(
+    # CI tester for Ozone/Headless
+    name = "Linux Tester (Ozone Headless)",
+    branch_selector = branches.STANDARD_RELEASES,
+    console_view_entry = ci.console_view_entry(
+        category = "release|ozone",
+        short_name = "ltoh",
+    ),
+    main_console_view = "main",
+    cq_mirrors_console_view = "mirrors",
+    triggered_by = [builder_name("linux-ozone-rel")],
+    tree_closing = False,
+)
+
+ci.linux_builder(
+    # CI tester for Ozone/Wayland
+    name = "Linux Tester (Ozone Wayland)",
+    branch_selector = branches.STANDARD_RELEASES,
+    console_view_entry = ci.console_view_entry(
+        category = "release|ozone",
+        short_name = "ltow",
+    ),
+    main_console_view = "main",
+    cq_mirrors_console_view = "mirrors",
+    triggered_by = [builder_name("linux-ozone-rel")],
+    tree_closing = False,
+)
+
+ci.linux_builder(
+    # CI tester for Ozone/X11
+    name = "Linux Tester (Ozone X11)",
+    branch_selector = branches.STANDARD_RELEASES,
+    console_view_entry = ci.console_view_entry(
+        category = "release|ozone",
+        short_name = "ltox",
+    ),
+    main_console_view = "main",
+    cq_mirrors_console_view = "mirrors",
+    triggered_by = [builder_name("linux-ozone-rel")],
+    tree_closing = False,
+)
+
+ci.linux_builder(
     name = "linux-trusty-rel",
     console_view_entry = ci.console_view_entry(
         category = "release",
@@ -4128,13 +4153,28 @@ ci.mac_builder(
 
 ci.mac_builder(
     name = "mac-arm64-rel",
+    branch_selector = branches.STANDARD_RELEASES,
     console_view_entry = ci.console_view_entry(
-        category = "release",
-        short_name = "a64",
+        category = "release|arm64",
+        short_name = "bld",
     ),
     main_console_view = settings.main_console_name,
     cores = None,
     os = os.MAC_ANY,
+)
+
+# TODO(estaab) When promoting out of FYI, make tree_closing True and make
+# branch_selector branches.STANDARD_RELEASES, then remove the entry for this
+# builder from //generators/scheduler-noop-jobs.star
+ci.thin_tester(
+    name = "mac-arm64-rel-tests",
+    builder_group = "chromium.fyi",
+    console_view_entry = ci.console_view_entry(
+        category = "mac",
+        short_name = "a64",
+    ),
+    tree_closing = False,
+    triggered_by = [builder_name("mac-arm64-rel")],
 )
 
 ci.thin_tester(
@@ -4263,9 +4303,6 @@ ci.mac_ios_builder(
 
 ci.mac_ios_builder(
     name = "ios-simulator-noncq",
-    caches = [
-        xcode_cache.x12a7209,
-    ],
     console_view_entry = ci.console_view_entry(
         category = "ios|default",
         short_name = "non",
@@ -4273,9 +4310,6 @@ ci.mac_ios_builder(
     # We don't have necessary capacity to run this configuration in CQ, but it
     # is part of the main waterfall
     main_console_view = "main",
-    properties = {
-        "xcode_build_version": "12a7209",
-    },
 )
 
 ci.memory_builder(
@@ -4503,6 +4537,52 @@ ci.memory_builder(
     builderless = True,
     main_console_view = "main",
     os = os.WINDOWS_DEFAULT,
+)
+
+ci.mojo_builder(
+    name = "Mojo Android",
+    console_view_entry = ci.console_view_entry(
+        short_name = "and",
+    ),
+)
+
+ci.mojo_builder(
+    name = "Mojo ChromiumOS",
+    console_view_entry = ci.console_view_entry(
+        short_name = "cr",
+    ),
+)
+
+ci.mojo_builder(
+    name = "Mojo Linux",
+    console_view_entry = ci.console_view_entry(
+        short_name = "lnx",
+    ),
+)
+
+ci.mojo_builder(
+    name = "Mojo Windows",
+    builderless = False,
+    console_view_entry = ci.console_view_entry(
+        short_name = "win",
+    ),
+    os = os.WINDOWS_DEFAULT,
+)
+
+ci.mojo_builder(
+    name = "android-mojo-webview-rel",
+    console_view_entry = ci.console_view_entry(
+        short_name = "aw",
+    ),
+)
+
+ci.mojo_builder(
+    name = "mac-mojo-rel",
+    console_view_entry = ci.console_view_entry(
+        short_name = "mac",
+    ),
+    cores = 4,
+    os = os.MAC_ANY,
 )
 
 ci.swangle_linux_builder(

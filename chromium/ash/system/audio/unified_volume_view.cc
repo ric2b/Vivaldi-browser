@@ -8,7 +8,6 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
-#include "ash/style/default_color_constants.h"
 #include "ash/system/audio/unified_volume_slider_controller.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/unified/unified_system_tray_view.h"
@@ -67,18 +66,17 @@ class MoreButton : public views::Button {
         2));
 
     const SkColor icon_color = AshColorProvider::Get()->GetContentLayerColor(
-        AshColorProvider::ContentLayerType::kIconColorPrimary,
-        AshColorProvider::AshColorMode::kDark);
+        AshColorProvider::ContentLayerType::kIconColorPrimary);
 
     if (!features::IsSystemTrayMicGainSettingEnabled()) {
       auto* headset = new views::ImageView();
-      headset->set_can_process_events_within_subtree(false);
+      headset->SetCanProcessEventsWithinSubtree(false);
       headset->SetImage(
           CreateVectorIcon(vector_icons::kHeadsetIcon, icon_color));
       AddChildView(headset);
     }
     auto* more = new views::ImageView();
-    more->set_can_process_events_within_subtree(false);
+    more->SetCanProcessEventsWithinSubtree(false);
     auto icon_rotation = base::i18n::IsRTL()
                              ? SkBitmapOperations::ROTATION_270_CW
                              : SkBitmapOperations::ROTATION_90_CW;
@@ -101,9 +99,8 @@ class MoreButton : public views::Button {
     gfx::RectF rect(GetContentsBounds());
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
-    flags.setColor(AshColorProvider::Get()->DeprecatedGetControlsLayerColor(
-        AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive,
-        kUnifiedMenuButtonColor));
+    flags.setColor(AshColorProvider::Get()->GetControlsLayerColor(
+        AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive));
     flags.setStyle(cc::PaintFlags::kFill_Style);
     canvas->DrawRoundRect(rect, kTrayItemCornerRadius, flags);
   }
@@ -115,15 +112,12 @@ class MoreButton : public views::Button {
   std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override {
     return TrayPopupUtils::CreateInkDropRipple(
         TrayPopupInkDropStyle::FILL_BOUNDS, this,
-        GetInkDropCenterBasedOnLastEvent(),
-        UnifiedSystemTrayView::GetBackgroundColor());
+        GetInkDropCenterBasedOnLastEvent());
   }
 
   std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
       const override {
-    return TrayPopupUtils::CreateInkDropHighlight(
-        TrayPopupInkDropStyle::FILL_BOUNDS, this,
-        UnifiedSystemTrayView::GetBackgroundColor());
+    return TrayPopupUtils::CreateInkDropHighlight(this);
   }
 
   const char* GetClassName() const override { return "MoreButton"; }

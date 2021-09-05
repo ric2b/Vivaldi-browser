@@ -41,8 +41,16 @@
 #include "ui/gl/gpu_preference.h"
 #include "ui/gl/gpu_switching_observer.h"
 
+namespace blink {
+namespace web_pref {
+struct WebPreferences;
+}
+}  // namespace blink
+
 namespace content {
 
+class AgentSchedulingGroupHost;
+class RenderProcessHost;
 class TimeoutMonitor;
 
 // A callback which will be called immediately before EnterBackForwardCache
@@ -87,6 +95,14 @@ class CONTENT_EXPORT RenderViewHostImpl
 
   static void GetPlatformSpecificPrefs(
       blink::mojom::RendererPreferences* prefs);
+
+  // Checks whether any RenderViewHostImpl instance associated with a given
+  // process is not currently in the back-forward cache.
+  // TODO(https://crbug.com/1125996): Remove once a well-behaved frozen
+  // RenderFrame never send IPCs messages, even if there are active pages in the
+  // process.
+  static bool HasNonBackForwardCachedInstancesForProcess(
+      RenderProcessHost* process);
 
   RenderViewHostImpl(SiteInstance* instance,
                      std::unique_ptr<RenderWidgetHostImpl> widget,
@@ -160,6 +176,10 @@ class CONTENT_EXPORT RenderViewHostImpl
   // https://crbug.com/763548.
   void DispatchRenderViewCreated();
 
+  // Returns the `AgentSchedulingGroupHost` this view is associated with (via
+  // the widget).
+  AgentSchedulingGroupHost& GetAgentSchedulingGroup();
+
   // Tells the renderer process to request a page-scale animation based on the
   // specified point/rect.
   void AnimateDoubleTapZoom(const gfx::Point& point, const gfx::Rect& rect);
@@ -213,6 +233,8 @@ class CONTENT_EXPORT RenderViewHostImpl
   // record the latency of this navigation.
   void LeaveBackForwardCache(
       blink::mojom::PageRestoreParamsPtr page_restore_params);
+
+  bool is_in_back_forward_cache() const { return is_in_back_forward_cache_; }
 
   void SetVisibility(blink::mojom::PageVisibilityState visibility);
 
@@ -302,10 +324,7 @@ class CONTENT_EXPORT RenderViewHostImpl
   void SetBackgroundOpaque(bool opaque) override;
   bool IsMainFrameActive() override;
   bool IsNeverComposited() override;
-  WebPreferences GetWebkitPreferencesForWidget() override;
-
-  void ShowContextMenu(RenderFrameHost* render_frame_host,
-                       const ContextMenuParams& params) override;
+  blink::web_pref::WebPreferences GetWebkitPreferencesForWidget() override;
 
   // IPC message handlers.
   void OnShowView(int route_id,
@@ -314,7 +333,6 @@ class CONTENT_EXPORT RenderViewHostImpl
                   bool user_gesture);
   void OnShowWidget(int widget_route_id, const gfx::Rect& initial_rect);
   void OnShowFullscreenWidget(int widget_route_id);
-  void OnUpdateTargetURL(const GURL& url);
   void OnDidContentsPreferredSizeChange(const gfx::Size& new_size);
   void OnPasteFromSelectionClipboard();
   void OnTakeFocus(bool reverse);

@@ -275,6 +275,11 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
                             if (exitEvent != null) {
                                 requestSendAccessibilityEvent(exitEvent);
                                 mLastHoverId = virtualViewId;
+                            } else if (virtualViewId != View.NO_ID
+                                    && mLastHoverId != virtualViewId) {
+                                // If IDs become mismatched, or on first hover, this will sync the
+                                // values again so all further hovers have correct event pairing.
+                                mLastHoverId = virtualViewId;
                             }
                         }
 
@@ -1446,7 +1451,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
             boolean canScrollDown, boolean canScrollLeft, boolean canScrollRight, boolean clickable,
             boolean editableText, boolean enabled, boolean focusable, boolean focused,
             boolean isCollapsed, boolean isExpanded, boolean hasNonEmptyValue,
-            boolean hasNonEmptyInnerText, boolean isRangeType, boolean isForm) {
+            boolean hasNonEmptyInnerText, boolean isSeekControl, boolean isForm) {
         addAction(node, AccessibilityNodeInfo.ACTION_NEXT_HTML_ELEMENT);
         addAction(node, AccessibilityNodeInfo.ACTION_PREVIOUS_HTML_ELEMENT);
         addAction(node, ACTION_SHOW_ON_SCREEN);
@@ -1529,7 +1534,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
             addAction(node, ACTION_COLLAPSE);
         }
 
-        if (isRangeType) {
+        if (isSeekControl) {
             addAction(node, ACTION_SET_PROGRESS);
         }
     }

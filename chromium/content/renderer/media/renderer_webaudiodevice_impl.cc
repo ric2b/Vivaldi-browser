@@ -16,17 +16,18 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
-#include "content/renderer/media/audio/audio_device_factory.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "media/base/audio_timestamp_helper.h"
 #include "media/base/limits.h"
 #include "media/base/silent_sink_suspender.h"
 #include "third_party/blink/public/platform/audio/web_audio_device_source_type.h"
+#include "third_party/blink/public/web/modules/media/audio/web_audio_device_factory.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_view.h"
 
 using blink::WebAudioDevice;
+using blink::WebAudioDeviceFactory;
 using blink::WebAudioLatencyHint;
 using blink::WebLocalFrame;
 using blink::WebVector;
@@ -83,25 +84,23 @@ int GetOutputBufferSize(const blink::WebAudioLatencyHint& latency_hint,
   return 0;
 }
 
-base::UnguessableToken FrameTokenFromCurrentContext() {
-  // Assumption: This method is being invoked within a V8 call stack.  CHECKs
+blink::LocalFrameToken FrameTokenFromCurrentContext() {
+  // Assumption: This method is being invoked within a V8 call stack. CHECKs
   // will fail in the call to frameForCurrentContext() otherwise.
   //
   // Therefore, we can perform look-ups to determine which RenderView is
   // starting the audio device.  The reason for all this is because the creator
   // of the WebAudio objects might not be the actual source of the audio (e.g.,
   // an extension creates a object that is passed and used within a page).
-  blink::WebLocalFrame* const web_frame =
-      blink::WebLocalFrame::FrameForCurrentContext();
-  return web_frame ? web_frame->GetFrameToken() : base::UnguessableToken();
+  return blink::WebLocalFrame::FrameForCurrentContext()->GetLocalFrameToken();
 }
 
 media::AudioParameters GetOutputDeviceParameters(
-    const base::UnguessableToken& frame_token,
+    const blink::LocalFrameToken& frame_token,
     const base::UnguessableToken& session_id,
     const std::string& device_id) {
-  return AudioDeviceFactory::GetOutputDeviceInfo(frame_token,
-                                                 {session_id, device_id})
+  return WebAudioDeviceFactory::GetOutputDeviceInfo(frame_token,
+                                                    {session_id, device_id})
       .output_params();
 }
 
@@ -133,7 +132,6 @@ RendererWebAudioDeviceImpl::RendererWebAudioDeviceImpl(
       session_id_(session_id),
       frame_token_(std::move(render_frame_token_cb).Run()) {
   DCHECK(client_callback_);
-  DCHECK(session_id.is_empty() || !frame_token_.is_empty());
 
   media::AudioParameters hardware_params(
       std::move(device_params_cb)
@@ -147,7 +145,7 @@ RendererWebAudioDeviceImpl::RendererWebAudioDeviceImpl(
   }
 
   const media::AudioLatency::LatencyType latency =
-      AudioDeviceFactory::GetSourceLatencyType(
+      WebAudioDeviceFactory::GetSourceLatencyType(
           GetLatencyHintSourceType(latency_hint_.Category()));
 
   const int output_buffer_size =
@@ -175,7 +173,7 @@ void RendererWebAudioDeviceImpl::Start() {
   if (sink_)
     return;  // Already started.
 
-  sink_ = AudioDeviceFactory::NewAudioRendererSink(
+  sink_ = WebAudioDeviceFactory::NewAudioRendererSink(
       GetLatencyHintSourceType(latency_hint_.Category()), frame_token_,
       media::AudioSinkParameters(session_id_, std::string()));
 

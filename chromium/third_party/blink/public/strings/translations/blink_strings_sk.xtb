@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">vysvetlivka</translation>
 <translation id="1281252709823657822">dialóg</translation>
 <translation id="1306460908038601864">vypnuté</translation>
+<translation id="1311894908970423688">Hodnota musí byť <ph name="VALUE_DATE_OR_TIME" />.</translation>
 <translation id="1335095011850992622">titulky</translation>
 <translation id="1342835525016946179">článok</translation>
 <translation id="1359897965706325498">banner</translation>
+<translation id="145015347812617860">Počet položiek: <ph name="COUNT" /></translation>
 <translation id="1480676835519562650">s viacerými výbermi, vybrané: <ph name="SELECTED" /> z <ph name="COUNT" />.</translation>
 <translation id="1589122976691792535">oblasť</translation>
 <translation id="1591562245178063882">Tento mesiac</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033"><ph name="WEEKNUMBER" />. týždeň, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">Skladba <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">začiarkavacie políčko</translation>
+<translation id="2307576640803031502">v zozname, <ph name="INDEX" />. položka z <ph name="COUNT" /></translation>
 <translation id="2311842470354187719">zlom strany</translation>
 <translation id="2335594187091864976">výber dátumu a času</translation>
 <translation id="2393030564806080191">Hodnota farby v šestnástkovej sústave</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">ďalšie možnosti</translation>
 <translation id="576709008726043716">úvod</translation>
 <translation id="57838592816432529">Vypnúť zvuk</translation>
+<translation id="5860033963881614850">Vypnuté</translation>
 <translation id="588258955323874662">Celá obrazovka</translation>
 <translation id="5888666972993069672">Prenáša sa do zariadenia <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">vyhľadávacie pole</translation>
+<translation id="5916664084637901428">Zapnuté</translation>
 <translation id="5939518447894949180">Resetovať</translation>
 <translation id="5966707198760109579">Týždeň</translation>
 <translation id="5987525920412732405">tlačidlo otáčania</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">Vymazať</translation>
 <translation id="668171684555832681">Iný...</translation>
 <translation id="6692633176391053278">stepper</translation>
+<translation id="6709093583001123835">Hodnota musí byť <ph name="VALUE" />.</translation>
 <translation id="6709570249143506788">Nízka kvalita prehrávania</translation>
 <translation id="6755330956360078551">popis</translation>
 <translation id="6790428901817661496">Prehrať</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" /> začínajúci <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Obraz v obraze</translation>
 <translation id="9168329111483466115">poznámka pod čiarou</translation>
+<translation id="945780513535800434">Čiastočne začiarknuté</translation>
 <translation id="954003015749068518">zapnúť obraz v obraze</translation>
 <translation id="966787709310836684">ponuka</translation>
 </translationbundle>

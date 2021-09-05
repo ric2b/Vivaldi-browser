@@ -56,7 +56,7 @@ class MultipleFieldsTemporalInputTypeView final
   ~MultipleFieldsTemporalInputTypeView() override;
   void Trace(Visitor*) const override;
 
-  String RawValue() const override;
+  wtf_size_t FocusedFieldIndex() const override;
 
  private:
   // DateTimeEditElement::EditControlOwner functions

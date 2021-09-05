@@ -9,13 +9,13 @@
 #include "chrome/browser/ui/page_info/chrome_page_info_ui_delegate.h"
 #include "chrome/common/chrome_features.h"
 #include "components/strings/grit/components_strings.h"
-#include "content/public/common/origin_util.h"
 #include "ppapi/buildflags/buildflags.h"
+#include "third_party/blink/public/common/loader/network_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 
 PermissionMenuModel::PermissionMenuModel(Profile* profile,
                                          const GURL& url,
-                                         const PageInfoUI::PermissionInfo& info,
+                                         const PageInfo::PermissionInfo& info,
                                          const ChangeCallback& callback)
     : ui::SimpleMenuModel(this),
       host_content_settings_map_(
@@ -79,13 +79,15 @@ void PermissionMenuModel::ExecuteCommand(int command_id, int event_flags) {
 
 bool PermissionMenuModel::ShouldShowAllow(const GURL& url) {
   switch (permission_.type) {
-    // Notifications does not support CONTENT_SETTING_ALLOW in incognito.
+    // Notifications and idle detection do not support CONTENT_SETTING_ALLOW in
+    // incognito.
     case ContentSettingsType::NOTIFICATIONS:
+    case ContentSettingsType::IDLE_DETECTION:
       return !permission_.is_incognito;
     // Media only supports CONTENT_SETTING_ALLOW for secure origins.
     case ContentSettingsType::MEDIASTREAM_MIC:
     case ContentSettingsType::MEDIASTREAM_CAMERA:
-      return content::IsOriginSecure(url);
+      return blink::network_utils::IsOriginSecure(url);
     // Chooser permissions do not support CONTENT_SETTING_ALLOW.
     case ContentSettingsType::SERIAL_GUARD:
     case ContentSettingsType::USB_GUARD:

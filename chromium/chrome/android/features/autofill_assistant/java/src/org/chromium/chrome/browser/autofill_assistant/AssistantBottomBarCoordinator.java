@@ -37,6 +37,7 @@ import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.StateChangeReason;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
 import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
@@ -217,6 +218,14 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
             public void onSheetOffsetChanged(float heightFraction, float offsetPx) {
                 updateVisualViewportHeight();
             }
+
+            @Override
+            public void onSheetClosed(@StateChangeReason int reason) {
+                AssistantBottomBarDelegate delegate = mModel.getBottomBarDelegate();
+                if (reason == StateChangeReason.SWIPE && delegate != null) {
+                    delegate.onBottomSheetClosedWithSwipe();
+                }
+            }
         };
         controller.addObserver(mBottomSheetObserver);
 
@@ -241,6 +250,8 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
                 mRootViewContainer.setTalkbackViewSizeFraction(
                         model.get(AssistantModel.TALKBACK_SHEET_SIZE_FRACTION));
                 updateVisualViewportHeight();
+            } else if (AssistantModel.PEEK_MODE_DISABLED == propertyKey) {
+                mContent.setPeekModeDisabled(model.get(AssistantModel.PEEK_MODE_DISABLED));
             }
         });
 

@@ -558,7 +558,14 @@ var GetMarkers = natives.GetMarkers;
  * @param {boolean} isUpstream
  * @return {!Object}
  */
-var createAutomationPosition = natives.CreateAutomationPosition;
+var CreateAutomationPosition = natives.CreateAutomationPosition;
+
+/**
+ * @param {string} axTreeID The id of the accessibility tree.
+ * @param {number} nodeID The id of a node.
+ * @return {string} The sort direction.
+ */
+var GetSortDirection = natives.GetSortDirection;
 
 var logging = requireNative('logging');
 var utils = require('utils');
@@ -660,6 +667,10 @@ AutomationNodeImpl.prototype = {
         'getTextLocation', {startIndex: startIndex, endIndex: endIndex},
         callback);
     return;
+  },
+
+  get sortDirection() {
+    return GetSortDirection(this.treeID, this.id);
   },
 
   get unclippedLocation() {
@@ -853,7 +864,7 @@ AutomationNodeImpl.prototype = {
   },
 
   createPosition: function(offset, opt_isUpstream) {
-    var nativePosition = createAutomationPosition(
+    var nativePosition = CreateAutomationPosition(
         this.treeID, this.id, offset, !!opt_isUpstream);
 
     // Attach a getter for the node, which is only available in js.
@@ -1038,12 +1049,17 @@ AutomationNodeImpl.prototype = {
     this.removeEventListener(eventType, callback);
     if (!this.listeners[eventType])
       this.listeners[eventType] = [];
+
+    // Calling EventListenerAdded will also validate the args
+    // and throw an exception it's not a valid event type, so no invalid event
+    // type/listener gets enqueued.
+    EventListenerAdded(this.treeID, this.id, eventType);
+
     $Array.push(this.listeners[eventType], {
       __proto__: null,
       callback: callback,
       capture: !!capture,
     });
-    EventListenerAdded(this.treeID, this.id, eventType);
   },
 
   // TODO(dtseng/aboxhall): Check this impl against spec.
@@ -1068,17 +1084,17 @@ AutomationNodeImpl.prototype = {
              attributes: this.attributes };
   },
 
-  dispatchEvent: function(eventType, eventFrom, mouseX, mouseY, intents) {
+  dispatchEvent: function(
+      eventType, eventFrom, mouseX, mouseY, intents) {
     var path = [];
     var parent = this.parent;
     while (parent) {
       $Array.push(path, parent);
       parent = parent.parent;
     }
-    var event = new AutomationEvent(eventType, this.wrapper, eventFrom);
-    event.mouseX = mouseX;
-    event.mouseY = mouseY;
-    event.intents = intents;
+
+    var event = new AutomationEvent(eventType, this.wrapper, eventFrom, mouseX,
+                                    mouseY, intents);
 
     // Dispatch the event through the propagation path in three phases:
     // - capturing: starting from the root and going down to the target's parent
@@ -1306,8 +1322,8 @@ var stringAttributes = [
 
 var boolAttributes = [
   'busy', 'clickable', 'containerLiveAtomic', 'containerLiveBusy',
-  'editableRoot', 'liveAtomic', 'modal', 'scrollable', 'selected',
-  'supportsTextLocation'
+  'editableRoot', 'liveAtomic', 'modal', 'notUserSelectableStyle', 'scrollable',
+  'selected', 'supportsTextLocation'
 ];
 
 var intAttributes = [
@@ -1746,8 +1762,9 @@ AutomationRootNodeImpl.prototype = {
     if (targetNode) {
       var targetNodeImpl = privates(targetNode).impl;
       targetNodeImpl.dispatchEvent(
-          eventParams.eventType, eventParams.eventFrom,
-          eventParams.mouseX, eventParams.mouseY, eventParams.intents);
+          eventParams.eventType,
+          eventParams.eventFrom, eventParams.mouseX, eventParams.mouseY,
+          eventParams.intents);
 
       if (eventParams.actionRequestID != -1) {
         this.onActionResult(eventParams.actionRequestID, targetNode);
@@ -1890,6 +1907,7 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
         'restriction',
         'role',
         'root',
+        'sortDirection',
         'standardActions',
         'state',
         'tableCellAriaColumnIndex',

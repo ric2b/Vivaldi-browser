@@ -39,7 +39,8 @@ class MEDIA_MOJO_EXPORT MojoVideoEncodeAcceleratorService
       base::OnceCallback<std::unique_ptr<::media::VideoEncodeAccelerator>(
           const ::media::VideoEncodeAccelerator::Config& config,
           Client* client,
-          const gpu::GpuPreferences& gpu_preferences)>;
+          const gpu::GpuPreferences& gpu_preferences,
+          const gpu::GpuDriverBugWorkarounds& gpu_workarounds)>;
 
   static void Create(
       mojo::PendingReceiver<mojom::VideoEncodeAccelerator> receiver,
@@ -66,6 +67,8 @@ class MEDIA_MOJO_EXPORT MojoVideoEncodeAcceleratorService
   void RequestEncodingParametersChange(
       const media::VideoBitrateAllocation& bitrate_allocation,
       uint32_t framerate) override;
+  void IsFlushSupported(IsFlushSupportedCallback callback) override;
+  void Flush(FlushCallback callback) override;
 
  private:
   friend class MojoVideoEncodeAcceleratorIntegrationTest;

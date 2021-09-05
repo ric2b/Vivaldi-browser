@@ -80,7 +80,6 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/common/url_constants.h"
-#include "content/public/common/web_preferences.h"
 #include "media/audio/audio_thread_impl.h"
 #include "media/base/media_switches.h"
 #include "media/mojo/services/mojo_renderer_service.h"
@@ -88,8 +87,8 @@
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/network_switches.h"
-#include "services/service_manager/embedder/descriptors.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gl/gl_switches.h"
@@ -527,7 +526,7 @@ CastContentBrowserClient::GetSystemNetworkContext() {
 
 void CastContentBrowserClient::OverrideWebkitPrefs(
     content::RenderViewHost* render_view_host,
-    content::WebPreferences* prefs) {
+    blink::web_pref::WebPreferences* prefs) {
   prefs->allow_scripts_to_close_windows = true;
   // TODO(halliwell): http://crbug.com/391089. This pref defaults to to true
   // because some content providers such as YouTube use plain http requests
@@ -550,7 +549,7 @@ void CastContentBrowserClient::OverrideWebkitPrefs(
   // 1280px wide layout viewport by default.
   DCHECK(prefs->viewport_enabled);
   DCHECK(prefs->viewport_meta_enabled);
-  prefs->viewport_style = content::ViewportStyle::TELEVISION;
+  prefs->viewport_style = blink::web_pref::ViewportStyle::kTelevision;
 #endif  // defined(OS_ANDROID)
 
   // Disable WebSQL databases by default.
@@ -744,7 +743,7 @@ void CastContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
   // TODO(crbug.com/753619): Enable crash reporting on Fuchsia.
   int crash_signal_fd = GetCrashSignalFD(command_line);
   if (crash_signal_fd >= 0) {
-    mappings->Share(service_manager::kCrashDumpSignal, crash_signal_fd);
+    mappings->Share(kCrashDumpSignal, crash_signal_fd);
   }
 #endif  // !defined(OS_FUCHSIA)
 }
@@ -868,6 +867,7 @@ CastContentBrowserClient::CreateThrottlesForNavigation(
 void CastContentBrowserClient::RegisterNonNetworkNavigationURLLoaderFactories(
     int frame_tree_node_id,
     base::UkmSourceId ukm_source_id,
+    NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
     NonNetworkURLLoaderFactoryMap* factories) {
 #if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
   content::WebContents* web_contents =
@@ -878,7 +878,7 @@ void CastContentBrowserClient::RegisterNonNetworkNavigationURLLoaderFactories(
           browser_context, ukm_source_id,
           !!extensions::WebViewGuest::FromWebContents(web_contents));
   factories->emplace(extensions::kExtensionScheme,
-                     std::make_unique<CastExtensionURLLoaderFactory>(
+                     CastExtensionURLLoaderFactory::Create(
                          browser_context, std::move(extension_factory)));
 #endif
 }
@@ -886,6 +886,7 @@ void CastContentBrowserClient::RegisterNonNetworkNavigationURLLoaderFactories(
 void CastContentBrowserClient::RegisterNonNetworkSubresourceURLLoaderFactories(
     int render_process_id,
     int render_frame_id,
+    NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
     NonNetworkURLLoaderFactoryMap* factories) {
   if (render_frame_id == MSG_ROUTING_NONE) {
     LOG(ERROR) << "Service worker not supported.";
@@ -899,13 +900,13 @@ void CastContentBrowserClient::RegisterNonNetworkSubresourceURLLoaderFactories(
   auto extension_factory = extensions::CreateExtensionURLLoaderFactory(
       render_process_id, render_frame_id);
   factories->emplace(extensions::kExtensionScheme,
-                     std::make_unique<CastExtensionURLLoaderFactory>(
+                     CastExtensionURLLoaderFactory::Create(
                          browser_context, std::move(extension_factory)));
 #endif
 
   factories->emplace(
       kChromeResourceScheme,
-      content::CreateWebUIURLLoader(
+      content::CreateWebUIURLLoaderFactory(
           frame_host, kChromeResourceScheme,
           /*allowed_webui_hosts=*/base::flat_set<std::string>()));
 }

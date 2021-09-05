@@ -5,7 +5,9 @@
 #include "ash/in_session_auth/in_session_auth_dialog.h"
 
 #include "ash/in_session_auth/auth_dialog_contents_view.h"
+#include "ash/public/cpp/rounded_corner_decorator.h"
 #include "base/command_line.h"
+#include "ui/aura/window.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
@@ -17,10 +19,14 @@ namespace {
 // The initial height does nothing except determining the vertical position of
 // the dialog, since the dialog is centered with the initial height.
 constexpr gfx::Size kDefaultSize(340, 490);
+constexpr int kCornerRadius = 12;
 
 class AuthDialogWidgetDelegate : public views::WidgetDelegate {
  public:
-  AuthDialogWidgetDelegate() = default;
+  AuthDialogWidgetDelegate() {
+    SetOwnedByWidget(true);
+    SetModalType(ui::MODAL_TYPE_SYSTEM);
+  }
   AuthDialogWidgetDelegate(const AuthDialogWidgetDelegate&) = delete;
   AuthDialogWidgetDelegate& operator=(const AuthDialogWidgetDelegate&) = delete;
   ~AuthDialogWidgetDelegate() override = default;
@@ -29,8 +35,6 @@ class AuthDialogWidgetDelegate : public views::WidgetDelegate {
   views::View* GetInitiallyFocusedView() override {
     return GetWidget()->GetContentsView();
   }
-  void DeleteDelegate() override { delete this; }
-  ui::ModalType GetModalType() const override { return ui::MODAL_TYPE_SYSTEM; }
 };
 
 std::unique_ptr<views::Widget> CreateAuthDialogWidget(aura::Window* parent) {
@@ -57,16 +61,25 @@ std::unique_ptr<views::Widget> CreateAuthDialogWidget(aura::Window* parent) {
 
 InSessionAuthDialog::InSessionAuthDialog(uint32_t auth_methods) {
   widget_ = CreateAuthDialogWidget(nullptr);
-  auto* contents_view = widget_->SetContentsView(
+  contents_view_ = widget_->SetContentsView(
       std::make_unique<AuthDialogContentsView>(auth_methods));
   gfx::Rect bound = widget_->GetWindowBoundsInScreen();
   // Calculate initial height based on which child views are shown.
-  bound.set_height(contents_view->GetPreferredSize().height());
+  bound.set_height(contents_view_->GetPreferredSize().height());
   widget_->SetBounds(bound);
+
+  aura::Window* window = widget_->GetNativeWindow();
+  rounded_corner_decorator_ = std::make_unique<RoundedCornerDecorator>(
+      window, window, window->layer(), kCornerRadius);
 
   widget_->Show();
 }
 
 InSessionAuthDialog::~InSessionAuthDialog() = default;
+
+uint32_t InSessionAuthDialog::GetAuthMethods() const {
+  DCHECK(contents_view_);
+  return contents_view_->auth_methods();
+}
 
 }  // namespace ash

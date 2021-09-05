@@ -10,9 +10,12 @@ import android.view.ViewGroup;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.Callback;
 import org.chromium.base.ObserverList;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.OneshotSupplierImpl;
+import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.accessibility_tab_switcher.OverviewListLayout;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.TitleCache;
@@ -23,7 +26,6 @@ import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeHandl
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EmptyEdgeSwipeHandler;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.ScrollDirection;
 import org.chromium.chrome.browser.compositor.layouts.phone.StackLayout;
-import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
 import org.chromium.chrome.browser.device.DeviceClassManager;
@@ -44,6 +46,8 @@ import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
 import java.util.List;
+
+import org.chromium.chrome.browser.ChromeTabbedActivity;
 
 /**
  * A {@link Layout} controller for the more complicated Chrome browser.  This is currently a
@@ -74,16 +78,22 @@ public class LayoutManagerChrome
     /** Whether to create an overview Layout when LayoutManagerChrome is created. */
     private boolean mCreateOverviewLayout;
 
+    protected ObservableSupplier<TabContentManager> mTabContentManagerSupplier;
+    private final OneshotSupplierImpl<OverviewModeBehavior> mOverviewModeBehaviorSupplier;
+
     /**
      * Creates the {@link LayoutManagerChrome} instance.
      * @param host         A {@link LayoutManagerHost} instance.
      * @param contentContainer A {@link ViewGroup} for Android views to be bound to.
      * @param startSurface An interface to talk to the Grid Tab Switcher. If it's NULL, VTS
      *                     should be used, otherwise GTS should be used.
+     * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
      */
     public LayoutManagerChrome(LayoutManagerHost host, ViewGroup contentContainer,
-            boolean createOverviewLayout, @Nullable StartSurface startSurface) {
-        super(host, contentContainer);
+            boolean createOverviewLayout, @Nullable StartSurface startSurface,
+            ObservableSupplier<TabContentManager> tabContentManagerSupplier,
+            OneshotSupplierImpl<OverviewModeBehavior> overviewModeBehaviorSupplier) {
+        super(host, contentContainer, tabContentManagerSupplier);
         Context context = host.getContext();
         LayoutRenderHost renderHost = host.getLayoutRenderHost();
 
@@ -92,6 +102,25 @@ public class LayoutManagerChrome
         // Build Event Filter Handlers
         mToolbarSwipeHandler = createToolbarSwipeHandler(/* supportSwipeDown = */ true);
 
+        mTabContentManagerSupplier = tabContentManagerSupplier;
+        mTabContentManagerSupplier.addObserver(new Callback<TabContentManager>() {
+            @Override
+            public void onResult(TabContentManager manager) {
+                if (mOverviewLayout != null) {
+                    mOverviewLayout.setTabContentManager(manager);
+                }
+                tabContentManagerSupplier.removeObserver(this);
+            }
+        });
+
+        // Note(david@vivaldi.com): For any LayoutManager we always create the overview layout with
+        // surface.
+        ChromeTabbedActivity activity = (ChromeTabbedActivity) context;
+        if (activity != null) {
+            createOverviewLayout = true;
+            startSurface = activity.getStartSurface();
+        }
+
         if (createOverviewLayout) {
             if (startSurface != null) {
                 assert TabUiFeatureUtilities.isGridTabSwitcherEnabled()
@@ -99,16 +128,6 @@ public class LayoutManagerChrome
                 TabManagementDelegate tabManagementDelegate =
                         TabManagementModuleProvider.getDelegate();
                 assert tabManagementDelegate != null;
-                startSurface.setStateChangeObserver(new StartSurface.StateObserver() {
-                    @Override
-                    public void onStateChanged(@OverviewModeState int overviewModeState,
-                            boolean shouldShowTabSwitcherToolbar) {
-                        for (OverviewModeObserver observer : mOverviewModeObservers) {
-                            observer.onOverviewModeStateChanged(
-                                    overviewModeState, shouldShowTabSwitcherToolbar);
-                        }
-                    }
-                });
                 final ObservableSupplier<? extends BrowserControlsStateProvider>
                         browserControlsSupplier = mHost.getBrowserControlsManagerSupplier();
                 mOverviewLayout = tabManagementDelegate.createStartSurfaceLayout(context, this,
@@ -118,6 +137,9 @@ public class LayoutManagerChrome
                 mCreateOverviewLayout = true;
             }
         }
+
+        mOverviewModeBehaviorSupplier = overviewModeBehaviorSupplier;
+        mOverviewModeBehaviorSupplier.set(this);
     }
 
     /**
@@ -125,8 +147,10 @@ public class LayoutManagerChrome
      */
     @Override
     public void getVirtualViews(List<VirtualView> views) {
-        if (getActiveLayout() != null) {
-            getActiveLayout().getVirtualViews(views);
+        // TODO(dtrainor): Investigate order.
+        for (int i = 0; i < mSceneOverlays.size(); i++) {
+            if (!mSceneOverlays.get(i).isSceneOverlayTreeShowing()) continue;
+            mSceneOverlays.get(i).getVirtualViews(views);
         }
     }
 
@@ -145,9 +169,9 @@ public class LayoutManagerChrome
 
     @Override
     public void init(TabModelSelector selector, TabCreatorManager creator,
-            TabContentManager content, ControlContainer controlContainer,
+            ControlContainer controlContainer,
             ContextualSearchManagementDelegate contextualSearchDelegate,
-            DynamicResourceLoader dynamicResourceLoader) {
+            DynamicResourceLoader dynamicResourceLoader, ActivityTabProvider tabProvider) {
         Context context = mHost.getContext();
         LayoutRenderHost renderHost = mHost.getLayoutRenderHost();
         BrowserControlsStateProvider browserControlsStateProvider =
@@ -165,18 +189,19 @@ public class LayoutManagerChrome
                     (ObservableSupplier<BrowserControlsStateProvider>) browserControlsSupplier);
         }
 
-        super.init(selector, creator, content, controlContainer, contextualSearchDelegate,
-                dynamicResourceLoader);
+        super.init(selector, creator, controlContainer, contextualSearchDelegate,
+                dynamicResourceLoader, tabProvider);
 
         // TODO: TitleCache should be a part of the ResourceManager.
         mTitleCache = mHost.getTitleCache();
 
         // Initialize Layouts
+        TabContentManager content = mTabContentManagerSupplier.get();
         mToolbarSwipeLayout.setTabModelSelector(selector, content);
         mOverviewListLayout.setTabModelSelector(selector, content);
         if (mOverviewLayout != null) {
-            mOverviewLayout.onFinishNativeInitialization();
             mOverviewLayout.setTabModelSelector(selector, content);
+            mOverviewLayout.onFinishNativeInitialization();
         }
     }
 
@@ -193,6 +218,10 @@ public class LayoutManagerChrome
         super.destroy();
         mOverviewModeObservers.clear();
 
+        if (mTabContentManagerSupplier != null) {
+            mTabContentManagerSupplier = null;
+        }
+
         if (mOverviewLayout != null) {
             mOverviewLayout.destroy();
             mOverviewLayout = null;
@@ -203,14 +232,6 @@ public class LayoutManagerChrome
         if (mToolbarSwipeLayout != null) {
             mToolbarSwipeLayout.destroy();
         }
-    }
-
-    @Override
-    protected void addGlobalSceneOverlay(SceneOverlay helper) {
-        super.addGlobalSceneOverlay(helper);
-        mOverviewListLayout.addSceneOverlay(helper);
-        mToolbarSwipeLayout.addSceneOverlay(helper);
-        if (mOverviewLayout != null) mOverviewLayout.addSceneOverlay(helper);
     }
 
     /**
@@ -263,9 +284,7 @@ public class LayoutManagerChrome
         if (isOverviewLayout(layoutBeingShown)) {
             boolean showToolbar = animate && (!mEnableAnimations
                     || getTabModelSelector().getCurrentModel().getCount() <= 0);
-            for (OverviewModeObserver observer : mOverviewModeObservers) {
-                observer.onOverviewModeStartedShowing(showToolbar);
-            }
+            notifyObserversStartedShowing(showToolbar);
         }
     }
 
@@ -283,9 +302,7 @@ public class LayoutManagerChrome
 
             boolean creatingNtp = layoutBeingHidden == mOverviewLayout && mCreatingNtp;
 
-            for (OverviewModeObserver observer : mOverviewModeObservers) {
-                observer.onOverviewModeStartedHiding(showToolbar, creatingNtp);
-            }
+            notifyObserversStartedHiding(showToolbar, creatingNtp);
         }
     }
 
@@ -294,9 +311,7 @@ public class LayoutManagerChrome
         super.doneShowing();
 
         if (isOverviewLayout(getActiveLayout())) {
-            for (OverviewModeObserver observer : mOverviewModeObservers) {
-                observer.onOverviewModeFinishedShowing();
-            }
+            notifyObserversFinishedShowing();
         }
     }
 
@@ -312,9 +327,7 @@ public class LayoutManagerChrome
         super.doneHiding();
 
         if (isOverviewLayout(layoutBeingHidden)) {
-            for (OverviewModeObserver observer : mOverviewModeObservers) {
-                observer.onOverviewModeFinishedHiding();
-            }
+            notifyObserversFinishedHiding();
         }
     }
 
@@ -580,5 +593,47 @@ public class LayoutManagerChrome
                     .getModel(lastTab.isIncognito())
                     .closeTab(lastTab, tab, false, false, false);
         }
+    }
+
+    private void notifyObserversStartedShowing(boolean showToolbar) {
+        mOverviewModeBehaviorSupplier.onAvailable((unused) -> {
+            for (OverviewModeObserver overviewModeObserver : mOverviewModeObservers) {
+                overviewModeObserver.onOverviewModeStartedShowing(showToolbar);
+            }
+        });
+    }
+
+    private void notifyObserversFinishedShowing() {
+        mOverviewModeBehaviorSupplier.onAvailable((unused) -> {
+            for (OverviewModeObserver overviewModeObserver : mOverviewModeObservers) {
+                overviewModeObserver.onOverviewModeFinishedShowing();
+            }
+        });
+    }
+
+    private void notifyObserversStartedHiding(boolean showToolbar, boolean creatingNtp) {
+        mOverviewModeBehaviorSupplier.onAvailable((unused) -> {
+            for (OverviewModeObserver overviewModeObserver : mOverviewModeObservers) {
+                overviewModeObserver.onOverviewModeStartedHiding(showToolbar, creatingNtp);
+            }
+        });
+    }
+
+    private void notifyObserversFinishedHiding() {
+        mOverviewModeBehaviorSupplier.onAvailable((unused) -> {
+            for (OverviewModeObserver overviewModeObserver : mOverviewModeObservers) {
+                overviewModeObserver.onOverviewModeFinishedHiding();
+            }
+        });
+    }
+
+    private void notifyObserversStateChanged(
+            @OverviewModeState int overviewModeState, boolean shouldShowTabSwitcherToolbar) {
+        mOverviewModeBehaviorSupplier.onAvailable((unused) -> {
+            for (OverviewModeObserver overviewModeObserver : mOverviewModeObservers) {
+                overviewModeObserver.onOverviewModeStateChanged(
+                        overviewModeState, shouldShowTabSwitcherToolbar);
+            }
+        });
     }
 }

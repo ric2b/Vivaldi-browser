@@ -14,6 +14,7 @@
 #include "chrome/updater/app/app.h"
 #include "chrome/updater/app/app_install.h"
 #include "chrome/updater/app/app_uninstall.h"
+#include "chrome/updater/app/app_update.h"
 #include "chrome/updater/app/app_wake.h"
 #include "chrome/updater/configurator.h"
 #include "chrome/updater/constants.h"
@@ -34,8 +35,8 @@
 
 // Instructions For Windows.
 // - To install only the updater, run "updatersetup.exe" from the build out dir.
-// - To install Chrome and the updater, do the same but use the --appid:
-//    updatersetup.exe --appid={8A69D345-D564-463c-AFF1-A69D9E530F96}
+// - To install Chrome and the updater, do the same but use the --app-id:
+//    updatersetup.exe --app-id={8A69D345-D564-463c-AFF1-A69D9E530F96}
 // - To uninstall, run "updater.exe --uninstall" from its install directory,
 // which is under %LOCALAPPDATA%\Google\GoogleUpdater, or from the |out|
 // directory of the build.
@@ -99,10 +100,8 @@ int HandleUpdaterCommands(const base::CommandLine* command_line) {
 #endif
   }
 
-#if defined(OS_MAC)
   if (command_line->HasSwitch(kUpdateSwitch))
-    return MakeAppInstall()->Run();
-#endif  // OS_MAC
+    return MakeAppUpdate()->Run();
 
 #if defined(OS_WIN)
   if (command_line->HasSwitch(kComServiceSwitch))
@@ -140,7 +139,9 @@ int UpdaterMain(int argc, const char* const* argv) {
 
   InitializeCrashReporting();
 
-  return HandleUpdaterCommands(command_line);
+  const int retval = HandleUpdaterCommands(command_line);
+  DVLOG(1) << __func__ << " returned " << retval << ".";
+  return retval;
 }
 
 }  // namespace updater

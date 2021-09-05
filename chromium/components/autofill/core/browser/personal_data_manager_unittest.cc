@@ -88,6 +88,11 @@ bool StructuredNames() {
       features::kAutofillEnableSupportForMoreStructureInNames);
 }
 
+bool StructuredAddress() {
+  return base::FeatureList::IsEnabled(
+      features::kAutofillEnableSupportForMoreStructureInAddresses);
+}
+
 class PersonalDataLoadedObserverMock : public PersonalDataManagerObserver {
  public:
   PersonalDataLoadedObserverMock() {}
@@ -259,12 +264,6 @@ class PersonalDataManagerTestBase {
     personal_data->OnStateChanged(&sync_service_);
 
     return personal_data->IsSyncFeatureEnabled();
-  }
-
-  void EnableWalletCardImport() {
-    identity_test_env_.MakePrimaryAccountAvailable(kPrimaryAccountEmail);
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kEnableOfferStoreUnmaskedWalletCards);
   }
 
   void RemoveByGUIDFromPersonalDataManager(const std::string& guid,
@@ -1059,7 +1058,6 @@ TEST_F(PersonalDataManagerTest, AddUpdateRemoveProfiles) {
 }
 
 TEST_F(PersonalDataManagerTest, AddUpdateRemoveCreditCards) {
-  EnableWalletCardImport();
   CreditCard credit_card0(base::GenerateGUID(), test::kEmptyOrigin);
   test::SetCreditCardInfo(&credit_card0, "John Dillinger",
                           "4234567890123456" /* Visa */, "01", "2999", "1");
@@ -1147,7 +1145,6 @@ TEST_F(PersonalDataManagerTest, DoNotAddGoogleIssuedCreditCardExpOff) {
   base::test::ScopedFeatureList scoped_features;
   scoped_features.InitAndDisableFeature(
       features::kAutofillEnableGoogleIssuedCard);
-  EnableWalletCardImport();
   // Set up the credit cards.
   CreditCard credit_card0 = test::GetMaskedServerCard();
   credit_card0.set_card_issuer(CreditCard::Issuer::ISSUER_UNKNOWN);
@@ -1173,7 +1170,6 @@ TEST_F(PersonalDataManagerTest, AddGoogleIssuedCreditCard) {
   base::test::ScopedFeatureList scoped_features;
   scoped_features.InitAndEnableFeature(
       features::kAutofillEnableGoogleIssuedCard);
-  EnableWalletCardImport();
   // Set up the credit cards.
   CreditCard credit_card0 = test::GetMaskedServerCard();
   credit_card0.set_card_issuer(CreditCard::Issuer::ISSUER_UNKNOWN);
@@ -1740,12 +1736,17 @@ TEST_F(PersonalDataManagerTest, GetNonEmptyTypes) {
   EXPECT_EQ(1U, personal_data_->GetProfiles().size());
 
   personal_data_->GetNonEmptyTypes(&non_empty_types);
-  // For structured names, there is one more non-empty type.
+  // For structured names and addresses, there are more non-empty types.
   // TODO(crbug.com/1103421): Clean once launched.
+  unsigned int non_empty_types_expectation = 15;
   if (StructuredNames())
-    EXPECT_EQ(16U, non_empty_types.size());
-  else
-    EXPECT_EQ(15U, non_empty_types.size());
+    non_empty_types_expectation += 1;
+  // TODO(crbug.com/1130194): Clean once launched.
+  if (StructuredAddress())
+    non_empty_types_expectation += 2;
+
+  EXPECT_EQ(non_empty_types_expectation, non_empty_types.size());
+
   EXPECT_TRUE(non_empty_types.count(NAME_FIRST));
   EXPECT_TRUE(non_empty_types.count(NAME_LAST));
   // TODO(crbug.com/1103421): Clean once launched.
@@ -1755,6 +1756,11 @@ TEST_F(PersonalDataManagerTest, GetNonEmptyTypes) {
   EXPECT_TRUE(non_empty_types.count(EMAIL_ADDRESS));
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_LINE1));
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_STREET_ADDRESS));
+  // TODO(crbug.com/1130194): Clean once launched.
+  if (StructuredAddress()) {
+    EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_STREET_NAME));
+    EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_HOUSE_NUMBER));
+  }
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_CITY));
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_STATE));
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_ZIP));
@@ -1782,12 +1788,15 @@ TEST_F(PersonalDataManagerTest, GetNonEmptyTypes) {
   EXPECT_EQ(3U, personal_data_->GetProfiles().size());
 
   personal_data_->GetNonEmptyTypes(&non_empty_types);
+  non_empty_types_expectation = 19;
   // For structured names, there is one more non-empty type.
   // TODO(crbug.com/1103421): Clean once launched.
   if (StructuredNames())
-    EXPECT_EQ(20U, non_empty_types.size());
-  else
-    EXPECT_EQ(19U, non_empty_types.size());
+    non_empty_types_expectation += 1;
+  // TODO(crbug.com/1130194): Clean once launched.
+  if (StructuredAddress())
+    non_empty_types_expectation += 2;
+  EXPECT_EQ(non_empty_types_expectation, non_empty_types.size());
   EXPECT_TRUE(non_empty_types.count(NAME_FIRST));
   EXPECT_TRUE(non_empty_types.count(NAME_MIDDLE));
   EXPECT_TRUE(non_empty_types.count(NAME_MIDDLE_INITIAL));
@@ -1800,6 +1809,11 @@ TEST_F(PersonalDataManagerTest, GetNonEmptyTypes) {
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_LINE1));
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_LINE2));
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_STREET_ADDRESS));
+  // TODO(crbug.com/1130194): Clean once launched.
+  if (StructuredAddress()) {
+    EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_STREET_NAME));
+    EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_HOUSE_NUMBER));
+  }
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_CITY));
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_STATE));
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_ZIP));
@@ -1822,20 +1836,30 @@ TEST_F(PersonalDataManagerTest, GetNonEmptyTypes) {
   personal_data_->GetNonEmptyTypes(&non_empty_types);
   // For structured names, there is one more non-empty type.
   // TODO(crbug.com/1103421): Clean once launched.
+  non_empty_types_expectation = 29;
   if (StructuredNames())
-    EXPECT_EQ(30U, non_empty_types.size());
-  else
-    EXPECT_EQ(29U, non_empty_types.size());
+    non_empty_types_expectation += 1;
+  // TODO(crbug.com/1130194): Clean once launched.
+  if (StructuredAddress())
+    non_empty_types_expectation += 2;
+  EXPECT_EQ(non_empty_types_expectation, non_empty_types.size());
   EXPECT_TRUE(non_empty_types.count(NAME_FIRST));
   EXPECT_TRUE(non_empty_types.count(NAME_MIDDLE));
   EXPECT_TRUE(non_empty_types.count(NAME_MIDDLE_INITIAL));
   EXPECT_TRUE(non_empty_types.count(NAME_LAST));
   EXPECT_TRUE(non_empty_types.count(NAME_FULL));
+  if (StructuredNames())
+    EXPECT_TRUE(non_empty_types.count(NAME_LAST));
   EXPECT_TRUE(non_empty_types.count(EMAIL_ADDRESS));
   EXPECT_TRUE(non_empty_types.count(COMPANY_NAME));
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_LINE1));
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_LINE2));
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_STREET_ADDRESS));
+  // TODO(crbug.com/1130194): Clean once launched.
+  if (StructuredAddress()) {
+    EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_STREET_NAME));
+    EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_HOUSE_NUMBER));
+  }
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_CITY));
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_STATE));
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_ZIP));
@@ -3055,7 +3079,6 @@ TEST_F(PersonalDataManagerTest, IsKnownCard_MatchesFullServerCard) {
 }
 
 TEST_F(PersonalDataManagerTest, IsKnownCard_MatchesLocalCard) {
-  EnableWalletCardImport();
   // Add a local card.
   CreditCard credit_card0("287151C8-6AB1-487C-9095-28E80BE5DA15",
                           test::kEmptyOrigin);
@@ -3074,7 +3097,6 @@ TEST_F(PersonalDataManagerTest, IsKnownCard_MatchesLocalCard) {
 }
 
 TEST_F(PersonalDataManagerTest, IsKnownCard_TypeDoesNotMatch) {
-  EnableWalletCardImport();
   // Add a local card.
   CreditCard credit_card0("287151C8-6AB1-487C-9095-28E80BE5DA15",
                           test::kEmptyOrigin);
@@ -3094,7 +3116,6 @@ TEST_F(PersonalDataManagerTest, IsKnownCard_TypeDoesNotMatch) {
 }
 
 TEST_F(PersonalDataManagerTest, IsKnownCard_LastFourDoesNotMatch) {
-  EnableWalletCardImport();
   // Add a local card.
   CreditCard credit_card0("287151C8-6AB1-487C-9095-28E80BE5DA15",
                           test::kEmptyOrigin);
@@ -3212,8 +3233,6 @@ TEST_F(PersonalDataManagerTest, IsServerCard_UniqueLocalCard) {
 // been typed in the field.
 TEST_F(PersonalDataManagerTest,
        GetCreditCardSuggestions_MaskedCardWithMoreThan6Numbers) {
-  EnableWalletCardImport();
-
   // Add a masked server card.
   std::vector<CreditCard> server_cards;
   server_cards.push_back(CreditCard(CreditCard::MASKED_SERVER_CARD, "b459"));
@@ -3265,7 +3284,6 @@ TEST_F(PersonalDataManagerTest, GetCreditCardSuggestions_LocalCardsRanking) {
 // Test that local and server cards are ordered as expected.
 TEST_F(PersonalDataManagerTest,
        GetCreditCardSuggestions_LocalAndServerCardsRanking) {
-  EnableWalletCardImport();
   SetUpReferenceLocalCreditCards();
 
   // Add some server cards.
@@ -3311,7 +3329,6 @@ TEST_F(PersonalDataManagerTest,
 // |kAutofillCreditCardEnabled| is set to |false|.
 TEST_F(PersonalDataManagerTest,
        GetCreditCardSuggestions_CreditCardAutofillDisabled) {
-  EnableWalletCardImport();
   SetUpReferenceLocalCreditCards();
 
   // Add some server cards.
@@ -3358,7 +3375,6 @@ TEST_F(PersonalDataManagerTest,
 // |kAutofillCreditCardEnabled| is set to |false|.
 TEST_F(PersonalDataManagerTest,
        GetCreditCardSuggestions_NoCardsLoadedIfDisabled) {
-  EnableWalletCardImport();
   SetUpReferenceLocalCreditCards();
 
   // Add some server cards.
@@ -3644,8 +3660,6 @@ TEST_F(PersonalDataManagerTest,
 TEST_F(PersonalDataManagerTest,
        GetCreditCardSuggestions_NumberMissing_QueryNonNumberField) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kAutofillEnableSurfacingServerCardNickname);
   ASSERT_EQ(0U, personal_data_->GetCreditCards().size());
 
   CreditCard credit_card("1141084B-72D7-4B73-90CF-3D6AC154673B",
@@ -3671,7 +3685,6 @@ TEST_F(PersonalDataManagerTest,
 
 // Tests the suggestions of duplicate local and server credit cards.
 TEST_F(PersonalDataManagerTest, GetCreditCardSuggestions_ServerDuplicates) {
-  EnableWalletCardImport();
   SetUpReferenceLocalCreditCards();
 
   // Add some server cards. If there are local dupes, the locals should be
@@ -3734,7 +3747,6 @@ TEST_F(PersonalDataManagerTest, GetCreditCardSuggestions_ServerDuplicates) {
 // Tests that a full server card can be a dupe of more than one local card.
 TEST_F(PersonalDataManagerTest,
        GetCreditCardSuggestions_ServerCardDuplicateOfMultipleLocalCards) {
-  EnableWalletCardImport();
   SetUpReferenceLocalCreditCards();
 
   // Add a duplicate server card.
@@ -3979,9 +3991,6 @@ TEST_F(PersonalDataManagerTest, ClearAllServerData) {
   personal_data_->Refresh();
   WaitForOnPersonalDataChanged();
 
-  // Need to set the google services username
-  EnableWalletCardImport();
-
   // The card and profile should be there.
   ResetPersonalDataManager(USER_MODE_NORMAL);
   EXPECT_FALSE(personal_data_->GetCreditCards().empty());
@@ -4078,8 +4087,9 @@ TEST_P(SaveImportedProfileTest, SaveImportedProfile) {
 
   // Apply changes to the original profile (if applicable).
   for (ProfileField change : test_case.changes_to_original) {
-    original_profile.SetRawInfo(change.field_type,
-                                base::UTF8ToUTF16(change.field_value));
+    original_profile.SetRawInfoWithVerificationStatus(
+        change.field_type, base::UTF8ToUTF16(change.field_value),
+        structured_address::VerificationStatus::kObserved);
   }
 
   // Initialize PersonalDataManager with the original profile.
@@ -4093,8 +4103,9 @@ TEST_P(SaveImportedProfileTest, SaveImportedProfile) {
 
   // Apply changes to the second profile (if applicable).
   for (ProfileField change : test_case.changes_to_new) {
-    profile2.SetRawInfo(change.field_type,
-                        base::UTF8ToUTF16(change.field_value));
+    profile2.SetRawInfoWithVerificationStatus(
+        change.field_type, base::UTF8ToUTF16(change.field_value),
+        structured_address::VerificationStatus::kObserved);
   }
 
   profile2.FinalizeAfterImport();
@@ -5635,7 +5646,6 @@ TEST_F(PersonalDataManagerTest,
   ///////////////////////////////////////////////////////////////////////
   // Setup.
   ///////////////////////////////////////////////////////////////////////
-  EnableWalletCardImport();
   ASSERT_TRUE(TurnOnSyncFeature());
 
   base::HistogramTester histogram_tester;
@@ -5738,7 +5748,6 @@ TEST_F(PersonalDataManagerTest,
   ///////////////////////////////////////////////////////////////////////
   // Setup.
   ///////////////////////////////////////////////////////////////////////
-  EnableWalletCardImport();
   ASSERT_TRUE(TurnOnSyncFeature());
 
   base::HistogramTester histogram_tester;
@@ -5834,7 +5843,6 @@ TEST_F(PersonalDataManagerTest,
   ///////////////////////////////////////////////////////////////////////
   // Setup.
   ///////////////////////////////////////////////////////////////////////
-  EnableWalletCardImport();
   ASSERT_TRUE(TurnOnSyncFeature());
 
   base::HistogramTester histogram_tester;
@@ -5877,7 +5885,6 @@ TEST_F(
   ///////////////////////////////////////////////////////////////////////
   // Setup.
   ///////////////////////////////////////////////////////////////////////
-  EnableWalletCardImport();
   ASSERT_TRUE(TurnOnSyncFeature());
 
   base::HistogramTester histogram_tester;
@@ -6002,7 +6009,6 @@ TEST_F(
   // Go through the conversion process for a server address and card. Then add
   // a new server card that refers to the already converted server address as
   // its billing address.
-  EnableWalletCardImport();
   ASSERT_TRUE(TurnOnSyncFeature());
 
   base::HistogramTester histogram_tester;
@@ -6094,7 +6100,6 @@ TEST_F(PersonalDataManagerTest, DoNotConvertWalletAddressesInEphemeralStorage) {
   ///////////////////////////////////////////////////////////////////////
   // Setup.
   ///////////////////////////////////////////////////////////////////////
-  EnableWalletCardImport();
   ResetPersonalDataManager(USER_MODE_NORMAL,
                            /*use_sync_transport_mode=*/true);
   ASSERT_FALSE(personal_data_->IsSyncFeatureEnabled());
@@ -6154,7 +6159,6 @@ TEST_F(PersonalDataManagerTest, RemoveByGUID_ResetsBillingAddress) {
   ///////////////////////////////////////////////////////////////////////
   // Setup.
   ///////////////////////////////////////////////////////////////////////
-  EnableWalletCardImport();
   std::vector<CreditCard> server_cards;
 
   // Add two different profiles
@@ -6282,7 +6286,6 @@ TEST_F(PersonalDataManagerTest, LogStoredProfileMetrics) {
 }
 
 TEST_F(PersonalDataManagerTest, LogStoredCreditCardMetrics) {
-  EnableWalletCardImport();
   ASSERT_EQ(0U, personal_data_->GetCreditCards().size());
 
   // Helper timestamps for setting up the test data.
@@ -7949,12 +7952,8 @@ class PersonalDataManagerTestForSharingNickname
  protected:
   void SetUp() override {
     PersonalDataManagerTest::SetUp();
-    EnableWalletCardImport();
-    scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{features::
-                                  kAutofillEnableSurfacingServerCardNickname,
-                              features::kAutofillEnableCardNicknameManagement},
-        /*disabled_features=*/{});
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kAutofillEnableCardNicknameManagement);
   }
 
  private:

@@ -57,11 +57,6 @@ class BuildConfigGenerator extends DefaultTask {
     String repositoryPath
 
     /**
-     * Relative path to the DEPS file where the cipd packages are specified.
-     */
-    String depsPath
-
-    /**
      * Relative path to the Chromium source root from the build.gradle file.
      */
     String chromiumSourceRoot
@@ -87,6 +82,11 @@ class BuildConfigGenerator extends DefaultTask {
      * //third_party/android_deps/BUILD.gn.
      */
     boolean onlyPlayServices
+
+    /**
+     * Array with visibility for targets which are not listed in build.gradle
+     */
+    String[] internalTargetVisibility
 
     @TaskAction
     void main() {
@@ -149,17 +149,19 @@ class BuildConfigGenerator extends DefaultTask {
         downloadExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
 
         // 3. Generate the root level build files
-        updateBuildTargetDeclaration(graph, "${normalisedRepoPath}/BUILD.gn", onlyPlayServices)
+        updateBuildTargetDeclaration(graph, repositoryPath, normalisedRepoPath, onlyPlayServices,
+            internalTargetVisibility)
         updateDepsDeclaration(graph, cipdBucket, stripFromCipdPath, repositoryPath,
-                              "${rootDirPath}/${depsPath}", onlyPlayServices)
+                              "${rootDirPath}/DEPS", onlyPlayServices)
         dependencyDirectories.sort { path1, path2 -> return path1.compareTo(path2) }
         updateReadmeReferenceFile(dependencyDirectories,
                                   "${normalisedRepoPath}/additional_readme_paths.json")
     }
 
-    private static void updateBuildTargetDeclaration(ChromiumDepGraph depGraph, String path,
-                                                     boolean onlyPlayServices) {
-        File buildFile = new File(path)
+    private static void updateBuildTargetDeclaration(ChromiumDepGraph depGraph,
+            String repositoryPath, String normalisedRepoPath, boolean onlyPlayServices,
+            String[] internalTargetVisibility) {
+        File buildFile = new File("${normalisedRepoPath}/BUILD.gn");
         def sb = new StringBuilder()
 
         // Comparator to sort the dependency in alphabetical order, with the visible ones coming
@@ -229,12 +231,12 @@ class BuildConfigGenerator extends DefaultTask {
 
             if (!dependency.visible) {
               sb.append("  # To remove visibility constraint, add this dependency to\n")
-              sb.append("  # //third_party/android_deps/build.gradle.\n")
-              sb.append("  visibility = [ \":*\" ]\n")
+              sb.append("  # //${repositoryPath}/build.gradle.\n")
+              sb.append("  visibility = " + makeGnArray(internalTargetVisibility) + "\n")
             }
             if (dependency.testOnly) sb.append("  testonly = true\n")
             if (!depsStr.empty) sb.append("  deps = [${depsStr}]\n")
-            addSpecialTreatment(sb, dependency.id)
+            addSpecialTreatment(sb, dependency.id, dependency.extension)
 
             sb.append("}\n\n")
         }
@@ -259,7 +261,7 @@ class BuildConfigGenerator extends DefaultTask {
         return Pattern.matches(".*google.*(play_services|firebase|datatransport).*", dependencyId)
     }
 
-    private static void addSpecialTreatment(StringBuilder sb, String dependencyId) {
+    private static void addSpecialTreatment(StringBuilder sb, String dependencyId, String dependencyExtension) {
         if (isPlayServicesTarget(dependencyId)) {
             if (Pattern.matches(".*cast_framework.*", dependencyId)) {
                 sb.append('  # Removing all resources from cast framework as they are unused bloat.\n')
@@ -274,6 +276,12 @@ class BuildConfigGenerator extends DefaultTask {
             // Skip platform checks since it depends on
             // accessibility_test_framework_java which requires_android.
             sb.append('  bypass_platform_checks = true\n')
+        }
+        if (dependencyExtension == "aar" &&
+            (dependencyId.startsWith('androidx') ||
+             dependencyId.startsWith('com_android_support'))) {
+          // androidx and com_android_support libraries have duplicate resources such as 'primary_text_default_material_dark'.
+          sb.append('  resource_overlay = true\n')
         }
         switch(dependencyId) {
             case 'androidx_annotation_annotation':
@@ -293,8 +301,16 @@ class BuildConfigGenerator extends DefaultTask {
                 sb.append('  ignore_proguard_configs = true\n')
                 break
             case 'androidx_fragment_fragment':
-                sb.append('\n')
-                sb.append('  ignore_proguard_configs = true\n')
+                sb.append("""\
+                |  deps += [ "//third_party/android_deps/local_modifications/androidx_fragment_fragment:androidx_fragment_fragment_prebuilt_java" ]
+                |  # Omit this file since we use our own copy, included above.
+                |  # We can remove this once we migrate to AndroidX master for all libraries.
+                |  jar_excluded_patterns = [
+                |    "androidx/fragment/app/DialogFragment*",
+                |  ]
+                |
+                |  ignore_proguard_configs = true
+                |""".stripMargin())
                 break
             case 'androidx_media_media':
             case 'androidx_versionedparcelable_versionedparcelable':
@@ -305,10 +321,6 @@ class BuildConfigGenerator extends DefaultTask {
                 break
             case 'androidx_test_uiautomator_uiautomator':
                 sb.append('  deps = [":androidx_test_runner_java"]\n')
-                break
-            case 'com_android_support_mediarouter_v7':
-                sb.append('  # https://crbug.com/1000382\n')
-                sb.append('  proguard_configs = ["support_mediarouter.flags"]\n')
                 break
             case 'androidx_mediarouter_mediarouter':
                 sb.append('  # https://crbug.com/1000382\n')
@@ -334,7 +346,6 @@ class BuildConfigGenerator extends DefaultTask {
                 break
             case 'com_android_support_coordinatorlayout':
             case 'androidx_coordinatorlayout_coordinatorlayout':
-            case 'com_android_support_design':
                 sb.append('\n')
                 sb.append('  # Reduce binary size. https:crbug.com/954584\n')
                 sb.append('  ignore_proguard_configs = true\n')
@@ -424,6 +435,7 @@ class BuildConfigGenerator extends DefaultTask {
                 |
                 |""".stripMargin())
                 break
+            case 'androidx_test_espresso_espresso_contrib':
             case 'androidx_test_espresso_espresso_web':
             case 'androidx_window_window':
                 sb.append('  enable_bytecode_checks = false\n')
@@ -433,7 +445,16 @@ class BuildConfigGenerator extends DefaultTask {
                 sb.append('  jar_excluded_patterns = [ "*xmlpull*" ]\n')
                 break
             case 'androidx_preference_preference':
-            case 'com_android_support_preference_v7':
+                sb.append("""\
+                |  deps += [ "//third_party/android_deps/local_modifications/androidx_preference_preference:androidx_preference_preference_prebuilt_java" ]
+                |  # Omit these files since we use our own copy from AndroidX master, included above.
+                |  # We can remove this once we migrate to AndroidX master for all libraries.
+                |  jar_excluded_patterns = [
+                |    "androidx/preference/PreferenceDialogFragmentCompat*",
+                |    "androidx/preference/PreferenceFragmentCompat*",
+                |  ]
+                |
+                |""".stripMargin())
                 // Replace broad library -keep rules with a more limited set in
                 // chrome/android/java/proguard.flags instead.
                 sb.append('  ignore_proguard_configs = true\n')
@@ -541,6 +562,18 @@ class BuildConfigGenerator extends DefaultTask {
 
     private String normalisePath(String pathRelativeToChromiumRoot) {
         return project.file("${chromiumSourceRoot}/${pathRelativeToChromiumRoot}").absolutePath
+    }
+
+    private static String makeGnArray(String[] values) {
+       def sb = new StringBuilder();
+       sb.append("[");
+       for (String value : values) {
+           sb.append("\"");
+           sb.append(value);
+           sb.append("\",");
+       }
+       sb.replace(sb.length() - 1, sb.length(), "]");
+       return sb.toString();
     }
 
     static String makeOwners() {

@@ -20,6 +20,8 @@ namespace media_router {
 class CastDialogSinkButton : public HoverButton {
  public:
   CastDialogSinkButton(views::ButtonListener* button_listener,
+                       const UIMediaSink& sink);
+  CastDialogSinkButton(views::ButtonListener* button_listener,
                        const UIMediaSink& sink,
                        int button_tag);
   ~CastDialogSinkButton() override;
@@ -35,6 +37,8 @@ class CastDialogSinkButton : public HoverButton {
   void OnBlur() override;
 
   const UIMediaSink& sink() const { return sink_; }
+
+  static const gfx::VectorIcon* GetVectorIcon(SinkIconType icon_type);
 
  private:
   friend class MediaRouterUiForTest;

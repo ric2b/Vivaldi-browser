@@ -68,8 +68,8 @@
       depends_on: ["UnoptimizedImagePolicies"],
     },
     {
-      name: "UnoptimizedLossyImages",
-      document_policy_name: "unoptimized-lossy-images",
+      name: "LossyImagesMaxBpp",
+      document_policy_name: "lossy-images-max-bpp",
       value_type: "DecDouble",
       default_value: "max",
       depends_on: ["UnoptimizedImagePolicies"],
@@ -91,6 +91,20 @@
     {
       name: "LayoutAnimations",
       document_policy_name: "layout-animations",
+      value_type: "Bool",
+      default_value: "true",
+      depends_on: ["ExperimentalProductivityFeatures"],
+    },
+    {
+      name: "DocumentWrite",
+      document_policy_name: "document-write",
+      value_type: "Bool",
+      default_value: "true",
+      depends_on: ["ExperimentalProductivityFeatures"],
+    },
+    {
+      name: "SyncScript",
+      document_policy_name: "sync-script",
       value_type: "Bool",
       default_value: "true",
       depends_on: ["ExperimentalProductivityFeatures"],

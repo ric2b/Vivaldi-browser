@@ -12,6 +12,7 @@
 #include "chromecast/browser/cast_web_contents.h"
 #include "chromecast/browser/webview/proto/webview.pb.h"
 #include "chromecast/browser/webview/webview_navigation_throttle.h"
+#include "chromecast/graphics/cast_focus_client_aura.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/navigation_handle.h"
@@ -24,7 +25,9 @@
 #include "third_party/blink/public/common/input/web_touch_event.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
+#include "ui/base/ime/constants.h"
 #include "ui/events/event.h"
+#include "ui/events/event_constants.h"
 
 namespace chromecast {
 
@@ -170,14 +173,23 @@ void WebContentController::AttachTo(aura::Window* window, int window_id) {
 void WebContentController::ProcessInputEvent(const webview::InputEvent& ev) {
   content::WebContents* contents = GetWebContents();
   DCHECK(contents);
-  DCHECK(contents->GetNativeView());
-  if (!contents->GetNativeView()->CanFocus())
-    return;
-  // Ensure this web contents has focus before sending it input.
-  if (!contents->GetNativeView()->HasFocus())
-    contents->GetNativeView()->Focus();
 
+  // Ensure this web contents has focus before sending it input.
+  // Focus at this level is necessary, or else Blink will ignore
+  // attempts to focus any elements in the contents.
+  //
+  // Via b/156123509: The aura::Window given by |contents->GetNativeView()|
+  // is not suitable for this purpose, because it has no OnWindowFocused
+  // observer. The |window| used here is the same one whose |delegate|
+  // is the EventHandler for this input event.
   content::RenderWidgetHostView* rwhv = contents->GetRenderWidgetHostView();
+  aura::Window* window = rwhv->GetNativeView();
+  DCHECK(window == contents->GetContentNativeView());
+  if (!window->CanFocus())
+    return;
+  if (!window->HasFocus())
+    window->Focus();
+
   ui::EventHandler* handler = rwhv->GetNativeView()->delegate();
   ui::EventType type = static_cast<ui::EventType>(ev.event_type());
   switch (type) {
@@ -258,6 +270,28 @@ void WebContentController::ProcessInputEvent(const webview::InputEvent& ev) {
         handler->OnMouseEvent(&evt);
       } else {
         client_->OnError("mouse() not supplied for mouse event");
+      }
+      break;
+    case ui::ET_KEY_PRESSED:
+    case ui::ET_KEY_RELEASED:
+      if (ev.has_key()) {
+        ui::KeyEvent evt(
+            type, static_cast<ui::KeyboardCode>(ev.key().key_code()),
+            static_cast<ui::DomCode>(ev.key().dom_code()),
+            ev.flags() | ui::EF_IS_SYNTHESIZED, ui::DomKey(ev.key().dom_key()),
+            base::TimeTicks() +
+                base::TimeDelta::FromMicroseconds(ev.timestamp()),
+            ev.key().is_char());
+
+        // Marks the simulated key event is from a Virtual Keyboard.
+        ui::Event::Properties properties;
+        properties[ui::kPropertyFromVK] =
+            std::vector<uint8_t>(ui::kPropertyFromVKSize);
+        evt.SetProperties(properties);
+
+        handler->OnKeyEvent(&evt);
+      } else {
+        client_->OnError("key() not supplied for key event");
       }
       break;
     default:
@@ -425,8 +459,7 @@ viz::SurfaceId WebContentController::GetSurfaceId() {
   if (!rwhv)
     return viz::SurfaceId();
   auto frame_sink_id = rwhv->GetRenderWidgetHost()->GetFrameSinkId();
-  auto local_surface_id =
-      rwhv->GetNativeView()->GetLocalSurfaceIdAllocation().local_surface_id();
+  auto local_surface_id = rwhv->GetNativeView()->GetLocalSurfaceId();
   return viz::SurfaceId(frame_sink_id, local_surface_id);
 }
 

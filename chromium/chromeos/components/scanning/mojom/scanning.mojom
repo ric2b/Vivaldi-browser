@@ -1,0 +1,85 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module chromeos.scanning.mojom;
+
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/unguessable_token.mojom";
+
+// The color modes that can be used to perform a scan.
+enum ColorMode {
+  kBlackAndWhite,
+  kGrayscale,
+  kColor,
+};
+
+// The source types from which a scan can be obtained.
+enum SourceType {
+  // An unknown source type.
+  kUnknown,
+  // A flatbed that scans a single page.
+  kFlatbed,
+  // An automatic document feeder that scans a single side of each page.
+  kAdfSimplex,
+  // An automatic document feeder that scans both sides of each page.
+  kAdfDuplex,
+  // The implicit source type used for scanners that do not report any source
+  // options.
+  kDefault,
+};
+
+// The source from which a scan can be obtained.
+struct ScanSource {
+  // The type of this source.
+  SourceType type;
+  // The name of this source. Source names are unique to each SANE backend and
+  // are required to perform scans.
+  string name;
+};
+
+// The capabilities a scanner supports.
+struct ScannerCapabilities {
+  array<ScanSource> sources;
+  array<ColorMode> color_modes;
+  array<uint32> resolutions;
+};
+
+// Settings used to perform a scan.
+struct ScanSettings {
+  // The SANE name of the ScanSource from which to scan.
+  string source_name;
+  // The color mode with which to scan.
+  ColorMode color_mode;
+  // The resolution with which to scan in DPI.
+  uint32 resolution_dpi;
+};
+
+// Represents a connected scanner.
+struct Scanner {
+  // The scanner's unique identifier.
+  mojo_base.mojom.UnguessableToken id;
+  // The scanner's display name.
+  mojo_base.mojom.String16 display_name;
+};
+
+// Interface used to obtain information about and interact with connected
+// scanners. It is implemented in the browser and exposed to the Scan app
+// (chrome://scanning).
+interface ScanService {
+  // Returns the connected scanners. Obtaining a scanner's capabilities is
+  // implemented in a separate method to minimize the amount of time clients
+  // must wait before receiving the scanners and displaying their display names.
+  GetScanners() => (array<Scanner> scanners);
+
+  // Returns the capabilities of the scanner identified by |scanner_id|.
+  // TODO(jschettler): Return a boolean to indicate whether the capabilities
+  // were obtained via a secure protocol.
+  GetScannerCapabilities(mojo_base.mojom.UnguessableToken scanner_id)
+      => (ScannerCapabilities capabilities);
+
+  // Performs a scan using the provided |settings|.
+  // TODO(jschettler): Send a ScanJobObserver to get scan job updates.
+  Scan(mojo_base.mojom.UnguessableToken scanner_id, ScanSettings settings)
+      => (bool success);
+};

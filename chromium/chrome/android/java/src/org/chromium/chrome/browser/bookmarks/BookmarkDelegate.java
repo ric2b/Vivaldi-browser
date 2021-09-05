@@ -129,4 +129,8 @@ public interface BookmarkDelegate {
      * @param bookmarkId The BookmarkId of the bookmark of interest.
      */
     void highlightBookmark(BookmarkId bookmarkId);
+
+    /** Vivaldi **/
+    void setSortOrder(BookmarkItemsAdapter.SortOrder sorting);
+    BookmarkItemsAdapter.SortOrder getSortOrder();
 }

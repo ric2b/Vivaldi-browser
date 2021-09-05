@@ -42,7 +42,7 @@ class SVGAnimateMotionElement final : public SVGAnimationElement {
 
   void ParseAttribute(const AttributeModificationParams&) override;
 
-  void ResetAnimatedType() override;
+  void ResetAnimatedType(bool needs_underlying_value) override;
   void ClearAnimatedType() override;
   bool CalculateToAtEndOfDurationValue(
       const String& to_at_end_of_duration_string) override;
@@ -59,8 +59,6 @@ class SVGAnimateMotionElement final : public SVGAnimationElement {
 
   enum RotateMode { kRotateAngle, kRotateAuto, kRotateAutoReverse };
   RotateMode GetRotateMode() const;
-
-  bool has_to_point_at_end_of_duration_;
 
   void UpdateAnimationMode() override;
 

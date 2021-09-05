@@ -146,47 +146,61 @@ mojom("mojom_network_isolation_key") {
   ]
 }
 
-# These interfaces are put in their own target to avoid a circular dependency,
+# These .mojom files are put in their own target to avoid a circular dependency,
 # which comes from the fact that the typemap for url_loader.mojom
-# (ResourceRequestBody) uses these interfaces.
-mojom("data_pipe_interfaces") {
+# (ResourceRequest) depends on them.
+mojom("url_loader_base") {
   generate_java = true
   sources = [
     "chunked_data_pipe_getter.mojom",
+    "client_security_state.mojom",
+    "cross_origin_embedder_policy.mojom",
     "data_pipe_getter.mojom",
+    "fetch_api.mojom",
+    "ip_address_space.mojom",
+    "mutable_network_traffic_annotation_tag.mojom",
+    "mutable_partial_network_traffic_annotation_tag.mojom",
+    "trust_tokens.mojom",
   ]
 
-  # TODO(crbug/598073): When moving the service implementation to
-  # //services/network, add the correct values for export_class_attribute /
-  # export_define / export_header here. Context in https://crrev.com/2225673002.
+  public_deps = [
+    "//mojo/public/mojom/base",
+    "//url/mojom:url_mojom_gurl",
+    "//url/mojom:url_mojom_origin",
+  ]
 
   if (!is_ios) {
     export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
     export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
     export_header_blink = "third_party/blink/public/platform/web_common.h"
   }
-}
 
-mojom("mutable_network_traffic_annotation_interface") {
-  generate_java = true
-  sources = [
-    "mutable_network_traffic_annotation_tag.mojom",
-    "mutable_partial_network_traffic_annotation_tag.mojom",
+  # Shared by cpp_typemaps and blink_cpp_typemaps.
+  shared_typemaps = [
+    {
+      types = [
+        {
+          mojom = "network.mojom.CrossOriginEmbedderPolicy"
+          cpp = "::network::CrossOriginEmbedderPolicy"
+        },
+      ]
+      traits_headers = [ "//services/network/public/cpp/cross_origin_embedder_policy_mojom_traits.h" ]
+      traits_deps =
+          [ "//services/network/public/cpp:cross_origin_embedder_policy" ]
+    },
+    {
+      types = [
+        {
+          mojom = "network.mojom.MutableNetworkTrafficAnnotationTag"
+          cpp = "::net::MutableNetworkTrafficAnnotationTag"
+        },
+      ]
+      traits_headers = [ "//services/network/public/cpp/mutable_network_traffic_annotation_tag_mojom_traits.h" ]
+      traits_public_deps = [ "//net/traffic_annotation" ]
+    },
   ]
 
-  mutable_network_traffic_annotation_tag_typemap = {
-    types = [
-      {
-        mojom = "network.mojom.MutableNetworkTrafficAnnotationTag"
-        cpp = "::net::MutableNetworkTrafficAnnotationTag"
-      },
-    ]
-    traits_headers = [ "//services/network/public/cpp/mutable_network_traffic_annotation_tag_mojom_traits.h" ]
-    traits_public_deps = [ "//net/traffic_annotation" ]
-  }
-
   cpp_typemaps = [
-    mutable_network_traffic_annotation_tag_typemap,
     {
       types = [
         {
@@ -199,24 +213,9 @@ mojom("mutable_network_traffic_annotation_interface") {
     },
   ]
 
-  blink_cpp_typemaps = [ mutable_network_traffic_annotation_tag_typemap ]
-}
+  cpp_typemaps += shared_typemaps
 
-# These interfaces are put in their own target to avoid a circular dependency,
-# which comes from the fact that the typemap for url_loader.mojom
-# (ResourceRequestBody) uses these interfaces.
-mojom("trust_tokens_interface") {
-  generate_java = true
-  sources = [ "trust_tokens.mojom" ]
-  public_deps = [
-    "//mojo/public/mojom/base",
-    "//url/mojom:url_mojom_origin",
-  ]
-  if (!is_ios) {
-    export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
-    export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
-    export_header_blink = "third_party/blink/public/platform/web_common.h"
-  }
+  blink_cpp_typemaps = shared_typemaps
 }
 
 # This target is split from "mojom" target as the lazy serialization may
@@ -441,17 +440,14 @@ mojom("mojom") {
     "content_security_policy.mojom",
     "cors.mojom",
     "cors_origin_pattern.mojom",
-    "cross_origin_embedder_policy.mojom",
     "cross_origin_opener_policy.mojom",
     "default_credentials.mojom",
     "dhcp_wpad_url_client.mojom",
     "digitally_signed.mojom",
-    "fetch_api.mojom",
     "host_resolver.mojom",
     "http_raw_headers.mojom",
     "http_raw_request_response_info.mojom",
     "http_request_headers.mojom",
-    "ip_address_space.mojom",
     "isolation_info.mojom",
     "load_timing_info.mojom",
     "mdns_responder.mojom",
@@ -487,11 +483,9 @@ mojom("mojom") {
 
   public_deps = [
     ":cookies_mojom",
-    ":data_pipe_interfaces",
     ":mojom_ip_address",
     ":mojom_network_isolation_key",
-    ":mutable_network_traffic_annotation_interface",
-    ":trust_tokens_interface",
+    ":url_loader_base",
     ":websocket_mojom",
     "//mojo/public/mojom/base",
     "//services/proxy_resolver/public/mojom",
@@ -537,15 +531,6 @@ mojom("mojom") {
 
   # Typemaps which apply to both Blink and non-Blink bindings.
   shared_cpp_typemaps = [
-    {
-      types = [
-        {
-          mojom = "network.mojom.CrossOriginEmbedderPolicy"
-          cpp = "::network::CrossOriginEmbedderPolicy"
-        },
-      ]
-      traits_headers = [ "//services/network/public/cpp/cross_origin_embedder_policy_mojom_traits.h" ]
-    },
     {
       types = [
         {
@@ -769,7 +754,7 @@ mojom("mojom") {
         },
         {
           mojom = "network.mojom.SecureDnsMode"
-          cpp = "::net::DnsConfig::SecureDnsMode"
+          cpp = "::net::SecureDnsMode"
         },
       ]
       traits_headers =

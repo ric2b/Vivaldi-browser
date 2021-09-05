@@ -88,6 +88,7 @@ public class ProfileSyncService {
      */
     @VisibleForTesting
     public static void overrideForTests(ProfileSyncService profileSyncService) {
+        ThreadUtils.assertOnUiThread();
         sProfileSyncService = profileSyncService;
         sInitialized = true;
     }
@@ -192,6 +193,21 @@ public class ProfileSyncService {
 
     public boolean requiresClientUpgrade() {
         return ProfileSyncServiceJni.get().requiresClientUpgrade(
+                mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
+    }
+
+    public void setDecoupledFromAndroidMasterSync() {
+        ProfileSyncServiceJni.get().setDecoupledFromAndroidMasterSync(
+                mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
+    }
+
+    public boolean getDecoupledFromAndroidMasterSync() {
+        return ProfileSyncServiceJni.get().getDecoupledFromAndroidMasterSync(
+                mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
+    }
+
+    public boolean isAuthenticatedAccountPrimary() {
+        return ProfileSyncServiceJni.get().isAuthenticatedAccountPrimary(
                 mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
     }
 
@@ -651,6 +667,12 @@ public class ProfileSyncService {
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller, String tag);
         int getAuthError(long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
         boolean requiresClientUpgrade(
+                long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
+        void setDecoupledFromAndroidMasterSync(
+                long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
+        boolean getDecoupledFromAndroidMasterSync(
+                long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
+        boolean isAuthenticatedAccountPrimary(
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
         boolean isEngineInitialized(
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller);

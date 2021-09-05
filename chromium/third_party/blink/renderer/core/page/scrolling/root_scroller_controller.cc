@@ -90,8 +90,10 @@ PaintLayerScrollableArea* GetScrollableArea(const Element& element) {
     return frame_view->LayoutViewport();
   }
 
-  DCHECK(element.GetLayoutObject()->IsBox());
-  return ToLayoutBox(element.GetLayoutObject())->GetScrollableArea();
+  if (!element.GetLayoutBoxForScrolling())
+    return nullptr;
+
+  return element.GetLayoutBoxForScrolling()->GetScrollableArea();
 }
 
 }  // namespace
@@ -236,7 +238,7 @@ bool RootScrollerController::IsValidRootScroller(const Element& element) const {
   if (element.GetLayoutObject()->IsInsideFlowThread())
     return false;
 
-  if (!element.GetLayoutObject()->HasOverflowClip() &&
+  if (!element.GetLayoutObject()->IsScrollContainer() &&
       !element.IsFrameOwnerElement())
     return false;
 
@@ -322,8 +324,9 @@ bool RootScrollerController::IsValidImplicit(const Element& element) const {
       if (ancestor_style->ScrollsOverflowY() && area->HasVerticalOverflow())
         return false;
     } else {
-      if (ancestor->ShouldClipOverflow() || ancestor->HasMask() ||
-          ancestor->HasClip() || ancestor->HasClipPath()) {
+      if (ancestor->ShouldClipOverflowAlongEitherAxis() ||
+          ancestor->HasMask() || ancestor->HasClip() ||
+          ancestor->HasClipPath()) {
         return false;
       }
     }

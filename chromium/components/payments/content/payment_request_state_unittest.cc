@@ -20,7 +20,11 @@
 #include "components/payments/content/payment_request_spec.h"
 #include "components/payments/content/test_content_payment_request_delegate.h"
 #include "components/payments/core/journey_logger.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
+#include "content/public/test/browser_task_environment.h"
+#include "content/public/test/test_browser_context.h"
+#include "content/public/test/test_web_contents_factory.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/payments/payment_request.mojom.h"
@@ -32,8 +36,10 @@ class PaymentRequestStateTest : public testing::Test,
                                 public PaymentRequestState::Delegate {
  protected:
   PaymentRequestStateTest()
-      : num_on_selected_information_changed_called_(0),
-        test_payment_request_delegate_(&test_personal_data_manager_),
+      : web_contents_(web_contents_factory_.CreateWebContents(&context_)),
+        num_on_selected_information_changed_called_(0),
+        test_payment_request_delegate_(/*task_executor=*/nullptr,
+                                       &test_personal_data_manager_),
         journey_logger_(test_payment_request_delegate_.IsOffTheRecord(),
                         ukm::UkmRecorder::GetNewSourceID()),
         address_(autofill::test::GetFullProfile()),
@@ -78,14 +84,13 @@ class PaymentRequestStateTest : public testing::Test,
         std::move(options), std::move(details), std::move(method_data),
         /*observer=*/nullptr, "en-US");
     PaymentAppServiceFactory::SetForTesting(
-        std::make_unique<PaymentAppService>(/*context=*/nullptr));
+        std::make_unique<PaymentAppService>(&context_));
     state_ = std::make_unique<PaymentRequestState>(
-        /*web_contents=*/nullptr,
-        /*render_frame_host=*/nullptr, GURL("https://example.com"),
+        web_contents_->GetMainFrame(), GURL("https://example.com"),
         GURL("https://example.com/pay"),
-        url::Origin::Create(GURL("https://example.com")), spec_.get(), this,
-        "en-US", &test_personal_data_manager_, &test_payment_request_delegate_,
-        &journey_logger_);
+        url::Origin::Create(GURL("https://example.com")), spec_->AsWeakPtr(),
+        weak_ptr_factory_.GetWeakPtr(), "en-US", &test_personal_data_manager_,
+        &test_payment_request_delegate_, &journey_logger_);
     state_->AddObserver(this);
   }
 
@@ -136,6 +141,10 @@ class PaymentRequestStateTest : public testing::Test,
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
+  content::BrowserTaskEnvironment task_environment_;
+  content::TestBrowserContext context_;
+  content::TestWebContentsFactory web_contents_factory_;
+  content::WebContents* web_contents_;  // Owned by `web_contents_factory_`.
   std::unique_ptr<PaymentRequestState> state_;
   std::unique_ptr<PaymentRequestSpec> spec_;
   int num_on_selected_information_changed_called_;
@@ -148,6 +157,7 @@ class PaymentRequestStateTest : public testing::Test,
   // Test data.
   autofill::AutofillProfile address_;
   autofill::CreditCard credit_card_visa_;
+  base::WeakPtrFactory<PaymentRequestStateTest> weak_ptr_factory_{this};
 };
 
 TEST_F(PaymentRequestStateTest, CanMakePayment) {
@@ -304,8 +314,7 @@ TEST_F(PaymentRequestStateTest, ReadyToPay_DefaultSelections) {
   // Therefore we are not ready to pay.
   EXPECT_FALSE(state()->is_ready_to_pay());
 
-  state()->SetSelectedShippingProfile(
-      test_address(), PaymentRequestState::SectionSelectionStatus::kSelected);
+  state()->SetSelectedShippingProfile(test_address());
   EXPECT_EQ(0, num_on_selected_information_changed_called());
 
   // Simulate that the merchant has validated the shipping address change.
@@ -350,14 +359,12 @@ TEST_F(PaymentRequestStateTest, ReadyToPay_ContactInfo) {
   EXPECT_TRUE(state()->is_ready_to_pay());
 
   // Unselecting contact profile.
-  state()->SetSelectedContactProfile(
-      nullptr, PaymentRequestState::SectionSelectionStatus::kSelected);
+  state()->SetSelectedContactProfile(/*profile=*/nullptr);
   EXPECT_EQ(1, num_on_selected_information_changed_called());
 
   EXPECT_FALSE(state()->is_ready_to_pay());
 
-  state()->SetSelectedContactProfile(
-      test_address(), PaymentRequestState::SectionSelectionStatus::kSelected);
+  state()->SetSelectedContactProfile(test_address());
   EXPECT_EQ(2, num_on_selected_information_changed_called());
 
   // Ready to pay!
@@ -378,8 +385,7 @@ TEST_F(PaymentRequestStateTest, SelectedShippingAddressMessage_Normalized) {
 
   // Select an address, nothing should happen until the normalization is
   // completed and the merchant has validated the address.
-  state()->SetSelectedShippingProfile(
-      test_address(), PaymentRequestState::SectionSelectionStatus::kSelected);
+  state()->SetSelectedShippingProfile(test_address());
   EXPECT_EQ(0, num_on_selected_information_changed_called());
   EXPECT_FALSE(state()->is_ready_to_pay());
 
@@ -431,8 +437,7 @@ TEST_F(PaymentRequestStateTest, JaLatnShippingAddress) {
                                  "Roppongi", "6 Chrome-10-1", "Tokyo", "",
                                  "106-6126", "JP", "+81363849000");
 
-  state()->SetSelectedShippingProfile(
-      &profile, PaymentRequestState::SectionSelectionStatus::kSelected);
+  state()->SetSelectedShippingProfile(&profile);
   EXPECT_EQ(0, num_on_selected_information_changed_called());
   EXPECT_FALSE(state()->is_ready_to_pay());
 
@@ -472,8 +477,7 @@ TEST_F(PaymentRequestStateTest, RetryWithShippingAddressErrors) {
   // Therefore we are not ready to pay.
   EXPECT_FALSE(state()->is_ready_to_pay());
 
-  state()->SetSelectedShippingProfile(
-      test_address(), PaymentRequestState::SectionSelectionStatus::kSelected);
+  state()->SetSelectedShippingProfile(test_address());
   EXPECT_EQ(0, num_on_selected_information_changed_called());
 
   // Simulate that the merchant has validated the shipping address change.
@@ -516,8 +520,7 @@ TEST_F(PaymentRequestStateTest, RetryWithPayerErrors) {
   options->request_payer_email = true;
   RecreateStateWithOptions(std::move(options));
 
-  state()->SetSelectedContactProfile(
-      test_address(), PaymentRequestState::SectionSelectionStatus::kSelected);
+  state()->SetSelectedContactProfile(test_address());
   EXPECT_EQ(1, num_on_selected_information_changed_called());
   EXPECT_TRUE(state()->is_ready_to_pay());
 

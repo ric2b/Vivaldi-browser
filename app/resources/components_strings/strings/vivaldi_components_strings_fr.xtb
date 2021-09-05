@@ -153,6 +153,7 @@
 <translation id="6165508094623778733">En savoir plus</translation>
 <translation id="6177128806592000436">Votre connexion à ce site n’est pas sécurisée</translation>
 <translation id="6203231073485539293">Vérifiez votre connexion Internet</translation>
+<translation id="6225522625585012689">Pour consulter la liste des URL bloquées et des autres règles définies par votre administrateur système, rendez-vous sur &lt;strong&gt;vivaldi://policy&lt;/strong&gt;.</translation>
 <translation id="625755898061068298">Vous avez choisi de désactiver les avertissements de sécurité pour ce site.</translation>
 <translation id="6264485186158353794">Retour à la sécurité</translation>
 <translation id="6305205051461490394"><ph name="URL" /> est inaccessible.</translation>
@@ -202,7 +203,6 @@
 <translation id="8041940743680923270">Utiliser le paramètre global par défaut (« Demander »)</translation>
 <translation id="808894953321890993">Modifier le mot de passe</translation>
 <translation id="8119307142152921512">traqueurs et publicités</translation>
-<translation id="8142868475871995937">Accéder à &lt;strong&gt;vivaldi://policy&lt;/strong&gt; pour consulter une liste des URL ajoutées à la liste noire et des autres règles définies par votre administrateur système.</translation>
 <translation id="8149426793427495338">Votre ordinateur s’est mis en veille.</translation>
 <translation id="8150722005171944719">Le fichier disponible à l’adresse <ph name="URL" /> n’est pas lisible. Il est possible qu’il ait été supprimé ou déplacé, ou que les autorisations associées empêchent d’y accéder.</translation>
 <translation id="8184538546369750125">Utiliser le paramètre global par défaut (« Autoriser »)</translation>

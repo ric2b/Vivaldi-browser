@@ -25,7 +25,7 @@ component("absl") {
   if (is_component_build) {
     public_configs = [ ":absl_component_build" ]
 
-    if (is_win) {
+    if (is_win && is_clang) {
       if (current_cpu == "x64") {
         if (is_debug) {
           sources = [ "symbols_x64_dbg.def" ]
@@ -61,19 +61,25 @@ group("absl_component_deps") {
     "//third_party/abseil-cpp/absl/base",
     "//third_party/abseil-cpp/absl/base:config",
     "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/container:btree",
     "//third_party/abseil-cpp/absl/container:fixed_array",
     "//third_party/abseil-cpp/absl/container:flat_hash_map",
     "//third_party/abseil-cpp/absl/container:flat_hash_set",
     "//third_party/abseil-cpp/absl/container:inlined_vector",
+    "//third_party/abseil-cpp/absl/container:node_hash_map",
+    "//third_party/abseil-cpp/absl/container:node_hash_set",
     "//third_party/abseil-cpp/absl/debugging:failure_signal_handler",
     "//third_party/abseil-cpp/absl/debugging:stacktrace",
     "//third_party/abseil-cpp/absl/debugging:symbolize",
+    "//third_party/abseil-cpp/absl/functional:bind_front",
     "//third_party/abseil-cpp/absl/hash",
     "//third_party/abseil-cpp/absl/memory",
     "//third_party/abseil-cpp/absl/meta:type_traits",
     "//third_party/abseil-cpp/absl/numeric:int128",
-    "//third_party/abseil-cpp/absl/status:status",
+    "//third_party/abseil-cpp/absl/status",
+    "//third_party/abseil-cpp/absl/status:statusor",
     "//third_party/abseil-cpp/absl/strings",
+    "//third_party/abseil-cpp/absl/strings:str_format",
     "//third_party/abseil-cpp/absl/synchronization",
     "//third_party/abseil-cpp/absl/time",
     "//third_party/abseil-cpp/absl/types:optional",
@@ -87,6 +93,8 @@ group("absl_component_deps") {
     public_deps -= [
       "//third_party/abseil-cpp/absl/container:flat_hash_map",
       "//third_party/abseil-cpp/absl/container:flat_hash_set",
+      "//third_party/abseil-cpp/absl/container:node_hash_map",
+      "//third_party/abseil-cpp/absl/container:node_hash_set",
       "//third_party/abseil-cpp/absl/debugging:failure_signal_handler",
     ]
   }
@@ -208,4 +216,3 @@ if (build_with_chromium) {
     ]
   }
 }
-

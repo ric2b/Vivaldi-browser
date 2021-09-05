@@ -37,6 +37,7 @@ UtilitySandboxedProcessLauncherDelegate::
       sandbox_type_ == sandbox::policy::SandboxType::kProxyResolver ||
       sandbox_type_ == sandbox::policy::SandboxType::kPdfConversion ||
       sandbox_type_ == sandbox::policy::SandboxType::kIconReader ||
+      sandbox_type_ == sandbox::policy::SandboxType::kMediaFoundationCdm ||
 #endif
       sandbox_type_ == sandbox::policy::SandboxType::kUtility ||
       sandbox_type_ == sandbox::policy::SandboxType::kNetwork ||
@@ -70,6 +71,12 @@ base::EnvironmentMap UtilitySandboxedProcessLauncherDelegate::GetEnvironment() {
   return env_;
 }
 #endif  // OS_POSIX
+
+#if defined(OS_MAC) && defined(ARCH_CPU_ARM64)
+bool UtilitySandboxedProcessLauncherDelegate::LaunchX86_64() {
+  return launch_x86_64_;
+}
+#endif  // OS_MAC && ARCH_CPU_ARM64
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
 ZygoteHandle UtilitySandboxedProcessLauncherDelegate::GetZygote() {

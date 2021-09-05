@@ -14,12 +14,20 @@
 #include "base/time/time.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/video_frame.h"
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+#include "media/formats/mp4/h264_annex_b_to_avc_bitstream_converter.h"
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "third_party/libyuv/include/libyuv.h"
 
 namespace media {
 
 namespace {
+
+// HW encoders expect a nonzero bitrate, so |kVEADefaultBitratePerPixel| is used
+// to estimate bits per second for ~30 fps with ~1/16 compression rate.
+constexpr int kVEADefaultBitratePerPixel = 2;
+
 Status SetUpVeaConfig(VideoCodecProfile profile,
                       const VideoEncoder::Options& opts,
                       VideoEncodeAccelerator::Config* config) {
@@ -29,9 +37,11 @@ Status SetUpVeaConfig(VideoCodecProfile profile,
 
   *config = VideoEncodeAccelerator::Config(
       PIXEL_FORMAT_I420, gfx::Size(opts.width, opts.height), profile,
-      opts.bitrate.value_or(1000000));
+      opts.bitrate.value_or(opts.width * opts.height *
+                            kVEADefaultBitratePerPixel));
   return Status();
 }
+
 }  // namespace
 
 class VideoEncodeAcceleratorAdapter::SharedMemoryPool
@@ -172,6 +182,11 @@ void VideoEncodeAcceleratorAdapter::InitializeOnAcceleratorThread(
     return;
   }
 
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+  if (profile >= H264PROFILE_MIN && profile <= H264PROFILE_MAX)
+    h264_converter_ = std::make_unique<H264AnnexBToAvcBitstreamConverter>();
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
+
   output_cb_ = std::move(output_cb);
   state_ = State::kInitializing;
   pending_init_ = std::make_unique<PendingOp>();
@@ -295,7 +310,7 @@ void VideoEncodeAcceleratorAdapter::FlushOnAcceleratorThread(StatusCB done_cb) {
 
   // If flush is not supported FlushCompleted() will be called by
   // BitstreamBufferReady() when |pending_encodes_| is empty.
-  if (accelerator_->IsFlushSupported()) {
+  if (flush_support_) {
     accelerator_->Flush(
         base::BindOnce(&VideoEncodeAcceleratorAdapter::FlushCompleted,
                        base::Unretained(this)));
@@ -324,21 +339,57 @@ void VideoEncodeAcceleratorAdapter::RequireBitstreamBuffers(
   accelerator_->UseOutputBitstreamBuffer(
       BitstreamBuffer(buffer_id, region->Duplicate(), region->GetSize()));
   InitCompleted(Status());
+  flush_support_ = accelerator_->IsFlushSupported();
 }
 
 void VideoEncodeAcceleratorAdapter::BitstreamBufferReady(
     int32_t buffer_id,
     const BitstreamBufferMetadata& metadata) {
+  base::Optional<CodecDescription> desc;
   VideoEncoderOutput result;
   result.key_frame = metadata.key_frame;
   result.timestamp = metadata.timestamp;
   result.size = metadata.payload_size_bytes;
-  result.data.reset(new uint8_t[result.size]);
 
   base::WritableSharedMemoryMapping* mapping =
       output_pool_->GetMapping(buffer_id);
   DCHECK_LE(result.size, mapping->size());
-  memcpy(result.data.get(), mapping->memory(), result.size);
+
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+  if (h264_converter_) {
+    uint8_t* src = static_cast<uint8_t*>(mapping->memory());
+    size_t dst_size = result.size;
+    size_t actual_output_size = 0;
+    bool config_changed = false;
+    std::unique_ptr<uint8_t[]> dst(new uint8_t[dst_size]);
+
+    auto status =
+        h264_converter_->ConvertChunk(base::span<uint8_t>(src, result.size),
+                                      base::span<uint8_t>(dst.get(), dst_size),
+                                      &config_changed, &actual_output_size);
+    if (!status.is_ok()) {
+      LOG(ERROR) << status.message();
+      NotifyError(VideoEncodeAccelerator::kPlatformFailureError);
+      return;
+    }
+    result.size = actual_output_size;
+    result.data = std::move(dst);
+
+    if (config_changed) {
+      const auto& config = h264_converter_->GetCurrentConfig();
+      desc = CodecDescription();
+      if (!config.Serialize(desc.value())) {
+        NotifyError(VideoEncodeAccelerator::kPlatformFailureError);
+        return;
+      }
+    }
+  } else {
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
+    result.data.reset(new uint8_t[result.size]);
+    memcpy(result.data.get(), mapping->memory(), result.size);
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+  }
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
   // Give the buffer back to |accelerator_|
   base::UnsafeSharedMemoryRegion* region = output_pool_->GetRegion(buffer_id);
@@ -352,8 +403,8 @@ void VideoEncodeAcceleratorAdapter::BitstreamBufferReady(
       break;
     }
   }
-  output_cb_.Run(std::move(result));
-  if (pending_encodes_.empty() && !accelerator_->IsFlushSupported()) {
+  output_cb_.Run(std::move(result), std::move(desc));
+  if (pending_encodes_.empty() && !flush_support_) {
     // Manually call FlushCompleted(), since |accelerator_| won't do it for us.
     FlushCompleted(true);
   }
@@ -381,6 +432,7 @@ void VideoEncodeAcceleratorAdapter::NotifyError(
     std::move(encode->done_callback).Run(Status());
   }
   pending_encodes_.clear();
+  state_ = State::kNotInitialized;
 }
 
 void VideoEncodeAcceleratorAdapter::NotifyEncoderInfoChange(

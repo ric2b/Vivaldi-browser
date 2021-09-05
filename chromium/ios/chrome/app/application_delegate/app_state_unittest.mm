@@ -28,7 +28,6 @@
 #import "ios/chrome/browser/main/test_browser.h"
 #import "ios/chrome/browser/metrics/ios_profile_session_durations_service.h"
 #import "ios/chrome/browser/metrics/ios_profile_session_durations_service_factory.h"
-#import "ios/chrome/browser/ntp_snippets/content_suggestions_scheduler_notifications.h"
 #include "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/authentication_service_fake.h"
@@ -47,6 +46,7 @@
 #import "ios/chrome/browser/ui/util/multi_window_support.h"
 #include "ios/chrome/test/block_cleanup_test.h"
 #include "ios/chrome/test/ios_chrome_scoped_testing_chrome_browser_provider.h"
+#import "ios/chrome/test/scoped_key_window.h"
 #include "ios/public/provider/chrome/browser/distribution/app_distribution_provider.h"
 #include "ios/public/provider/chrome/browser/test_chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/user_feedback/test_user_feedback_provider.h"
@@ -195,27 +195,6 @@ class AppStateTest : public BlockCleanupTest {
     browser_state_ = test_cbs_builder.Build();
   }
 
-  void initializeIncognitoBlocker(UIWindow* window) {
-    id application = [OCMockObject niceMockForClass:[UIApplication class]];
-    id memoryHelper = [OCMockObject mockForClass:[MemoryWarningHelper class]];
-    StubBrowserInterfaceProvider* interfaceProvider =
-        [[StubBrowserInterfaceProvider alloc] init];
-    std::unique_ptr<Browser> browser = std::make_unique<TestBrowser>();
-
-    [[startup_information_mock_ stub] expireFirstUserActionRecorder];
-    [[[memoryHelper stub] andReturnValue:@0] foregroundMemoryWarningCount];
-
-    interfaceProvider.mainInterface.browser = browser.get();
-
-    swizzleMetricsMediatorDisableReporting();
-
-    [app_state_ applicationDidEnterBackground:application
-                                 memoryHelper:memoryHelper
-                      incognitoContentVisible:YES];
-
-    metrics_mediator_called_ = NO;
-  }
-
   void swizzleConnectedScenes(NSArray<SceneState*>* connectedScenes) {
     connected_scenes_swizzle_block_ = ^NSArray<SceneState*>*(id self) {
       return connectedScenes;
@@ -268,8 +247,7 @@ class AppStateTest : public BlockCleanupTest {
         handle_startup_swizzle_block_));
   }
 
-  AppState* getAppStateWithOpenNTPAndIncognitoBlock(BOOL shouldOpenNTP,
-                                                    UIWindow* window) {
+  AppState* getAppStateWithOpenNTP(BOOL shouldOpenNTP, UIWindow* window) {
     AppState* appState = getAppStateWithRealWindow(window);
 
     id application = [OCMockObject mockForClass:[UIApplication class]];
@@ -294,10 +272,7 @@ class AppStateTest : public BlockCleanupTest {
 
     [appState applicationWillEnterForeground:application
                              metricsMediator:metricsMediator
-                                memoryHelper:memoryHelper
-                                   tabOpener:tabOpener];
-
-    initializeIncognitoBlocker(window);
+                                memoryHelper:memoryHelper];
 
     return appState;
   }
@@ -588,7 +563,7 @@ TEST_F(AppStateWithThreadTest, willTerminate) {
   EXPECT_TRUE(provider->cancel_called());
 }
 
-// Test that -resumeSessionWithTabOpener removes incognito blocker,
+// Test that -resumeSessionWithTabOpener
 // restart metrics and launchs from StartupParameters if they exist.
 TEST_F(AppStateTest, resumeSessionWithStartupParameters) {
   if (IsSceneStartupSupported()) {
@@ -626,10 +601,8 @@ TEST_F(AppStateTest, resumeSessionWithStartupParameters) {
   // Swizzle Startup Parameters.
   swizzleHandleStartupParameters(tabOpener, getBrowserState());
 
-  UIWindow* window = [[UIWindow alloc] init];
-  AppState* appState = getAppStateWithOpenNTPAndIncognitoBlock(NO, window);
-
-  ASSERT_EQ(NSUInteger(1), [window subviews].count);
+  ScopedKeyWindow scopedKeyWindow;
+  AppState* appState = getAppStateWithOpenNTP(NO, scopedKeyWindow.Get());
 
   // Action.
   [appState resumeSessionWithTabOpener:tabOpener
@@ -637,12 +610,11 @@ TEST_F(AppStateTest, resumeSessionWithStartupParameters) {
                  connectionInformation:getConnectionInformationMock()];
 
   // Test.
-  EXPECT_EQ(NSUInteger(0), [window subviews].count);
   EXPECT_EQ(1, getProfileSessionDurationsService()->session_started_count());
   EXPECT_EQ(0, getProfileSessionDurationsService()->session_ended_count());
 }
 
-// Test that -resumeSessionWithTabOpener removes incognito blocker,
+// Test that -resumeSessionWithTabOpener
 // restart metrics and creates a new tab from tab switcher if shouldOpenNTP is
 // YES.
 TEST_F(AppStateTest, resumeSessionShouldOpenNTPTabSwitcher) {
@@ -679,11 +651,8 @@ TEST_F(AppStateTest, resumeSessionShouldOpenNTPTabSwitcher) {
   id tabSwitcher = [OCMockObject mockForProtocol:@protocol(TabSwitching)];
   [[[tabSwitcher stub] andReturnValue:@YES] openNewTabFromTabSwitcher];
 
-
-  UIWindow* window = [[UIWindow alloc] init];
-  AppState* appState = getAppStateWithOpenNTPAndIncognitoBlock(YES, window);
-
-  ASSERT_EQ(NSUInteger(1), [window subviews].count);
+  ScopedKeyWindow scopedKeyWindow;
+  AppState* appState = getAppStateWithOpenNTP(YES, scopedKeyWindow.Get());
 
   // Action.
   [appState resumeSessionWithTabOpener:tabOpener
@@ -691,10 +660,10 @@ TEST_F(AppStateTest, resumeSessionShouldOpenNTPTabSwitcher) {
                  connectionInformation:getConnectionInformationMock()];
 
   // Test.
-  EXPECT_EQ(NSUInteger(0), [window subviews].count);
+  EXPECT_EQ(NSUInteger(0), [scopedKeyWindow.Get() subviews].count);
 }
 
-// Test that -resumeSessionWithTabOpener removes incognito blocker,
+// Test that -resumeSessionWithTabOpener,
 // restart metrics and creates a new tab if shouldOpenNTP is YES.
 TEST_F(AppStateTest, resumeSessionShouldOpenNTPNoTabSwitcher) {
   if (IsSceneStartupSupported()) {
@@ -744,11 +713,8 @@ TEST_F(AppStateTest, resumeSessionShouldOpenNTPNoTabSwitcher) {
   id tabSwitcher = [OCMockObject mockForProtocol:@protocol(TabSwitching)];
   [[[tabSwitcher stub] andReturnValue:@NO] openNewTabFromTabSwitcher];
 
-  UIWindow* window = [[UIWindow alloc] init];
-  AppState* appState = getAppStateWithOpenNTPAndIncognitoBlock(YES, window);
-
-  // incognitoBlocker.
-  ASSERT_EQ(NSUInteger(1), [window subviews].count);
+  ScopedKeyWindow scopedKeyWindow;
+  AppState* appState = getAppStateWithOpenNTP(YES, scopedKeyWindow.Get());
 
   // Action.
   [appState resumeSessionWithTabOpener:tabOpener
@@ -756,7 +722,7 @@ TEST_F(AppStateTest, resumeSessionShouldOpenNTPNoTabSwitcher) {
                  connectionInformation:getConnectionInformationMock()];
 
   // Test.
-  EXPECT_EQ(NSUInteger(0), [window subviews].count);
+  EXPECT_EQ(NSUInteger(0), [scopedKeyWindow.Get() subviews].count);
 }
 
 // Tests that -applicationWillEnterForeground resets components as needed.
@@ -788,8 +754,7 @@ TEST_F(AppStateTest, applicationWillEnterForeground) {
   [[getStartupInformationMock() expect] expireFirstUserActionRecorder];
   swizzleMetricsMediatorDisableReporting();
   [getAppStateWithMock() applicationDidEnterBackground:application
-                                          memoryHelper:memoryHelper
-                               incognitoContentVisible:YES];
+                                          memoryHelper:memoryHelper];
 
   void (^swizzleBlock)() = ^{
   };
@@ -802,8 +767,7 @@ TEST_F(AppStateTest, applicationWillEnterForeground) {
   // Actions.
   [getAppStateWithMock() applicationWillEnterForeground:application
                                         metricsMediator:metricsMediator
-                                           memoryHelper:memoryHelper
-                                              tabOpener:tabOpener];
+                                           memoryHelper:memoryHelper];
 
   // Tests.
   EXPECT_OCMOCK_VERIFY(metricsMediator);
@@ -822,7 +786,6 @@ TEST_F(AppStateTest, applicationWillEnterForegroundFromBackground) {
   id application = [OCMockObject mockForClass:[UIApplication class]];
   id metricsMediator = [OCMockObject mockForClass:[MetricsMediator class]];
   id memoryHelper = [OCMockObject mockForClass:[MemoryWarningHelper class]];
-  id tabOpener = [OCMockObject mockForProtocol:@protocol(TabOpening)];
 
   BrowserInitializationStageType stage = INITIALIZATION_STAGE_BACKGROUND;
   [[[getBrowserLauncherMock() stub] andReturnValue:@(stage)]
@@ -838,8 +801,7 @@ TEST_F(AppStateTest, applicationWillEnterForegroundFromBackground) {
   // Actions.
   [getAppStateWithMock() applicationWillEnterForeground:application
                                         metricsMediator:metricsMediator
-                                           memoryHelper:memoryHelper
-                                              tabOpener:tabOpener];
+                                           memoryHelper:memoryHelper];
 
   // Tests.
   EXPECT_OCMOCK_VERIFY(getBrowserLauncherMock());
@@ -857,7 +819,6 @@ TEST_F(AppStateTest,
   id application = [OCMockObject mockForClass:[UIApplication class]];
   id metricsMediator = [OCMockObject mockForClass:[MetricsMediator class]];
   id memoryHelper = [OCMockObject mockForClass:[MemoryWarningHelper class]];
-  id tabOpener = [OCMockObject mockForProtocol:@protocol(TabOpening)];
 
   id window = getWindowMock();
 
@@ -882,18 +843,17 @@ TEST_F(AppStateTest,
   // Actions.
   [getAppStateWithMock() applicationWillEnterForeground:application
                                         metricsMediator:metricsMediator
-                                           memoryHelper:memoryHelper
-                                              tabOpener:tabOpener];
+                                           memoryHelper:memoryHelper];
 
   // Tests.
   EXPECT_OCMOCK_VERIFY(window);
   EXPECT_TRUE([getAppStateWithMock() isInSafeMode]);
 }
 
-// Tests that -applicationDidEnterBackground creates an incognito blocker.
+// Tests that -applicationDidEnterBackground calls the metrics mediator.
 TEST_F(AppStateTest, applicationDidEnterBackgroundIncognito) {
   // Setup.
-  UIWindow* window = [[UIWindow alloc] init];
+  ScopedKeyWindow scopedKeyWindow;
   id application = [OCMockObject niceMockForClass:[UIApplication class]];
   id memoryHelper = [OCMockObject mockForClass:[MemoryWarningHelper class]];
   StubBrowserInterfaceProvider* interfaceProvider = getInterfaceProvider();
@@ -903,7 +863,7 @@ TEST_F(AppStateTest, applicationDidEnterBackgroundIncognito) {
   id browserLauncher = getBrowserLauncherMock();
   BrowserInitializationStageType stage = INITIALIZATION_STAGE_FOREGROUND;
 
-  AppState* appState = getAppStateWithRealWindow(window);
+  AppState* appState = getAppStateWithRealWindow(scopedKeyWindow.Get());
 
   [[startupInformation expect] expireFirstUserActionRecorder];
   [[[memoryHelper stub] andReturnValue:@0] foregroundMemoryWarningCount];
@@ -913,24 +873,20 @@ TEST_F(AppStateTest, applicationDidEnterBackgroundIncognito) {
 
   swizzleMetricsMediatorDisableReporting();
 
-  ASSERT_EQ(NSUInteger(0), [window subviews].count);
-
   // Action.
   [appState applicationDidEnterBackground:application
-                             memoryHelper:memoryHelper
-                  incognitoContentVisible:YES];
+                             memoryHelper:memoryHelper];
 
   // Tests.
   EXPECT_OCMOCK_VERIFY(startupInformation);
   EXPECT_TRUE(metricsMediatorHasBeenCalled());
-  EXPECT_EQ(NSUInteger(1), [window subviews].count);
 }
 
 // Tests that -applicationDidEnterBackground do nothing if the application has
 // never been in a Foreground stage.
 TEST_F(AppStateTest, applicationDidEnterBackgroundStageBackground) {
   // Setup.
-  UIWindow* window = [[UIWindow alloc] init];
+  ScopedKeyWindow scopedKeyWindow;
   id application = [OCMockObject mockForClass:[UIApplication class]];
   id memoryHelper = [OCMockObject mockForClass:[MemoryWarningHelper class]];
   id browserLauncher = getBrowserLauncherMock();
@@ -939,50 +895,13 @@ TEST_F(AppStateTest, applicationDidEnterBackgroundStageBackground) {
   [[[browserLauncher stub] andReturnValue:@(stage)] browserInitializationStage];
   [[[browserLauncher stub] andReturn:nil] interfaceProvider];
 
-  ASSERT_EQ(NSUInteger(0), [window subviews].count);
+  ASSERT_EQ(NSUInteger(0), [scopedKeyWindow.Get() subviews].count);
 
   // Action.
-  [getAppStateWithRealWindow(window) applicationDidEnterBackground:application
-                                                      memoryHelper:memoryHelper
-                                           incognitoContentVisible:YES];
+  [getAppStateWithRealWindow(scopedKeyWindow.Get())
+      applicationDidEnterBackground:application
+                       memoryHelper:memoryHelper];
 
   // Tests.
-  EXPECT_EQ(NSUInteger(0), [window subviews].count);
-}
-
-// Tests that -applicationDidEnterBackground does not create an incognito
-// blocker if there is no incognito tab.
-TEST_F(AppStateTest, applicationDidEnterBackgroundNoIncognitoBlocker) {
-  // Setup.
-  UIWindow* window = [[UIWindow alloc] init];
-  id application = [OCMockObject niceMockForClass:[UIApplication class]];
-  id memoryHelper = [OCMockObject mockForClass:[MemoryWarningHelper class]];
-  StubBrowserInterfaceProvider* interfaceProvider = getInterfaceProvider();
-
-  std::unique_ptr<Browser> browser = std::make_unique<TestBrowser>();
-  id startupInformation = getStartupInformationMock();
-  id browserLauncher = getBrowserLauncherMock();
-  BrowserInitializationStageType stage = INITIALIZATION_STAGE_FOREGROUND;
-
-  AppState* appState = getAppStateWithRealWindow(window);
-
-  [[startupInformation expect] expireFirstUserActionRecorder];
-  [[[memoryHelper stub] andReturnValue:@0] foregroundMemoryWarningCount];
-  interfaceProvider.incognitoInterface.browser = browser.get();
-  [[[browserLauncher stub] andReturnValue:@(stage)] browserInitializationStage];
-  [[[browserLauncher stub] andReturn:interfaceProvider] interfaceProvider];
-
-  swizzleMetricsMediatorDisableReporting();
-
-  ASSERT_EQ(NSUInteger(0), [window subviews].count);
-
-  // Action.
-  [appState applicationDidEnterBackground:application
-                             memoryHelper:memoryHelper
-                  incognitoContentVisible:NO];
-
-  // Tests.
-  EXPECT_OCMOCK_VERIFY(startupInformation);
-  EXPECT_TRUE(metricsMediatorHasBeenCalled());
-  EXPECT_EQ(NSUInteger(0), [window subviews].count);
+  EXPECT_EQ(NSUInteger(0), [scopedKeyWindow.Get() subviews].count);
 }

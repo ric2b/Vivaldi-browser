@@ -41,6 +41,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/system/message_pipe.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
 #include "services/network/public/mojom/restricted_cookie_manager.mojom-forward.h"
@@ -90,6 +91,9 @@ class WebUsbService;
 class WindowFeatures;
 enum class WebFeature : int32_t;
 }  // namespace mojom
+namespace web_pref {
+struct WebPreferences;
+}  // namespace web_pref
 class AssociatedInterfaceRegistry;
 class URLLoaderThrottle;
 }  // namespace blink
@@ -152,6 +156,7 @@ struct ResourceRequest;
 }  // namespace network
 
 namespace sandbox {
+class SeatbeltExecClient;
 class TargetPolicy;
 namespace policy {
 enum class SandboxType;
@@ -222,7 +227,6 @@ struct OpenURLParams;
 struct PepperPluginInfo;
 struct Referrer;
 struct SocketPermissionRequest;
-struct WebPreferences;
 
 #if defined(OS_ANDROID)
 class TtsEnvironmentAndroid;
@@ -471,7 +475,15 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Allows the embedder to override parameters when navigating. Called for both
   // opening new URLs and when transferring URLs across processes.
+  // |web_contents| is the WebContents the navigation will occur in, which is
+  // not necessarily the WebContents the navigation was initiated from. For
+  // example, a popup results in a new WebContents. In some situations
+  // |web_contents| is null. This generally only occurs when code outside of
+  // content triggers this function, such as restore.
+  // WARNING: |web_contents| is temporary, and will be removed. See
+  // https://crbug.com/1141501.
   virtual void OverrideNavigationParams(
+      WebContents* web_contents,
       SiteInstance* site_instance,
       ui::PageTransition* transition,
       bool* is_renderer_initiated,
@@ -743,11 +755,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual void OnTrustAnchorUsed(BrowserContext* browser_context) {}
 #endif
 
-  // Notification that a signed certificate timestamp (SCT) report was enqueued.
-  // Allows an embedder to implement their own behavior for auditing SCTs.
-  virtual void OnSCTReportReady(BrowserContext* browser_context,
-                                const std::string& cache_key) {}
-
   // Allows the embedder to override the LocationProvider implementation.
   // Return nullptr to indicate the default one for the platform should be
   // created. This is used by Qt, see
@@ -890,14 +897,15 @@ class CONTENT_EXPORT ContentBrowserClient {
   // the renderer. The content layer will add its own settings, and then it's up
   // to the embedder to update it if it wants.
   virtual void OverrideWebkitPrefs(RenderViewHost* render_view_host,
-                                   WebPreferences* prefs) {}
+                                   blink::web_pref::WebPreferences* prefs) {}
 
   // Similar to OverrideWebkitPrefs, but is only called after navigations. Some
   // attributes in WebPreferences might need its value updated after navigation,
   // and this method will give the opportunity for embedder to update them.
   // Returns true if some values |prefs| changed due to embedder override.
-  virtual bool OverrideWebPreferencesAfterNavigation(WebContents* web_contents,
-                                                     WebPreferences* prefs);
+  virtual bool OverrideWebPreferencesAfterNavigation(
+      WebContents* web_contents,
+      blink::web_pref::WebPreferences* prefs);
 
   // Notifies that BrowserURLHandler has been created, so that the embedder can
   // optionally add their own handlers.
@@ -1237,17 +1245,28 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Allows the embedder to register per-scheme URLLoaderFactory implementations
   // to handle navigation URL requests for schemes not handled by the Network
-  // Service. Only called when the Network Service is enabled.
+  // Service.
+  //
   // Note that a RenderFrameHost or RenderProcessHost aren't passed in because
   // these can change during a navigation (e.g. depending on redirects).
   //
   // |ukm_source_id| can be used to record UKM events associated with the
   // navigation.
-  using NonNetworkURLLoaderFactoryMap =
+  //
+  // TODO(lukasza): https://crbug.com/1106995: Remove
+  // NonNetworkURLLoaderFactoryDeprecatedMap type alias (and parameters in
+  // methods below that use this type).  This type encourages incorrect lifetime
+  // of factories (the factories and their clones need to be fully owned by
+  // their receivers).
+  using NonNetworkURLLoaderFactoryDeprecatedMap =
       std::map<std::string, std::unique_ptr<network::mojom::URLLoaderFactory>>;
+  using NonNetworkURLLoaderFactoryMap =
+      std::map<std::string,
+               mojo::PendingRemote<network::mojom::URLLoaderFactory>>;
   virtual void RegisterNonNetworkNavigationURLLoaderFactories(
       int frame_tree_node_id,
       base::UkmSourceId ukm_source_id,
+      NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
       NonNetworkURLLoaderFactoryMap* factories);
 
   // Allows the embedder to register per-scheme URLLoaderFactory
@@ -1277,9 +1296,14 @@ class CONTENT_EXPORT ContentBrowserClient {
   //   -downloads
   //   -service worker script when starting a service worker. In that case, the
   //    frame id will be MSG_ROUTING_NONE
+  //
+  // TODO(lukasza): https://crbug.com/1106995: Deprecate and remove the
+  // |uniquely_owned_factories| parameter - it results in incorrect factory
+  // lifetimes.
   virtual void RegisterNonNetworkSubresourceURLLoaderFactories(
       int render_process_id,
       int render_frame_id,
+      NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
       NonNetworkURLLoaderFactoryMap* factories);
 
   // Describes the purpose of the factory in WillCreateURLLoaderFactory().
@@ -1348,6 +1372,10 @@ class CONTENT_EXPORT ContentBrowserClient {
   // |navigation_id| is valid iff |type| is |kNavigation|. It corresponds to the
   // Navigation ID returned by NavigationHandle::GetNavigationId().
   //
+  // |ukm_source_id| can be used to record UKM events associated with the
+  // page or worker this URLLoaderFactory is intended for (it may be
+  // kInvalidUkmSourceId if there is no such ID available).
+  //
   // |*factory_receiver| is always valid upon entry and MUST be valid upon
   // return. The embedder may swap out the value of |*factory_receiver| for its
   // own, in which case it must return |true| to indicate that it's proxying
@@ -1389,6 +1417,7 @@ class CONTENT_EXPORT ContentBrowserClient {
       URLLoaderFactoryType type,
       const url::Origin& request_initiator,
       base::Optional<int64_t> navigation_id,
+      base::UkmSourceId ukm_source_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
@@ -1788,6 +1817,12 @@ class CONTENT_EXPORT ContentBrowserClient {
       bool user_gesture,
       NavigationDownloadPolicy* download_policy);
 
+  // Returns the interest cohort associated with the |browser_context|.
+  virtual std::string GetInterestCohortForJsApi(
+      content::BrowserContext* browser_context,
+      const url::Origin& requesting_origin,
+      const net::SiteForCookies& site_for_cookies);
+
   // Returns whether a site is blocked to use Bluetooth scanning API.
   virtual bool IsBluetoothScanningBlocked(
       content::BrowserContext* browser_context,
@@ -1849,18 +1884,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // fullscreen when mock screen orientation changes.
   virtual bool CanEnterFullscreenWithoutUserActivation();
 
-  // Called to log a UKM event for the
-  // Extensions.CrossOriginFetchFromContentScript3 metric.  See the metric
-  // definition in //tools/metrics/ukm/ukm.xml for more details, including when
-  // this event should be logged.
-  //
-  // |isolated_world_host| is the hostname of the isolated world origin that has
-  // initiated the network request.  See the doc comment for
-  // network.mojom.URLRequest.isolated_world_origin for more details.  In
-  // practice, |isolated_world_host| is the Chrome Extension ID.
-  virtual void LogUkmEventForCrossOriginFetchFromContentScript3(
-      const std::string& isolated_world_host);
-
 #if BUILDFLAG(ENABLE_PLUGINS)
   // Returns true if |embedder_origin| is allowed to embed a plugin described by
   // |plugin_info|.  This method allows restricting some internal plugins (like
@@ -1881,24 +1904,36 @@ class CONTENT_EXPORT ContentBrowserClient {
   // External applications and services may launch the browser in a mode which
   // exposes browser control interfaces via Mojo. Any such interface binding
   // request received from an external client is passed to this method.
-  virtual void BindBrowserControlInterface(
-      mojo::GenericPendingReceiver receiver);
+  virtual void BindBrowserControlInterface(mojo::ScopedMessagePipeHandle pipe);
 
   // Returns true when a context (e.g., iframe) whose URL is |url| should
   // inherit the parent COEP value implicitly, similar to "blob:"
   virtual bool ShouldInheritCrossOriginEmbedderPolicyImplicitly(
       const GURL& url);
 
-  // Returns the private network request policy to apply to |url|.
+  // Returns whether a context whose URL is |url| should be allowed to make
+  // insecure private network requests.
+  //
+  // See the CORS-RFC1918 spec for more details:
+  // https://wicg.github.io/cors-rfc1918.
   //
   // |browser_context| must not be nullptr. Caller retains ownership.
   // |url| is the URL of a navigation ready to commit.
-  virtual network::mojom::PrivateNetworkRequestPolicy
-  GetPrivateNetworkRequestPolicy(BrowserContext* browser_context,
-                                 const GURL& url);
+  virtual bool ShouldAllowInsecurePrivateNetworkRequests(
+      BrowserContext* browser_context,
+      const GURL& url);
 
   // Returns the URL-Keyed Metrics service for chrome:ukm.
   virtual ukm::UkmService* GetUkmService();
+
+#if defined(OS_MAC)
+  // Sets up the embedder sandbox parameters for the given sandbox type. Returns
+  // true if parameters were successfully set up or false if no additional
+  // parameters were set up.
+  virtual bool SetupEmbedderSandboxParameters(
+      sandbox::policy::SandboxType sandbox_type,
+      sandbox::SeatbeltExecClient* client);
+#endif  // defined(OS_MAC)
 };
 
 }  // namespace content

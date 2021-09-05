@@ -140,7 +140,9 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData {
       network::mojom::blink::CoopAccessReportType report_type,
       LocalFrame* accessing_frame,
       mojo::PendingRemote<
-          network::mojom::blink::CrossOriginOpenerPolicyReporter> reporter);
+          network::mojom::blink::CrossOriginOpenerPolicyReporter> reporter,
+      bool endpoint_defined,
+      const WTF::String& reported_window_url);
   // Whenever we detect that the enforcement of a report-only COOP policy would
   // have resulted in preventing access to this window, a report is potentially
   // sent when calling this function.
@@ -165,6 +167,11 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData {
                      LocalDOMWindow* source,
                      ExceptionState&);
 
+  // Removed the CoopAccessMonitor with the given |accessing_main_frame| from
+  // the |coop_access_monitor| list. This is called when the COOP reporter is
+  // gone or a more recent CoopAccessMonitor is being added.
+  void DisconnectCoopAccessMonitor(base::UnguessableToken accessing_main_frame);
+
   Member<Frame> frame_;
   // Unlike |frame_|, |window_proxy_manager_| is available even after the
   // window's frame gets detached from the DOM, until the end of the lifetime
@@ -188,6 +195,8 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData {
     base::UnguessableToken accessing_main_frame;
     mojo::Remote<network::mojom::blink::CrossOriginOpenerPolicyReporter>
         reporter;
+    bool endpoint_defined;
+    WTF::String reported_window_url;
   };
   WTF::Vector<CoopAccessMonitor> coop_access_monitor_;
 };

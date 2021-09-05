@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "ash/focus_cycler.h"
+#include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/lock_screen_action/lock_screen_action_background_state.h"
 #include "ash/login/login_screen_controller.h"
 #include "ash/login/ui/lock_screen.h"
@@ -24,6 +25,9 @@
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/ash_color_provider.h"
+#include "ash/style/default_color_constants.h"
+#include "ash/style/default_colors.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/status_area_widget_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
@@ -72,6 +76,26 @@ namespace {
 
 const char* kLoginShelfButtonClassName = "LoginShelfButton";
 
+SkColor GetButtonTextColor() {
+  return DeprecatedGetContentLayerColor(
+      AshColorProvider::ContentLayerType::kButtonLabelColor,
+      kLoginShelfButtonLabelColor);
+}
+
+SkColor GetButtonIconColor() {
+  return DeprecatedGetContentLayerColor(
+      AshColorProvider::ContentLayerType::kButtonIconColor,
+      kLoginShelfButtonIconColor);
+}
+
+SkColor GetButtonBackgroundColor() {
+  if (Shell::Get()->session_controller()->GetSessionState() ==
+      session_manager::SessionState::OOBE) {
+    return SkColorSetA(SK_ColorBLACK, 16);  // 6% opacity
+  }
+  return DeprecatedGetLoginBackgroundBaseColor(kLoginButtonBackgroundBaseColor);
+}
+
 LoginMetricsRecorder::ShelfButtonClickTarget GetUserClickTarget(int button_id) {
   switch (button_id) {
     case LoginShelfView::kShutdown:
@@ -106,14 +130,8 @@ constexpr int kButtonMarginRightDp = 16;
 // Spacing between the button image and label.
 constexpr int kImageLabelSpacingDp = 10;
 
-// The color of the button text.
-constexpr SkColor kButtonTextColor = gfx::kGoogleGrey100;
-
 // The color of the button text during OOBE.
 constexpr SkColor kButtonTextColorOobe = gfx::kGoogleGrey700;
-
-// The color of the button icon.
-constexpr SkColor kButtonIconColor = SkColorSetRGB(0xEB, 0xEA, 0xED);
 
 void AnimateButtonOpacity(ui::Layer* layer,
                           float target_opacity,
@@ -155,11 +173,12 @@ class LoginShelfButton : public views::LabelButton {
         text_resource_id_(text_resource_id),
         icon_(icon) {
     SetAccessibleName(GetText());
+    SkColor button_icon_color = GetButtonIconColor();
     SetImage(views::Button::STATE_NORMAL,
-             gfx::CreateVectorIcon(icon, kButtonIconColor));
+             gfx::CreateVectorIcon(icon, button_icon_color));
     SetImage(views::Button::STATE_DISABLED,
              gfx::CreateVectorIcon(
-                 icon, SkColorSetA(kButtonIconColor,
+                 icon, SkColorSetA(button_icon_color,
                                    login_constants::kButtonDisabledAlpha)));
     SetFocusBehavior(FocusBehavior::ALWAYS);
     SetInstallFocusRingOnFocus(true);
@@ -168,10 +187,11 @@ class LoginShelfButton : public views::LabelButton {
     focus_ring()->SetColor(ShelfConfig::Get()->shelf_focus_border_color());
     SetFocusPainter(nullptr);
     SetInkDropMode(InkDropMode::ON);
-    set_has_ink_drop_action_on_click(true);
-    set_ink_drop_base_color(ShelfConfig::Get()->shelf_ink_drop_base_color());
-    set_ink_drop_visible_opacity(
-        ShelfConfig::Get()->shelf_ink_drop_visible_opacity());
+    SetHasInkDropActionOnClick(true);
+    SetInkDropBaseColor(
+        DeprecatedGetInkDropBaseColor(kDefaultShelfInkDropColor));
+    SetInkDropVisibleOpacity(
+        DeprecatedGetInkDropOpacity(kDefaultShelfInkDropOpacity));
 
     // Layer rendering is required when the shelf background is visible, which
     // happens when the wallpaper is not blurred.
@@ -181,10 +201,12 @@ class LoginShelfButton : public views::LabelButton {
     SetTextSubpixelRenderingEnabled(false);
 
     SetImageLabelSpacing(kImageLabelSpacingDp);
-    SetEnabledTextColors(kButtonTextColor);
+
+    SkColor button_text_color = GetButtonTextColor();
+    SetEnabledTextColors(button_text_color);
     SetTextColor(
         views::Button::STATE_DISABLED,
-        SkColorSetA(kButtonTextColor, login_constants::kButtonDisabledAlpha));
+        SkColorSetA(button_text_color, login_constants::kButtonDisabledAlpha));
     label()->SetFontList(views::Label::GetDefaultFontList().Derive(
         1, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::NORMAL));
   }
@@ -205,7 +227,7 @@ class LoginShelfButton : public views::LabelButton {
   void PaintButtonContents(gfx::Canvas* canvas) override {
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
-    flags.setColor(ShelfConfig::Get()->GetShelfControlButtonColor());
+    flags.setColor(GetButtonBackgroundColor());
     flags.setStyle(cc::PaintFlags::kFill_Style);
     canvas->DrawPath(GetButtonHighlightPath(this), flags);
   }
@@ -231,10 +253,17 @@ class LoginShelfButton : public views::LabelButton {
   }
 
   void PaintLightColors() {
-    SetEnabledTextColors(kButtonTextColor);
+    SkColor button_text_color = GetButtonTextColor();
+    SetEnabledTextColors(button_text_color);
     SetImage(views::Button::STATE_NORMAL,
-             gfx::CreateVectorIcon(icon_, kButtonTextColor));
+             gfx::CreateVectorIcon(icon_, button_text_color));
     SchedulePaint();
+  }
+
+  void OnFocus() override {
+    auto* const keyboard_controller = keyboard::KeyboardUIController::Get();
+    keyboard_controller->set_keyboard_locked(false /*lock*/);
+    keyboard_controller->HideKeyboardImplicitlyByUser();
   }
 
  private:
@@ -280,10 +309,11 @@ class KioskAppsButton : public views::MenuButton,
     focus_ring()->SetColor(ShelfConfig::Get()->shelf_focus_border_color());
     SetFocusPainter(nullptr);
     SetInkDropMode(InkDropMode::ON);
-    set_has_ink_drop_action_on_click(true);
-    set_ink_drop_base_color(ShelfConfig::Get()->shelf_ink_drop_base_color());
-    set_ink_drop_visible_opacity(
-        ShelfConfig::Get()->shelf_ink_drop_visible_opacity());
+    SetHasInkDropActionOnClick(true);
+    SetInkDropBaseColor(
+        DeprecatedGetInkDropBaseColor(kDefaultShelfInkDropColor));
+    SetInkDropVisibleOpacity(
+        DeprecatedGetInkDropOpacity(kDefaultShelfInkDropOpacity));
 
     // Layer rendering is required when the shelf background is visible, which
     // happens when the wallpaper is not blurred.
@@ -293,9 +323,9 @@ class KioskAppsButton : public views::MenuButton,
     SetTextSubpixelRenderingEnabled(false);
 
     SetImage(views::Button::STATE_NORMAL,
-             CreateVectorIcon(kShelfAppsButtonIcon, kButtonIconColor));
+             CreateVectorIcon(kShelfAppsButtonIcon, GetButtonIconColor()));
     SetImageLabelSpacing(kImageLabelSpacingDp);
-    SetEnabledTextColors(kButtonTextColor);
+    SetEnabledTextColors(GetButtonTextColor());
     label()->SetFontList(views::Label::GetDefaultFontList().Derive(
         1, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::NORMAL));
   }
@@ -371,9 +401,9 @@ class KioskAppsButton : public views::MenuButton,
   }
 
   void PaintLightColors() {
-    SetEnabledTextColors(kButtonTextColor);
+    SetEnabledTextColors(GetButtonTextColor());
     SetImage(views::Button::STATE_NORMAL,
-             CreateVectorIcon(kShelfAppsButtonIcon, kButtonIconColor));
+             CreateVectorIcon(kShelfAppsButtonIcon, GetButtonIconColor()));
     SchedulePaint();
   }
 
@@ -475,11 +505,11 @@ LoginShelfView::LoginShelfView(
   };
   add_button(kShutdown, IDS_ASH_SHELF_SHUTDOWN_BUTTON,
              kShelfShutdownButtonIcon);
+  add_button(kRestart, IDS_ASH_SHELF_RESTART_BUTTON, kShelfShutdownButtonIcon);
+  add_button(kSignOut, IDS_ASH_SHELF_SIGN_OUT_BUTTON, kShelfSignOutButtonIcon);
   kiosk_apps_button_ = new KioskAppsButton();
   kiosk_apps_button_->SetID(kApps);
   AddChildView(kiosk_apps_button_);
-  add_button(kRestart, IDS_ASH_SHELF_RESTART_BUTTON, kShelfShutdownButtonIcon);
-  add_button(kSignOut, IDS_ASH_SHELF_SIGN_OUT_BUTTON, kShelfSignOutButtonIcon);
   add_button(kCloseNote, IDS_ASH_SHELF_UNLOCK_BUTTON, kShelfUnlockButtonIcon);
   add_button(kCancel, IDS_ASH_SHELF_CANCEL_BUTTON, kShelfCancelButtonIcon);
   add_button(kBrowseAsGuest, IDS_ASH_BROWSE_AS_GUEST_BUTTON,

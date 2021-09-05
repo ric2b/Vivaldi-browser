@@ -6,6 +6,7 @@
 #define UI_VIEWS_CONTROLS_BUTTON_BUTTON_H_
 
 #include <memory>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/macros.h"
@@ -18,6 +19,7 @@
 #include "ui/views/animation/ink_drop_state.h"
 #include "ui/views/controls/button/button_controller_delegate.h"
 #include "ui/views/controls/focus_ring.h"
+#include "ui/views/metadata/view_factory.h"
 #include "ui/views/painter.h"
 
 namespace views {
@@ -30,7 +32,8 @@ class ButtonController;
 class Event;
 
 // An interface implemented by an object to let it know that a button was
-// pressed.
+// pressed.  DEPRECATED; use PressedCallback instead.
+// TODO(crbug.com/772945): Replace ButtonListener with PressedCallback.
 class VIEWS_EXPORT ButtonListener {
  public:
   virtual void ButtonPressed(Button* sender, const ui::Event& event) = 0;
@@ -45,10 +48,6 @@ class VIEWS_EXPORT ButtonListener {
 class VIEWS_EXPORT Button : public InkDropHostView,
                             public AnimationDelegateViews {
  public:
-  METADATA_HEADER(Button);
-
-  ~Button() override;
-
   // Button states for various button sub-types.
   enum ButtonState {
     STATE_NORMAL = 0,
@@ -57,10 +56,6 @@ class VIEWS_EXPORT Button : public InkDropHostView,
     STATE_DISABLED,
     STATE_COUNT,
   };
-
-  static constexpr ButtonState kButtonStates[STATE_COUNT] = {
-      ButtonState::STATE_NORMAL, ButtonState::STATE_HOVERED,
-      ButtonState::STATE_PRESSED, ButtonState::STATE_DISABLED};
 
   // An enum describing the events on which a button should be clicked for a
   // given key event.
@@ -92,6 +87,46 @@ class VIEWS_EXPORT Button : public InkDropHostView,
     DISALLOW_COPY_AND_ASSIGN(DefaultButtonControllerDelegate);
   };
 
+  // PressedCallback wraps a one-arg callback type with a variety of
+  // constructors, both to aid conversion from ButtonListener and to allow
+  // callers to specify a RepeatingClosure if they don't care about the callback
+  // arg.
+  // TODO(crbug.com/772945): Remove ButtonListener constructor, then re-evaluate
+  // if this class can/should be converted to a type alias + various helpers or
+  // overloads to support the RepeatingClosure case.
+  class VIEWS_EXPORT PressedCallback {
+   public:
+    using Callback = base::RepeatingCallback<void(const ui::Event& event)>;
+
+    // Allow providing callbacks that expect either zero or one args, since many
+    // callers don't care about the argument and can avoid adapter functions
+    // this way.
+    PressedCallback(Callback callback = Callback());  // NOLINT
+    PressedCallback(base::RepeatingClosure closure);  // NOLINT
+    // TODO(crbug.com/772945): Remove.
+    PressedCallback(ButtonListener* listener, Button* button);
+    PressedCallback(const PressedCallback&);
+    PressedCallback(PressedCallback&&);
+    PressedCallback& operator=(const PressedCallback&);
+    PressedCallback& operator=(PressedCallback&&);
+    ~PressedCallback();
+
+    explicit operator bool() const { return !!callback_; }
+
+    void Run(const ui::Event& event) { callback_.Run(event); }
+
+   private:
+    Callback callback_;
+  };
+
+  static constexpr ButtonState kButtonStates[STATE_COUNT] = {
+      ButtonState::STATE_NORMAL, ButtonState::STATE_HOVERED,
+      ButtonState::STATE_PRESSED, ButtonState::STATE_DISABLED};
+
+  METADATA_HEADER(Button);
+
+  ~Button() override;
+
   static const Button* AsButton(const View* view);
   static Button* AsButton(View* view);
 
@@ -101,11 +136,14 @@ class VIEWS_EXPORT Button : public InkDropHostView,
   void SetFocusForPlatform();
 
   void SetTooltipText(const base::string16& tooltip_text);
+  base::string16 GetTooltipText() const;
 
   int tag() const { return tag_; }
   void set_tag(int tag) { tag_ = tag; }
 
-  void set_listener(ButtonListener* listener) { listener_ = listener; }
+  void set_callback(PressedCallback callback) {
+    callback_ = std::move(callback);
+  }
 
   void SetAccessibleName(const base::string16& name);
   const base::string16& GetAccessibleName() const;
@@ -128,46 +166,31 @@ class VIEWS_EXPORT Button : public InkDropHostView,
   // Set how long the hover animation will last for.
   void SetAnimationDuration(base::TimeDelta duration);
 
-  void set_triggerable_event_flags(int triggerable_event_flags) {
-    triggerable_event_flags_ = triggerable_event_flags;
-  }
-  int triggerable_event_flags() const { return triggerable_event_flags_; }
+  void SetTriggerableEventFlags(int triggerable_event_flags);
+  int GetTriggerableEventFlags() const;
 
   // Sets whether |RequestFocus| should be invoked on a mouse press. The default
   // is false.
-  void set_request_focus_on_press(bool value) {
-// On Mac, buttons should not request focus on a mouse press. Hence keep the
-// default value i.e. false.
-#if !defined(OS_APPLE)
-    request_focus_on_press_ = value;
-#endif
-  }
-
-  bool request_focus_on_press() const { return request_focus_on_press_; }
+  void SetRequestFocusOnPress(bool value);
+  bool GetRequestFocusOnPress() const;
 
   // See description above field.
-  void set_animate_on_state_change(bool value) {
-    animate_on_state_change_ = value;
-  }
+  void SetAnimateOnStateChange(bool value);
+  bool GetAnimateOnStateChange() const;
 
-  bool hide_ink_drop_when_showing_context_menu() const {
-    return hide_ink_drop_when_showing_context_menu_;
-  }
-  void set_hide_ink_drop_when_showing_context_menu(
-      bool hide_ink_drop_when_showing_context_menu) {
-    hide_ink_drop_when_showing_context_menu_ =
-        hide_ink_drop_when_showing_context_menu;
-  }
+  void SetHideInkDropWhenShowingContextMenu(bool value);
+  bool GetHideInkDropWhenShowingContextMenu() const;
 
-  void set_show_ink_drop_when_hot_tracked(bool show_ink_drop_when_hot_tracked) {
-    show_ink_drop_when_hot_tracked_ = show_ink_drop_when_hot_tracked;
-  }
+  void SetShowInkDropWhenHotTracked(bool value);
+  bool GetShowInkDropWhenHotTracked() const;
 
-  void set_ink_drop_base_color(SkColor color) { ink_drop_base_color_ = color; }
-  void set_has_ink_drop_action_on_click(bool has_ink_drop_action_on_click) {
-    has_ink_drop_action_on_click_ = has_ink_drop_action_on_click;
-  }
+  void SetInkDropBaseColor(SkColor color);
+
+  void SetHasInkDropActionOnClick(bool value);
+  bool GetHasInkDropActionOnClick() const;
+
   void SetInstallFocusRingOnFocus(bool install_focus_ring_on_focus);
+  bool GetInstallFocusRingOnFocus() const;
 
   void SetHotTracked(bool is_hot_tracked);
   bool IsHotTracked() const;
@@ -229,10 +252,8 @@ class VIEWS_EXPORT Button : public InkDropHostView,
   gfx::Point GetMenuPosition() const;
 
  protected:
-  // Construct the Button with a Listener. The listener can be null. This can be
-  // true of buttons that don't have a listener - e.g. menubuttons where there's
-  // no default action and checkboxes.
-  explicit Button(ButtonListener* listener = nullptr);
+  explicit Button(PressedCallback callback = PressedCallback());
+  explicit Button(ButtonListener* listener);
 
   // Called when the button has been clicked or tapped and should request focus
   // if necessary.
@@ -289,9 +310,6 @@ class VIEWS_EXPORT Button : public InkDropHostView,
 
   FocusRing* focus_ring() { return focus_ring_; }
 
-  // The button's listener. Notified when clicked.
-  ButtonListener* listener_;
-
  private:
   friend class test::ButtonTestApi;
   FRIEND_TEST_ALL_PREFIXES(BlueButtonTest, Border);
@@ -304,8 +322,13 @@ class VIEWS_EXPORT Button : public InkDropHostView,
   // Accessibility data.
   base::string16 accessible_name_;
 
+  // The button's listener. Notified when clicked.
+  PressedCallback callback_;
+
   // The id tag associated with this button. Used to disambiguate buttons in
   // the ButtonListener implementation.
+  // TODO(pbos): Remove this after ButtonListener is gone since disambiguation
+  // shouldn't be needed.
   int tag_ = -1;
 
   ButtonState state_ = STATE_NORMAL;
@@ -356,6 +379,20 @@ class VIEWS_EXPORT Button : public InkDropHostView,
 
   DISALLOW_COPY_AND_ASSIGN(Button);
 };
+
+BEGIN_VIEW_BUILDER(VIEWS_EXPORT, Button, InkDropHostView)
+VIEW_BUILDER_PROPERTY(base::TimeDelta, AnimationDuration)
+VIEW_BUILDER_PROPERTY(bool, AnimateOnStateChange)
+VIEW_BUILDER_PROPERTY(bool, HasInkDropActionOnClick)
+VIEW_BUILDER_PROPERTY(bool, HideInkDropWhenShowingContextMenu)
+VIEW_BUILDER_PROPERTY(SkColor, InkDropBaseColor)
+VIEW_BUILDER_PROPERTY(bool, InstallFocusRingOnFocus)
+VIEW_BUILDER_PROPERTY(bool, RequestFocusOnPress)
+VIEW_BUILDER_PROPERTY(Button::ButtonState, State)
+VIEW_BUILDER_PROPERTY(base::string16, TooltipText)
+VIEW_BUILDER_PROPERTY(int, TriggerableEventFlags)
+VIEW_BUILDER_METHOD(SetFocusForPlatform)
+END_VIEW_BUILDER(VIEWS_EXPORT, Button)
 
 }  // namespace views
 

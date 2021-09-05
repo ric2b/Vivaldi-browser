@@ -6,7 +6,6 @@
 #define UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_KEYBOARD_H_
 
 #include <keyboard-extension-unstable-v1-client-protocol.h>
-#include <wayland-client.h>
 
 #include "base/time/time.h"
 #include "ui/base/buildflags.h"
@@ -117,8 +116,6 @@ class WaylandKeyboard::Delegate {
   // dispatched.
   virtual uint32_t OnKeyboardKeyEvent(EventType type,
                                       DomCode dom_code,
-                                      DomKey dom_key,
-                                      KeyboardCode key_code,
                                       bool repeat,
                                       base::TimeTicks timestamp) = 0;
 

@@ -104,12 +104,22 @@ base::Optional<SkColor> TestAppRegistrar::GetAppBackgroundColor(
   return base::nullopt;
 }
 
-const GURL& TestAppRegistrar::GetAppLaunchURL(const AppId& app_id) const {
+const GURL& TestAppRegistrar::GetAppStartUrl(const AppId& app_id) const {
   auto iterator = installed_apps_.find(app_id);
   if (iterator == installed_apps_.end())
     return GURL::EmptyGURL();
 
   return iterator->second.launch_url;
+}
+
+const std::string* TestAppRegistrar::GetAppLaunchQueryParams(
+    const AppId& app_id) const {
+  return nullptr;
+}
+
+const apps::ShareTarget* TestAppRegistrar::GetAppShareTarget(
+    const AppId& app_id) const {
+  return nullptr;
 }
 
 base::Optional<GURL> TestAppRegistrar::GetAppScopeInternal(
@@ -153,7 +163,7 @@ std::vector<WebApplicationIconInfo> TestAppRegistrar::GetAppIconInfos(
   return {};
 }
 
-std::vector<SquareSizePx> TestAppRegistrar::GetAppDownloadedIconSizesAny(
+SortedSizesPx TestAppRegistrar::GetAppDownloadedIconSizesAny(
     const AppId& app_id) const {
   NOTIMPLEMENTED();
   return {};

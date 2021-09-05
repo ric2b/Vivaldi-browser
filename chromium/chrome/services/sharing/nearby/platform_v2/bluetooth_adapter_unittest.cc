@@ -39,8 +39,7 @@ class BluetoothAdapterTest : public testing::Test {
     remote_adapter_.Bind(std::move(pending_adapter),
                          /*bind_task_runner=*/nullptr);
 
-    bluetooth_adapter_ =
-        std::make_unique<BluetoothAdapter>(remote_adapter_.get());
+    bluetooth_adapter_ = std::make_unique<BluetoothAdapter>(remote_adapter_);
   }
 
  protected:
@@ -123,6 +122,10 @@ TEST_F(BluetoothAdapterTest, TestSetName) {
   EXPECT_NE(name, fake_adapter_->name_);
   EXPECT_TRUE(bluetooth_adapter_->SetName(name));
   EXPECT_EQ(name, fake_adapter_->name_);
+}
+
+TEST_F(BluetoothAdapterTest, TestGetAddress) {
+  EXPECT_EQ(fake_adapter_->address_, bluetooth_adapter_->GetMacAddress());
 }
 
 }  // namespace chrome

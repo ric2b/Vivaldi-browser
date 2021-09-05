@@ -9,6 +9,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/grit/browser_resources.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/zoom/page_zoom_constants.h"
 #include "pdf/pdf_features.h"
@@ -39,7 +40,6 @@ void AddCommonStrings(base::Value* dict) {
       {"tooltipFitToWidth", IDS_PDF_TOOLTIP_FIT_WIDTH},
       {"tooltipZoomIn", IDS_PDF_TOOLTIP_ZOOM_IN},
       {"tooltipZoomOut", IDS_PDF_TOOLTIP_ZOOM_OUT},
-      {"twoUpViewDisable", IDS_PDF_TWO_UP_VIEW_DISABLE},
       {"twoUpViewEnable", IDS_PDF_TWO_UP_VIEW_ENABLE},
   };
   for (const auto& resource : kPdfResources)
@@ -51,26 +51,37 @@ void AddCommonStrings(base::Value* dict) {
 // Adds strings that are used only by the stand-alone PDF Viewer.
 void AddPdfViewerStrings(base::Value* dict) {
   static constexpr webui::LocalizedString kPdfResources[] = {
+    {"annotationsShowToggle", IDS_PDF_ANNOTATIONS_SHOW_TOGGLE},
     {"bookmarks", IDS_PDF_BOOKMARKS},
+    {"bookmarkExpandIconAriaLabel", IDS_PDF_BOOKMARK_EXPAND_ICON_ARIA_LABEL},
     {"downloadEdited", IDS_PDF_DOWNLOAD_EDITED},
     {"downloadOriginal", IDS_PDF_DOWNLOAD_ORIGINAL},
     {"labelPageNumber", IDS_PDF_LABEL_PAGE_NUMBER},
+    {"menu", IDS_MENU},
+    {"moreActions", IDS_DOWNLOAD_MORE_ACTIONS},
     {"passwordDialogTitle", IDS_PDF_PASSWORD_DIALOG_TITLE},
     {"passwordInvalid", IDS_PDF_PASSWORD_INVALID},
     {"passwordPrompt", IDS_PDF_NEED_PASSWORD},
     {"passwordSubmit", IDS_PDF_PASSWORD_SUBMIT},
+    {"thumbnailPageAriaLabel", IDS_PDF_THUMBNAIL_PAGE_ARIA_LABEL},
     {"tooltipDocumentOutline", IDS_PDF_TOOLTIP_DOCUMENT_OUTLINE},
     {"tooltipDownload", IDS_PDF_TOOLTIP_DOWNLOAD},
     {"tooltipPrint", IDS_PDF_TOOLTIP_PRINT},
-    {"tooltipRotateCW", IDS_PDF_TOOLTIP_ROTATE_CW},
     {"tooltipRotateCCW", IDS_PDF_TOOLTIP_ROTATE_CCW},
+    {"tooltipRotateCW", IDS_PDF_TOOLTIP_ROTATE_CW},
     {"tooltipThumbnails", IDS_PDF_TOOLTIP_THUMBNAILS},
-    {"annotationsShowToggle", IDS_PDF_ANNOTATIONS_SHOW_TOGGLE},
+    {"zoomTextInputAriaLabel", IDS_PDF_ZOOM_TEXT_INPUT_ARIA_LABEL},
 #if defined(OS_CHROMEOS)
     {"tooltipAnnotate", IDS_PDF_ANNOTATION_ANNOTATE},
     {"annotationDocumentTooLarge", IDS_PDF_ANNOTATION_DOCUMENT_TOO_LARGE},
     {"annotationDocumentProtected", IDS_PDF_ANNOTATION_DOCUMENT_PROTECTED},
     {"annotationDocumentRotated", IDS_PDF_ANNOTATION_DOCUMENT_ROTATED},
+    {"annotationEditInDefaultView", IDS_PDF_ANNOTATION_EDIT_IN_DEFAULT_VIEW},
+    {"annotationResetRotate", IDS_PDF_ANNOTATION_RESET_ROTATE},
+    {"annotationResetTwoPageView", IDS_PDF_ANNOTATION_RESET_TWO_PAGE_VIEW},
+    {"annotationResetRotateAndTwoPageView",
+     IDS_PDF_ANNOTATION_RESET_ROTATE_AND_TWO_PAGE_VIEW},
+    {"cancelButton", IDS_CANCEL},
     {"annotationPen", IDS_PDF_ANNOTATION_PEN},
     {"annotationHighlighter", IDS_PDF_ANNOTATION_HIGHLIGHTER},
     {"annotationEraser", IDS_PDF_ANNOTATION_ERASER},
@@ -121,6 +132,12 @@ void AddPdfViewerStrings(base::Value* dict) {
   };
   for (const auto& resource : kPdfResources)
     dict->SetStringKey(resource.name, l10n_util::GetStringUTF16(resource.id));
+
+#if defined(OS_CHROMEOS)
+  base::string16 edit_string = l10n_util::GetStringUTF16(IDS_EDIT);
+  base::Erase(edit_string, '&');
+  dict->SetStringKey("editButton", edit_string);
+#endif
 
   webui::SetLoadTimeDataDefaults(g_browser_process->GetApplicationLocale(),
                                  static_cast<base::DictionaryValue*>(dict));

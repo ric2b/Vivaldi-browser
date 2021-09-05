@@ -144,14 +144,16 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   // reason for menu or for the main Chrome browser, as we have no reason to
   // specifically differentiate those yet.
   //
-  // Add additional values as needed.
+  // Add additional values as needed. Do not change any existing values, as this
+  // enum is logged to UMA.
   enum class ClosedReason {
-    kUnspecified = 0,      // No reason was given for the widget closing.
-    kEscKeyPressed,        // The ESC key was pressed to cancel the widget.
-    kCloseButtonClicked,   // The [X] button was explicitly clicked.
-    kLostFocus,            // The widget destroyed itself when it lost focus.
-    kCancelButtonClicked,  // The widget's cancel button was clicked.
-    kAcceptButtonClicked   // The widget's done/accept button was clicked.
+    kUnspecified = 0,         // No reason was given for the widget closing.
+    kEscKeyPressed = 1,       // The ESC key was pressed to cancel the widget.
+    kCloseButtonClicked = 2,  // The [X] button was explicitly clicked.
+    kLostFocus = 3,           // The widget destroyed itself when it lost focus.
+    kCancelButtonClicked = 4,  // The widget's cancel button was clicked.
+    kAcceptButtonClicked = 5,  // The widget's done/accept button was clicked.
+    kMaxValue = kAcceptButtonClicked
   };
 
   struct VIEWS_EXPORT InitParams {
@@ -874,6 +876,11 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     focus_on_creation_ = focus_on_creation;
   }
 
+  // Returns the parent of this widget. Note that a top-level widget is not
+  // necessarily a root widget and can have a parent.
+  Widget* parent() { return parent_; }
+  const Widget* parent() const { return parent_; }
+
   // True if the widget is considered top level widget. Top level widget
   // is a widget of TYPE_WINDOW, TYPE_PANEL, TYPE_WINDOW_FRAMELESS, BUBBLE,
   // POPUP or MENU, and has a focus manager and input method object associated
@@ -1051,6 +1058,11 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   // Non-owned pointer to the Widget's delegate. If a NULL delegate is supplied
   // to Init() a default WidgetDelegate is created.
   WidgetDelegate* widget_delegate_ = nullptr;
+
+  // The parent of this widget. This is the widget that associates with the
+  // |params.parent| supplied to Init(). If no parent is given or the native
+  // view parent has no associating Widget, this value will be nullptr.
+  Widget* parent_ = nullptr;
 
   // The root of the View hierarchy attached to this window.
   // WARNING: see warning in tooltip_manager_ for ordering dependencies with

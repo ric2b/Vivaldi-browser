@@ -33,7 +33,6 @@ import org.chromium.components.offline_items_collection.OfflineContentProvider;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.ui.modaldialog.ModalDialogManager;
-import org.chromium.ui.vr.VrModeProvider;
 
 import java.io.Closeable;
 
@@ -66,7 +65,7 @@ class DownloadManagerCoordinatorImpl
             ModalDialogManager modalDialogManager, PrefService prefService, Tracker tracker,
             FaviconProvider faviconProvider, OfflineContentProvider provider,
             LegacyDownloadProvider legacyProvider,
-            DiscardableReferencePool discardableReferencePool, VrModeProvider vrModeProvider) {
+            DiscardableReferencePool discardableReferencePool) {
         mActivity = activity;
         mSettingsLauncher = settingsLauncher;
         mDeleteCoordinator = new DeleteUndoCoordinator(snackbarManager);
@@ -78,10 +77,10 @@ class DownloadManagerCoordinatorImpl
                 discardableReferencePool);
         if (ChromeApplication.isVivaldi())
             mToolbarCoordinator = new ToolbarCoordinator(mActivity, this, mListCoordinator,
-                    mSelectionDelegate, true, tracker, vrModeProvider);
+                    mSelectionDelegate, config.isSeparateActivity, tracker);
         else
         mToolbarCoordinator = new ToolbarCoordinator(mActivity, this, mListCoordinator,
-                mSelectionDelegate, config.isSeparateActivity, tracker, vrModeProvider);
+                mSelectionDelegate, config.isSeparateActivity, tracker);
 
         initializeView();
         if (config.startWithPrefetchedContent) {

@@ -30,6 +30,7 @@
 #import "ios/chrome/browser/download/ar_quick_look_tab_helper.h"
 #include "ios/chrome/browser/favicon/favicon_service_factory.h"
 #import "ios/chrome/browser/find_in_page/find_tab_helper.h"
+#import "ios/chrome/browser/geolocation/omnibox_geolocation_tab_helper.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
 #include "ios/chrome/browser/history/history_tab_helper.h"
 #include "ios/chrome/browser/history/top_sites_factory.h"
@@ -40,6 +41,7 @@
 #import "ios/chrome/browser/infobars/overlays/infobar_overlay_tab_helper.h"
 #import "ios/chrome/browser/infobars/overlays/translate_overlay_tab_helper.h"
 #import "ios/chrome/browser/itunes_urls/itunes_urls_handler_tab_helper.h"
+#import "ios/chrome/browser/link_to_text/link_to_text_tab_helper.h"
 #import "ios/chrome/browser/metrics/pageload_foreground_duration_tab_helper.h"
 #import "ios/chrome/browser/network_activity/network_activity_indicator_tab_helper.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
@@ -56,8 +58,6 @@
 #import "ios/chrome/browser/search_engines/search_engine_tab_helper.h"
 #import "ios/chrome/browser/sessions/ios_chrome_session_tab_helper.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
-#include "ios/chrome/browser/ssl/captive_portal_features.h"
-#import "ios/chrome/browser/ssl/captive_portal_metrics_tab_helper.h"
 #import "ios/chrome/browser/store_kit/store_kit_tab_helper.h"
 #import "ios/chrome/browser/sync/ios_chrome_synced_tab_delegate.h"
 #import "ios/chrome/browser/translate/chrome_ios_translate_client.h"
@@ -128,10 +128,6 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
     InfobarOverlayRequestInserter::CreateForWebState(web_state);
     InfobarOverlayTabHelper::CreateForWebState(web_state);
     TranslateOverlayTabHelper::CreateForWebState(web_state);
-  }
-
-  if (base::FeatureList::IsEnabled(kCaptivePortalMetrics)) {
-    CaptivePortalMetricsTabHelper::CreateForWebState(web_state);
   }
 
   if (base::FeatureList::IsEnabled(web::kWebPageTextAccessibility)) {
@@ -216,6 +212,12 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
     InfobarBadgeTabHelper::CreateForWebState(web_state);
   }
 
+  OmniboxGeolocationTabHelper::CreateForWebState(web_state);
+
   // Allow the embedder to attach tab helpers.
   ios::GetChromeBrowserProvider()->AttachTabHelpers(web_state);
+
+  if (base::FeatureList::IsEnabled(kSharedHighlightingIOS)) {
+    LinkToTextTabHelper::CreateForWebState(web_state);
+  }
 }

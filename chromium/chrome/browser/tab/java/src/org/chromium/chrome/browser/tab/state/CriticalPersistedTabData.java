@@ -37,7 +37,7 @@ public class CriticalPersistedTabData extends PersistedTabData {
             CriticalPersistedTabData.class;
 
     private static final int UNSPECIFIED_THEME_COLOR = Color.TRANSPARENT;
-    private static final long INVALID_TIMESTAMP = -1;
+    public static final long INVALID_TIMESTAMP = -1;
 
     /**
      * Title of the ContentViews webpage.
@@ -244,7 +244,7 @@ public class CriticalPersistedTabData extends PersistedTabData {
         return "Critical";
     }
 
-    private static @TabLaunchType int getLaunchType(
+    private static @Nullable @TabLaunchType Integer getLaunchType(
             CriticalPersistedTabDataProto.LaunchTypeAtCreation protoLaunchType) {
         switch (protoLaunchType) {
             case FROM_LINK:
@@ -279,7 +279,7 @@ public class CriticalPersistedTabData extends PersistedTabData {
                 assert false : "Unexpected deserialization of LaunchAtCreationType: "
                                + protoLaunchType;
                 // shouldn't happen
-                return -1;
+                return null;
         }
     }
 

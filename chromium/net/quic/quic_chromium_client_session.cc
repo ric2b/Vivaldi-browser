@@ -1094,10 +1094,16 @@ void QuicChromiumClientSession::UpdateStreamPriority(
 }
 
 void QuicChromiumClientSession::OnHttp3GoAway(uint64_t id) {
-  // TODO(https://crbug.com/1113661): Retry requests with stream ID greater than
-  // or equal to |id|.
   quic::QuicSpdySession::OnHttp3GoAway(id);
   NotifyFactoryOfSessionGoingAway();
+
+  PerformActionOnActiveStreams([id](quic::QuicStream* stream) {
+    if (stream->id() >= id) {
+      static_cast<QuicChromiumClientStream*>(stream)->OnError(
+          ERR_QUIC_GOAWAY_REQUEST_CAN_BE_RETRIED);
+    }
+    return true;
+  });
 }
 
 void QuicChromiumClientSession::AddHandle(Handle* handle) {
@@ -1276,8 +1282,7 @@ bool QuicChromiumClientSession::GetRemoteEndpoint(IPEndPoint* endpoint) {
 // we learn about SSL info (sync vs async vs cached).
 bool QuicChromiumClientSession::GetSSLInfo(SSLInfo* ssl_info) const {
   ssl_info->Reset();
-  if (!cert_verify_result_ || (connection()->version().UsesTls() &&
-                               !crypto_stream_->one_rtt_keys_available())) {
+  if (!cert_verify_result_) {
     return false;
   }
 
@@ -1644,16 +1649,28 @@ void QuicChromiumClientSession::LogZeroRttStats() {
 
   ZeroRttState state;
 
-  if (attempted_zero_rtt_) {
-    if (crypto_stream_->EarlyDataAccepted()) {
-      state = ZeroRttState::kAttemptedAndSucceeded;
-    } else {
-      state = ZeroRttState::kAttemptedAndRejected;
-    }
+  ssl_early_data_reason_t early_data_reason = crypto_stream_->EarlyDataReason();
+  if (early_data_reason == ssl_early_data_accepted) {
+    state = ZeroRttState::kAttemptedAndSucceeded;
+  } else if (early_data_reason == ssl_early_data_peer_declined ||
+             early_data_reason == ssl_early_data_session_not_resumed ||
+             early_data_reason == ssl_early_data_hello_retry_request) {
+    state = ZeroRttState::kAttemptedAndRejected;
   } else {
     state = ZeroRttState::kNotAttempted;
   }
   UMA_HISTOGRAM_ENUMERATION("Net.QuicSession.ZeroRttState", state);
+  UMA_HISTOGRAM_ENUMERATION("Net.QuicSession.ZeroRttReason", early_data_reason,
+                            ssl_early_data_reason_max_value + 1);
+  if (IsGoogleHost(session_key_.host())) {
+    UMA_HISTOGRAM_ENUMERATION("Net.QuicSession.ZeroRttReasonGoogle",
+                              early_data_reason,
+                              ssl_early_data_reason_max_value + 1);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION("Net.QuicSession.ZeroRttReasonNonGoogle",
+                              early_data_reason,
+                              ssl_early_data_reason_max_value + 1);
+  }
 }
 
 void QuicChromiumClientSession::OnCryptoHandshakeMessageSent(
@@ -1699,6 +1716,23 @@ void QuicChromiumClientSession::OnConnectionClosed(
 
   const quic::QuicErrorCode error = frame.quic_error_code;
   const std::string& error_details = frame.error_details;
+
+  if (source == quic::ConnectionCloseSource::FROM_SELF &&
+      error == quic::QUIC_NETWORK_IDLE_TIMEOUT && ShouldKeepConnectionAlive()) {
+    quic::QuicStreamCount streams_waiting_to_write = 0;
+    PerformActionOnActiveStreams(
+        [&streams_waiting_to_write](quic::QuicStream* stream) {
+          if (stream->HasBufferedData())
+            ++streams_waiting_to_write;
+          return true;
+        });
+
+    UMA_HISTOGRAM_COUNTS_100(
+        "Net.QuicSession.NumStreamsWaitingToWriteOnIdleTimeout",
+        streams_waiting_to_write);
+    UMA_HISTOGRAM_COUNTS_100("Net.QuicSession.NumActiveStreamsOnIdleTimeout",
+                             GetNumActiveStreams());
+  }
 
   if (source == quic::ConnectionCloseSource::FROM_PEER) {
     if (error == quic::QUIC_PUBLIC_RESET) {

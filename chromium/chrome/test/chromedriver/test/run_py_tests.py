@@ -45,6 +45,7 @@ sys.path.remove(_PARENT_DIR)
 
 sys.path.insert(1, _CLIENT_DIR)
 import chromedriver
+import websocket_connection
 import webelement
 sys.path.remove(_CLIENT_DIR)
 
@@ -98,6 +99,7 @@ _OS_SPECIFIC_FILTER['win'] = [
     'ChromeDownloadDirTest.testFileDownloadAfterTabHeadless',
     'ChromeDownloadDirTest.testFileDownloadWithClickHeadless',
     'ChromeDownloadDirTest.testFileDownloadWithGetHeadless',
+    'RemoteBrowserTest.testConnectToRemoteBrowserLiteralAddressHeadless',
     # HeadlessInvalidCertificateTest is sometimes flaky.
     'HeadlessInvalidCertificateTest.*',
     # Similar issues with HeadlessChromeDriverTest.
@@ -504,6 +506,60 @@ class ChromeDriverTestWithCustomCapability(ChromeDriverBaseTestWithWebServer):
                       driver.Load, 'http://invalid/')
     self.assertEquals('http://invalid/', driver.GetCurrentUrl())
 
+class ChromeDriverWebSocketTest(ChromeDriverBaseTestWithWebServer):
+  @staticmethod
+  def composeWebSocketUrl(server_url, session_id):
+    return server_url.replace('http', 'ws') + '/session/' + session_id
+
+  def testDefaultSession(self):
+    driver = self.CreateDriver()
+    self.assertFalse(driver.capabilities.has_key('webSocketUrl'))
+    self.assertRaises(Exception, websocket_connection.WebSocketConnection,
+                      _CHROMEDRIVER_SERVER_URL, driver.GetSessionId())
+
+  def testWebSocketUrlFalse(self):
+    driver = self.CreateDriver(web_socket_url=False)
+    self.assertFalse(driver.capabilities.has_key('webSocketUrl'))
+    self.assertRaises(Exception, websocket_connection.WebSocketConnection,
+                      _CHROMEDRIVER_SERVER_URL, driver.GetSessionId())
+
+  def testWebSocketUrlTrue(self):
+    driver = self.CreateDriver(web_socket_url=True)
+    self.assertTrue(driver.capabilities.has_key('webSocketUrl'))
+    self.assertNotEqual(None, driver.GetSessionId())
+    self.assertEquals(driver.capabilities['webSocketUrl'],
+        self.composeWebSocketUrl(_CHROMEDRIVER_SERVER_URL,
+                                 driver.GetSessionId()))
+    websocket = websocket_connection.WebSocketConnection(
+        _CHROMEDRIVER_SERVER_URL, driver.GetSessionId())
+    self.assertNotEqual(None, websocket)
+
+  def testWebSocketUrlInvalid(self):
+    self.assertRaises(chromedriver.InvalidArgument,
+        self.CreateDriver, web_socket_url='Invalid')
+
+  def testWebSocketOneConnectionPerSession(self):
+    driver = self.CreateDriver(web_socket_url=True)
+    websocket = websocket_connection.WebSocketConnection(
+        _CHROMEDRIVER_SERVER_URL, driver.GetSessionId())
+    self.assertNotEqual(None, websocket)
+    self.assertRaises(Exception, websocket_connection.WebSocketConnection,
+                      _CHROMEDRIVER_SERVER_URL, driver.GetSessionId())
+
+  def testWebSocketInvalidSessionId(self):
+    driver = self.CreateDriver(web_socket_url=True)
+    self.assertRaises(Exception, websocket_connection.WebSocketConnection,
+                      _CHROMEDRIVER_SERVER_URL, "random_session_id_123")
+
+  def testWebSocketClosedCanReconnect(self):
+    driver = self.CreateDriver(web_socket_url=True)
+    websocket = websocket_connection.WebSocketConnection(
+        _CHROMEDRIVER_SERVER_URL, driver.GetSessionId())
+    self.assertNotEqual(None, websocket)
+    websocket.Close()
+    websocket2 = websocket_connection.WebSocketConnection(
+        _CHROMEDRIVER_SERVER_URL, driver.GetSessionId())
+    self.assertNotEqual(None, websocket2)
 
 class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
   """End to end tests for ChromeDriver."""
@@ -513,6 +569,38 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
 
   def testStartStop(self):
     pass
+
+  def testGetComputedAttributes(self):
+    self._driver.Load(
+      self.GetHttpUrlForFile('/chromedriver/accessibility.html'))
+
+    firstHeaderElement = self._driver.FindElement(
+      'css selector', '#first-header')
+
+    self.assertEquals(firstHeaderElement.GetComputedLabel(), 'header content')
+    self.assertEquals(firstHeaderElement.GetComputedRole(), 'heading')
+
+  def testGetComputedAttributesForIgnoredNode(self):
+    self._driver.Load(
+      self.GetHttpUrlForFile('/chromedriver/accessibility.html'))
+
+    ignoredHeaderElement = self._driver.FindElement(
+      'css selector', '#ignored-header')
+
+    # GetComputedLabel for ignored node should return empty string.
+    self.assertEquals(ignoredHeaderElement.GetComputedLabel(), '')
+    self.assertEquals(ignoredHeaderElement.GetComputedRole(), 'Ignored')
+
+  def testGetComputedAttributesForUnrenderedNode(self):
+    self._driver.Load(
+      self.GetHttpUrlForFile('/chromedriver/accessibility.html'))
+
+    unrenderedHeaderElement = self._driver.FindElement(
+      'css selector', '#unrendered-header')
+
+    # GetComputedLabel for unrendered node should return empty string.
+    self.assertEquals(unrenderedHeaderElement.GetComputedLabel(), '')
+    self.assertEquals(unrenderedHeaderElement.GetComputedRole(), 'Ignored')
 
   def testLoadUrl(self):
     self._driver.Load(self.GetHttpUrlForFile('/chromedriver/empty.html'))
@@ -2729,6 +2817,20 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
         is_desktop,
         self._driver.capabilities['webauthn:virtualAuthenticators'])
 
+class ChromeDriverBackgroundTest(ChromeDriverBaseTestWithWebServer):
+  def setUp(self):
+    self._driver1 = self.CreateDriver()
+    self._driver2 = self.CreateDriver()
+
+  def testBackgroundScreenshot(self):
+    self._driver2.Load(self._http_server.GetUrl('localhost')
+                      + '/chromedriver/empty.html')
+    self._driver1.Load(self._http_server.GetUrl('localhost')
+                      + '/chromedriver/empty.html')
+
+    screenshotPNGBase64  = self._driver1.TakeScreenshot()
+    self.assertIsNotNone(screenshotPNGBase64)
+
 # Tests that require a secure context.
 class ChromeDriverSecureContextTest(ChromeDriverBaseTestWithWebServer):
   # The example attestation private key from the U2F spec at
@@ -4226,6 +4328,50 @@ class RemoteBrowserTest(ChromeDriverBaseTest):
       break
     else:  # Else clause gets invoked if "break" never happens.
       raise  # This re-raises the most recent exception.
+
+  def testConnectToRemoteBrowserLiteralAddressHeadless(self):
+    debug_addrs = ['127.0.0.1', '::1']
+    debug_url_addrs = ['127.0.0.1', '[::1]']
+
+    for (debug_addr, debug_url_addr) in zip(debug_addrs, debug_url_addrs):
+      # Must use retries since there is an inherent race condition in port
+      # selection.
+      ports_generator = util.FindProbableFreePorts()
+      for _ in range(3):
+        port = ports_generator.next()
+        temp_dir = util.MakeTempDir()
+        print 'temp dir is ' + temp_dir
+        cmd = [_CHROME_BINARY,
+              '--headless',
+              '--remote-debugging-address=%s' % debug_addr,
+              '--remote-debugging-port=%d' % port,
+              '--user-data-dir=%s' % temp_dir,
+              '--use-mock-keychain']
+        process = subprocess.Popen(cmd)
+        try:
+          driver = self.CreateDriver(
+            debugger_address='%s:%d' % (debug_url_addr, port))
+          driver.ExecuteScript(
+            'console.info("%s")' % 'connecting at %d!' % port)
+          driver.Quit()
+        except:
+          continue
+        finally:
+          if process.poll() is None:
+            process.terminate()
+            # Wait for Chrome to exit here to prevent a race with Chrome to
+            # delete/modify the temporary user-data-dir.
+            # Maximum wait ~1 second.
+            for _ in range(20):
+              if process.poll() is not None:
+                break
+              print 'continuing to wait for Chrome to exit'
+              time.sleep(.05)
+            else:
+              process.kill()
+        break
+      else:  # Else clause gets invoked if "break" never happens.
+        raise  # This re-raises the most recent exception.
 
 
 class LaunchDesktopTest(ChromeDriverBaseTest):

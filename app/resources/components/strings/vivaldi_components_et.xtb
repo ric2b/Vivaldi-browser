@@ -2,7 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="et">
 <translation id="3830627370375585318">Luba tulemüüri või viirusetõrje seadetes Vivaldile võrgujuurdepääs</translation>
-<translation id="4200102020577305737">Valige
+<translation id="4200102020577305737">ava
           Vivaldi menüü &gt;
           <ph name="SETTINGS_TITLE" />
           &gt;
@@ -10,17 +10,25 @@
           &gt;
           <ph name="PROXIES_TITLE" />
           &gt;
-          LAN-seaded
-          ja tühistage valik „Kasuta LAN-i jaoks puhverserverit”.</translation>
+          Kohtvõrgu sätted (LAN Settings)
+          ja tühjenda ruut „Kasutage oma kohtvõrgu jaoks puhverserverit” (Use a proxy server for your LAN).</translation>
+<translation id="4932161901409251843">ava
+          Vivaldi menüü &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          (või chrome://settings/system) &gt;
+          <ph name="PROXIES_TITLE" />
+          ning vaata, et seal oleks määratud „Puhverserver puudub” või „Otse”.</translation>
 <translation id="5248344925342018662">See on turvaline Vivaldi-sisene leht</translation>
-<translation id="7023871570427738255">Avage
-        Vivaldi menüü &gt;
-        <ph name="SETTINGS_TITLE" />
-        &gt;
-        <ph name="ADVANCED_TITLE" />
-        ja tühistage valik „<ph name="NO_PREFETCH_DESCRIPTION" />”.
-        Kui see probleemi ei lahenda, soovitame toimivuse parandamiseks
-        selle valiku uuesti teha.</translation>
+<translation id="7023871570427738255">Ava
+          Vivaldi menüü &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          ja tühjenda ruut „<ph name="NO_PREFETCH_DESCRIPTION" />”.
+          Kui see aga probleemi ei lahenda, on parema jõudluse nimel soovitatav
+          ruut taas märkida.</translation>
 <translation id="8187289872471304532">ava
           Rakendused &gt; Süsteemi eelistused &gt; Võrk &gt; Täpsemalt &gt; Puhverserverid
           (Applications &gt; System Preferences &gt; Network &gt; Advanced &gt; Proxies)

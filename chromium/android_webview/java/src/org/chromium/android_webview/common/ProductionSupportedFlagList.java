@@ -61,9 +61,9 @@ public final class ProductionSupportedFlagList {
                             + "crash reporting is typically compiled but disabled."),
             Flag.commandLine(GpuSwitches.DISABLE_GPU_RASTERIZATION,
                     "Disables GPU rasterization, i.e. rasterizes on the CPU only."),
-            Flag.baseFeature("OutOfBlinkCors",
-                    "Moves CORS logic into the Network Service (rather than inside the blink "
-                            + "rendering engine)."),
+            Flag.commandLine(GpuSwitches.IGNORE_GPU_BLOCKLIST,
+                    "Overrides the built-in software rendering list and enables "
+                            + "GPU acceleration on unsupported device configurations."),
             Flag.baseFeature("EnableSharedImageForWebview", "Enables shared images for WebView."),
             Flag.baseFeature("VizForWebView", "Enables Viz for WebView."),
             Flag.baseFeature(AwFeatures.WEBVIEW_CONNECTIONLESS_SAFE_BROWSING,
@@ -85,5 +85,7 @@ public final class ProductionSupportedFlagList {
                             + "Elements v0, and HTML Imports)."),
             Flag.baseFeature(AwFeatures.WEBVIEW_DISPLAY_CUTOUT,
                     "Enables display cutout (notch) support in WebView for Android P and above."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_CPU_AFFINITY_RESTRICT_TO_LITTLE_CORES,
+                    "Forces WebView to do rendering work in little cores"),
     };
 }

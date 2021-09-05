@@ -5,20 +5,52 @@
 #ifndef ASH_SYSTEM_HOLDING_SPACE_RECENT_FILES_CONTAINER_H_
 #define ASH_SYSTEM_HOLDING_SPACE_RECENT_FILES_CONTAINER_H_
 
-#include "ui/views/view.h"
+#include <map>
+
+#include "ash/system/holding_space/holding_space_item_views_container.h"
+
+namespace views {
+class Label;
+}  // namespace views
 
 namespace ash {
 
-// Container for the recent files (Screenshots, downloads etc).
-class RecentFilesContainer : public views::View {
+class HoldingSpaceItemChipsContainer;
+class HoldingSpaceItemViewDelegate;
+
+// Container for the recent files (e.g. screenshots, downloads, etc).
+class RecentFilesContainer : public HoldingSpaceItemViewsContainer {
  public:
-  RecentFilesContainer();
+  explicit RecentFilesContainer(HoldingSpaceItemViewDelegate* delegate);
   RecentFilesContainer(const RecentFilesContainer& other) = delete;
   RecentFilesContainer& operator=(const RecentFilesContainer& other) = delete;
   ~RecentFilesContainer() override;
 
-  // views::View:
-  const char* GetClassName() const override;
+  // HoldingSpaceItemViewsContainer:
+  void ChildVisibilityChanged(views::View* child) override;
+  void ViewHierarchyChanged(const views::ViewHierarchyChangedDetails&) override;
+  void AddHoldingSpaceItemView(const HoldingSpaceItem* item) override;
+  void RemoveAllHoldingSpaceItemViews() override;
+  void RemoveHoldingSpaceItemView(const HoldingSpaceItem* item) override;
+
+ private:
+  void AddHoldingSpaceScreenshotView(const HoldingSpaceItem* item);
+  void RemoveHoldingSpaceScreenshotView(const HoldingSpaceItem* item);
+  void AddHoldingSpaceDownloadView(const HoldingSpaceItem* item);
+  void RemoveHoldingSpaceDownloadView(const HoldingSpaceItem* item);
+  void OnScreenshotsContainerViewHierarchyChanged(
+      const views::ViewHierarchyChangedDetails& details);
+  void OnDownloadsContainerViewHierarchyChanged(
+      const views::ViewHierarchyChangedDetails& details);
+
+  HoldingSpaceItemViewDelegate* const delegate_;
+
+  views::View* screenshots_container_ = nullptr;
+  views::Label* screenshots_label_ = nullptr;
+  HoldingSpaceItemChipsContainer* downloads_container_ = nullptr;
+  views::View* downloads_header_ = nullptr;
+
+  std::map<std::string, views::View*> views_by_item_id_;
 };
 
 }  // namespace ash

@@ -386,40 +386,6 @@ TEST(CSSSelectorParserTest, InternalPseudo) {
   }
 }
 
-TEST(CSSSelectorParserTest, InvalidNestingPseudoIs) {
-  // :is() is currently not supported within these pseudo classes as they
-  // currently do not support complex selector arguments (:is() does
-  // support this and the expansion of :is() may provide complex selector
-  // arguments to these pseudo classes). Most of these test cases should
-  // eventually be removed once they support complex selector arguments.
-  const char* test_cases[] = {":-webkit-any(:is(.a))",
-                              "::cue(:is(.a))",
-                              ":cue(:is(.a))",
-                              ":host(:is(.a))",
-                              ":host-context(:is(.a))",
-                              ":lang(:is(.a))",
-                              ":not(:is(.a))",
-                              ":nth-child(:is(.a))",
-                              ":nth-last-child(:is(.a))",
-                              ":nth-last-of-type(:is(.a))",
-                              ":nth-of-type(:is(.a))",
-                              "::slotted(:is(.a))"};
-
-  auto* context = MakeGarbageCollected<CSSParserContext>(
-      kHTMLStandardMode, SecureContextMode::kInsecureContext);
-  auto* sheet = MakeGarbageCollected<StyleSheetContents>(context);
-
-  for (auto* test_case : test_cases) {
-    SCOPED_TRACE(test_case);
-    CSSTokenizer tokenizer(test_case);
-    const auto tokens = tokenizer.TokenizeToEOF();
-    CSSParserTokenRange range(tokens);
-    CSSSelectorList list =
-        CSSSelectorParser::ParseSelector(range, context, sheet);
-    EXPECT_FALSE(list.IsValid());
-  }
-}
-
 TEST(CSSSelectorParserTest, InvalidPseudoIsArguments) {
   // Pseudo-elements are not valid within :is() as per the spec:
   // https://drafts.csswg.org/selectors-4/#matches
@@ -460,30 +426,34 @@ TEST(CSSSelectorParserTest, InvalidPseudoIsArguments) {
   }
 }
 
-TEST(CSSSelectorParserTest, InvalidNestingPseudoWhere) {
-  // :where() is currently not supported within these pseudo classes as they
-  // currently do not support complex selector arguments (:where() does support
-  // this and the expansion of :where() may provide complex selector arguments
-  // to these pseudo classes). Most of these test cases should eventually be
-  // removed once they support complex selector arguments.
-  const char* test_cases[] = {":-webkit-any(:where(.a))",
-                              "::cue(:where(.a))",
-                              ":cue(:where(.a))",
-                              ":host(:where(.a))",
-                              ":host-context(:where(.a))",
-                              ":lang(:where(.a))",
-                              ":not(:where(.a))",
-                              ":nth-child(:where(.a))",
-                              ":nth-last-child(:where(.a))",
-                              ":nth-last-of-type(:where(.a))",
-                              ":nth-of-type(:where(.a))",
-                              "::slotted(:where(.a))"};
+TEST(CSSSelectorParserTest, ShadowDomV0WithIsAndWhere) {
+  // To reduce complexity, ShadowDOM v0 features are not supported in
+  // combination with :is/:where.
+  const char* test_cases[] = {
+      // clang-format off
+      ":is(.a) ::content",
+      ":is(.a /deep/ .b)",
+      ":is(::content)",
+      ":is(::shadow)",
+      ":is(::content .a)",
+      ":is(::shadow .b)",
+      ":is(.a)::shadow",
+      ":is(.a) ::content",
+      ":is(.a) ::shadow",
+      "::content :is(.a)",
+      "::shadow :is(.a)",
+      ":is(.a) /deep/ .b",
+      ":.a /deep/ :is(.b)",
+      ":where(.a /deep/ .b)",
+      ":where(.a) ::shadow",
+      // clang-format on
+  };
 
   auto* context = MakeGarbageCollected<CSSParserContext>(
       kHTMLStandardMode, SecureContextMode::kInsecureContext);
   auto* sheet = MakeGarbageCollected<StyleSheetContents>(context);
 
-  for (const char* test_case : test_cases) {
+  for (auto* test_case : test_cases) {
     SCOPED_TRACE(test_case);
     CSSTokenizer tokenizer(test_case);
     const auto tokens = tokenizer.TokenizeToEOF();

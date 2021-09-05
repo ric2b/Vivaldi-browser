@@ -24,15 +24,15 @@ class ControlServiceOutOfProcess : public ControlService {
 
   // Overrides for ControlService.
   void Run(base::OnceClosure callback) override;
+  void InitializeUpdateService(base::OnceClosure callback) override;
   void Uninitialize() override;
 
  private:
   ~ControlServiceOutOfProcess() override;
 
-  // Runs on the |com_task_runner_|.
+  // These function are invoked on the |com_task_runner_|.
   void RunOnSTA(base::OnceClosure callback);
-
-  static void ModuleStop();
+  void InitializeUpdateServiceOnSTA(base::OnceClosure callback);
 
   // Bound to the main sequence.
   SEQUENCE_CHECKER(sequence_checker_);

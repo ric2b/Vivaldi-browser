@@ -18,41 +18,40 @@ password_manager::FakeAffiliationFetcher::~FakeAffiliationFetcher() = default;
 
 void password_manager::FakeAffiliationFetcher::SimulateSuccess(
     std::unique_ptr<AffiliationFetcherDelegate::Result> fake_result) {
-  delegate()->OnFetchSucceeded(std::move(fake_result));
+  delegate()->OnFetchSucceeded(this, std::move(fake_result));
 }
 
 void password_manager::FakeAffiliationFetcher::SimulateFailure() {
-  delegate()->OnFetchFailed();
+  delegate()->OnFetchFailed(this);
 }
 
-password_manager::ScopedFakeAffiliationFetcherFactory::
-    ScopedFakeAffiliationFetcherFactory() {
-  AffiliationFetcher::SetFactoryForTesting(this);
+password_manager::FakeAffiliationFetcherFactory::
+    FakeAffiliationFetcherFactory() = default;
+
+password_manager::FakeAffiliationFetcherFactory::
+    ~FakeAffiliationFetcherFactory() {
+  CHECK(pending_fetchers_.empty());
 }
 
-password_manager::ScopedFakeAffiliationFetcherFactory::
-    ~ScopedFakeAffiliationFetcherFactory() {
-  AffiliationFetcher::SetFactoryForTesting(nullptr);
-}
-
-FakeAffiliationFetcher* ScopedFakeAffiliationFetcherFactory::PopNextFetcher() {
+FakeAffiliationFetcher* FakeAffiliationFetcherFactory::PopNextFetcher() {
   DCHECK(!pending_fetchers_.empty());
   FakeAffiliationFetcher* first = pending_fetchers_.front();
   pending_fetchers_.pop();
   return first;
 }
 
-FakeAffiliationFetcher* ScopedFakeAffiliationFetcherFactory::PeekNextFetcher() {
+FakeAffiliationFetcher* FakeAffiliationFetcherFactory::PeekNextFetcher() {
   DCHECK(!pending_fetchers_.empty());
   return pending_fetchers_.front();
 }
 
-FakeAffiliationFetcher* ScopedFakeAffiliationFetcherFactory::CreateInstance(
+std::unique_ptr<AffiliationFetcherInterface>
+FakeAffiliationFetcherFactory::CreateInstance(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     AffiliationFetcherDelegate* delegate) {
-  FakeAffiliationFetcher* fetcher =
-      new FakeAffiliationFetcher(std::move(url_loader_factory), delegate);
-  pending_fetchers_.push(fetcher);
+  auto fetcher = std::make_unique<FakeAffiliationFetcher>(
+      std::move(url_loader_factory), delegate);
+  pending_fetchers_.push(fetcher.get());
   return fetcher;
 }
 

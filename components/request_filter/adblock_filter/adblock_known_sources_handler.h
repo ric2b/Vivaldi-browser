@@ -12,7 +12,7 @@
 #include "url/gurl.h"
 
 namespace adblock_filter {
-class RuleService;
+class RuleServiceImpl;
 
 struct KnownRuleSource : public RuleSourceBase {
   KnownRuleSource(const GURL& source_url, RuleGroup group);
@@ -42,14 +42,17 @@ class KnownRuleSourcesHandler {
     virtual void OnKnownSourceDisabled(RuleGroup group, uint32_t source_id) {}
   };
 
-  KnownRuleSourcesHandler(RuleService* rule_service,
-                          int storage_version,
-                          const std::array<std::vector<KnownRuleSource>,
-                                           kRuleGroupCount>& known_sources,
-                          base::RepeatingClosure schedule_save);
+  KnownRuleSourcesHandler(
+      RuleServiceImpl* rule_service,
+      int storage_version,
+      const std::array<std::vector<KnownRuleSource>, kRuleGroupCount>&
+          known_sources,
+      std::array<std::set<std::string>, kRuleGroupCount> deleted_presets,
+      base::RepeatingClosure schedule_save);
   ~KnownRuleSourcesHandler();
 
   const KnownRuleSources& GetSources(RuleGroup group) const;
+  const std::set<std::string>& GetDeletedPresets(RuleGroup group) const;
 
   base::Optional<uint32_t> AddSourceFromUrl(RuleGroup group, const GURL& url);
   base::Optional<uint32_t> AddSourceFromFile(RuleGroup group,
@@ -74,11 +77,17 @@ class KnownRuleSourcesHandler {
   KnownRuleSources& GetSourceMap(RuleGroup group);
   const KnownRuleSources& GetSourceMap(RuleGroup group) const;
 
+  void UpdateSourcesFromPresets(RuleGroup group,
+                                bool add_deleted_presets,
+                                bool store_missing_as_deleted);
+
+  RuleServiceImpl* rule_service_;
+
   std::array<KnownRuleSources, kRuleGroupCount> known_sources_;
+  std::array<std::set<std::string>, kRuleGroupCount> deleted_presets_;
 
   base::ObserverList<Observer> observers_;
 
-  RuleService* rule_service_;
   base::RepeatingClosure schedule_save_;
 
   DISALLOW_COPY_AND_ASSIGN(KnownRuleSourcesHandler);

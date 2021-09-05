@@ -10,10 +10,8 @@
 #include "base/unguessable_token.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
-#include "components/viz/common/surfaces/local_surface_id_allocation.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "components/viz/common/surfaces/surface_info.h"
-#include "content/common/content_to_visible_time_reporter.h"
 #include "ipc/ipc_mojo_message_helper.h"
 #include "ipc/ipc_mojo_param_traits.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -100,6 +98,9 @@ void ParamTraits<blink::PolicyValue>::Write(base::Pickle* m,
     case blink::mojom::PolicyValueType::kDecDouble:
       WriteParam(m, p.DoubleValue());
       break;
+    case blink::mojom::PolicyValueType::kEnum:
+      WriteParam(m, p.IntValue());
+      break;
     case blink::mojom::PolicyValueType::kNull:
       break;
   }
@@ -157,7 +158,14 @@ bool ParamTraits<blink::PolicyValue>::Read(const base::Pickle* m,
       double d;
       if (!ReadParam(m, iter, &d))
         return false;
-      r->SetDoubleValue(d, type);
+      r->SetDoubleValue(d);
+      break;
+    }
+    case blink::mojom::PolicyValueType::kEnum: {
+      int32_t i;
+      if (!ReadParam(m, iter, &i))
+        return false;
+      r->SetIntValue(i);
       break;
     }
     case blink::mojom::PolicyValueType::kNull:
@@ -305,38 +313,6 @@ void ParamTraits<viz::LocalSurfaceId>::Log(const param_type& p,
   l->append(")");
 }
 
-void ParamTraits<viz::LocalSurfaceIdAllocation>::Write(base::Pickle* m,
-                                                       const param_type& p) {
-  DCHECK(p.IsValid());
-  WriteParam(m, p.local_surface_id());
-  WriteParam(m, p.allocation_time());
-}
-
-bool ParamTraits<viz::LocalSurfaceIdAllocation>::Read(
-    const base::Pickle* m,
-    base::PickleIterator* iter,
-    param_type* p) {
-  viz::LocalSurfaceId local_surface_id;
-  if (!ReadParam(m, iter, &local_surface_id))
-    return false;
-
-  base::TimeTicks allocation_time;
-  if (!ReadParam(m, iter, &allocation_time))
-    return false;
-
-  *p = viz::LocalSurfaceIdAllocation(local_surface_id, allocation_time);
-  return p->IsValid();
-}
-
-void ParamTraits<viz::LocalSurfaceIdAllocation>::Log(const param_type& p,
-                                                     std::string* l) {
-  l->append("viz::LocalSurfaceIdAllocation(");
-  LogParam(p.local_surface_id(), l);
-  l->append(", ");
-  LogParam(p.allocation_time(), l);
-  l->append(")");
-}
-
 void ParamTraits<viz::SurfaceId>::Write(base::Pickle* m, const param_type& p) {
   WriteParam(m, p.frame_sink_id());
   WriteParam(m, p.local_surface_id());
@@ -426,37 +402,6 @@ bool ParamTraits<net::SHA256HashValue>::Read(const base::Pickle* m,
 void ParamTraits<net::SHA256HashValue>::Log(const param_type& p,
                                             std::string* l) {
   l->append("<SHA256HashValue>");
-}
-
-void ParamTraits<content::RecordContentToVisibleTimeRequest>::Write(
-    base::Pickle* m,
-    const param_type& p) {
-  WriteParam(m, p.event_start_time);
-  WriteParam(m, p.destination_is_loaded);
-  WriteParam(m, p.show_reason_tab_switching);
-  WriteParam(m, p.show_reason_unoccluded);
-  WriteParam(m, p.show_reason_bfcache_restore);
-}
-
-bool ParamTraits<content::RecordContentToVisibleTimeRequest>::Read(
-    const base::Pickle* m,
-    base::PickleIterator* iter,
-    param_type* r) {
-  if (!ReadParam(m, iter, &r->event_start_time) ||
-      !ReadParam(m, iter, &r->destination_is_loaded) ||
-      !ReadParam(m, iter, &r->show_reason_tab_switching) ||
-      !ReadParam(m, iter, &r->show_reason_unoccluded) ||
-      !ReadParam(m, iter, &r->show_reason_bfcache_restore)) {
-    return false;
-  }
-
-  return true;
-}
-
-void ParamTraits<content::RecordContentToVisibleTimeRequest>::Log(
-    const param_type& p,
-    std::string* l) {
-  l->append("<content::RecordContentToVisibleTimeRequest>");
 }
 
 }  // namespace IPC

@@ -28,6 +28,11 @@
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "printing/buildflags/buildflags.h"
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/policy/dlp/dlp_content_manager.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_notification_helper.h"
+#endif
+
 using content::BrowserThread;
 
 namespace {
@@ -86,13 +91,13 @@ bool PrintViewManager::PrintForSystemDialogNow(
   DCHECK(!on_print_dialog_shown_callback_);
   on_print_dialog_shown_callback_ = std::move(dialog_shown_callback);
   is_switching_to_system_dialog_ = true;
-
-  SetPrintingRFH(print_preview_rfh_);
+  DisconnectFromCurrentPrintJob();
 
   // Don't print / print preview crashed tabs.
   if (IsCrashed())
     return false;
 
+  SetPrintingRFH(print_preview_rfh_);
   GetPrintRenderFrame(print_preview_rfh_)->PrintForSystemDialog();
   return true;
 }
@@ -177,6 +182,17 @@ void PrintViewManager::PrintPreviewDone() {
   print_preview_rfh_ = nullptr;
 }
 
+bool PrintViewManager::RejectPrintPreviewRequestIfRestricted(
+    content::RenderFrameHost* rfh) {
+  if (!IsPrintingRestricted())
+    return false;
+  GetPrintRenderFrame(rfh)->OnPrintPreviewDialogClosed();
+#if defined(OS_CHROMEOS)
+  policy::ShowDlpPrintDisabledToast();
+#endif
+  return true;
+}
+
 void PrintViewManager::RenderFrameCreated(
     content::RenderFrameHost* render_frame_host) {
   if (PrintPreviewDialogController::IsPrintPreviewURL(
@@ -207,6 +223,13 @@ bool PrintViewManager::PrintPreview(
   if (IsCrashed())
     return false;
 
+  if (IsPrintingRestricted()) {
+#if defined(OS_CHROMEOS)
+    policy::ShowDlpPrintDisabledToast();
+#endif
+    return false;
+  }
+
   GetPrintRenderFrame(rfh)->InitiatePrintPreview(std::move(print_renderer),
                                                  has_selection);
 
@@ -216,9 +239,11 @@ bool PrintViewManager::PrintPreview(
   return true;
 }
 
-void PrintViewManager::OnDidShowPrintDialog(content::RenderFrameHost* rfh) {
-  if (rfh != print_preview_rfh_)
+void PrintViewManager::DidShowPrintDialog() {
+  if (print_manager_host_receivers_.GetCurrentTargetFrame() !=
+      print_preview_rfh_) {
     return;
+  }
 
   if (on_print_dialog_shown_callback_)
     std::move(on_print_dialog_shown_callback_).Run();
@@ -253,6 +278,9 @@ void PrintViewManager::OnSetupScriptedPrintPreview(
     return;
   }
 
+  if (RejectPrintPreviewRequestIfRestricted(rfh))
+    return;
+
   DCHECK(!print_preview_rfh_);
   print_preview_rfh_ = rfh;
   print_preview_state_ = SCRIPTED_PREVIEW;
@@ -268,6 +296,9 @@ void PrintViewManager::OnSetupScriptedPrintPreview(
 
 void PrintViewManager::OnShowScriptedPrintPreview(content::RenderFrameHost* rfh,
                                                   bool source_is_modifiable) {
+  if (print_preview_state_ != SCRIPTED_PREVIEW)
+    return;
+
   DCHECK(print_preview_rfh_);
   if (rfh != print_preview_rfh_)
     return;
@@ -302,7 +333,6 @@ bool PrintViewManager::OnMessageReceived(
   FrameDispatchHelper helper = {this, render_frame_host};
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(PrintViewManager, message, render_frame_host)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_DidShowPrintDialog, OnDidShowPrintDialog)
     IPC_MESSAGE_FORWARD_DELAY_REPLY(
         PrintHostMsg_SetupScriptedPrintPreview, &helper,
         FrameDispatchHelper::OnSetupScriptedPrintPreview)
@@ -320,6 +350,15 @@ void PrintViewManager::MaybeUnblockScriptedPreviewRPH() {
     scripted_print_preview_rph_->SetBlocked(false);
     scripted_print_preview_rph_set_blocked_ = false;
   }
+}
+
+bool PrintViewManager::IsPrintingRestricted() const {
+#if defined(OS_CHROMEOS)
+  // Don't print DLP restricted content on Chrome OS.
+  return policy::DlpContentManager::Get()->IsPrintingRestricted(web_contents());
+#else
+  return false;
+#endif
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(PrintViewManager)

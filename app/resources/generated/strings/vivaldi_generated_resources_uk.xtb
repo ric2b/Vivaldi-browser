@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Переглянути джерело фрейма</translation>
 <translation id="1165039591588034296">Помилка</translation>
 <translation id="1175364870820465910">&amp;Друк...</translation>
-<translation id="1177863135347784049">Вказані</translation>
 <translation id="1181037720776840403">Видалити</translation>
 <translation id="1187722533808055681">Вихід зі стану неактивності</translation>
 <translation id="119944043368869598">Очистити все</translation>
 <translation id="1221825588892235038">Лише виділене</translation>
 <translation id="1244303850296295656">Помилка розширення</translation>
+<translation id="125220115284141797">За замовчуванням</translation>
 <translation id="1274977772557788323">Налаштування сховища Adobe Flash Player</translation>
 <translation id="1297175357211070620">Принтер</translation>
 <translation id="1303101771013849280">HTML-файл закладок</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Нове вікно</translation>
 <translation id="1725149567830788547">Показати &amp;елементи керування</translation>
 <translation id="1729533290416704613">Розширення також змінило сторінку, яка відкривається під час пошуку в універсальному вікні пошуку.</translation>
+<translation id="174123615272205933">Вказані</translation>
 <translation id="1744108098763830590">фонова сторінка</translation>
 <translation id="176587472219019965">&amp;Нове вікно</translation>
 <translation id="1769104665586091481">Відкрити посилання в новому &amp;вікні</translation>
+<translation id="1779468444204342338">Мінімальні</translation>
 <translation id="1815083418640426271">Вставити як звичайний текст</translation>
 <translation id="1828901632669367785">Друкувати за допомогою системного діалогу...</translation>
 <translation id="1850508293116537636">Повернути за &amp;годинниковою стрілкою</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Запитувати перед надсиланням (рекомендовано)</translation>
 <translation id="241082044617551207">Невідомий плагін</translation>
 <translation id="2423578206845792524">Збер&amp;егти зображення як...</translation>
-<translation id="2436707352762155834">Мінімальні</translation>
 <translation id="2439110203301358333">Інша програма на вашому комп’ютері додала розширення, яке може змінити роботу Vivaldi.</translation>
 <translation id="2445081178310039857">Потрібен кореневий каталог розширення.</translation>
 <translation id="2470702053775288986">Непідтримувані розширення вимкнено</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Візуалізатор: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Мікрофон</translation>
 <translation id="3241680850019875542">Виберіть кореневий каталог для пакування розширення. Щоб оновити розширення, також виберіть файл секретного ключа для повторного використання.</translation>
+<translation id="3266179261140759675">Заборонити закритим сайтам надсилати й отримувати дані</translation>
 <translation id="3280237271814976245">Зберегти &amp;як...</translation>
 <translation id="3285322247471302225">Нова &amp;вкладка</translation>
 <translation id="3288047731229977326">Розширення, які працюють у режимі розробника, можуть пошкодити ваш комп’ютер. Якщо ви не розробник, вимкніть їх заради безпеки.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Дозволити</translation>
 <translation id="5057110919553308744">Коли ви натискаєте на розширення</translation>
 <translation id="5063480226653192405">Використання</translation>
-<translation id="5068918910148307423">Заборонити нещодавно закритим сайтам завершувати надсилання й отримання даних</translation>
 <translation id="5116628073786783676">&amp;Зберегти аудіо як...</translation>
 <translation id="5143374789336132547">Розширення "<ph name="EXTENSION_NAME" />" змінило сторінку, яка відкривається під час натискання кнопки "Домашня сторінка".</translation>
 <translation id="5154108062446123722">Додаткові налаштування для <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">Розширення "<ph name="EXTENSION_NAME" />" змінило сторінку, яка відкривається під час пошуку в універсальному вікні пошуку.</translation>
 <translation id="5360150013186312835">Показати на панелі інструментів</translation>
 <translation id="5362741141255528695">Виберіть файл секретного ключа.</translation>
+<translation id="536638840841140142">Немає</translation>
 <translation id="5370819323174483825">&amp;Оновити</translation>
 <translation id="5398572795982417028">Сторінка поза діапазоном, максимальна кількість сторінок: <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Продовжити завантаження</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Одержувач: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Встановлено адміністратором</translation>
 <translation id="7685049629764448582">Пам'ять Javascript</translation>
-<translation id="7701040980221191251">Немає</translation>
 <translation id="7701869757853594372">USER-дескриптори</translation>
 <translation id="7704305437604973648">Завдання</translation>
 <translation id="7710568461918838723">Трансляція...</translation>
@@ -457,7 +458,7 @@
 <translation id="8757090071857742562">Не вдається транслювати робочий стіл. Перевірте, чи ви підтвердили запит на трансляцію екрана.</translation>
 <translation id="8774934320277480003">Верхнє поле</translation>
 <translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; хоче надати вам доступ до принтера &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;.</translation>
-<translation id="8798099450830957504">За замовчуванням</translation>
+<translation id="8798099450830957504">За умовчанням</translation>
 <translation id="8800004011501252845">Місце призначення для</translation>
 <translation id="8808478386290700967">Веб-магазин</translation>
 <translation id="8823514049557262177">Копіювати &amp;текст посилання</translation>

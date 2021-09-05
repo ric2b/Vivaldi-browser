@@ -24,6 +24,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
+#include "base/task/common/task_annotator.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_allocator_dump.h"
@@ -165,15 +166,14 @@ class ChannelAssociatedGroupController
     DCHECK(thread_checker_.CalledOnValidThread());
     DCHECK(task_runner_->BelongsToCurrentThread());
 
-    connector_.reset(new mojo::Connector(
-        std::move(handle), mojo::Connector::SINGLE_THREADED_SEND,
-        task_runner_));
+    connector_ = std::make_unique<mojo::Connector>(
+        std::move(handle), mojo::Connector::SINGLE_THREADED_SEND, task_runner_,
+        "IPC Channel");
     connector_->set_incoming_receiver(&dispatcher_);
     connector_->set_connection_error_handler(
         base::BindOnce(&ChannelAssociatedGroupController::OnPipeError,
                        base::Unretained(this)));
     connector_->set_enforce_errors_from_incoming_receiver(false);
-    connector_->SetWatcherHeapProfilerTag("IPC Channel");
     if (quota_checker_)
       connector_->SetMessageQuotaChecker(quota_checker_);
 
@@ -887,11 +887,18 @@ class ChannelAssociatedGroupController
       // in-transit associated endpoints and thus acquire |lock_|. We no longer
       // need the lock to be held now since |proxy_task_runner_| is safe to
       // access unguarded.
-      locker.Release();
-      proxy_task_runner_->PostTask(
-          FROM_HERE,
-          base::BindOnce(&ChannelAssociatedGroupController::AcceptOnProxyThread,
-                         this, std::move(*message)));
+      {
+        // Grab interface name from |client| before releasing the lock to ensure
+        // that |client| is safe to access.
+        base::TaskAnnotator::ScopedSetIpcHash scoped_set_ipc_hash(
+            client ? client->interface_name() : "unknown interface");
+        locker.Release();
+        proxy_task_runner_->PostTask(
+            FROM_HERE,
+            base::BindOnce(
+                &ChannelAssociatedGroupController::AcceptOnProxyThread, this,
+                std::move(*message)));
+      }
       return true;
     }
 
@@ -901,11 +908,16 @@ class ChannelAssociatedGroupController
            !message->has_flag(mojo::Message::kFlagIsResponse));
 
     locker.Release();
+    // It's safe to access |client| here without holding a lock, because this
+    // code runs on a proxy thread and |client| can't be destroyed from any
+    // thread.
     return client->HandleIncomingMessage(message);
   }
 
   void AcceptOnProxyThread(mojo::Message message) {
     DCHECK(proxy_task_runner_->BelongsToCurrentThread());
+    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("mojom"),
+                 "ChannelAssociatedGroupController::AcceptOnProxyThread");
 
     mojo::InterfaceId id = message.interface_id();
     DCHECK(mojo::IsValidInterfaceId(id) && !mojo::IsPrimaryInterfaceId(id));
@@ -919,6 +931,9 @@ class ChannelAssociatedGroupController
     if (!client)
       return;
 
+    // Using client->interface_name() is safe here because this is a static
+    // string defined for each mojo interface.
+    TRACE_EVENT0("mojom", client->interface_name());
     DCHECK(endpoint->task_runner()->RunsTasksInCurrentSequence());
 
     // Sync messages should never make their way to this method.
@@ -936,6 +951,8 @@ class ChannelAssociatedGroupController
 
   void AcceptSyncMessage(mojo::InterfaceId interface_id, uint32_t message_id) {
     DCHECK(proxy_task_runner_->BelongsToCurrentThread());
+    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("mojom"),
+                 "ChannelAssociatedGroupController::AcceptSyncMessage");
 
     base::AutoLock locker(lock_);
     Endpoint* endpoint = FindEndpoint(interface_id);
@@ -948,6 +965,9 @@ class ChannelAssociatedGroupController
     if (!client)
       return;
 
+    // Using client->interface_name() is safe here because this is a static
+    // string defined for each mojo interface.
+    TRACE_EVENT0("mojom", client->interface_name());
     DCHECK(endpoint->task_runner()->RunsTasksInCurrentSequence());
     MessageWrapper message_wrapper = endpoint->PopSyncMessage(message_id);
 

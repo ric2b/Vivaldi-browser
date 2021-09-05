@@ -127,7 +127,7 @@ void ProxyMain::BeginMainFrame(
 
   benchmark_instrumentation::ScopedBeginFrameTask begin_frame_task(
       benchmark_instrumentation::kDoBeginFrame,
-      begin_main_frame_state->begin_frame_id);
+      begin_main_frame_state->begin_frame_args.frame_id.sequence_number);
 
   // This needs to run unconditionally, so do it before any early-returns.
   if (layer_tree_host_->scheduling_client())
@@ -392,15 +392,6 @@ void ProxyMain::DidPresentCompositorFrame(
 
 void ProxyMain::NotifyThroughputTrackerResults(CustomTrackerResults results) {
   layer_tree_host_->NotifyThroughputTrackerResults(std::move(results));
-}
-
-void ProxyMain::SubmitThroughputData(ukm::SourceId source_id,
-                                     int aggregated_percent,
-                                     int impl_percent,
-                                     base::Optional<int> main_percent) {
-  DCHECK(!task_runner_provider_->IsImplThread());
-  layer_tree_host_->SubmitThroughputData(source_id, aggregated_percent,
-                                         impl_percent, main_percent);
 }
 
 void ProxyMain::DidObserveFirstScrollDelay(
@@ -698,6 +689,15 @@ void ProxyMain::SetSourceURL(ukm::SourceId source_id, const GURL& url) {
       FROM_HERE, base::BindOnce(&ProxyImpl::SetSourceURL,
                                 base::Unretained(proxy_impl_.get()),
                                 source_id, url));
+}
+
+void ProxyMain::SetUkmSmoothnessDestination(
+    base::WritableSharedMemoryMapping ukm_smoothness_data) {
+  DCHECK(IsMainThread());
+  ImplThreadTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(&ProxyImpl::SetUkmSmoothnessDestination,
+                                base::Unretained(proxy_impl_.get()),
+                                std::move(ukm_smoothness_data)));
 }
 
 void ProxyMain::ClearHistory() {

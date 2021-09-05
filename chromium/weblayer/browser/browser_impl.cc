@@ -13,7 +13,7 @@
 #include "base/stl_util.h"
 #include "components/base32/base32.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/web_preferences.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "weblayer/browser/browser_context_impl.h"
 #include "weblayer/browser/browser_list.h"
 #include "weblayer/browser/feature_list_creator.h"
@@ -24,6 +24,7 @@
 #include "weblayer/browser/tab_impl.h"
 #include "weblayer/common/weblayer_paths.h"
 #include "weblayer/public/browser_observer.h"
+#include "weblayer/public/browser_restore_observer.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/callback_android.h"
@@ -145,12 +146,6 @@ void BrowserImpl::AddTab(JNIEnv* env,
   AddTab(reinterpret_cast<TabImpl*>(native_tab));
 }
 
-void BrowserImpl::RemoveTab(JNIEnv* env,
-                            long native_tab) {
-  // The Java side owns the Tab.
-  RemoveTab(reinterpret_cast<TabImpl*>(native_tab)).release();
-}
-
 ScopedJavaLocalRef<jobjectArray> BrowserImpl::GetTabs(JNIEnv* env) {
   ScopedJavaLocalRef<jclass> clazz =
       base::android::GetClass(env, "org/chromium/weblayer_private/TabImpl");
@@ -258,7 +253,7 @@ std::vector<uint8_t> BrowserImpl::GetMinimalPersistenceState(
   return PersistMinimalState(this, max_size_in_bytes);
 }
 
-void BrowserImpl::SetWebPreferences(content::WebPreferences* prefs) {
+void BrowserImpl::SetWebPreferences(blink::web_pref::WebPreferences* prefs) {
 #if defined(OS_ANDROID)
   prefs->password_echo_enabled = Java_BrowserImpl_getPasswordEchoEnabled(
       AttachCurrentThread(), java_impl_);
@@ -272,8 +267,10 @@ void BrowserImpl::SetWebPreferences(content::WebPreferences* prefs) {
 }
 
 #if defined(OS_ANDROID)
-void BrowserImpl::DestroyTabFromJava(Tab* tab) {
-  RemoveTab(tab);
+void BrowserImpl::RemoveTabBeforeDestroyingFromJava(Tab* tab) {
+  // The java side owns the Tab, and is going to delete it shortly. See
+  // JNI_TabImpl_DeleteTab.
+  RemoveTab(tab).release();
 }
 #endif
 
@@ -290,6 +287,7 @@ void BrowserImpl::AddTab(Tab* tab) {
 
 void BrowserImpl::DestroyTab(Tab* tab) {
 #if defined(OS_ANDROID)
+  // Route destruction through the java side.
   Java_BrowserImpl_destroyTabImpl(AttachCurrentThread(), java_impl_,
                                   static_cast<TabImpl*>(tab)->GetJavaTab());
 #else
@@ -332,6 +330,14 @@ Tab* BrowserImpl::CreateTab() {
   return CreateTab(nullptr);
 }
 
+void BrowserImpl::OnRestoreCompleted() {
+  for (BrowserRestoreObserver& obs : browser_restore_observers_)
+    obs.OnRestoreCompleted();
+#if defined(OS_ANDROID)
+  Java_BrowserImpl_onRestoreCompleted(AttachCurrentThread(), java_impl_);
+#endif
+}
+
 void BrowserImpl::PrepareForShutdown() {
   browser_persister_.reset();
 }
@@ -345,12 +351,25 @@ std::vector<uint8_t> BrowserImpl::GetMinimalPersistenceState() {
   return GetMinimalPersistenceState(0);
 }
 
+bool BrowserImpl::IsRestoringPreviousState() {
+  return browser_persister_ && browser_persister_->is_restore_in_progress();
+}
+
 void BrowserImpl::AddObserver(BrowserObserver* observer) {
   browser_observers_.AddObserver(observer);
 }
 
 void BrowserImpl::RemoveObserver(BrowserObserver* observer) {
   browser_observers_.RemoveObserver(observer);
+}
+
+void BrowserImpl::AddBrowserRestoreObserver(BrowserRestoreObserver* observer) {
+  browser_restore_observers_.AddObserver(observer);
+}
+
+void BrowserImpl::RemoveBrowserRestoreObserver(
+    BrowserRestoreObserver* observer) {
+  browser_restore_observers_.RemoveObserver(observer);
 }
 
 void BrowserImpl::VisibleSecurityStateOfActiveTabChanged() {

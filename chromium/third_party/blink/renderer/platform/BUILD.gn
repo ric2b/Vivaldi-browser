@@ -17,6 +17,13 @@ import("//third_party/blink/renderer/config.gni")
 import("//third_party/blink/renderer/platform/platform_generated.gni")
 import("//v8/gni/v8.gni")
 
+# This file depends on the legacy global sources assignment filter. It should
+# be converted to check target platform before assigning source files to the
+# sources variable. Remove this import and set_sources_assignment_filter call
+# when the file has been converted. See https://crbug.com/1018739 for details.
+import("//build/config/deprecated_default_sources_assignment_filter.gni")
+set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
+
 # Most targets in this file are private actions so use that as the default.
 visibility = [
   ":*",
@@ -92,6 +99,7 @@ compiled_action("character_data") {
 
 executable("character_data_generator") {
   sources = [
+    "text/character_property.h",
     "text/character_property_data.h",
     "text/character_property_data_generator.cc",
   ]
@@ -122,6 +130,8 @@ group("make_platform_generated") {
 import("//build/config/pch.gni")
 
 config("blink_platform_config") {
+  visibility = []
+  visibility = [ "./*" ]
   configs = [
     "//third_party/blink/renderer:config",
     "//third_party/blink/renderer:inside_blink",
@@ -200,10 +210,15 @@ buildflag_header("bindings_buildflags") {
 }
 
 config("blink_platform_implementation") {
+  visibility = []
+  visibility = [ "./*" ]
+
   defines = [ "BLINK_PLATFORM_IMPLEMENTATION=1" ]
 }
 
 config("blink_platform_pch") {
+  visibility = []
+  visibility = [ "./*" ]
   if (enable_precompiled_headers) {
     if (is_win) {
       # This is a string rather than a file GN knows about. It has to match
@@ -231,8 +246,8 @@ source_set("platform_export") {
 
   visibility = []  # Allow re-assignment of list.
   visibility = [
-    ":platform",
     "//mojo/public/cpp/bindings:wtf_support",
+    "//third_party/blink/renderer/platform/*",
   ]
 }
 
@@ -243,8 +258,8 @@ component("platform") {
     "//services/device/public/mojom:mojom_blink",
     "//services/media_session/public/mojom:mojom_blink",
     "//third_party/blink/*",
-    "//url/mojom:url_mojom_origin_blink",
     "//url/mojom:url_mojom_gurl_blink",
+    "//url/mojom:url_mojom_origin_blink",
   ]
   output_name = "blink_platform"
 
@@ -864,9 +879,16 @@ component("platform") {
     "graphics/dark_mode_color_filter.h",
     "graphics/dark_mode_filter.cc",
     "graphics/dark_mode_filter.h",
+    "graphics/dark_mode_filter_helper.cc",
+    "graphics/dark_mode_filter_helper.h",
+    "graphics/dark_mode_image_cache.h",
     "graphics/dark_mode_image_classifier.cc",
     "graphics/dark_mode_image_classifier.h",
+    "graphics/dark_mode_lab_color_space.h",
     "graphics/dark_mode_settings.h",
+    "graphics/dark_mode_settings_builder.cc",
+    "graphics/dark_mode_settings_builder.h",
+    "graphics/dark_mode_types.h",
     "graphics/darkmode/darkmode_classifier.cc",
     "graphics/darkmode/darkmode_classifier.h",
     "graphics/dash_array.h",
@@ -973,6 +995,8 @@ component("platform") {
     "graphics/graphics_layer.cc",
     "graphics/graphics_layer.h",
     "graphics/graphics_layer_client.h",
+    "graphics/graphics_layer_tree_as_text.cc",
+    "graphics/graphics_layer_tree_as_text.h",
     "graphics/graphics_types.cc",
     "graphics/graphics_types.h",
     "graphics/graphics_types_3d.h",
@@ -980,7 +1004,6 @@ component("platform") {
     "graphics/identifiability_paint_op_digest.h",
     "graphics/image.cc",
     "graphics/image.h",
-    "graphics/image_animation_policy.h",
     "graphics/image_data_buffer.cc",
     "graphics/image_data_buffer.h",
     "graphics/image_decoder_wrapper.cc",
@@ -999,9 +1022,10 @@ component("platform") {
     "graphics/intercepting_canvas.h",
     "graphics/interpolation_space.cc",
     "graphics/interpolation_space.h",
-    "graphics/lab_color_space.h",
     "graphics/logging_canvas.cc",
     "graphics/logging_canvas.h",
+    "graphics/mailbox_ref.cc",
+    "graphics/mailbox_ref.h",
     "graphics/mailbox_texture_backing.cc",
     "graphics/mailbox_texture_backing.h",
     "graphics/main_thread_mutator_client.cc",
@@ -1013,6 +1037,7 @@ component("platform") {
     "graphics/mutator_client.h",
     "graphics/offscreen_canvas_placeholder.cc",
     "graphics/offscreen_canvas_placeholder.h",
+    "graphics/overlay_scrollbar_clip_behavior.h",
     "graphics/paint/clip_paint_property_node.cc",
     "graphics/paint/clip_paint_property_node.h",
     "graphics/paint/cull_rect.cc",
@@ -1110,7 +1135,6 @@ component("platform") {
     "graphics/replaying_canvas.cc",
     "graphics/replaying_canvas.h",
     "graphics/scoped_interpolation_quality.h",
-    "graphics/scroll_types.h",
     "graphics/scrollbar_theme_settings.cc",
     "graphics/scrollbar_theme_settings.h",
     "graphics/skia/image_pixel_locker.cc",
@@ -1139,7 +1163,7 @@ component("platform") {
     "graphics/video_frame_submitter.h",
     "graphics/web_graphics_context_3d_provider_wrapper.cc",
     "graphics/web_graphics_context_3d_provider_wrapper.h",
-    "heap_observer_list.h",
+    "heap_observer_set.h",
     "image-decoders/bmp/bmp_image_decoder.cc",
     "image-decoders/bmp/bmp_image_decoder.h",
     "image-decoders/bmp/bmp_image_reader.cc",
@@ -1337,6 +1361,8 @@ component("platform") {
     "privacy_budget/identifiability_digest_helpers.cc",
     "privacy_budget/identifiability_digest_helpers.h",
     "resolution_units.h",
+    "search_engine_utils.cc",
+    "search_engine_utils.h",
     "supplementable.cc",
     "supplementable.h",
     "text/bidi_character_run.h",
@@ -1374,6 +1400,8 @@ component("platform") {
     "text/locale_win.cc",
     "text/locale_win.h",
     "text/mac/hyphenation_mac.cc",
+    "text/mathml_operator_dictionary.cc",
+    "text/mathml_operator_dictionary.h",
     "text/platform_locale.cc",
     "text/platform_locale.h",
     "text/segmented_string.cc",
@@ -1537,7 +1565,6 @@ component("platform") {
     sources += [
       "widget/input/synchronous_compositor_proxy.cc",
       "widget/input/synchronous_compositor_proxy.h",
-      "widget/input/synchronous_compositor_registry.h",
     ]
   }
 
@@ -1550,18 +1577,31 @@ component("platform") {
 
   include_dirs = []
 
+  allow_circular_includes_from = [
+    "//third_party/blink/renderer/platform/blob",
+    "//third_party/blink/renderer/platform/heap:heap",
+    "//third_party/blink/renderer/platform/instrumentation",
+    "//third_party/blink/renderer/platform/loader:loader",
+    "//third_party/blink/renderer/platform/network:network",
+    "//third_party/blink/renderer/platform/scheduler",
+  ]
+
   public_deps = [
     ":blink_platform_public_deps",
     ":platform_export",
+    "//gpu/command_buffer/client:raster_interface",
+    "//media/capture:capture_lib",
     "//mojo/public/cpp/base",
     "//mojo/public/cpp/bindings",
     "//services/network/public/mojom:mojom_headers",
+    "//third_party/blink/public/mojom:embedded_frame_sink_mojo_bindings_blink",
     "//third_party/blink/renderer/platform/blob",
     "//third_party/blink/renderer/platform/heap",
     "//third_party/blink/renderer/platform/instrumentation",
     "//third_party/blink/renderer/platform/loader",
     "//third_party/blink/renderer/platform/network",
     "//third_party/blink/renderer/platform/scheduler",
+    "//third_party/pffft:pffft",
     "//ui/gfx",
   ]
   deps = [
@@ -1569,16 +1609,20 @@ component("platform") {
     "//base/allocator:buildflags",
     "//cc/ipc",
     "//components/paint_preview/common",
+    "//components/search_engines:search_engine_utils",
     "//components/viz/client",
     "//components/viz/common",
     "//crypto",
     "//device/vr/public/mojom:mojom_blink",
     "//gin",
+    "//gpu:gpu",
+    "//gpu/command_buffer/client:webgpu_interface",
     "//jingle:webrtc_glue",
     "//media",
     "//media/capture:capture_switches",
     "//media/capture/mojom:video_capture",
     "//mojo/public/cpp/bindings:wtf_support",
+    "//services/metrics/public/cpp:ukm_builders",
     "//services/network/public/mojom:mojom_shared",
     "//services/service_manager/public/cpp",
     "//services/viz/public/cpp/gpu",
@@ -1588,7 +1632,6 @@ component("platform") {
     "//third_party/abseil-cpp:absl",
     "//third_party/blink/public:image_resources",
     "//third_party/blink/public/common",
-    "//third_party/blink/public/mojom:embedded_frame_sink_mojo_bindings_blink",
     "//third_party/blink/public/strings",
     "//third_party/blink/renderer/platform/wtf",
     "//third_party/ced",
@@ -1677,6 +1720,7 @@ component("platform") {
   if (current_cpu == "x86" || current_cpu == "x64") {
     deps += [ ":blink_x86_avx" ]
     sources += [ "audio/cpu/x86/audio_delay_dsp_kernel_sse2.cc" ]
+    allow_circular_includes_from += [ ":blink_x86_avx" ]
   }
 
   if (current_cpu == "arm64" || (current_cpu == "arm" && arm_use_neon)) {
@@ -1711,8 +1755,17 @@ static_library("test_support") {
 
   sources = [
     "graphics/gpu/drawing_buffer_test_helpers.h",
+    "graphics/paint/paint_controller_test.h",
+    "graphics/test/fake_canvas_resource_host.h",
+    "graphics/test/fake_gles2_interface.h",
+    "graphics/test/fake_web_graphics_context_3d_provider.h",
+    "graphics/test/gpu_memory_buffer_test_platform.h",
     "graphics/test/gpu_test_utils.cc",
     "graphics/test/gpu_test_utils.h",
+    "graphics/test/mock_compositor_frame_sink.h",
+    "graphics/test/mock_embedded_frame_sink_provider.h",
+    "graphics/test/mock_image_decoder.h",
+    "graphics/test/mock_paint_canvas.h",
     "testing/code_cache_loader_mock.cc",
     "testing/code_cache_loader_mock.h",
     "testing/compositor_test.cc",
@@ -1733,6 +1786,7 @@ static_library("test_support") {
     "testing/layer_tree_host_embedder.cc",
     "testing/layer_tree_host_embedder.h",
     "testing/message_loop_for_mojo.h",
+    "testing/mock_context_lifecycle_notifier.h",
     "testing/paint_property_test_helpers.h",
     "testing/paint_test_configurations.h",
     "testing/picture_matchers.cc",
@@ -1784,9 +1838,14 @@ static_library("test_support") {
     "//cc",
     "//cc:test_support",
     "//components/viz/test:test_support",
+    "//gpu:raster",
     "//testing/gmock",
     "//testing/gtest:gtest",
     "//testing/perf",
+    "//third_party/blink/renderer/platform/blob:test_support",
+    "//third_party/blink/renderer/platform/heap:test_support",
+    "//third_party/blink/renderer/platform/loader:test_support",
+    "//third_party/blink/renderer/platform/scheduler:test_support",
   ]
 
   deps = [
@@ -1797,12 +1856,10 @@ static_library("test_support") {
     "//services/service_manager/public/cpp",
     "//skia",
     "//third_party/blink/public/common:common",
-    "//third_party/blink/renderer/platform/blob:test_support",
-    "//third_party/blink/renderer/platform/heap:test_support",
-    "//third_party/blink/renderer/platform/loader:test_support",
     "//third_party/blink/renderer/platform/network:test_support",
-    "//third_party/blink/renderer/platform/scheduler:test_support",
   ]
+  allow_circular_includes_from =
+      [ "//third_party/blink/renderer/platform/loader:test_support" ]
 
   if (is_win) {
     cflags = [ "/wd4267" ]  # Truncation from size_t to int.
@@ -1903,7 +1960,9 @@ source_set("blink_platform_unittests_sources") {
     "graphics/contiguous_container_test.cc",
     "graphics/dark_mode_color_classifier_test.cc",
     "graphics/dark_mode_filter_test.cc",
+    "graphics/dark_mode_image_cache_test.cc",
     "graphics/dark_mode_image_classifier_test.cc",
+    "graphics/dark_mode_lab_color_space_test.cc",
     "graphics/decoding_image_generator_test.cc",
     "graphics/deferred_image_decoder_test_wo_platform.cc",
     "graphics/filters/fe_composite_test.cc",
@@ -1915,7 +1974,6 @@ source_set("blink_platform_unittests_sources") {
     "graphics/gpu/webgpu_swap_buffer_provider_test.cc",
     "graphics/graphics_context_test.cc",
     "graphics/identifiability_paint_op_digest_unittest.cc",
-    "graphics/lab_color_space_test.cc",
     "graphics/paint/cull_rect_test.cc",
     "graphics/paint/display_item_client_test.cc",
     "graphics/paint/display_item_raster_invalidator_test.cc",
@@ -1928,7 +1986,6 @@ source_set("blink_platform_unittests_sources") {
     "graphics/paint/paint_chunk_test.cc",
     "graphics/paint/paint_chunker_test.cc",
     "graphics/paint/paint_controller_test.cc",
-    "graphics/paint/paint_controller_test.h",
     "graphics/paint/paint_property_node_test.cc",
     "graphics/paint/paint_record_builder_test.cc",
     "graphics/paint/raster_invalidator_test.cc",
@@ -1938,7 +1995,7 @@ source_set("blink_platform_unittests_sources") {
     "graphics/placeholder_image_test.cc",
     "graphics/static_bitmap_image_test.cc",
     "graphics/video_frame_submitter_test.cc",
-    "heap_observer_list_test.cc",
+    "heap_observer_set_test.cc",
     "image-decoders/bmp/bmp_image_decoder_test.cc",
     "image-decoders/fast_shared_buffer_reader_test.cc",
     "image-decoders/gif/gif_image_decoder_test.cc",
@@ -1993,6 +2050,7 @@ source_set("blink_platform_unittests_sources") {
     "text/hyphenation_test.cc",
     "text/icu_error_test.cc",
     "text/layout_locale_test.cc",
+    "text/mathml_operator_dictionary_test.cc",
     "text/platform_locale_test.cc",
     "text/segmented_string_test.cc",
     "text/suffix_tree_test.cc",
@@ -2075,12 +2133,15 @@ source_set("blink_platform_unittests_sources") {
     "//testing/gmock",
     "//testing/gtest",
     "//third_party:freetype_harfbuzz",
+    "//third_party/blink/public:test_headers",
+    "//third_party/blink/public/strings:strings",
     "//third_party/blink/renderer/platform/blob:unit_tests",
     "//third_party/blink/renderer/platform/instrumentation:unit_tests",
     "//third_party/blink/renderer/platform/loader:unit_tests",
     "//third_party/blink/renderer/platform/network:unit_tests",
     "//third_party/blink/renderer/platform/scheduler:unit_tests",
     "//third_party/blink/renderer/platform/wtf",
+    "//third_party/libavif:libavif",
     "//third_party/libyuv",
     "//third_party/webrtc/api/task_queue:task_queue_test",
     "//third_party/webrtc_overrides:webrtc_component",
@@ -2207,6 +2268,8 @@ if (current_cpu == "x86" || current_cpu == "x64") {
 test("blink_fuzzer_unittests") {
   deps = [
     ":test_support",
+    "//base/test:test_support",
+    "//mojo/core/embedder:embedder",
     "//skia:test_fonts",
     "//third_party/blink/public:test_support",
   ]
@@ -2230,9 +2293,10 @@ source_set("blink_fuzzer_test_support") {
     "testing/blink_fuzzer_test_support.cc",
     "testing/blink_fuzzer_test_support.h",
   ]
+  public_deps = [ ":test_support" ]
   deps = [
     ":platform",
-    ":test_support",
+    "//base/test:test_config",
     "//content/test:test_support",
   ]
 }
@@ -2363,14 +2427,6 @@ source_set("unit_tests") {
     "graphics/image_decoding_store_test.cc",
     "graphics/image_frame_generator_test.cc",
     "graphics/paint_worklet_paint_dispatcher_test.cc",
-    "graphics/test/fake_canvas_resource_host.h",
-    "graphics/test/fake_gles2_interface.h",
-    "graphics/test/fake_web_graphics_context_3d_provider.h",
-    "graphics/test/gpu_memory_buffer_test_platform.h",
-    "graphics/test/mock_compositor_frame_sink.h",
-    "graphics/test/mock_embedded_frame_sink_provider.h",
-    "graphics/test/mock_image_decoder.h",
-    "graphics/test/mock_paint_canvas.h",
     "graphics/test/stub_image.h",
 
     # Tests migrated from the web/tests directory.
@@ -2389,5 +2445,7 @@ source_set("unit_tests") {
     ":test_support",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/blink/public:test_headers",
   ]
+  public_deps = [ "//gpu:raster" ]
 }

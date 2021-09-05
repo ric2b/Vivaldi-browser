@@ -193,12 +193,13 @@ void MarkRequestCompleteTask::DidOpenCache(
 
   // TODO(crbug.com/774054): The request blob stored in the cache is being
   // overwritten here, it should be written back.
-  handle.value()->Put(
-      std::move(request), BackgroundFetchSettledFetch::CloneResponse(response_),
-      trace_id,
-      base::BindOnce(&MarkRequestCompleteTask::DidWriteToCache,
-                     weak_factory_.GetWeakPtr(), std::move(handle),
-                     std::move(done_closure)));
+  CacheStorageCache* handle_ptr = handle.value();
+  handle_ptr->Put(std::move(request),
+                  BackgroundFetchSettledFetch::CloneResponse(response_),
+                  trace_id,
+                  base::BindOnce(&MarkRequestCompleteTask::DidWriteToCache,
+                                 weak_factory_.GetWeakPtr(), std::move(handle),
+                                 std::move(done_closure)));
 }
 
 void MarkRequestCompleteTask::DidWriteToCache(
@@ -221,7 +222,7 @@ void MarkRequestCompleteTask::CreateAndStoreCompletedRequest(
 
   service_worker_context()->StoreRegistrationUserData(
       registration_id_.service_worker_registration_id(),
-      registration_id_.origin().GetURL(),
+      registration_id_.origin(),
       {{CompletedRequestKey(completed_request_.unique_id(),
                             completed_request_.request_index()),
         completed_request_.SerializeAsString()}},
@@ -298,7 +299,7 @@ void MarkRequestCompleteTask::DidGetMetadata(
 
   service_worker_context()->StoreRegistrationUserData(
       registration_id_.service_worker_registration_id(),
-      registration_id_.origin().GetURL(),
+      registration_id_.origin(),
       {{RegistrationKey(registration_id_.unique_id()),
         metadata->SerializeAsString()}},
       base::BindOnce(&MarkRequestCompleteTask::DidStoreMetadata,

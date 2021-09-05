@@ -26,13 +26,14 @@
 #include "content/browser/renderer_host/display_feature.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/content_export.h"
-#include "content/common/content_to_visible_time_reporter.h"
 #include "content/public/browser/render_frame_metadata_provider.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/common/widget_type.h"
 #include "services/viz/public/mojom/hit_test/hit_test_region_list.mojom.h"
+#include "third_party/blink/public/common/page/content_to_visible_time_reporter.h"
 #include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom-forward.h"
 #include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
+#include "third_party/blink/public/mojom/page/record_content_to_visible_time_request.mojom-forward.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/accessibility/ax_tree_id_registry.h"
 #include "ui/base/ime/mojom/text_input_state.mojom-forward.h"
@@ -73,12 +74,8 @@ class DelegatedFrameHost;
 struct DisplayFeature;
 
 // Basic implementation shared by concrete RenderWidgetHostView subclasses.
-class CONTENT_EXPORT RenderWidgetHostViewBase
-    : public RenderWidgetHostView,
-      public RenderFrameMetadataProvider::Observer {
+class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
  public:
-  ~RenderWidgetHostViewBase() override;
-
   float current_device_scale_factor() const {
     return current_device_scale_factor_;
   }
@@ -116,13 +113,12 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   void EnableAutoResize(const gfx::Size& min_size,
                         const gfx::Size& max_size) override;
   void DisableAutoResize(const gfx::Size& new_size) override;
-  bool IsScrollOffsetAtTop() override;
   float GetDeviceScaleFactor() final;
   TouchSelectionControllerClientManager*
   GetTouchSelectionControllerClientManager() override;
   void SetRecordContentToVisibleTimeRequest(
       base::TimeTicks start_time,
-      base::Optional<bool> destination_is_loaded,
+      bool destination_is_loaded,
       bool show_reason_tab_switching,
       bool show_reason_unoccluded,
       bool show_reason_bfcache_restore) final;
@@ -133,14 +129,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
       const gfx::PointF& point) override;
   gfx::PointF TransformRootPointToViewCoordSpace(
       const gfx::PointF& point) override;
-
-  // RenderFrameMetadataProvider::Observer
-  void OnRenderFrameMetadataChangedBeforeActivation(
-      const cc::RenderFrameMetadata& metadata) override;
-  void OnRenderFrameMetadataChangedAfterActivation() override;
-  void OnRenderFrameSubmission() override;
-  void OnLocalSurfaceIdChanged(
-      const cc::RenderFrameMetadata& metadata) override;
 
   virtual void UpdateIntrinsicSizingInfo(
       blink::mojom::IntrinsicSizingInfoPtr sizing_info);
@@ -158,14 +146,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   void SetWidgetType(WidgetType widget_type);
 
   WidgetType GetWidgetType();
-
-  // Return a value that is incremented each time the renderer swaps a new frame
-  // to the view.
-  uint32_t RendererFrameNumber();
-
-  // Called each time the RenderWidgetHost receives a new frame for display from
-  // the renderer.
-  void DidReceiveRendererFrame();
 
   // Notification that a resize or move session ended on the native widget.
   void UpdateScreenInfo(gfx::NativeView view);
@@ -190,7 +170,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // |event_start_time| field of the returned struct will have a null
   // timestamp. Calling this will reset |last_record_tab_switch_time_request_|
   // to null.
-  base::Optional<RecordContentToVisibleTimeRequest>
+  blink::mojom::RecordContentToVisibleTimeRequestPtr
   TakeRecordContentToVisibleTimeRequest();
 
   base::WeakPtr<RenderWidgetHostViewBase> GetWeakPtr();
@@ -287,8 +267,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   virtual const viz::FrameSinkId& GetFrameSinkId() const = 0;
 
   // Returns the LocalSurfaceId allocated by the parent client for this view.
-  virtual const viz::LocalSurfaceIdAllocation& GetLocalSurfaceIdAllocation()
-      const = 0;
+  virtual const viz::LocalSurfaceId& GetLocalSurfaceId() const = 0;
 
   // Called whenever the browser receives updated hit test data from viz.
   virtual void NotifyHitTestRegionUpdated(
@@ -540,10 +519,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   void reset_is_evicted() { is_evicted_ = false; }
   bool is_evicted() { return is_evicted_; }
 
-  bool is_drawing_delegated_ink_trails() const {
-    return is_drawing_delegated_ink_trails_;
-  }
-
   // Vivaldi addition:
   bool IsRenderWidgetHostViewMac() { return is_render_widget_host_view_mac_; }
 
@@ -628,6 +603,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // Vivaldi addition:
   bool is_render_widget_host_view_mac_ = false;
 
+ protected:
+  ~RenderWidgetHostViewBase() override;
+
  private:
   FRIEND_TEST_ALL_PREFIXES(
       BrowserSideFlingBrowserTest,
@@ -663,13 +641,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
     return view_stopped_flinging_for_test_;
   }
 
-  void SetIsDrawingDelegatedInkTrailsForTest(bool b) {
-    is_drawing_delegated_ink_trails_ = b;
-  }
-
   gfx::Rect current_display_area_;
-
-  uint32_t renderer_frame_number_ = 0;
 
   base::ObserverList<RenderWidgetHostViewBaseObserver>::Unchecked observers_;
 
@@ -678,19 +650,13 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // The last tab switch processing start request. This should only be set and
   // retrieved using SetRecordContentToVisibleTimeRequest and
   // TakeRecordContentToVisibleTimeRequest.
-  base::Optional<RecordContentToVisibleTimeRequest>
+  blink::mojom::RecordContentToVisibleTimeRequestPtr
       last_record_tab_switch_time_request_;
 
   // True when StopFlingingIfNecessary() calls StopFling().
   bool view_stopped_flinging_for_test_ = false;
 
   bool is_evicted_ = false;
-
-  // True when points should be forwarded from the
-  // RenderWidgetHostViewEventHandler directly to viz for use in a delegated
-  // ink trail.
-  // TODO(1052145): Use this to begin forwarding the points to viz.
-  bool is_drawing_delegated_ink_trails_ = false;
 
   base::WeakPtrFactory<RenderWidgetHostViewBase> weak_factory_{this};
 

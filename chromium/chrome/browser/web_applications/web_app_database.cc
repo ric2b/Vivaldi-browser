@@ -18,8 +18,10 @@
 #include "chrome/browser/web_applications/web_app_database_factory.h"
 #include "chrome/browser/web_applications/web_app_proto_utils.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
+#include "chrome/common/web_application_info.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
 #include "components/services/app_service/public/cpp/protocol_handler_info.h"
+#include "components/services/app_service/public/cpp/share_target.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/time.h"
 #include "components/sync/model/metadata_batch.h"
@@ -28,6 +30,46 @@
 #include "third_party/blink/public/common/manifest/manifest.h"
 
 namespace web_app {
+
+namespace {
+
+ShareTarget_Method MethodToProto(apps::ShareTarget::Method method) {
+  switch (method) {
+    case apps::ShareTarget::Method::kGet:
+      return ShareTarget_Method_GET;
+    case apps::ShareTarget::Method::kPost:
+      return ShareTarget_Method_POST;
+  }
+}
+
+apps::ShareTarget::Method ProtoToMethod(ShareTarget_Method method) {
+  switch (method) {
+    case ShareTarget_Method_GET:
+      return apps::ShareTarget::Method::kGet;
+    case ShareTarget_Method_POST:
+      return apps::ShareTarget::Method::kPost;
+  }
+}
+
+ShareTarget_Enctype EnctypeToProto(apps::ShareTarget::Enctype enctype) {
+  switch (enctype) {
+    case apps::ShareTarget::Enctype::kFormUrlEncoded:
+      return ShareTarget_Enctype_FORM_URL_ENCODED;
+    case apps::ShareTarget::Enctype::kMultipartFormData:
+      return ShareTarget_Enctype_MULTIPART_FORM_DATA;
+  }
+}
+
+apps::ShareTarget::Enctype ProtoToEnctype(ShareTarget_Enctype enctype) {
+  switch (enctype) {
+    case ShareTarget_Enctype_FORM_URL_ENCODED:
+      return apps::ShareTarget::Enctype::kFormUrlEncoded;
+    case ShareTarget_Enctype_MULTIPART_FORM_DATA:
+      return apps::ShareTarget::Enctype::kMultipartFormData;
+  }
+}
+
+}  // anonymous namespace
 
 WebAppDatabase::WebAppDatabase(AbstractWebAppDatabaseFactory* database_factory,
                                ReportErrorCallback error_callback)
@@ -92,11 +134,11 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
   auto local_data = std::make_unique<WebAppProto>();
 
   // Required fields:
-  const GURL launch_url = web_app.launch_url();
-  DCHECK(!launch_url.is_empty() && launch_url.is_valid());
+  const GURL start_url = web_app.start_url();
+  DCHECK(!start_url.is_empty() && start_url.is_valid());
 
   DCHECK(!web_app.app_id().empty());
-  DCHECK_EQ(web_app.app_id(), GenerateAppIdFromURL(launch_url));
+  DCHECK_EQ(web_app.app_id(), GenerateAppIdFromURL(start_url));
 
   // Set sync data to sync proto.
   *(local_data->mutable_sync_data()) = WebAppToSyncProto(web_app);
@@ -115,6 +157,9 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
   local_data->set_is_locally_installed(web_app.is_locally_installed());
 
   // Optional fields:
+  if (web_app.launch_query_params())
+    local_data->set_launch_query_params(*web_app.launch_query_params());
+
   if (web_app.display_mode() != DisplayMode::kUndefined) {
     local_data->set_display_mode(
         ToWebAppProtoDisplayMode(web_app.display_mode()));
@@ -186,6 +231,33 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
     }
   }
 
+  if (web_app.share_target()) {
+    const apps::ShareTarget& share_target = *web_app.share_target();
+    auto* const mutable_share_target = local_data->mutable_share_target();
+    mutable_share_target->set_action(share_target.action.spec());
+    mutable_share_target->set_method(MethodToProto(share_target.method));
+    mutable_share_target->set_enctype(EnctypeToProto(share_target.enctype));
+
+    const apps::ShareTarget::Params& params = share_target.params;
+    auto* const mutable_share_target_params =
+        mutable_share_target->mutable_params();
+    if (!params.title.empty())
+      mutable_share_target_params->set_title(params.title);
+    if (!params.text.empty())
+      mutable_share_target_params->set_text(params.text);
+    if (!params.url.empty())
+      mutable_share_target_params->set_url(params.url);
+
+    for (const auto& files_entry : params.files) {
+      ShareTargetParamsFile* mutable_share_target_files =
+          mutable_share_target_params->add_files();
+      mutable_share_target_files->set_name(files_entry.name);
+
+      for (const auto& file_type : files_entry.accept)
+        mutable_share_target_files->add_accept(file_type);
+    }
+  }
+
   for (const WebApplicationShortcutsMenuItemInfo& shortcut_info :
        web_app.shortcuts_menu_item_infos()) {
     WebAppShortcutsMenuItemInfoProto* shortcut_info_proto =
@@ -237,18 +309,18 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
 
   const sync_pb::WebAppSpecifics& sync_data = local_data.sync_data();
 
-  // AppId is a hash of launch_url. Read launch_url first:
-  GURL launch_url(sync_data.launch_url());
-  if (launch_url.is_empty() || !launch_url.is_valid()) {
-    DLOG(ERROR) << "WebApp proto launch_url parse error: "
-                << launch_url.possibly_invalid_spec();
+  // AppId is a hash of start_url. Read start_url first:
+  GURL start_url(sync_data.start_url());
+  if (start_url.is_empty() || !start_url.is_valid()) {
+    DLOG(ERROR) << "WebApp proto start_url parse error: "
+                << start_url.possibly_invalid_spec();
     return nullptr;
   }
 
-  const AppId app_id = GenerateAppIdFromURL(launch_url);
+  const AppId app_id = GenerateAppIdFromURL(start_url);
 
   auto web_app = std::make_unique<WebApp>(app_id);
-  web_app->SetLaunchUrl(launch_url);
+  web_app->SetStartUrl(start_url);
 
   // Required fields:
   if (!local_data.has_sources()) {
@@ -325,6 +397,9 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   }
 
   // Optional fields:
+  if (local_data.has_launch_query_params())
+    web_app->SetLaunchQueryParams(local_data.launch_query_params());
+
   if (local_data.has_display_mode())
     web_app->SetDisplayMode(ToMojomDisplayMode(local_data.display_mode()));
 
@@ -384,13 +459,14 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   std::vector<SquareSizePx> icon_sizes_any;
   for (int32_t size : local_data.downloaded_icon_sizes_purpose_any())
     icon_sizes_any.push_back(size);
-  web_app->SetDownloadedIconSizes(IconPurpose::ANY, std::move(icon_sizes_any));
+  web_app->SetDownloadedIconSizes(IconPurpose::ANY,
+                                  SortedSizesPx(std::move(icon_sizes_any)));
 
   std::vector<SquareSizePx> icon_sizes_maskable;
   for (int32_t size : local_data.downloaded_icon_sizes_purpose_maskable())
     icon_sizes_maskable.push_back(size);
-  web_app->SetDownloadedIconSizes(IconPurpose::MASKABLE,
-                                  std::move(icon_sizes_maskable));
+  web_app->SetDownloadedIconSizes(
+      IconPurpose::MASKABLE, SortedSizesPx(std::move(icon_sizes_maskable)));
 
   web_app->SetIsGeneratedIcon(local_data.is_generated_icon());
 
@@ -422,6 +498,50 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
     file_handlers.push_back(std::move(file_handler));
   }
   web_app->SetFileHandlers(std::move(file_handlers));
+
+  if (local_data.has_share_target()) {
+    apps::ShareTarget share_target;
+    const ShareTarget& local_share_target = local_data.share_target();
+    const ShareTargetParams& local_share_target_params =
+        local_share_target.params();
+
+    GURL action(local_share_target.action());
+    if (action.is_empty() || !action.is_valid()) {
+      DLOG(ERROR) << "WebApp proto action parse error: "
+                  << action.possibly_invalid_spec();
+      return nullptr;
+    }
+
+    share_target.action = action;
+    share_target.method = ProtoToMethod(local_share_target.method());
+    share_target.enctype = ProtoToEnctype(local_share_target.enctype());
+
+    if (local_share_target_params.has_title())
+      share_target.params.title = local_share_target_params.title();
+    if (local_share_target_params.has_text())
+      share_target.params.text = local_share_target_params.text();
+    if (local_share_target_params.has_url())
+      share_target.params.url = local_share_target_params.url();
+
+    for (const auto& share_target_params_file :
+         local_share_target_params.files()) {
+      apps::ShareTarget::Files files_entry;
+      files_entry.name = share_target_params_file.name();
+      for (const auto& file_type : share_target_params_file.accept()) {
+        if (base::Contains(files_entry.accept, file_type)) {
+          // We intentionally don't return a nullptr here; instead, duplicate
+          // entries are absorbed.
+          DLOG(ERROR) << "apps::ShareTarget::Files parsing encountered "
+                      << "duplicate file type";
+        } else {
+          files_entry.accept.push_back(file_type);
+        }
+      }
+      share_target.params.files.push_back(std::move(files_entry));
+    }
+
+    web_app->SetShareTarget(std::move(share_target));
+  }
 
   std::vector<WebApplicationShortcutsMenuItemInfo> shortcuts_menu_item_infos;
   for (const auto& shortcut_info_proto :
@@ -604,6 +724,10 @@ DisplayMode ToMojomDisplayMode(
   switch (user_display_mode) {
     case ::sync_pb::WebAppSpecifics::BROWSER:
       return DisplayMode::kBrowser;
+    // New display modes will most likely be of the window variety than the
+    // browser tab variety so default to windowed if it's an enum value we don't
+    // know about.
+    case ::sync_pb::WebAppSpecifics::UNSPECIFIED:
     case ::sync_pb::WebAppSpecifics::STANDALONE:
       return DisplayMode::kStandalone;
   }

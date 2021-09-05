@@ -10,7 +10,6 @@ import android.graphics.Bitmap;
 import android.os.Build;
 import android.text.TextUtils;
 
-import androidx.annotation.StringRes;
 import androidx.test.filters.SmallTest;
 
 import org.hamcrest.Matchers;
@@ -28,12 +27,14 @@ import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.banners.AppBannerManager;
+import org.chromium.chrome.browser.banners.AppMenuVerbiage;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.webapps.WebappDataStorage;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.TabLoadObserver;
 import org.chromium.chrome.test.util.browser.TabTitleObserver;
 import org.chromium.chrome.test.util.browser.webapps.WebappTestPage;
@@ -53,8 +54,7 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class AddToHomescreenTest {
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     @Rule
     public EmbeddedTestServerRule mTestServerRule = new EmbeddedTestServerRule();
@@ -148,15 +148,16 @@ public class AddToHomescreenTest {
 
         TestAddToHomescreenCoordinator(Context context, WindowAndroid windowAndroid,
                 ModalDialogManager modalDialogManager, String title) {
-            super(context, windowAndroid, modalDialogManager);
+            super(null, context, windowAndroid, modalDialogManager);
             mTitle = title;
         }
 
         @Override
         protected AddToHomescreenDialogView initView(
-                @StringRes int titleText, AddToHomescreenViewDelegate delegate) {
+                AppBannerManager.InstallStringPair installStrings,
+                AddToHomescreenViewDelegate delegate) {
             return new AddToHomescreenDialogView(
-                    mActivityContext, mModalDialogManager, titleText, delegate) {
+                    mActivityContext, mModalDialogManager, installStrings, delegate) {
                 @Override
                 void setTitle(String title) {
                     if (TextUtils.isEmpty(mTitle)) {
@@ -344,7 +345,8 @@ public class AddToHomescreenTest {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             boolean started = new TestAddToHomescreenCoordinator(mActivity,
                     mActivity.getWindowAndroid(), mActivity.getModalDialogManager(), title)
-                                      .showForAppMenu(tab.getWebContents());
+                                      .showForAppMenu(tab.getWebContents(),
+                                              AppMenuVerbiage.APP_MENU_OPTION_ADD_TO_HOMESCREEN);
             Assert.assertEquals(expectAdded, started);
         });
 

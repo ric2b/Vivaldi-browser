@@ -40,6 +40,7 @@
 #include "base/memory/weak_ptr.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/trees/layer_tree_host.h"
+#include "components/viz/common/surfaces/frame_sink_id.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -203,16 +204,6 @@ class TestWebWidgetClient : public WebWidgetClient,
   void ClearAnimationScheduled() { animation_scheduled_ = false; }
 
   bool HaveScrollEventHandlers() const;
-
-  int VisuallyNonEmptyLayoutCount() const {
-    return visually_non_empty_layout_count_;
-  }
-  int FinishedParsingLayoutCount() const {
-    return finished_parsing_layout_count_;
-  }
-  int FinishedLoadingLayoutCount() const {
-    return finished_loading_layout_count_;
-  }
   const Vector<std::unique_ptr<blink::WebCoalescedInputEvent>>&
   GetInjectedScrollEvents() const {
     return injected_scroll_events_;
@@ -238,11 +229,13 @@ class TestWebWidgetClient : public WebWidgetClient,
 
   // WebWidgetClient overrides;
   void ScheduleAnimation() override { animation_scheduled_ = true; }
-  void DidMeaningfulLayout(WebMeaningfulLayout) override;
   viz::FrameSinkId GetFrameSinkId() override;
   void RequestNewLayerTreeFrameSink(
       LayerTreeFrameSinkCallback callback) override;
   void WillQueueSyntheticEvent(const WebCoalescedInputEvent& event) override;
+  bool ShouldAutoDetermineCompositingToLCDTextSetting() override {
+    return false;
+  }
 
   // mojom::blink::WidgetHost overrides:
   void SetCursor(const ui::Cursor& cursor) override;
@@ -265,9 +258,7 @@ class TestWebWidgetClient : public WebWidgetClient,
       injected_scroll_events_;
   std::unique_ptr<TestWidgetInputHandlerHost> widget_input_handler_host_;
   bool animation_scheduled_ = false;
-  int visually_non_empty_layout_count_ = 0;
-  int finished_parsing_layout_count_ = 0;
-  int finished_loading_layout_count_ = 0;
+  viz::FrameSinkId frame_sink_id_;
   mojo::AssociatedReceiver<mojom::blink::WidgetHost> receiver_{this};
 };
 
@@ -445,6 +436,17 @@ class TestWebFrameClient : public WebLocalFrameClient {
   WebPlugin* CreatePlugin(const WebPluginParams& params) override;
   AssociatedInterfaceProvider* GetRemoteNavigationAssociatedInterfaces()
       override;
+  void DidMeaningfulLayout(WebMeaningfulLayout) override;
+
+  int VisuallyNonEmptyLayoutCount() const {
+    return visually_non_empty_layout_count_;
+  }
+  int FinishedParsingLayoutCount() const {
+    return finished_parsing_layout_count_;
+  }
+  int FinishedLoadingLayoutCount() const {
+    return finished_loading_layout_count_;
+  }
 
  private:
   void CommitNavigation(std::unique_ptr<WebNavigationInfo>);
@@ -464,6 +466,9 @@ class TestWebFrameClient : public WebLocalFrameClient {
   std::unique_ptr<WebWidgetClient> owned_widget_client_;
   WebEffectiveConnectionType effective_connection_type_;
   Vector<String> console_messages_;
+  int visually_non_empty_layout_count_ = 0;
+  int finished_parsing_layout_count_ = 0;
+  int finished_loading_layout_count_ = 0;
 
   base::WeakPtrFactory<TestWebFrameClient> weak_factory_{this};
 };

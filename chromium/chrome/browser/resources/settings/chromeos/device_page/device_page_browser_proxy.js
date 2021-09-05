@@ -31,7 +31,8 @@ cr.define('settings', function() {
     DISPLAY_OFF_SLEEP: 0,
     DISPLAY_OFF: 1,
     DISPLAY_ON: 2,
-    OTHER: 3,
+    SHUT_DOWN: 3,
+    STOP_SESSION: 4,
   };
 
   /**
@@ -96,6 +97,9 @@ cr.define('settings', function() {
 
     /** Initializes the keyboard WebUI handler. */
     initializeKeyboard() {}
+
+    /** Initializes the keyboard update watcher. */
+    initializeKeyboardWatcher() {}
 
     /** Shows the Ash keyboard shortcut viewer. */
     showKeyboardShortcutViewer() {}
@@ -214,6 +218,11 @@ cr.define('settings', function() {
     /** @override */
     showKeyboardShortcutViewer() {
       chrome.send('showKeyboardShortcutViewer');
+    }
+
+    /** @override */
+    initializeKeyboardWatcher() {
+      chrome.send('initializeKeyboardWatcher');
     }
 
     /** @override */

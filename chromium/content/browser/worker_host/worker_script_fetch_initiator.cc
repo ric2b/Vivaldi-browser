@@ -38,6 +38,7 @@
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/shared_cors_origin_access_list.h"
 #include "content/public/browser/url_loader_throttles.h"
+#include "content/public/browser/web_ui_url_loader_factory.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/referrer.h"
@@ -55,11 +56,6 @@
 #include "url/origin.h"
 
 namespace content {
-
-namespace {
-
-
-}  // namespace
 
 // static
 void WorkerScriptFetchInitiator::Start(
@@ -111,11 +107,13 @@ void WorkerScriptFetchInitiator::Start(
   std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
       factory_bundle_for_browser = CreateFactoryBundle(
           LoaderType::kMainResource, worker_process_id, storage_partition,
-          storage_domain, constructor_uses_file_url, filesystem_url_support);
+          storage_domain, constructor_uses_file_url, filesystem_url_support,
+          creator_render_frame_host);
   std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
       subresource_loader_factories = CreateFactoryBundle(
           LoaderType::kSubResource, worker_process_id, storage_partition,
-          storage_domain, constructor_uses_file_url, filesystem_url_support);
+          storage_domain, constructor_uses_file_url, filesystem_url_support,
+          creator_render_frame_host);
 
   // Create a resource request for initiating worker script fetch from the
   // browser process.
@@ -192,20 +190,34 @@ WorkerScriptFetchInitiator::CreateFactoryBundle(
     StoragePartitionImpl* storage_partition,
     const std::string& storage_domain,
     bool file_support,
-    bool filesystem_url_support) {
+    bool filesystem_url_support,
+    RenderFrameHost* creator_render_frame_host) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
+  ContentBrowserClient::NonNetworkURLLoaderFactoryDeprecatedMap
+      non_network_uniquely_owned_factories;
   ContentBrowserClient::NonNetworkURLLoaderFactoryMap non_network_factories;
-  non_network_factories[url::kDataScheme] =
-      std::make_unique<DataURLLoaderFactory>();
+  non_network_factories.emplace(url::kDataScheme,
+                                DataURLLoaderFactory::Create());
   if (filesystem_url_support) {
     // TODO(https://crbug.com/986188): Pass ChildProcessHost::kInvalidUniqueID
     // instead of valid |worker_process_id| for |factory_bundle_for_browser|
     // once CanCommitURL-like check is implemented in PlzWorker.
-    non_network_factories[url::kFileSystemScheme] =
+    non_network_factories.emplace(
+        url::kFileSystemScheme,
         CreateFileSystemURLLoaderFactory(
             worker_process_id, RenderFrameHost::kNoFrameTreeNodeId,
-            storage_partition->GetFileSystemContext(), storage_domain);
+            storage_partition->GetFileSystemContext(), storage_domain));
+  }
+  if (file_support) {
+    // USER_VISIBLE because worker script fetch may affect the UI.
+    base::TaskPriority file_factory_priority = base::TaskPriority::USER_VISIBLE;
+    non_network_factories.emplace(
+        url::kFileScheme, FileURLLoaderFactory::Create(
+                              storage_partition->browser_context()->GetPath(),
+                              storage_partition->browser_context()
+                                  ->GetSharedCorsOriginAccessList(),
+                              file_factory_priority));
   }
 
   switch (loader_type) {
@@ -219,13 +231,30 @@ WorkerScriptFetchInitiator::CreateFactoryBundle(
       GetContentClient()
           ->browser()
           ->RegisterNonNetworkSubresourceURLLoaderFactories(
-              worker_process_id, MSG_ROUTING_NONE, &non_network_factories);
+              worker_process_id, MSG_ROUTING_NONE,
+              &non_network_uniquely_owned_factories, &non_network_factories);
       break;
+  }
+
+  // Create WebUI loader for chrome:// workers from WebUI frames.
+  // TODO(crbug.com/1128243): Enable shared worker on "chrome-untrusted://" as
+  // well.
+  if (creator_render_frame_host) {
+    auto requesting_scheme =
+        creator_render_frame_host->GetLastCommittedOrigin().scheme();
+    if (requesting_scheme == kChromeUIScheme &&
+        creator_render_frame_host->GetWebUI() != nullptr) {
+      non_network_factories.emplace(
+          kChromeUIScheme,
+          CreateWebUIURLLoaderFactory(
+              creator_render_frame_host, kChromeUIScheme,
+              /*allowed_webui_hosts=*/base::flat_set<std::string>()));
+    }
   }
 
   auto factory_bundle =
       std::make_unique<blink::PendingURLLoaderFactoryBundle>();
-  for (auto& pair : non_network_factories) {
+  for (auto& pair : non_network_uniquely_owned_factories) {
     const std::string& scheme = pair.first;
     std::unique_ptr<network::mojom::URLLoaderFactory> factory =
         std::move(pair.second);
@@ -236,19 +265,12 @@ WorkerScriptFetchInitiator::CreateFactoryBundle(
     factory_bundle->pending_scheme_specific_factories().emplace(
         scheme, std::move(factory_remote));
   }
-
-  if (file_support) {
-    auto file_factory = std::make_unique<FileURLLoaderFactory>(
-        storage_partition->browser_context()->GetPath(),
-        storage_partition->browser_context()->GetSharedCorsOriginAccessList(),
-        // USER_VISIBLE because worker script fetch may affect the UI.
-        base::TaskPriority::USER_VISIBLE);
-    mojo::PendingRemote<network::mojom::URLLoaderFactory> file_factory_remote;
-    mojo::MakeSelfOwnedReceiver(
-        std::move(file_factory),
-        file_factory_remote.InitWithNewPipeAndPassReceiver());
+  for (auto& pair : non_network_factories) {
+    const std::string& scheme = pair.first;
+    mojo::PendingRemote<network::mojom::URLLoaderFactory>& pending_remote =
+        pair.second;
     factory_bundle->pending_scheme_specific_factories().emplace(
-        url::kFileScheme, std::move(file_factory_remote));
+        scheme, std::move(pending_remote));
   }
 
   return factory_bundle;
@@ -324,7 +346,8 @@ void WorkerScriptFetchInitiator::CreateScriptLoader(
     network::mojom::URLLoaderFactoryParamsPtr factory_params =
         URLLoaderFactoryParamsHelper::CreateForWorker(
             factory_process, request_initiator, trusted_isolation_info,
-            /*coep_reporter=*/mojo::NullRemote());
+            /*coep_reporter=*/mojo::NullRemote(),
+            /*debug_tag=*/"WorkerScriptFetchInitiator::CreateScriptLoader");
 
     mojo::PendingReceiver<network::mojom::URLLoaderFactory>
         default_factory_receiver =
@@ -335,7 +358,9 @@ void WorkerScriptFetchInitiator::CreateScriptLoader(
         browser_context, creator_render_frame_host, factory_process->GetID(),
         ContentBrowserClient::URLLoaderFactoryType::kWorkerMainResource,
         request_initiator,
-        /*navigation_id=*/base::nullopt, &default_factory_receiver,
+        /*navigation_id=*/base::nullopt,
+        /* TODO(https://crbug.com/1103288): The UKM ID could be computed */
+        base::kInvalidUkmSourceId, &default_factory_receiver,
         &factory_params->header_client, &bypass_redirect_checks,
         nullptr /* disable_secure_dns */, &factory_params->factory_override);
     factory_bundle_for_browser_info->set_bypass_redirect_checks(

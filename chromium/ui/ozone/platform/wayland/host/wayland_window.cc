@@ -4,8 +4,6 @@
 
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 
-#include <wayland-client.h>
-
 #include <algorithm>
 #include <memory>
 
@@ -136,7 +134,7 @@ void WaylandWindow::SetBounds(const gfx::Rect& bounds_px) {
     return;
   bounds_px_ = bounds_px;
 
-  root_surface_->SetBounds(bounds_px);
+  root_surface_->SetOpaqueRegion(bounds_px);
   delegate_->OnBoundsChanged(bounds_px_);
 }
 
@@ -255,6 +253,8 @@ bool WaylandWindow::CanDispatchEvent(const PlatformEvent& event) {
     return has_keyboard_focus_;
   if (event->IsTouchEvent())
     return has_touch_focus_;
+  if (event->IsScrollEvent())
+    return has_pointer_focus_;
   return false;
 }
 
@@ -358,31 +358,9 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
 
   // Will do nothing for menus because they have got their scale above.
   UpdateBufferScale(false);
-  root_surface_->SetBounds(bounds_px_);
+  root_surface_->SetOpaqueRegion(bounds_px_);
 
   return true;
-}
-
-WaylandWindow* WaylandWindow::GetParentWindow(
-    gfx::AcceleratedWidget parent_widget) {
-  auto* parent_window =
-      connection_->wayland_window_manager()->GetWindow(parent_widget);
-
-  // If propagated parent has already had a child, it means that |this| is a
-  // submenu of a 3-dot menu. In aura, the parent of a 3-dot menu and its
-  // submenu is the main native widget, which is the main window. In contrast,
-  // Wayland requires a menu window to be a parent of a submenu window. Thus,
-  // check if the suggested parent has a child. If yes, take its child as a
-  // parent of |this|.
-  // Another case is a notifcation window or a drop down window, which do not
-  // have a parent in aura. In this case, take the current focused window as a
-  // parent.
-
-  if (!parent_window)
-    parent_window =
-        connection_->wayland_window_manager()->GetCurrentFocusedWindow();
-
-  return parent_window ? parent_window->GetTopMostChildWindow() : nullptr;
 }
 
 WaylandWindow* WaylandWindow::GetRootParentWindow() {
@@ -469,6 +447,11 @@ bool WaylandWindow::IsOpaqueWindow() const {
   return opacity_ == ui::PlatformWindowOpacity::kOpaqueWindow;
 }
 
+bool WaylandWindow::IsActive() const {
+  // Please read the comment where the IsActive method is declared.
+  return false;
+}
+
 uint32_t WaylandWindow::DispatchEventToDelegate(
     const PlatformEvent& native_event) {
   auto* event = static_cast<Event*>(native_event);
@@ -484,6 +467,7 @@ uint32_t WaylandWindow::DispatchEventToDelegate(
 std::unique_ptr<WaylandSurface> WaylandWindow::TakeWaylandSurface() {
   DCHECK(shutting_down_);
   DCHECK(root_surface_);
+  root_surface_->UnsetRootWindow();
   return std::move(root_surface_);
 }
 
@@ -540,8 +524,9 @@ bool WaylandWindow::CommitOverlays(
       ozone::mojom::WaylandOverlayConfig::New();
   auto split = std::lower_bound(overlays.begin(), overlays.end(), value,
                                 OverlayStackOrderCompare);
-  CHECK((*split)->z_order >= 0);
-  size_t num_primary_planes = (*split)->z_order == 0 ? 1 : 0;
+  CHECK(split == overlays.end() || (*split)->z_order >= 0);
+  size_t num_primary_planes =
+      (split != overlays.end() && (*split)->z_order == 0) ? 1 : 0;
 
   size_t above = (overlays.end() - split) - num_primary_planes;
   size_t below = split - overlays.begin();
@@ -567,11 +552,12 @@ bool WaylandWindow::CommitOverlays(
           reference_above = (*std::next(iter))->wayland_surface();
         }
         (*iter)->ConfigureAndShowSurface(
-            (*overlay_iter)->transform, (*overlay_iter)->bounds_rect,
-            (*overlay_iter)->enable_blend, nullptr, reference_above);
+            (*overlay_iter)->transform, (*overlay_iter)->crop_rect,
+            (*overlay_iter)->bounds_rect, (*overlay_iter)->enable_blend,
+            nullptr, reference_above);
         connection_->buffer_manager_host()->CommitBufferInternal(
-            (*iter)->wayland_surface(), (*overlay_iter)->buffer_id,
-            gfx::Rect());
+            (*iter)->wayland_surface(), (*overlay_iter)->buffer_id, gfx::Rect(),
+            /*wait_for_frame_callback=*/false);
       } else {
         // If there're more subsurfaces requested that we don't need at the
         // moment, hide them.
@@ -595,11 +581,12 @@ bool WaylandWindow::CommitOverlays(
           reference_below = (*std::prev(iter))->wayland_surface();
         }
         (*iter)->ConfigureAndShowSurface(
-            (*overlay_iter)->transform, (*overlay_iter)->bounds_rect,
-            (*overlay_iter)->enable_blend, reference_below, nullptr);
+            (*overlay_iter)->transform, (*overlay_iter)->crop_rect,
+            (*overlay_iter)->bounds_rect, (*overlay_iter)->enable_blend,
+            reference_below, nullptr);
         connection_->buffer_manager_host()->CommitBufferInternal(
-            (*iter)->wayland_surface(), (*overlay_iter)->buffer_id,
-            gfx::Rect());
+            (*iter)->wayland_surface(), (*overlay_iter)->buffer_id, gfx::Rect(),
+            /*wait_for_frame_callback=*/false);
       } else {
         // If there're more subsurfaces requested that we don't need at the
         // moment, hide them.
@@ -609,16 +596,16 @@ bool WaylandWindow::CommitOverlays(
   }
 
   if (num_primary_planes) {
-    // TODO: forward fence.
     connection_->buffer_manager_host()->CommitBufferInternal(
-        root_surface(), (*split)->buffer_id, (*split)->damage_region);
+        root_surface(), (*split)->buffer_id, (*split)->damage_region,
+        /*wait_for_frame_callback=*/true);
   } else {
-    // Subsurfaces are set to desync, above operations will only take effects
+    // Subsurfaces are set to sync, above operations will only take effects
     // when root_surface is committed.
-    root_surface()->Commit();
+    connection_->buffer_manager_host()->CommitWithoutBufferInternal(
+        root_surface(), /*wait_for_frame_callback=*/true);
   }
 
-  // commit all;
   return true;
 }
 

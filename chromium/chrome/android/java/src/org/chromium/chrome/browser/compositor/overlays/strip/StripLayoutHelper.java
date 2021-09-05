@@ -624,6 +624,8 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
                 // causes the new tab button to disappear for a frame.
                 boolean shouldAnimate = !mNewTabButton.isVisible()
                         && !mAnimationsDisabledForTesting;
+                // Note(david@vivaldi.com): Only scroll when tab is selected.
+                if (ChromeApplication.isVivaldi() && selected)
                 setScrollForScrollingTabStacker(delta, shouldAnimate, time);
             } else if (delta != 0.f) {
                 mScroller.startScroll(mScrollOffset, 0, (int) delta, 0, time, EXPAND_DURATION_MS);
@@ -1836,13 +1838,15 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
     /** Vivaldi **/
     public void scrollToSelectedTab() {
         mScrollOffset = 0;
-        Tab tab = mModel.getTabAt(mModel.index());
-        if (tab != null) {
-            StripLayoutTab stripLayoutTab = findTabById(tab.getId());
-            if (stripLayoutTab != null) {
-                updateStrip();
-                float delta = calculateOffsetToMakeTabVisible(stripLayoutTab, true, true, true);
-                setScrollForScrollingTabStacker(delta, true, SystemClock.uptimeMillis());
+        if (mModel != null) {
+            Tab tab = mModel.getTabAt(mModel.index());
+            if (tab != null) {
+                StripLayoutTab stripLayoutTab = findTabById(tab.getId());
+                if (stripLayoutTab != null) {
+                    updateStrip();
+                    float delta = calculateOffsetToMakeTabVisible(stripLayoutTab, true, true, true);
+                    setScrollForScrollingTabStacker(delta, true, SystemClock.uptimeMillis());
+                }
             }
         }
     }

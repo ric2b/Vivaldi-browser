@@ -39,8 +39,7 @@ class CustomTabBarView : public views::AccessiblePaneView,
                          public ui::SimpleMenuModel::Delegate,
                          public views::ContextMenuController,
                          public IconLabelBubbleView::Delegate,
-                         public LocationIconView::Delegate,
-                         public views::ButtonListener {
+                         public LocationIconView::Delegate {
  public:
   static const char kViewClassName[];
 
@@ -78,11 +77,8 @@ class CustomTabBarView : public views::AccessiblePaneView,
       security_state::SecurityLevel security_level) const override;
   bool ShowPageInfoDialog() override;
   const LocationBarModel* GetLocationBarModel() const override;
-  gfx::ImageSkia GetLocationIcon(LocationIconView::Delegate::IconFetchedCallback
+  ui::ImageModel GetLocationIcon(LocationIconView::Delegate::IconFetchedCallback
                                      on_icon_fetched) const override;
-
-  // ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   // Methods for testing.
   base::string16 title_for_testing() const { return last_title_; }

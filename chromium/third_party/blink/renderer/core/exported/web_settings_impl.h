@@ -31,6 +31,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_EXPORTED_WEB_SETTINGS_IMPL_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_EXPORTED_WEB_SETTINGS_IMPL_H_
 
+#include "third_party/blink/public/common/web_preferences/editing_behavior_types.h"
+#include "third_party/blink/public/mojom/v8_cache_options.mojom-blink.h"
 #include "third_party/blink/public/web/web_settings.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
@@ -50,7 +52,7 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   bool ShrinksViewportContentToFit() const override;
   bool ViewportEnabled() const override;
   void SetAccelerated2dCanvasMSAASampleCount(int) override;
-  void SetAutoplayPolicy(AutoplayPolicy) override;
+  void SetAutoplayPolicy(web_pref::AutoplayPolicy) override;
   void SetPreferCompositingToLCDTextEnabled(bool) override;
   void SetAccessibilityPasswordValuesEnabled(bool) override;
   void SetAllowFileAccessFromFileURLs(bool) override;
@@ -81,7 +83,7 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetDontSendKeyEventsToJavascript(bool) override;
   void SetDoubleTapToZoomEnabled(bool) override;
   void SetDownloadableBinaryFontsEnabled(bool) override;
-  void SetEditingBehavior(EditingBehavior) override;
+  void SetEditingBehavior(web_pref::EditingBehaviorType) override;
   void SetEnableScrollAnimator(bool) override;
   void SetPrefersReducedMotion(bool) override;
   void SetWebGL1Enabled(bool) override;
@@ -99,7 +101,7 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetHighlightAds(bool) override;
   void SetHyperlinkAuditingEnabled(bool) override;
   void SetIgnoreMainFrameOverflowHiddenQuirk(bool) override;
-  void SetImageAnimationPolicy(ImageAnimationPolicy) override;
+  void SetImageAnimationPolicy(web_pref::ImageAnimationPolicy) override;
   void SetImagesEnabled(bool) override;
   void SetInlineTextBoxAccessibilityEnabled(bool) override;
   void SetJavaScriptCanAccessClipboard(bool) override;
@@ -128,9 +130,9 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
                                UScriptCode = USCRIPT_COMMON) override;
   void SetPluginsEnabled(bool) override;
   void SetAvailablePointerTypes(int) override;
-  void SetPrimaryPointerType(PointerType) override;
+  void SetPrimaryPointerType(ui::PointerType) override;
   void SetAvailableHoverTypes(int) override;
-  void SetPrimaryHoverType(HoverType) override;
+  void SetPrimaryHoverType(ui::HoverType) override;
   void SetPreferHiddenVolumeControls(bool) override;
   void SetShouldProtectAgainstIpcFlooding(bool) override;
   void SetRenderVSyncNotificationEnabled(bool) override;
@@ -181,9 +183,9 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetTouchDragEndContextMenu(bool) override;
   void SetBarrelButtonForDragEnabled(bool) override;
   void SetUseLegacyBackgroundSizeShorthandBehavior(bool) override;
-  void SetViewportStyle(WebViewportStyle) override;
+  void SetViewportStyle(web_pref::ViewportStyle) override;
   void SetUseWideViewport(bool) override;
-  void SetV8CacheOptions(V8CacheOptions) override;
+  void SetV8CacheOptions(mojom::blink::V8CacheOptions) override;
   void SetValidationMessageTimerMagnification(int) override;
   void SetViewportEnabled(bool) override;
   void SetViewportMetaEnabled(bool) override;
@@ -226,6 +228,7 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetAriaModalPrunesAXTree(bool) override;
   void SetUseAXMenuList(bool) override;
   void SetSelectionClipboardBufferAvailable(bool) override;
+  void SetAccessibilityIncludeSvgGElement(bool) override;
 
   bool RenderVSyncNotificationEnabled() const {
     return render_v_sync_notification_enabled_;

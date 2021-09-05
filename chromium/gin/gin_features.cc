@@ -42,4 +42,12 @@ const base::Feature kV8ReduceConcurrentMarkingTasks{
 const base::Feature kV8NoReclaimUnmodifiedWrappers{
     "V8NoReclaimUnmodifiedWrappers", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables concurrent heap access and allocation.
+const base::Feature kV8LocalHeaps{"V8LocalHeaps",
+                                  base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables TurboFan's direct heap access.
+const base::Feature kV8TurboDirectHeapAccess{"V8TurboDirectHeapAccess",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
+
 }  // namespace features

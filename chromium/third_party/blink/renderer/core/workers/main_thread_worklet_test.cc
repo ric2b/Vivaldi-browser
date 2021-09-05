@@ -60,7 +60,7 @@ class MainThreadWorkletTest : public PageTestBase {
     reporting_proxy_ =
         std::make_unique<MainThreadWorkletReportingProxyForTest>(window);
     auto creation_params = std::make_unique<GlobalScopeCreationParams>(
-        window->Url(), mojom::ScriptType::kModule, "MainThreadWorklet",
+        window->Url(), mojom::blink::ScriptType::kModule, "MainThreadWorklet",
         window->UserAgent(), window->GetFrame()->Loader().UserAgentMetadata(),
         nullptr /* web_worker_fetch_context */,
         window->GetContentSecurityPolicy()->Headers(),
@@ -69,7 +69,7 @@ class MainThreadWorkletTest : public PageTestBase {
         nullptr /* worker_clients */, nullptr /* content_settings_client */,
         window->AddressSpace(), OriginTrialContext::GetTokens(window).get(),
         base::UnguessableToken::Create(), nullptr /* worker_settings */,
-        kV8CacheOptionsDefault,
+        mojom::blink::V8CacheOptions::kDefault,
         MakeGarbageCollected<WorkletModuleResponsesMap>(),
         mojo::NullRemote() /* browser_interface_broker */,
         BeginFrameProviderParams(), nullptr /* parent_feature_policy */,

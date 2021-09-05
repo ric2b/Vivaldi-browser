@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/location.h"
 #include "base/stl_util.h"
@@ -112,11 +113,6 @@ AppServiceProxy::~AppServiceProxy() {
 #endif
 }
 
-// static
-void AppServiceProxy::RegisterProfilePrefs(PrefRegistrySimple* registry) {
-  AppServiceImpl::RegisterProfilePrefs(registry);
-}
-
 void AppServiceProxy::ReInitializeForTesting(Profile* profile) {
   // Some test code creates a profile and profile-linked services, like the App
   // Service, before the profile is fully initialized. Such tests can call this
@@ -152,7 +148,7 @@ void AppServiceProxy::Initialize() {
   browser_app_launcher_ = std::make_unique<apps::BrowserAppLauncher>(profile_);
 
   app_service_impl_ = std::make_unique<apps::AppServiceImpl>(
-      profile_->GetPrefs(), profile_->GetPath(),
+      profile_->GetPath(),
       base::FeatureList::IsEnabled(features::kIntentHandlingSharing));
   app_service_impl_->BindReceiver(app_service_.BindNewPipeAndPassReceiver());
 
@@ -195,6 +191,7 @@ void AppServiceProxy::Initialize() {
           app_service_, profile_, apps::mojom::AppType::kWeb,
           &instance_registry_);
     }
+    borealis_apps_ = std::make_unique<BorealisApps>(app_service_, profile_);
 #else
     if (base::FeatureList::IsEnabled(features::kDesktopPWAsWithoutExtensions)) {
       web_apps_ = std::make_unique<WebApps>(app_service_, profile_);
@@ -493,6 +490,9 @@ void AppServiceProxy::FlushMojoCallsForTesting() {
   } else {
     extension_web_apps_->FlushMojoCallsForTesting();
   }
+  if (borealis_apps_) {
+    borealis_apps_->FlushMojoCallsForTesting();
+  }
 #endif
   receivers_.FlushForTesting();
 }
@@ -541,6 +541,11 @@ std::vector<IntentLaunchInfo> AppServiceProxy::GetAppsForIntent(
     const apps::mojom::IntentPtr& intent,
     bool exclude_browsers) {
   std::vector<IntentLaunchInfo> intent_launch_info;
+  if (apps_util::OnlyShareToDrive(intent) ||
+      !apps_util::IsIntentValid(intent)) {
+    return intent_launch_info;
+  }
+
   if (app_service_.is_bound()) {
     cache_.ForEachApp([&intent_launch_info, &intent,
                        &exclude_browsers](const apps::AppUpdate& update) {
@@ -606,6 +611,12 @@ void AppServiceProxy::AddPreferredApp(const std::string& app_id,
 
 void AppServiceProxy::AddPreferredApp(const std::string& app_id,
                                       const apps::mojom::IntentPtr& intent) {
+  // TODO(https://crbug.com/853604): Remove this and convert to a DCHECK
+  // after finding out the root cause.
+  if (app_id.empty()) {
+    base::debug::DumpWithoutCrashing();
+    return;
+  }
   auto intent_filter = FindBestMatchingFilter(intent);
   if (!intent_filter) {
     return;

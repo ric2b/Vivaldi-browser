@@ -8,6 +8,7 @@ import android.content.Context;
 import android.view.View;
 
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.app.appmenu.AppMenuIconRowFooter;
@@ -28,26 +29,27 @@ import org.chromium.chrome.browser.ui.appmenu.AppMenuDelegate;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 
 import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
  * An {@link AppMenuPropertiesDelegateImpl} for ChromeTabbedActivity.
  */
 public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateImpl {
     AppMenuDelegate mAppMenuDelegate;
+    // Vivaldi
+    private final ObservableSupplier<BookmarkBridge> mVivaldiBookmarkBridgeSupplier;
 
     public TabbedAppMenuPropertiesDelegate(Context context, ActivityTabProvider activityTabProvider,
             MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
             TabModelSelector tabModelSelector, ToolbarManager toolbarManager, View decorView,
             AppMenuDelegate appMenuDelegate,
-            ObservableSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
+            OneshotSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
             ObservableSupplier<BookmarkBridge> bookmarkBridgeSupplier) {
         super(context, activityTabProvider, multiWindowModeStateDispatcher, tabModelSelector,
                 toolbarManager, decorView, overviewModeBehaviorSupplier, bookmarkBridgeSupplier);
         mAppMenuDelegate = appMenuDelegate;
-    }
-
-    private boolean isMenuButtonInBottomToolbar() {
-        return mToolbarManager != null && mToolbarManager.isMenuFromBottom();
+        // Vivaldi
+        mVivaldiBookmarkBridgeSupplier = bookmarkBridgeSupplier;
     }
 
     private boolean shouldShowDataSaverMenuItem() {
@@ -58,15 +60,22 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
 
     @Override
     public int getFooterResourceId() {
-        if (isMenuButtonInBottomToolbar()) {
-            return this.shouldShowPageMenu() ? R.layout.icon_row_menu_footer : 0;
-        }
+        // Vivaldi
+        if (!(mIsTablet || VivaldiUtils.isTopToolbarOn()))
+            return R.layout.icon_row_menu_footer;
+
         return shouldShowDataSaverMenuItem() ? R.layout.data_reduction_main_menu_item : 0;
     }
 
     @Override
     public void onFooterViewInflated(AppMenuHandler appMenuHandler, View view) {
         if (view instanceof AppMenuIconRowFooter) {
+            // Vivaldi:
+            // If mBookmarkBridge has not been supplied yet by the callback in the base class,
+            // try to get the bridge directly from the supplier.
+            if (mBookmarkBridge == null && mVivaldiBookmarkBridgeSupplier != null)
+                mBookmarkBridge = mVivaldiBookmarkBridgeSupplier.get();
+
             ((AppMenuIconRowFooter) view)
                     .initialize(appMenuHandler, mBookmarkBridge, mActivityTabProvider.get(),
                             mAppMenuDelegate);
@@ -75,9 +84,6 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
 
     @Override
     public int getHeaderResourceId() {
-        if (isMenuButtonInBottomToolbar()) {
-            return shouldShowDataSaverMenuItem() ? R.layout.data_reduction_main_menu_item : 0;
-        }
         return 0;
     }
 
@@ -90,24 +96,18 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
 
     @Override
     public boolean shouldShowFooter(int maxMenuHeight) {
-        if (isMenuButtonInBottomToolbar()) return true;
+        if (ChromeApplication.isVivaldi()) {
+            boolean showFooter = !VivaldiUtils.isTopToolbarOn();
+            // Check if we have a current tab; if not we are in the tab switcher and should not
+            // show a footer (icon row menu).
+            showFooter &= (mActivityTabProvider != null && mActivityTabProvider.get() != null);
+            return showFooter;
+        }
+
         if (shouldShowDataSaverMenuItem()) {
             return canShowDataReductionItem(maxMenuHeight);
         }
         return super.shouldShowFooter(maxMenuHeight);
-    }
-
-    @Override
-    public boolean shouldShowHeader(int maxMenuHeight) {
-        if (!isMenuButtonInBottomToolbar()) {
-            return super.shouldShowHeader(maxMenuHeight);
-        }
-
-        if (DataReductionProxySettings.getInstance().shouldUseDataReductionMainMenuItem()) {
-            return canShowDataReductionItem(maxMenuHeight);
-        }
-
-        return super.shouldShowHeader(maxMenuHeight);
     }
 
     @Override

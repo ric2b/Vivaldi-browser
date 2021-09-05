@@ -58,6 +58,10 @@ void RecordHeuristicsUKMData(ReputationCheckResult result,
 void OnSafetyTipClosed(ReputationCheckResult result,
                        base::Time start_time,
                        ukm::SourceId navigation_source_id,
+                       Profile* profile,
+                       const GURL& url,
+                       security_state::SafetyTipStatus status,
+                       base::OnceClosure safety_tip_close_callback_for_testing,
                        SafetyTipInteraction action) {
   std::string action_suffix;
   bool warning_dismissed = false;
@@ -93,8 +97,28 @@ void OnSafetyTipClosed(ReputationCheckResult result,
       // Do nothing because the OnSafetyTipClosed should never be called if the
       // safety tip is not shown.
       break;
+    case SafetyTipInteraction::kCloseTab:
+      action_suffix = "CloseTab";
+      break;
+    case SafetyTipInteraction::kSwitchTab:
+      action_suffix = "SwitchTab";
+      break;
+    case SafetyTipInteraction::kStartNewNavigation:
+      action_suffix = "StartNewNavigation";
+      break;
   }
   if (warning_dismissed) {
+    ReputationService::Get(profile)->SetUserIgnore(url);
+
+    // Record that the user dismissed the safety tip. kDismiss is recorded in
+    // all dismiss-like cases, which makes it easier to track overall dismissals
+    // without having to re-constitute from each bucket on how the user
+    // dismissed the safety tip. We additionally record a more specific action
+    // below (e.g. kDismissWithEsc).
+    base::UmaHistogramEnumeration(
+        security_state::GetSafetyTipHistogramName(
+            "Security.SafetyTips.Interaction", status),
+        SafetyTipInteraction::kDismiss);
     base::UmaHistogramCustomTimes(
         security_state::GetSafetyTipHistogramName(
             std::string("Security.SafetyTips.OpenTime.Dismiss"),
@@ -102,6 +126,9 @@ void OnSafetyTipClosed(ReputationCheckResult result,
         base::Time::Now() - start_time, base::TimeDelta::FromMilliseconds(1),
         base::TimeDelta::FromHours(1), 100);
   }
+  base::UmaHistogramEnumeration(security_state::GetSafetyTipHistogramName(
+                                    "Security.SafetyTips.Interaction", status),
+                                action);
   base::UmaHistogramCustomTimes(
       security_state::GetSafetyTipHistogramName(
           std::string("Security.SafetyTips.OpenTime.") + action_suffix,
@@ -110,6 +137,10 @@ void OnSafetyTipClosed(ReputationCheckResult result,
       base::TimeDelta::FromHours(1), 100);
 
   RecordHeuristicsUKMData(result, navigation_source_id, action);
+
+  if (!safety_tip_close_callback_for_testing.is_null()) {
+    std::move(safety_tip_close_callback_for_testing).Run();
+  }
 }
 
 // Safety Tips does not use starts_active (since flagged sites are so rare to
@@ -155,8 +186,7 @@ void RecordSafetyTipStatusWithInitiatorOriginInfo(
     suffix = "SameRegDomain";
   } else {
     // This is assumed to mean that the user has clicked on a link from a
-    // non-lookalike page.
-    // on a lookalike page, resulting in another lookalike navigation.
+    // non-lookalike page, newly triggering the safety tip.
     suffix = "CrossOrigin";
   }
 
@@ -182,8 +212,16 @@ ReputationWebContentsObserver::~ReputationWebContentsObserver() = default;
 void ReputationWebContentsObserver::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInMainFrame() ||
-      navigation_handle->IsSameDocument() ||
       !navigation_handle->HasCommitted() || navigation_handle->IsErrorPage()) {
+    MaybeCallReputationCheckCallback(false);
+    return;
+  }
+
+  // Same doc navigations keep the same status as their predecessor. Update last
+  // navigation entry so that GetSafetyTipInfoForVisibleNavigation() works.
+  if (navigation_handle->IsSameDocument()) {
+    last_safety_tip_navigation_entry_id_ =
+        web_contents()->GetController().GetLastCommittedEntry()->GetUniqueID();
     MaybeCallReputationCheckCallback(false);
     return;
   }
@@ -223,6 +261,11 @@ ReputationWebContentsObserver::GetSafetyTipInfoForVisibleNavigation() const {
 void ReputationWebContentsObserver::RegisterReputationCheckCallbackForTesting(
     base::OnceClosure callback) {
   reputation_check_callback_for_testing_ = std::move(callback);
+}
+
+void ReputationWebContentsObserver::RegisterSafetyTipCloseCallbackForTesting(
+    base::OnceClosure callback) {
+  safety_tip_close_callback_for_testing_ = std::move(callback);
 }
 
 ReputationWebContentsObserver::ReputationWebContentsObserver(
@@ -339,10 +382,12 @@ void ReputationWebContentsObserver::HandleReputationCheckResult(
   }
 
   RecordPostFlagCheckHistogram(result.safety_tip_status);
-  ShowSafetyTipDialog(web_contents(), result.safety_tip_status, result.url,
-                      result.suggested_url,
-                      base::BindOnce(OnSafetyTipClosed, result,
-                                     base::Time::Now(), navigation_source_id));
+  ShowSafetyTipDialog(
+      web_contents(), result.safety_tip_status, result.suggested_url,
+      base::BindOnce(OnSafetyTipClosed, result, base::Time::Now(),
+                     navigation_source_id, profile_, result.url,
+                     result.safety_tip_status,
+                     std::move(safety_tip_close_callback_for_testing_)));
   MaybeCallReputationCheckCallback(true);
 }
 

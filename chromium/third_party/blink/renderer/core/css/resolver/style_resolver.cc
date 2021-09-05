@@ -50,6 +50,7 @@
 #include "third_party/blink/renderer/core/css/font_face.h"
 #include "third_party/blink/renderer/core/css/page_rule_collector.h"
 #include "third_party/blink/renderer/core/css/part_names.h"
+#include "third_party/blink/renderer/core/css/properties/computed_style_utils.h"
 #include "third_party/blink/renderer/core/css/properties/css_property.h"
 #include "third_party/blink/renderer/core/css/properties/css_property_ref.h"
 #include "third_party/blink/renderer/core/css/resolver/match_result.h"
@@ -76,10 +77,15 @@
 #include "third_party/blink/renderer/core/html/custom/custom_element_definition.h"
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
+#include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/html/track/text_track.h"
 #include "third_party/blink/renderer/core/html/track/vtt/vtt_cue.h"
 #include "third_party/blink/renderer/core/html/track/vtt/vtt_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
+#include "third_party/blink/renderer/core/mathml/mathml_fraction_element.h"
+#include "third_party/blink/renderer/core/mathml/mathml_operator_element.h"
+#include "third_party/blink/renderer/core/mathml/mathml_padded_element.h"
+#include "third_party/blink/renderer/core/mathml/mathml_space_element.h"
 #include "third_party/blink/renderer/core/mathml_names.h"
 #include "third_party/blink/renderer/core/media_type_names.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
@@ -313,7 +319,7 @@ static void MatchHostAndCustomElementRules(const Element& element,
 static void MatchSlottedRules(const Element&, ElementRuleCollector&);
 static void MatchSlottedRulesForUAHost(const Element& element,
                                        ElementRuleCollector& collector) {
-  if (element.ShadowPseudoId() != "-webkit-input-placeholder")
+  if (element.ShadowPseudoId() != shadow_element_names::kPseudoInputPlaceholder)
     return;
 
   // We allow ::placeholder pseudo element after ::slotted(). Since we are
@@ -425,7 +431,7 @@ static void MatchElementScopeRules(const Element& element,
 void StyleResolver::MatchPseudoPartRulesForUAHost(
     const Element& element,
     ElementRuleCollector& collector) {
-  if (element.ShadowPseudoId() != "-webkit-input-placeholder")
+  if (element.ShadowPseudoId() != shadow_element_names::kPseudoInputPlaceholder)
     return;
 
   // We allow ::placeholder pseudo element after ::part(). See
@@ -852,6 +858,9 @@ scoped_refptr<ComputedStyle> StyleResolver::StyleForElement(
         state.Style()->GetCurrentColor());
   }
 
+  if (element->IsMathMLElement())
+    ApplyMathMLCustomStyleProperties(element, state);
+
   SetAnimationUpdateIfNeeded(state, *element);
 
   if (state.Style()->HasViewportUnits())
@@ -895,9 +904,10 @@ void StyleResolver::InitStyleAndApplyInheritance(Element& element,
       // Strictly, we should only allow the root element to inherit from
       // initial styles, but we allow getComputedStyle() for connected
       // elements outside the flat tree rooted at an unassigned shadow host
-      // child, or Shadow DOM V0 insertion points.
+      // child, a slot fallback element, or Shadow DOM V0 insertion points.
       DCHECK(element.IsV0InsertionPoint() ||
-             (IsShadowHost(element.parentNode()) &&
+             ((IsShadowHost(element.parentNode()) ||
+               IsA<HTMLSlotElement>(element.parentNode())) &&
               !LayoutTreeBuilderTraversal::ParentElement(element)));
       state.Style()->SetIsEnsuredOutsideFlatTree();
     }
@@ -914,6 +924,37 @@ void StyleResolver::InitStyleAndApplyInheritance(Element& element,
         link_state = EInsideLink::kInsideVisitedLink;
     }
     state.Style()->SetInsideLink(link_state);
+  }
+}
+
+void StyleResolver::ApplyMathMLCustomStyleProperties(
+    Element* element,
+    StyleResolverState& state) {
+  DCHECK(element && element->IsMathMLElement());
+  ComputedStyle& style = state.StyleRef();
+  if (auto* space = DynamicTo<MathMLSpaceElement>(*element)) {
+    space->AddMathBaselineIfNeeded(style, state.CssToLengthConversionData());
+  } else if (auto* padded = DynamicTo<MathMLPaddedElement>(*element)) {
+    padded->AddMathBaselineIfNeeded(style, state.CssToLengthConversionData());
+    padded->AddMathPaddedDepthIfNeeded(style,
+                                       state.CssToLengthConversionData());
+    padded->AddMathPaddedLSpaceIfNeeded(style,
+                                        state.CssToLengthConversionData());
+    padded->AddMathPaddedVOffsetIfNeeded(style,
+                                         state.CssToLengthConversionData());
+  } else if (auto* fraction = DynamicTo<MathMLFractionElement>(*element)) {
+    fraction->AddMathFractionBarThicknessIfNeeded(
+        style, state.CssToLengthConversionData());
+  } else if (auto* operator_element =
+                 DynamicTo<MathMLOperatorElement>(*element)) {
+    operator_element->AddMathLSpaceIfNeeded(style,
+                                            state.CssToLengthConversionData());
+    operator_element->AddMathRSpaceIfNeeded(style,
+                                            state.CssToLengthConversionData());
+    operator_element->AddMathMinSizeIfNeeded(style,
+                                             state.CssToLengthConversionData());
+    operator_element->AddMathMaxSizeIfNeeded(style,
+                                             state.CssToLengthConversionData());
   }
 }
 
@@ -1133,7 +1174,7 @@ scoped_refptr<ComputedStyle> StyleResolver::PseudoStyleForElement(
 }
 
 scoped_refptr<const ComputedStyle> StyleResolver::StyleForPage(
-    int page_index,
+    uint32_t page_index,
     const AtomicString& page_name) {
   scoped_refptr<const ComputedStyle> initial_style =
       InitialStyleForElement(GetDocument());
@@ -1572,6 +1613,31 @@ bool StyleResolver::CanReuseBaseComputedStyle(const StyleResolverState& state) {
   }
 
   return true;
+}
+
+const CSSValue* StyleResolver::ComputeValue(
+    Element* element,
+    const CSSPropertyName& property_name,
+    const CSSValue& value) {
+  const ComputedStyle* base_style = element->GetComputedStyle();
+  StyleResolverState state(element->GetDocument(), *element);
+  STACK_UNINITIALIZED StyleCascade cascade(state);
+  state.SetStyle(ComputedStyle::Clone(*base_style));
+  auto* set =
+      MakeGarbageCollected<MutableCSSPropertyValueSet>(state.GetParserMode());
+  if (property_name.IsCustomProperty()) {
+    set->SetProperty(CSSPropertyValue(property_name, value));
+  } else {
+    set->SetProperty(property_name.Id(), value);
+  }
+  cascade.MutableMatchResult().FinishAddingUARules();
+  cascade.MutableMatchResult().FinishAddingUserRules();
+  cascade.MutableMatchResult().AddMatchedProperties(set);
+  cascade.Apply();
+
+  CSSPropertyRef property_ref(property_name, element->GetDocument());
+  return ComputedStyleUtils::ComputedPropertyValue(property_ref.GetProperty(),
+                                                   *state.Style());
 }
 
 scoped_refptr<ComputedStyle> StyleResolver::StyleForInterpolations(

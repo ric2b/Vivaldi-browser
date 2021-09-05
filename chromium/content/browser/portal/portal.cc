@@ -12,11 +12,11 @@
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
-#include "content/browser/frame_host/navigation_request.h"
-#include "content/browser/frame_host/navigator.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
-#include "content/browser/frame_host/render_frame_host_manager.h"
-#include "content/browser/frame_host/render_frame_proxy_host.h"
+#include "content/browser/renderer_host/navigation_request.h"
+#include "content/browser/renderer_host/navigator.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/render_frame_host_manager.h"
+#include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/render_widget_host_iterator.h"
@@ -152,6 +152,7 @@ RenderFrameProxyHost* Portal::CreateProxyAndAttachPortal() {
     WebContents::CreateParams params(outer_contents_impl->GetBrowserContext());
     portal_contents_.SetOwned(base::WrapUnique(
         static_cast<WebContentsImpl*>(WebContents::Create(params).release())));
+    outer_contents_impl->InnerWebContentsCreated(portal_contents_.get());
     web_contents_created = true;
   }
 
@@ -338,26 +339,33 @@ void Portal::Activate(blink::TransferableMessage data,
                      std::move(data), activation_time, std::move(callback)));
 }
 
-void Portal::PostMessageToGuest(
-    blink::TransferableMessage message,
-    const base::Optional<url::Origin>& target_origin) {
-  portal_contents_->GetMainFrame()->ForwardMessageFromHost(
-      std::move(message), owner_render_frame_host_->GetLastCommittedOrigin(),
-      target_origin);
+namespace {
+const char* kCrossOriginPostMessageError =
+    "postMessage failed because portal is not same origin with its host";
 }
 
-void Portal::PostMessageToHost(
-    blink::TransferableMessage message,
-    const base::Optional<url::Origin>& target_origin) {
+void Portal::PostMessageToGuest(blink::TransferableMessage message) {
+  if (!IsSameOrigin()) {
+    owner_render_frame_host()->AddMessageToConsole(
+        blink::mojom::ConsoleMessageLevel::kError,
+        kCrossOriginPostMessageError);
+    return;
+  }
+  portal_contents_->GetMainFrame()->ForwardMessageFromHost(
+      std::move(message), owner_render_frame_host_->GetLastCommittedOrigin());
+}
+
+void Portal::PostMessageToHost(blink::TransferableMessage message) {
   DCHECK(GetPortalContents());
-  if (target_origin) {
-    if (target_origin != owner_render_frame_host_->GetLastCommittedOrigin())
-      return;
+  if (!IsSameOrigin()) {
+    portal_contents_->GetMainFrame()->AddMessageToConsole(
+        blink::mojom::ConsoleMessageLevel::kError,
+        kCrossOriginPostMessageError);
+    return;
   }
   client().ForwardMessageFromGuest(
       std::move(message),
-      GetPortalContents()->GetMainFrame()->GetLastCommittedOrigin(),
-      target_origin);
+      GetPortalContents()->GetMainFrame()->GetLastCommittedOrigin());
 }
 
 void Portal::OnFrameTreeNodeDestroyed(FrameTreeNode* frame_tree_node) {
@@ -446,6 +454,11 @@ WebContentsImpl* Portal::GetPortalContents() {
 WebContentsImpl* Portal::GetPortalHostContents() {
   return static_cast<WebContentsImpl*>(
       WebContents::FromRenderFrameHost(owner_render_frame_host_));
+}
+
+bool Portal::IsSameOrigin() const {
+  return owner_render_frame_host_->GetLastCommittedOrigin().IsSameOriginWith(
+      portal_contents_->GetMainFrame()->GetLastCommittedOrigin());
 }
 
 std::pair<bool, blink::mojom::PortalActivateResult> Portal::CanActivate() {

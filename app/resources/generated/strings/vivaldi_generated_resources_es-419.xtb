@@ -12,12 +12,12 @@
 <translation id="1163931534039071049">&amp;Ver fuente de marco</translation>
 <translation id="1165039591588034296">Error</translation>
 <translation id="1175364870820465910">Im&amp;primir...</translation>
-<translation id="1177863135347784049">Personalizado</translation>
 <translation id="1181037720776840403">Eliminar</translation>
 <translation id="1187722533808055681">Wake Ups inactivos</translation>
 <translation id="119944043368869598">Borrar todo</translation>
 <translation id="1221825588892235038">Solo selección</translation>
 <translation id="1244303850296295656">Error de extensión</translation>
+<translation id="125220115284141797">Predeterminado</translation>
 <translation id="1274977772557788323">Configuración del almacenamiento para Adobe Flash Player</translation>
 <translation id="1297175357211070620">Destino</translation>
 <translation id="1303101771013849280">Archivo HTML de Marcadores</translation>
@@ -44,9 +44,11 @@
 <translation id="1723824996674794290">Nueva &amp;ventana</translation>
 <translation id="1725149567830788547">Mostrar &amp;controles</translation>
 <translation id="1729533290416704613">También controla qué página se muestra al realizar búsquedas desde el cuadro multifunción.</translation>
+<translation id="174123615272205933">Personalizado</translation>
 <translation id="1744108098763830590">Página de fondo</translation>
 <translation id="176587472219019965">Nueva &amp;ventana</translation>
 <translation id="1769104665586091481">Abrir vínculo en una &amp;ventana nueva</translation>
+<translation id="1779468444204342338">Mínimo</translation>
 <translation id="1815083418640426271">Pegar como texto sin formato</translation>
 <translation id="1828901632669367785">Imprimir utilizando el diálogo de sistema...</translation>
 <translation id="1850508293116537636">Girar a la &amp;derecha</translation>
@@ -85,7 +87,6 @@
 <translation id="2381756643783702095">Preguntar antes de enviar (recomendado)</translation>
 <translation id="241082044617551207">Complemento desconocido</translation>
 <translation id="2423578206845792524">Guar&amp;dar imagen como...</translation>
-<translation id="2436707352762155834">Mínimo</translation>
 <translation id="2439110203301358333">Otro programa en tu computadora agregó una extensión que puede cambiar el funcionamiento de Vivaldi.</translation>
 <translation id="2445081178310039857">Se requiere un directorio de raíz de la extensión.</translation>
 <translation id="2470702053775288986">Extensiones no admitidas inhabilitadas</translation>
@@ -242,7 +243,6 @@
 <translation id="5039804452771397117">Permitir</translation>
 <translation id="5057110919553308744">Cuando haces clic en la extensión</translation>
 <translation id="5063480226653192405">Uso</translation>
-<translation id="5068918910148307423">Después de cerrar un sitio web, no permitirle terminar de enviar y recibir datos</translation>
 <translation id="5116628073786783676">Gu&amp;ardar audio como...</translation>
 <translation id="5143374789336132547">La extensión "<ph name="EXTENSION_NAME" />" cambió la página que se muestra al hacer clic en el botón Página prinicpal.</translation>
 <translation id="5154108062446123722">Configuración avanzada para <ph name="PRINTING_DESTINATION" /></translation>
@@ -261,6 +261,7 @@
 <translation id="5355926466126177564">La extensión "<ph name="EXTENSION_NAME" />" cambió la página que se muestra al llevar a cabo búsquedas desde el cuadro multifunción.</translation>
 <translation id="5360150013186312835">Mostrar en la barra de herramientas</translation>
 <translation id="5362741141255528695">Seleccionar archivo de clave privada.</translation>
+<translation id="536638840841140142">Ninguno</translation>
 <translation id="5370819323174483825">&amp;Volver a cargar</translation>
 <translation id="5398572795982417028">Referencia de página fuera de los límites. El límite es <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Continuar con la descarga</translation>
@@ -384,7 +385,6 @@
 <translation id="7663719505383602579">Receptor: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Instalado por tu administrador</translation>
 <translation id="7685049629764448582">Memoria del JavaScript</translation>
-<translation id="7701040980221191251">Ninguno</translation>
 <translation id="7701869757853594372">A cargo del USUARIO</translation>
 <translation id="7704305437604973648">Tarea</translation>
 <translation id="7710568461918838723">&amp;Emitir...</translation>

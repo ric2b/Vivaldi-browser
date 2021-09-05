@@ -14,13 +14,13 @@ import androidx.annotation.ColorInt;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.Callback;
-import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.CallbackController;
+import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
-import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
+import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.status_indicator.StatusIndicatorCoordinator;
@@ -40,10 +40,12 @@ import org.chromium.ui.util.ColorUtils;
 
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.tab.TabImpl;
+import org.vivaldi.browser.common.VivaldiColorUtils;
+import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.speeddial.SpeedDialPage;
 
 /**
- * Maintains the status bar color for a {@link ChromeActivity}.
+ * Maintains the status bar color for a {@link Window}.
  */
 public class StatusBarColorController
         implements Destroyable, TopToolbarCoordinator.UrlExpansionObserver,
@@ -83,8 +85,7 @@ public class StatusBarColorController
     private final @ColorInt int mIncognitoDefaultThemeColor;
 
     private @Nullable TabModelSelector mTabModelSelector;
-    private ObservableSupplier<OverviewModeBehavior> mOverviewModeBehaviorSupplier;
-    private Callback<OverviewModeBehavior> mOverviewModeBehaviorSupplierObserver;
+    private CallbackController mCallbackController = new CallbackController();
     private @Nullable OverviewModeBehavior.OverviewModeObserver mOverviewModeObserver;
     private @Nullable Tab mCurrentTab;
     private boolean mIsInOverviewMode;
@@ -99,16 +100,25 @@ public class StatusBarColorController
     private @ColorInt int mStatusBarColorWithoutStatusIndicator;
 
     /**
-     * @param chromeActivity The {@link ChromeActivity} that this class is attached to.
+     * Constructs a StatusBarColorController.
+     *
+     * @param window The Android app window, used to access decor view and set the status color.
+     * @param isTablet Whether the current context is on a tablet.
+     * @param resources An Android resources object, used to load colors.
+     * @param statusBarColorProvider An implementation of {@link StatusBarColorProvider}.
+     * @param overviewModeBehaviorSupplier Supplies the overview mode behavior.
+     * @param activityLifecycleDispatcher Allows observation of the activity lifecycle.
      * @param tabProvider The {@link ActivityTabProvider} to get current tab of the activity.
      */
-    public StatusBarColorController(
-            ChromeActivity chromeActivity, ActivityTabProvider tabProvider) {
-        mWindow = chromeActivity.getWindow();
-        mIsTablet = chromeActivity.isTablet();
-        mStatusBarColorProvider = chromeActivity;
+    public StatusBarColorController(Window window, boolean isTablet, Resources resources,
+            StatusBarColorProvider statusBarColorProvider,
+            OneshotSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
+            ActivityLifecycleDispatcher activityLifecycleDispatcher,
+            ActivityTabProvider tabProvider) {
+        mWindow = window;
+        mIsTablet = isTablet;
+        mStatusBarColorProvider = statusBarColorProvider;
 
-        Resources resources = chromeActivity.getResources();
         mStandardPrimaryBgColor = ChromeColors.getPrimaryBackgroundColor(resources, false);
         mIncognitoPrimaryBgColor = ChromeColors.getPrimaryBackgroundColor(resources, true);
         mStandardDefaultThemeColor = ChromeColors.getDefaultThemeColor(resources, false);
@@ -184,52 +194,45 @@ public class StatusBarColorController
             }
         };
 
-        mOverviewModeBehaviorSupplier = chromeActivity.getOverviewModeBehaviorSupplier();
+        if (overviewModeBehaviorSupplier != null) {
+            overviewModeBehaviorSupplier.onAvailable(
+                    mCallbackController.makeCancelable(overviewModeBehavior -> {
+                        assert overviewModeBehavior != null;
+                        mOverviewModeBehavior = overviewModeBehavior;
+                        mOverviewModeObserver = new EmptyOverviewModeObserver() {
+                            @Override
+                            public void onOverviewModeStartedShowing(boolean showToolbar) {
+                                mIsInOverviewMode = true;
+                                if (!ChromeApplication.isVivaldi())
+                                updateStatusBarColor();
+                            }
 
-        if (mOverviewModeBehaviorSupplier != null) {
-            mOverviewModeBehaviorSupplierObserver = new Callback<OverviewModeBehavior>() {
-                @Override
-                public void onResult(OverviewModeBehavior overviewModeBehavior) {
-                    assert overviewModeBehavior != null;
-                    mOverviewModeBehavior = overviewModeBehavior;
-                    mOverviewModeObserver = new EmptyOverviewModeObserver() {
-                        @Override
-                        public void onOverviewModeStartedShowing(boolean showToolbar) {
-                            mIsInOverviewMode = true;
-                            if (!ChromeApplication.isVivaldi())
-                            updateStatusBarColor();
-                        }
-
-                        @Override
-                        public void onOverviewModeFinishedHiding() {
-                            mIsInOverviewMode = false;
-                            updateStatusBarColor();
-                        }
-                    };
-                    mOverviewModeBehavior.addOverviewModeObserver(mOverviewModeObserver);
-                    // TODO(crbug.com/1084528): Replace with OneShotSupplier when it is available.
-                    mOverviewModeBehaviorSupplier.removeObserver(this);
-                    mOverviewModeBehaviorSupplier = null;
-                }
-            };
-            mOverviewModeBehaviorSupplier.addObserver(mOverviewModeBehaviorSupplierObserver);
+                            @Override
+                            public void onOverviewModeFinishedHiding() {
+                                mIsInOverviewMode = false;
+                                updateStatusBarColor();
+                            }
+                        };
+                        mOverviewModeBehavior.addOverviewModeObserver(mOverviewModeObserver);
+                    }));
         }
 
-        chromeActivity.getLifecycleDispatcher().register(this);
+        activityLifecycleDispatcher.register(this);
     }
 
     // Destroyable implementation.
     @Override
     public void destroy() {
         mStatusBarColorTabObserver.destroy();
-        if (mOverviewModeBehaviorSupplier != null) {
-            mOverviewModeBehaviorSupplier.removeObserver(mOverviewModeBehaviorSupplierObserver);
-        }
         if (mOverviewModeBehavior != null) {
             mOverviewModeBehavior.removeOverviewModeObserver(mOverviewModeObserver);
         }
         if (mTabModelSelector != null) {
             mTabModelSelector.removeObserver(mTabModelSelectorObserver);
+        }
+        if (mCallbackController != null) {
+            mCallbackController.destroy();
+            mCallbackController = null;
         }
     }
 
@@ -280,6 +283,12 @@ public class StatusBarColorController
         int statusBarColor = applyStatusBarIndicatorColor(mStatusBarColorWithoutStatusIndicator);
         statusBarColor = applyCurrentScrimToColor(statusBarColor);
         setStatusBarColor(statusBarColor);
+
+        // Note(david@vivaldi.com): We also apply color to the navigation bar.
+        if (VivaldiUtils.isTopToolbarOn() && mIsIncognito && !mIsInOverviewMode)
+            VivaldiColorUtils.setNavigationBarColor(mWindow, mIncognitoDefaultThemeColor);
+        else
+            VivaldiColorUtils.setNavigationBarColor(mWindow, statusBarColor);
     }
 
     // TODO(sinansahin): Confirm pre-M expectations with UX and update as needed.

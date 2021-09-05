@@ -20,8 +20,8 @@
 #import "content/app_shim_remote_cocoa/web_contents_view_cocoa.h"
 #include "content/browser/download/drag_download_file.h"
 #include "content/browser/download/drag_download_util.h"
-#include "content/browser/frame_host/popup_menu_helper_mac.h"
 #include "content/browser/renderer_host/display_util.h"
+#include "content/browser/renderer_host/popup_menu_helper_mac.h"
 #include "content/browser/renderer_host/render_view_host_factory.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_mac.h"
@@ -35,24 +35,24 @@
 #include "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/gfx/mac/coordinate_conversion.h"
 
-using blink::WebDragOperation;
-using blink::WebDragOperationsMask;
+using blink::DragOperation;
+using blink::DragOperationsMask;
 using remote_cocoa::mojom::DraggingInfoPtr;
 using remote_cocoa::mojom::SelectionDirection;
 
-// Ensure that the blink::WebDragOperation enum values stay in sync with
+// Ensure that the blink::DragOperation enum values stay in sync with
 // NSDragOperation constants, since the code below static_casts between 'em.
 #define STATIC_ASSERT_ENUM(a, b)                            \
   static_assert(static_cast<int>(a) == static_cast<int>(b), \
                 "enum mismatch: " #a)
-STATIC_ASSERT_ENUM(NSDragOperationNone, blink::kWebDragOperationNone);
-STATIC_ASSERT_ENUM(NSDragOperationCopy, blink::kWebDragOperationCopy);
-STATIC_ASSERT_ENUM(NSDragOperationLink, blink::kWebDragOperationLink);
-STATIC_ASSERT_ENUM(NSDragOperationGeneric, blink::kWebDragOperationGeneric);
-STATIC_ASSERT_ENUM(NSDragOperationPrivate, blink::kWebDragOperationPrivate);
-STATIC_ASSERT_ENUM(NSDragOperationMove, blink::kWebDragOperationMove);
-STATIC_ASSERT_ENUM(NSDragOperationDelete, blink::kWebDragOperationDelete);
-STATIC_ASSERT_ENUM(NSDragOperationEvery, blink::kWebDragOperationEvery);
+STATIC_ASSERT_ENUM(NSDragOperationNone, blink::kDragOperationNone);
+STATIC_ASSERT_ENUM(NSDragOperationCopy, blink::kDragOperationCopy);
+STATIC_ASSERT_ENUM(NSDragOperationLink, blink::kDragOperationLink);
+STATIC_ASSERT_ENUM(NSDragOperationGeneric, blink::kDragOperationGeneric);
+STATIC_ASSERT_ENUM(NSDragOperationPrivate, blink::kDragOperationPrivate);
+STATIC_ASSERT_ENUM(NSDragOperationMove, blink::kDragOperationMove);
+STATIC_ASSERT_ENUM(NSDragOperationDelete, blink::kDragOperationDelete);
+STATIC_ASSERT_ENUM(NSDragOperationEvery, blink::kDragOperationEvery);
 
 namespace content {
 namespace {
@@ -138,10 +138,10 @@ gfx::Rect WebContentsViewMac::GetContainerBounds() const {
 
 void WebContentsViewMac::StartDragging(
     const DropData& drop_data,
-    WebDragOperationsMask allowed_operations,
+    DragOperationsMask allowed_operations,
     const gfx::ImageSkia& image,
     const gfx::Vector2d& image_offset,
-    const DragEventSourceInfo& event_info,
+    const blink::mojom::DragEventSourceInfo& event_info,
     RenderWidgetHostImpl* source_rwh) {
   // By allowing nested tasks, the code below also allows Close(),
   // which would deallocate |this|.  The same problem can occur while
@@ -228,7 +228,7 @@ DropData* WebContentsViewMac::GetDropData() const {
   return [drag_dest_ currentDropData];
 }
 
-void WebContentsViewMac::UpdateDragCursor(WebDragOperation operation) {
+void WebContentsViewMac::UpdateDragCursor(DragOperation operation) {
   [drag_dest_ setCurrentOperation:operation];
 }
 
@@ -428,7 +428,7 @@ std::list<RenderWidgetHostViewMac*> WebContentsViewMac::GetChildViews() {
   std::list<RenderWidgetHostViewMac*> result;
   for (auto iter = child_views_.begin(); iter != child_views_.end();) {
     if (*iter) {
-      result.push_back(reinterpret_cast<RenderWidgetHostViewMac*>(iter->get()));
+      result.push_back(static_cast<RenderWidgetHostViewMac*>(iter->get()));
       iter++;
     } else {
       iter = child_views_.erase(iter);
@@ -573,7 +573,7 @@ void WebContentsViewMac::EndDrag(uint32_t drag_operation,
   web_contents_->DragSourceEndedAt(
       transformed_point.x(), transformed_point.y(),
       transformed_screen_point.x(), transformed_screen_point.y(),
-      static_cast<blink::WebDragOperation>(drag_operation),
+      static_cast<blink::DragOperation>(drag_operation),
       drag_source_start_rwh_.get());
 }
 

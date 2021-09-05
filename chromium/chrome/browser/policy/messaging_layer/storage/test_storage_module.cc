@@ -18,31 +18,28 @@ using ::testing::Invoke;
 namespace reporting {
 namespace test {
 
-TestStorageModule::TestStorageModule() {
+TestStorageModuleStrict::TestStorageModuleStrict() {
   ON_CALL(*this, AddRecord)
       .WillByDefault(Invoke(this, &TestStorageModule::AddRecordSuccessfully));
 }
 
-TestStorageModule::~TestStorageModule() = default;
+TestStorageModuleStrict::~TestStorageModuleStrict() = default;
 
-WrappedRecord TestStorageModule::wrapped_record() const {
-  EXPECT_TRUE(wrapped_record_.has_value());
-  return wrapped_record_.value();
+Record TestStorageModuleStrict::record() const {
+  EXPECT_TRUE(record_.has_value());
+  return record_.value();
 }
 
-Priority TestStorageModule::priority() const {
+Priority TestStorageModuleStrict::priority() const {
   EXPECT_TRUE(priority_.has_value());
   return priority_.value();
 }
 
-void TestStorageModule::AddRecordSuccessfully(
-    EncryptedRecord record,
+void TestStorageModuleStrict::AddRecordSuccessfully(
     Priority priority,
+    Record record,
     base::OnceCallback<void(Status)> callback) {
-  WrappedRecord wrapped_record;
-  ASSERT_TRUE(
-      wrapped_record.ParseFromString(record.encrypted_wrapped_record()));
-  wrapped_record_ = wrapped_record;
+  record_ = std::move(record);
   priority_ = priority;
   std::move(callback).Run(Status::StatusOK());
 }

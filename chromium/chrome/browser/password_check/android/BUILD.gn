@@ -54,6 +54,7 @@ android_library("public_java") {
     "java/src/org/chromium/chrome/browser/password_check/PasswordCheckMetricsRecorder.java",
     "java/src/org/chromium/chrome/browser/password_check/PasswordCheckPreference.java",
     "java/src/org/chromium/chrome/browser/password_check/PasswordCheckReferrer.java",
+    "java/src/org/chromium/chrome/browser/password_check/PasswordCheckResolutionAction.java",
     "java/src/org/chromium/chrome/browser/password_check/PasswordCheckUserAction.java",
   ]
   resources_package = "org.chromium.chrome.browser.password_check"
@@ -165,5 +166,4 @@ android_resources("java_resources") {
     "//chrome/browser/ui/android/strings:ui_strings_grd",
     "//components/strings:components_strings_grd",
   ]
-  create_srcjar = false
 }

@@ -42,22 +42,10 @@ const char kSyncFirstSyncTime[] = "sync.first_sync_time";
 // Obsolete pref that used to store long poll intervals received by the server.
 const char kSyncLongPollIntervalSeconds[] = "sync.long_poll_interval";
 
-#if defined(OS_CHROMEOS)
-// Obsolete pref.
-const char kSyncSpareBootstrapToken[] = "sync.spare_bootstrap_token";
-#endif  // defined(OS_CHROMEOS)
-
 // Obsolete pref that used to store if sync should be prevented from
 // automatically starting up. This is now replaced by its inverse
 // kSyncRequested.
 const char kSyncSuppressStart[] = "sync.suppress_start";
-
-// Obsolete pref that stored how many times sync received memory pressure
-// warnings.
-const char kSyncMemoryPressureWarningCount[] = "sync.memory_warning_count";
-
-// Obsolete pref that stored if sync shutdown cleanly.
-const char kSyncShutdownCleanly[] = "sync.shutdown_cleanly";
 
 // Obsolete prefs for data types. Can be deleted after 2020-01-30.
 const char kSyncAppList[] = "sync.app_list";
@@ -302,6 +290,10 @@ void SyncPrefs::RegisterProfilePrefs(
   registry->RegisterStringPref(prefs::kSyncLastRunVersion, std::string());
   registry->RegisterBooleanPref(prefs::kEnableLocalSyncBackend, false);
   registry->RegisterFilePathPref(prefs::kLocalSyncBackendDir, base::FilePath());
+#if defined(OS_ANDROID)
+  registry->RegisterBooleanPref(prefs::kSyncDecoupledFromAndroidMasterSync,
+                                false);
+#endif  // defined(OS_ANDROID)
 
   // Demographic prefs.
   registry->RegisterDictionaryPref(
@@ -321,12 +313,7 @@ void SyncPrefs::RegisterProfilePrefs(
   registry->RegisterBooleanPref(kSyncHasAuthError, false);
   registry->RegisterInt64Pref(kSyncFirstSyncTime, 0);
   registry->RegisterInt64Pref(kSyncLongPollIntervalSeconds, 0);
-#if defined(OS_CHROMEOS)
-  registry->RegisterStringPref(kSyncSpareBootstrapToken, "");
-#endif
   registry->RegisterBooleanPref(kSyncSuppressStart, false);
-  registry->RegisterIntegerPref(kSyncMemoryPressureWarningCount, -1);
-  registry->RegisterBooleanPref(kSyncShutdownCleanly, false);
 }
 
 void SyncPrefs::AddSyncPrefObserver(SyncPrefObserver* sync_pref_observer) {
@@ -360,6 +347,9 @@ void SyncPrefs::ClearLocalSyncTransportData() {
   pref_service_->ClearPref(prefs::kSyncCacheGuid);
   pref_service_->ClearPref(prefs::kSyncBirthday);
   pref_service_->ClearPref(prefs::kSyncBagOfChips);
+#if defined(OS_ANDROID)
+  pref_service_->ClearPref(prefs::kSyncDecoupledFromAndroidMasterSync);
+#endif  // defined(OS_ANDROID)
 
   // No need to clear kManaged, kEnableLocalSyncBackend or kLocalSyncBackendDir,
   // since they're never actually set as user preferences.
@@ -687,12 +677,23 @@ void SyncPrefs::SetPassphrasePrompted(bool value) {
   pref_service_->SetBoolean(prefs::kSyncPassphrasePrompted, value);
 }
 
-void SyncPrefs::GetInvalidationVersions(
-    std::map<ModelType, int64_t>* invalidation_versions) const {
+#if defined(OS_ANDROID)
+void SyncPrefs::SetDecoupledFromAndroidMasterSync() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  pref_service_->SetBoolean(prefs::kSyncDecoupledFromAndroidMasterSync, true);
+}
+
+bool SyncPrefs::GetDecoupledFromAndroidMasterSync() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return pref_service_->GetBoolean(prefs::kSyncDecoupledFromAndroidMasterSync);
+}
+#endif  // defined(OS_ANDROID)
+
+std::map<ModelType, int64_t> SyncPrefs::GetInvalidationVersions() const {
+  std::map<ModelType, int64_t> invalidation_versions;
   const base::DictionaryValue* invalidation_dictionary =
       pref_service_->GetDictionary(prefs::kSyncInvalidationVersions);
-  ModelTypeSet protocol_types = ProtocolTypes();
-  for (ModelType type : protocol_types) {
+  for (ModelType type : ProtocolTypes()) {
     std::string key = ModelTypeToString(type);
     std::string version_str;
     if (!invalidation_dictionary->GetString(key, &version_str))
@@ -700,8 +701,9 @@ void SyncPrefs::GetInvalidationVersions(
     int64_t version = 0;
     if (!base::StringToInt64(version_str, &version))
       continue;
-    (*invalidation_versions)[type] = version;
+    invalidation_versions[type] = version;
   }
+  return invalidation_versions;
 }
 
 void SyncPrefs::UpdateInvalidationVersions(
@@ -812,11 +814,6 @@ void ClearObsoleteSyncLongPollIntervalSeconds(PrefService* pref_service) {
   pref_service->ClearPref(kSyncLongPollIntervalSeconds);
 }
 
-#if defined(OS_CHROMEOS)
-void ClearObsoleteSyncSpareBootstrapToken(PrefService* pref_service) {
-  pref_service->ClearPref(kSyncSpareBootstrapToken);
-}
-#endif  // defined(OS_CHROMEOS)
 
 void MigrateSyncSuppressedPref(PrefService* pref_service) {
   // If the new kSyncRequested already has a value, there's nothing to be
@@ -851,11 +848,6 @@ void MigrateSyncSuppressedPref(PrefService* pref_service) {
   }
   // Otherwise, nothing to be done: Sync was likely never enabled in this
   // profile.
-}
-
-void ClearObsoleteMemoryPressurePrefs(PrefService* pref_service) {
-  pref_service->ClearPref(kSyncMemoryPressureWarningCount);
-  pref_service->ClearPref(kSyncShutdownCleanly);
 }
 
 }  // namespace syncer

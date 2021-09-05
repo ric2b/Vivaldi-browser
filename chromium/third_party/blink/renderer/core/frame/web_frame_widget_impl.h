@@ -80,7 +80,9 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
       CrossVariantMojoAssociatedRemote<mojom::blink::WidgetHostInterfaceBase>
           widget_host,
       CrossVariantMojoAssociatedReceiver<mojom::blink::WidgetInterfaceBase>
-          widget);
+          widget,
+      bool hidden,
+      bool never_composited);
   ~WebFrameWidgetImpl() override;
 
   // WebWidget functions:
@@ -132,6 +134,8 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
                          const gfx::Size& min_size_before_dsf,
                          const gfx::Size& max_size_before_dsf,
                          float device_scale_factor) override;
+  void ApplyVisualPropertiesSizing(
+      const VisualProperties& visual_properties) override;
 
   // FrameWidget overrides:
   void SetRootLayer(scoped_refptr<cc::Layer>) override;

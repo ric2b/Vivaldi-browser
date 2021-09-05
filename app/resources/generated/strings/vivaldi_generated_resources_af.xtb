@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Bekyk raambron</translation>
 <translation id="1165039591588034296">Fout</translation>
 <translation id="1175364870820465910">&amp;Druk af…</translation>
-<translation id="1177863135347784049">Pasgemaak</translation>
 <translation id="1181037720776840403">Verwyder</translation>
 <translation id="1187722533808055681">Wek vanuit luierstand</translation>
 <translation id="119944043368869598">Wis alles</translation>
 <translation id="1221825588892235038">Slegs seleksie</translation>
 <translation id="1244303850296295656">Uitbreidingsfout</translation>
+<translation id="125220115284141797">Verstek</translation>
 <translation id="1274977772557788323">Bewaarinstellings vir Adobe Flash Player</translation>
 <translation id="1297175357211070620">Bestemming</translation>
 <translation id="1303101771013849280">Boekmerke-HTML-lêer</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Nuwe venster</translation>
 <translation id="1725149567830788547">Toon &amp;Kontroles</translation>
 <translation id="1729533290416704613">Dit beheer ook die blad wat vertoon word wanneer u vanuit die adresveld soek.</translation>
+<translation id="174123615272205933">Pasgemaak</translation>
 <translation id="1744108098763830590">agtergrondblad</translation>
 <translation id="176587472219019965">&amp;Nuwe Venster</translation>
 <translation id="1769104665586091481">Open Skakel in Nuwe &amp;Venster</translation>
+<translation id="1779468444204342338">Minimum</translation>
 <translation id="1815083418640426271">Plak As Skoonteks</translation>
 <translation id="1828901632669367785">Druk Af d.m.v. Stelseldialoogvenster…</translation>
 <translation id="1850508293116537636">Draai &amp;kloksgewys</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Vra voor verstuur word (aanbeveel)</translation>
 <translation id="241082044617551207">Onbekende inprop</translation>
 <translation id="2423578206845792524">Be&amp;waar beeld as…</translation>
-<translation id="2436707352762155834">Minimum</translation>
 <translation id="2439110203301358333">’n Ander program op u rekenaar het ’n uitbreiding toegevoeg wat Vivaldi se werkswyse kan verander.</translation>
 <translation id="2445081178310039857">Uitbreidingstamgids word vereis.</translation>
 <translation id="2470702053775288986">Onondersteunde uitbreidings gedeaktiveer</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Voorverbeeld: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofoon</translation>
 <translation id="3241680850019875542">Kies die stamgids van die uitbreidings om in te pak. Om ’n uitbreiding by te werk, kies ook die privaatsleutellêer om dit weer te gebruik.</translation>
+<translation id="3266179261140759675">Keer dat werwe wat toe is inligting stuur en ontvang</translation>
 <translation id="3280237271814976245">Bewaar &amp;as…</translation>
 <translation id="3285322247471302225">Nuwe &amp;Oortjie</translation>
 <translation id="3288047731229977326">Uitbreidings wat in ontwikkelaarsmodus loop kan u rekenaar beskadig. Indien u nie ’n ontwikkelaar is nie moet u die uitbreidings veiligheidshalwe deaktiveer.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Laat Toe</translation>
 <translation id="5057110919553308744">Wanneer u op die uitbreiding klik</translation>
 <translation id="5063480226653192405">Gebruik</translation>
-<translation id="5068918910148307423">Laat geen onlangs geslote werwe toe om data klaar te verstuur en ontvang nie</translation>
 <translation id="5116628073786783676">Be&amp;Waar Oudio As…</translation>
 <translation id="5143374789336132547">Die uitbreiding “<ph name="EXTENSION_NAME" />” het die blad wat vertoon word wanneer u die Tuis-knop klik, verander.</translation>
 <translation id="5154108062446123722">Gevorderde instellings vir <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">Die uitbreiding “<ph name="EXTENSION_NAME" />” het die blad wat vertoon word wanneer u vanuit die adresveld soek, verander.</translation>
 <translation id="5360150013186312835">Toon in Nutsbalk</translation>
 <translation id="5362741141255528695">Kies privaatsleutellêer.</translation>
+<translation id="536638840841140142">Geen</translation>
 <translation id="5370819323174483825">&amp;Herlaai</translation>
 <translation id="5398572795982417028">Bladsyverwysing val buite bereik, limiet is <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Sit aflaai voort</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Ontvanger: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Deur U Administrateur Geïnstalleer</translation>
 <translation id="7685049629764448582">JavaScript-geheue</translation>
-<translation id="7701040980221191251">Geen</translation>
 <translation id="7701869757853594372">USER-handvatsels</translation>
 <translation id="7704305437604973648">Taak</translation>
 <translation id="7710568461918838723">&amp;Send…</translation>

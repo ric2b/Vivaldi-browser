@@ -64,12 +64,15 @@ os = struct(
     MAC_10_13 = os_enum("Mac-10.13", os_category.MAC),
     MAC_10_14 = os_enum("Mac-10.14", os_category.MAC),
     MAC_10_15 = os_enum("Mac-10.15", os_category.MAC),
+    MAC_11_0 = os_enum("Mac-11.0", os_category.MAC),
     # TODO(crbug/1121185): Remove 10.13 once builders have been migrated to 10.15.
     MAC_DEFAULT = os_enum("Mac-10.13|Mac-10.15", os_category.MAC),
     MAC_ANY = os_enum("Mac", os_category.MAC),
     WINDOWS_7 = os_enum("Windows-7", os_category.WINDOWS),
     WINDOWS_8_1 = os_enum("Windows-8.1", os_category.WINDOWS),
     WINDOWS_10 = os_enum("Windows-10", os_category.WINDOWS),
+    WINDOWS_10_1703 = os_enum("Windows-10-15063", os_category.WINDOWS),
+    WINDOWS_10_1909 = os_enum("Windows-10-18363", os_category.WINDOWS),
     WINDOWS_DEFAULT = os_enum("Windows-10", os_category.WINDOWS),
     WINDOWS_ANY = os_enum("Windows", os_category.WINDOWS),
 )
@@ -126,16 +129,16 @@ def xcode_enum(cache_name, cache_path):
 
 # Keep this in-sync with the versions of bots in //ios/build/bots/.
 xcode_cache = struct(
-    x10e1001 = xcode_enum("xcode_ios_10e1001", "xcode_ios_10e1001.app"),
-    x11a1027 = xcode_enum("xcode_ios_11a1027", "xcode_ios_11a1027.app"),
+    # in use by webrtc mac builders
     x11c29 = xcode_enum("xcode_ios_11c29", "xcode_ios_11c29.app"),
-    x11m382q = xcode_enum("xcode_ios_11m382q", "xcode_ios_11m382q.app"),
+    # in use by ci/ios-simulator-cronet and try/ios-simulator-cronet
     x11e146 = xcode_enum("xcode_ios_11e146", "xcode_ios_11e146.app"),
-    x11e608c = xcode_enum("xcode_ios_11e608c", "xcode_ios_11e608c.app"),
+    # in use by ios-webkit-tot
     x11e608cwk = xcode_enum("xcode_ios_11e608cwk", "xcode_ios_11e608cwk.app"),
-    x11e503a_xct12b1 = xcode_enum("xcode_ios_11e503a_xct12b1", "xcode_ios_11e503a_xct12b1.app"),
-    # xc12 GM seed.
+    # (current default) xc12 gm seed
     x12a7209 = xcode_enum("xcode_ios_12a7209", "xcode_ios_12a7209.app"),
+    # Xcode 12.2 beta 1
+    x12b5018i = xcode_enum("xcode_ios_12b5018i", "xcode_ios_12b5018i.app"),
 )
 
 ################################################################################
@@ -143,6 +146,10 @@ xcode_cache = struct(
 ################################################################################
 
 _DEFAULT_BUILDERLESS_OS_CATEGORIES = [os_category.LINUX]
+
+# Macs all have SSDs, so it doesn't make sense to use the default behavior of
+# setting ssd:0 dimension
+_EXCLUDE_BUILDERLESS_SSD_OS_CATEGORIES = [os_category.MAC]
 
 def _chromium_tests_property(*, bucketed_triggers, project_trigger_overrides):
     chromium_tests = {}
@@ -157,7 +164,7 @@ def _chromium_tests_property(*, bucketed_triggers, project_trigger_overrides):
 
     return chromium_tests or None
 
-def _goma_property(*, goma_backend, goma_debug, goma_enable_ats, goma_jobs, goma_use_luci_auth, os):
+def _goma_property(*, goma_backend, goma_debug, goma_enable_ats, goma_jobs, os):
     goma_properties = {}
 
     goma_backend = defaults.get_value("goma_backend", goma_backend)
@@ -187,11 +194,9 @@ def _goma_property(*, goma_backend, goma_debug, goma_enable_ats, goma_jobs, goma
     if goma_jobs != None:
         goma_properties["jobs"] = goma_jobs
 
-    goma_use_luci_auth = defaults.get_value("goma_use_luci_auth", goma_use_luci_auth)
-    if goma_use_luci_auth:
-        goma_properties["use_luci_auth"] = True
+    goma_properties["use_luci_auth"] = True
 
-    return goma_properties or None
+    return goma_properties
 
 def _code_coverage_property(
         *,
@@ -258,7 +263,6 @@ defaults = args.defaults(
     goma_debug = False,
     goma_enable_ats = args.COMPUTE,
     goma_jobs = None,
-    goma_use_luci_auth = None,
     os = None,
     project_trigger_overrides = None,
     pool = None,
@@ -303,7 +307,6 @@ def builder(
         goma_debug = args.DEFAULT,
         goma_enable_ats = args.DEFAULT,
         goma_jobs = args.DEFAULT,
-        goma_use_luci_auth = args.DEFAULT,
         use_clang_coverage = args.DEFAULT,
         use_java_coverage = args.DEFAULT,
         coverage_exclude_sources = args.DEFAULT,
@@ -390,9 +393,6 @@ def builder(
         to be used by the builder. Sets the 'jobs' field of the '$build/goma'
         property will be set according to the enum member. By default, the 'jobs'
         considered None.
-      * goma_use_luci_auth - a boolean indicating whether luci_auth should be
-        used for accessing goma backend. If True, the 'use_luci_auth' field
-        will be set in the '$build/goma' property. By default, considered False.
       * use_clang_coverage - a boolean indicating whether clang coverage should be
         used. If True, the 'use_clang_coverage" field will be set in the
         '$build/code_coverage' property. By default, considered False.
@@ -485,7 +485,10 @@ def builder(
 
     ssd = defaults.get_value("ssd", ssd)
     if ssd == args.COMPUTE:
-        ssd = False if builderless else None
+        ssd = None
+        if (builderless and os != None and
+            os.category not in _EXCLUDE_BUILDERLESS_SSD_OS_CATEGORIES):
+            ssd = False
     if ssd != None:
         dimensions["ssd"] = str(int(ssd))
 
@@ -508,7 +511,6 @@ def builder(
         goma_debug = goma_debug,
         goma_enable_ats = goma_enable_ats,
         goma_jobs = goma_jobs,
-        goma_use_luci_auth = goma_use_luci_auth,
         os = os,
     )
     if goma != None:

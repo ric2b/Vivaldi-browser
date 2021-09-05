@@ -26,8 +26,11 @@
 #include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/supervised_user/kids_management_url_checker_client.h"
 #include "chrome/browser/supervised_user/supervised_user_denylist.h"
+#include "chrome/browser/supervised_user/supervised_user_service.h"
+#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/policy/core/browser/url_util.h"
@@ -76,6 +79,13 @@ GetBehaviorFromSafeSearchClassification(
   }
   NOTREACHED();
   return SupervisedUserURLFilter::BLOCK;
+}
+
+bool IsSameDomain(const GURL& url1, const GURL& url2) {
+  return net::registry_controlled_domains::SameDomainOrHost(
+      url1, url2,
+      net::registry_controlled_domains::PrivateRegistryFilter::
+          EXCLUDE_PRIVATE_REGISTRIES);
 }
 
 }  // namespace
@@ -239,7 +249,7 @@ bool SupervisedUserURLFilter::ShouldSkipParentManualAllowlistFiltering(
       contents->GetOutermostWebContents();
 
   return outer_most_content->GetURL() ==
-         GURL(chrome::kChromeUIEDUCoexistenceLoginURL);
+         GURL(SupervisedUserService::GetEduCoexistenceLoginUrl());
 }
 
 // static
@@ -467,11 +477,18 @@ bool SupervisedUserURLFilter::GetFilteringBehaviorForURLWithAsyncChecks(
     const GURL& url,
     FilteringBehaviorCallback callback,
     bool skip_manual_parent_filter) const {
+  supervised_user_error_page::FilteringBehaviorReason reason =
+      supervised_user_error_page::DEFAULT;
+  FilteringBehavior behavior = GetFilteringBehaviorForURL(url, false, &reason);
+
+  if (behavior == ALLOW && reason != supervised_user_error_page::DEFAULT) {
+    std::move(callback).Run(behavior, reason, false);
+    for (Observer& observer : observers_)
+      observer.OnURLChecked(url, behavior, reason, false);
+    return true;
+  }
+
   if (!skip_manual_parent_filter) {
-    supervised_user_error_page::FilteringBehaviorReason reason =
-        supervised_user_error_page::DEFAULT;
-    FilteringBehavior behavior =
-        GetFilteringBehaviorForURL(url, false, &reason);
     // Any non-default reason trumps the async checker.
     // Also, if we're blocking anyway, then there's no need to check it.
     if (reason != supervised_user_error_page::DEFAULT || behavior == BLOCK ||
@@ -483,16 +500,39 @@ bool SupervisedUserURLFilter::GetFilteringBehaviorForURLWithAsyncChecks(
     }
   }
 
-  if (!async_url_checker_) {
-    std::move(callback).Run(FilteringBehavior::ALLOW,
-                            supervised_user_error_page::DEFAULT, false);
+  // Runs mature url filter if the |async_url_checker_| exists.
+  return RunAsyncChecker(url, std::move(callback));
+}
+
+bool SupervisedUserURLFilter::GetFilteringBehaviorForSubFrameURLWithAsyncChecks(
+    const GURL& url,
+    const GURL& main_frame_url,
+    FilteringBehaviorCallback callback) const {
+  supervised_user_error_page::FilteringBehaviorReason reason =
+      supervised_user_error_page::DEFAULT;
+  FilteringBehavior behavior = GetFilteringBehaviorForURL(url, false, &reason);
+
+  // If the reason is not default, then it is manually allowed or blocked.
+  if (reason != supervised_user_error_page::DEFAULT) {
+    std::move(callback).Run(behavior, reason, false);
+    for (Observer& observer : observers_)
+      observer.OnURLChecked(url, behavior, reason, false);
     return true;
   }
 
-  return async_url_checker_->CheckURL(
-      policy::url_util::Normalize(url),
-      base::BindOnce(&SupervisedUserURLFilter::CheckCallback,
-                     base::Unretained(this), std::move(callback)));
+  // If the reason is default and behavior is block and the subframe url is not
+  // the same domain as the main frame, block the subframe.
+  if (behavior == FilteringBehavior::BLOCK &&
+      !IsSameDomain(url, main_frame_url)) {
+    // It is not in the same domain and is blocked.
+    std::move(callback).Run(behavior, reason, false);
+    for (Observer& observer : observers_)
+      observer.OnURLChecked(url, behavior, reason, false);
+    return true;
+  }
+
+  // Runs mature url filter if the |async_url_checker_| exists.
+  return RunAsyncChecker(url, std::move(callback));
 }
 
 std::map<std::string, base::string16>
@@ -627,6 +667,23 @@ void SupervisedUserURLFilter::RemoveObserver(Observer* observer) {
 void SupervisedUserURLFilter::SetBlockingTaskRunnerForTesting(
     const scoped_refptr<base::TaskRunner>& task_runner) {
   blocking_task_runner_ = task_runner;
+}
+
+bool SupervisedUserURLFilter::RunAsyncChecker(
+    const GURL& url,
+    FilteringBehaviorCallback callback) const {
+  // The parental setting may allow all sites to be visited. In such case, the
+  // |async_url_checker_| will not be created.
+  if (!async_url_checker_) {
+    std::move(callback).Run(FilteringBehavior::ALLOW,
+                            supervised_user_error_page::DEFAULT, false);
+    return true;
+  }
+
+  return async_url_checker_->CheckURL(
+      policy::url_util::Normalize(url),
+      base::BindOnce(&SupervisedUserURLFilter::CheckCallback,
+                     base::Unretained(this), std::move(callback)));
 }
 
 void SupervisedUserURLFilter::SetContents(std::unique_ptr<Contents> contents) {

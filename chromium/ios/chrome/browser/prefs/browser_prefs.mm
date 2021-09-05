@@ -60,6 +60,7 @@
 #import "ios/chrome/browser/metrics/ios_chrome_metrics_service_client.h"
 #include "ios/chrome/browser/notification_promo.h"
 #include "ios/chrome/browser/pref_names.h"
+#include "ios/chrome/browser/prerender/prerender_pref.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_mediator.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_path_cache.h"
@@ -91,6 +92,13 @@ const char kGCMChannelLastCheckTime[] = "gcm.check_time";
 const char kInvalidatorClientId[] = "invalidator.client_id";
 const char kInvalidatorInvalidationState[] = "invalidator.invalidation_state";
 const char kInvalidatorSavedInvalidations[] = "invalidator.saved_invalidations";
+
+// Deprecated 9/2020
+const char kPasswordManagerOnboardingState[] =
+    "profile.password_manager_onboarding_state";
+
+const char kWasOnboardingFeatureCheckedBefore[] =
+    "profile.was_pwm_onboarding_feature_checked_before";
 }
 
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
@@ -165,6 +173,7 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   payments::RegisterProfilePrefs(registry);
   policy::URLBlocklistManager::RegisterProfilePrefs(registry);
   PrefProxyConfigTrackerImpl::RegisterProfilePrefs(registry);
+  prerender_prefs::RegisterNetworkPredictionPrefs(registry);
   RegisterVoiceSearchBrowserStatePrefs(registry);
   safe_browsing::RegisterProfilePrefs(registry);
   sync_sessions::SessionSyncPrefs::RegisterProfilePrefs(registry);
@@ -193,12 +202,6 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterStringPref(prefs::kDefaultCharset,
                                l10n_util::GetStringUTF8(IDS_DEFAULT_ENCODING),
                                user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  registry->RegisterBooleanPref(
-      prefs::kNetworkPredictionEnabled, true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  registry->RegisterBooleanPref(
-      prefs::kNetworkPredictionWifiOnly, true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterStringPref(prefs::kContextualSearchEnabled, std::string(),
                                user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
@@ -227,6 +230,9 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterStringPref(kInvalidatorClientId, std::string());
 
   registry->RegisterBooleanPref(prefs::kPrintingEnabled, true);
+
+  registry->RegisterIntegerPref(kPasswordManagerOnboardingState, 0);
+  registry->RegisterBooleanPref(kWasOnboardingFeatureCheckedBefore, false);
 }
 
 // This method should be periodically pruned of year+ old migrations.
@@ -249,7 +255,6 @@ void MigrateObsoleteBrowserStatePrefs(PrefService* prefs) {
 
   // Added 07/2019.
   syncer::MigrateSyncSuppressedPref(prefs);
-  syncer::ClearObsoleteMemoryPressurePrefs(prefs);
   syncer::MigrateSessionsToProxyTabsPrefs(prefs);
   syncer::ClearObsoleteUserTypePrefs(prefs);
   syncer::ClearObsoleteClearServerDataPrefs(prefs);
@@ -275,4 +280,9 @@ void MigrateObsoleteBrowserStatePrefs(PrefService* prefs) {
   prefs->ClearPref(kInvalidatorSavedInvalidations);
   prefs->ClearPref(kInvalidatorInvalidationState);
   prefs->ClearPref(kInvalidatorClientId);
+
+  // Added 9/2020.
+  prefs->ClearPref(kPasswordManagerOnboardingState);
+  prefs->ClearPref(kWasOnboardingFeatureCheckedBefore);
+  prerender_prefs::MigrateNetworkPredictionPrefs(prefs);
 }

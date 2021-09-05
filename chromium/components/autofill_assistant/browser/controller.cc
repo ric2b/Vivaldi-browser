@@ -118,10 +118,12 @@ bool IsInWhitelist(const std::string& subdomain,
 Controller::Controller(content::WebContents* web_contents,
                        Client* client,
                        const base::TickClock* tick_clock,
+                       RuntimeManagerImpl* runtime_manager,
                        std::unique_ptr<Service> service)
     : content::WebContentsObserver(web_contents),
       client_(client),
       tick_clock_(tick_clock),
+      runtime_manager_(runtime_manager),
       service_(service ? std::move(service)
                        : ServiceImpl::Create(web_contents->GetBrowserContext(),
                                              client_)),
@@ -273,15 +275,50 @@ void Controller::SetProgress(int progress) {
   }
 }
 
+bool Controller::SetProgressActiveStepIdentifier(
+    const std::string& active_step_identifier) {
+  if (!step_progress_bar_configuration_.has_value()) {
+    return false;
+  }
+
+  auto it = std::find_if(
+      step_progress_bar_configuration_->annotated_step_icons().cbegin(),
+      step_progress_bar_configuration_->annotated_step_icons().cend(),
+      [&](const ShowProgressBarProto::StepProgressBarIcon& icon) {
+        return icon.identifier() == active_step_identifier;
+      });
+  if (it == step_progress_bar_configuration_->annotated_step_icons().cend()) {
+    return false;
+  }
+
+  SetProgressActiveStep(std::distance(
+      step_progress_bar_configuration_->annotated_step_icons().cbegin(), it));
+  return true;
+}
+
 void Controller::SetProgressActiveStep(int active_step) {
-  // Step can only increase.
-  if (progress_active_step_ >= active_step) {
+  if (!step_progress_bar_configuration_.has_value()) {
     return;
   }
 
-  progress_active_step_ = active_step;
+  // Default step progress bar has 2 steps.
+  int max_step = std::max(
+      2, step_progress_bar_configuration_->annotated_step_icons().size());
+
+  int new_active_step = active_step;
+  if (active_step < 0 || active_step > max_step) {
+    new_active_step = max_step;
+  }
+
+  // Step can only increase.
+  if (progress_active_step_.has_value() &&
+      *progress_active_step_ >= new_active_step) {
+    return;
+  }
+
+  progress_active_step_ = new_active_step;
   for (ControllerObserver& observer : observers_) {
-    observer.OnProgressActiveStepChanged(active_step);
+    observer.OnProgressActiveStepChanged(new_active_step);
   }
 }
 
@@ -302,10 +339,10 @@ bool Controller::GetProgressVisible() const {
 void Controller::SetStepProgressBarConfiguration(
     const ShowProgressBarProto::StepProgressBarConfiguration& configuration) {
   step_progress_bar_configuration_ = configuration;
-  if (!configuration.step_icons().empty() &&
+  if (!configuration.annotated_step_icons().empty() &&
       progress_active_step_.has_value() &&
-      configuration.step_icons().size() < *progress_active_step_) {
-    progress_active_step_ = configuration.step_icons().size();
+      configuration.annotated_step_icons().size() < *progress_active_step_) {
+    progress_active_step_ = configuration.annotated_step_icons().size();
   }
   for (ControllerObserver& observer : observers_) {
     observer.OnStepProgressBarConfigurationChanged(configuration);
@@ -356,11 +393,16 @@ bool Controller::HasNavigationError() {
 }
 
 void Controller::RequireUI() {
-  if (needs_ui_)
+  if (ui_shown_)
     return;
 
   needs_ui_ = true;
   client_->AttachUI();
+}
+
+void Controller::SetUiShown(bool shown) {
+  ui_shown_ = shown;
+  runtime_manager_->SetUIState(shown ? UIState::kShown : UIState::kNotShown);
 }
 
 void Controller::SetGenericUi(
@@ -722,14 +764,14 @@ bool Controller::EnterState(AutofillAssistantState state) {
     observer.OnStateChanged(state);
   }
 
-  if (!needs_ui_ && StateNeedsUI(state)) {
+  if (!ui_shown_ && StateNeedsUI(state)) {
     RequireUI();
   } else if (needs_ui_ && state == AutofillAssistantState::TRACKING) {
     needs_ui_ = false;
-  } else if (browse_mode_invisible_ && needs_ui_ &&
+  } else if (browse_mode_invisible_ && ui_shown_ &&
              state == AutofillAssistantState::BROWSE) {
-    client_->DestroyUI();
     needs_ui_ = false;
+    client_->DestroyUI();
   }
 
   if (ShouldCheckScripts()) {
@@ -1144,8 +1186,11 @@ bool Controller::Start(const GURL& deeplink_url,
 }
 
 void Controller::ShowFirstMessageAndStart() {
-  // Only show default status message if necessary.
-  if (status_message_.empty()) {
+  // Only show default status message if necessary. Scripts started by lite
+  // scripts that also showed the onboarding do not show the loading message.
+  if (status_message_.empty() &&
+      !(GetTriggerContext()->is_onboarding_shown() &&
+        GetTriggerContext()->WasStartedByTriggerScript())) {
     SetStatusMessage(
         l10n_util::GetStringFUTF8(IDS_AUTOFILL_ASSISTANT_LOADING,
                                   base::UTF8ToUTF16(GetCurrentURL().host())));
@@ -1216,11 +1261,6 @@ void Controller::OnCollectUserDataContinueButtonClicked() {
     return;
 
   auto callback = std::move(collect_user_data_options_->confirm_callback);
-
-  // TODO(crbug.com/806868): succeed is currently always true, but we might want
-  // to set it to false and propagate the result to CollectUserDataAction
-  // when the user clicks "Cancel" during that action.
-  user_data_->succeed_ = true;
 
   SetCollectUserDataOptions(nullptr);
   std::move(callback).Run(user_data_.get(), &user_model_);
@@ -1777,8 +1817,11 @@ void Controller::DidStartNavigation(
     return;
   }
 
-  // The following types of navigations are allowed for the main frame, when
-  // in PROMPT state:
+  // In lite scripts, navigations are allowed (the lite script will fail if the
+  // trigger condition stops being true).
+  //
+  // In regular scripts, the following types of navigations are allowed for the
+  // main frame, when in PROMPT state:
   //  - first-time URL load
   //  - script-directed navigation, while a script is running unless
   //    there's a touchable area.
@@ -1793,7 +1836,7 @@ void Controller::DidStartNavigation(
   // Everything else, such as going back to a previous page, or refreshing the
   // page is considered an end condition. If going back to a previous page is
   // required, consider using the BROWSE state instead.
-  if (state_ == AutofillAssistantState::PROMPT &&
+  if (!IsRunningLiteScript() && state_ == AutofillAssistantState::PROMPT &&
       web_contents()->GetLastCommittedURL().is_valid() &&
       !navigation_handle->WasServerRedirect() &&
       !navigation_handle->IsRendererInitiated()) {
@@ -1802,17 +1845,14 @@ void Controller::DidStartNavigation(
     return;
   }
 
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillAssistantBreakOnRunningNavigation)) {
-    // When in RUNNING state, all renderer initiated navigation is allowed,
-    // user initiated navigation will cause an error.
-    if (state_ == AutofillAssistantState::RUNNING &&
-        !navigation_handle->WasServerRedirect() &&
-        !navigation_handle->IsRendererInitiated()) {
-      OnScriptError(l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_GIVE_UP),
-                    Metrics::DropOutReason::NAVIGATION_WHILE_RUNNING);
-      return;
-    }
+  // When in RUNNING state, all renderer initiated navigation is allowed,
+  // user initiated navigation will cause an error.
+  if (state_ == AutofillAssistantState::RUNNING &&
+      !navigation_handle->WasServerRedirect() &&
+      !navigation_handle->IsRendererInitiated()) {
+    OnScriptError(l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_GIVE_UP),
+                  Metrics::DropOutReason::NAVIGATION_WHILE_RUNNING);
+    return;
   }
 
   // Note that BROWSE state end conditions are in DidFinishNavigation, in order
@@ -1949,6 +1989,7 @@ void Controller::WriteUserData(
   for (ControllerObserver& observer : observers_) {
     observer.OnUserDataChanged(user_data_.get(), field_change);
   }
+  UpdateCollectUserDataActions();
 }
 
 bool Controller::StateNeedsUI(AutofillAssistantState state) {

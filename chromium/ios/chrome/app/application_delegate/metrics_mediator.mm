@@ -7,7 +7,7 @@
 #include <sys/sysctl.h>
 
 #include "base/bind.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/post_task.h"
@@ -32,6 +32,7 @@
 #import "ios/chrome/browser/ui/main/browser_interface_provider.h"
 #import "ios/chrome/browser/ui/main/connection_information.h"
 #import "ios/chrome/browser/ui/main/scene_state.h"
+#import "ios/chrome/browser/ui/ntp/ntp_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #include "ios/chrome/common/app_group/app_group_metrics_mainapp.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
@@ -110,6 +111,10 @@ using metrics_mediator::kAppEnteredBackgroundDateKey;
 + (void)recordNumTabAtStartup:(int)numTabs;
 // Logs the number of tabs with UMAHistogramCount100 and allows testing.
 + (void)recordNumTabAtResume:(int)numTabs;
+// Logs the number of NTP tabs with UMAHistogramCount100 and allows testing.
++ (void)recordNumNTPTabAtStartup:(int)numTabs;
+// Logs the number of NTP tabs with UMAHistogramCount100 and allows testing.
++ (void)recordNumNTPTabAtResume:(int)numTabs;
 
 @end
 
@@ -128,14 +133,15 @@ using metrics_mediator::kAppEnteredBackgroundDateKey;
   const base::TimeDelta startDurationFromProcess =
       TimeDeltaSinceAppLaunchFromProcess();
 
-  UMA_HISTOGRAM_TIMES("Startup.ColdStartFromProcessCreationTime",
-                      startDurationFromProcess);
+  base::UmaHistogramTimes("Startup.ColdStartFromProcessCreationTime",
+                          startDurationFromProcess);
 
   if ([connectionInformation startupParameters]) {
-    UMA_HISTOGRAM_TIMES("Startup.ColdStartWithExternalURLTime", startDuration);
+    base::UmaHistogramTimes("Startup.ColdStartWithExternalURLTime",
+                            startDuration);
   } else {
-    UMA_HISTOGRAM_TIMES("Startup.ColdStartWithoutExternalURLTime",
-                        startDuration);
+    base::UmaHistogramTimes("Startup.ColdStartWithoutExternalURLTime",
+                            startDuration);
   }
 }
 
@@ -149,6 +155,7 @@ using metrics_mediator::kAppEnteredBackgroundDateKey;
             (id<StartupInformation>)startupInformation
                                connectedScenes:(NSArray<SceneState*>*)scenes {
   int numTabs = 0;
+  int numNTPTabs = 0;
   for (SceneState* scene in scenes) {
     if (!scene.interfaceProvider) {
       // The scene might not yet be initiated.
@@ -156,14 +163,23 @@ using metrics_mediator::kAppEnteredBackgroundDateKey;
       // counted in sessions instead of scenes.
       continue;
     }
-    numTabs += scene.interfaceProvider.mainInterface.browser->GetWebStateList()
-                   ->count();
+
+    const WebStateList* web_state_list =
+        scene.interfaceProvider.mainInterface.browser->GetWebStateList();
+    numTabs += web_state_list->count();
+    for (int i = 0; i < web_state_list->count(); i++) {
+      if (IsURLNewTabPage(web_state_list->GetWebStateAt(i)->GetVisibleURL())) {
+        numNTPTabs++;
+      }
+    }
   }
 
   if (startupInformation.isColdStart) {
     [self recordNumTabAtStartup:numTabs];
+    [self recordNumNTPTabAtStartup:numNTPTabs];
   } else {
     [self recordNumTabAtResume:numTabs];
+    [self recordNumNTPTabAtResume:numNTPTabs];
   }
 
   if (UIAccessibilityIsVoiceOverRunning()) {
@@ -377,8 +393,19 @@ using metrics_mediator::kAppEnteredBackgroundDateKey;
 
 + (void)applicationDidEnterBackground:(NSInteger)memoryWarningCount {
   base::RecordAction(base::UserMetricsAction("MobileEnteredBackground"));
-  UMA_HISTOGRAM_COUNTS_100("MemoryWarning.OccurrencesPerSession",
-                           memoryWarningCount);
+  base::UmaHistogramCounts100("MemoryWarning.OccurrencesPerSession",
+                              memoryWarningCount);
+
+  task_vm_info task_info_data;
+  mach_msg_type_number_t count = sizeof(task_vm_info) / sizeof(natural_t);
+  kern_return_t result =
+      task_info(mach_task_self(), TASK_VM_INFO,
+                reinterpret_cast<task_info_t>(&task_info_data), &count);
+  if (result == KERN_SUCCESS) {
+    mach_vm_size_t footprint_mb = task_info_data.phys_footprint / 1024 / 1024;
+    base::UmaHistogramMemoryLargeMB(
+        "Memory.Browser.MemoryFootprint.OnBackground", footprint_mb);
+  }
 }
 
 #pragma mark - CRConnectionTypeObserverBridge implementation
@@ -408,11 +435,19 @@ using metrics_mediator::kAppEnteredBackgroundDateKey;
 #pragma mark - interfaces methods
 
 + (void)recordNumTabAtStartup:(int)numTabs {
-  UMA_HISTOGRAM_COUNTS_100("Tabs.CountAtStartup", numTabs);
+  base::UmaHistogramCounts100("Tabs.CountAtStartup", numTabs);
 }
 
 + (void)recordNumTabAtResume:(int)numTabs {
-  UMA_HISTOGRAM_COUNTS_100("Tabs.CountAtResume", numTabs);
+  base::UmaHistogramCounts100("Tabs.CountAtResume", numTabs);
+}
+
++ (void)recordNumNTPTabAtStartup:(int)numTabs {
+  base::UmaHistogramCounts100("Tabs.NTPCountAtStartup", numTabs);
+}
+
++ (void)recordNumNTPTabAtResume:(int)numTabs {
+  base::UmaHistogramCounts100("Tabs.NTPCountAtResume", numTabs);
 }
 
 - (void)setBreakpadUploadingEnabled:(BOOL)enableUploading {

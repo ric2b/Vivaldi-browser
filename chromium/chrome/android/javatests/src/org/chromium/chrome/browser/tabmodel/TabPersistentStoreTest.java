@@ -28,12 +28,14 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.browser.accessibility_tab_switcher.OverviewListLayout;
 import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.app.tabmodel.AsyncTabParamsManagerSingleton;
 import org.chromium.chrome.browser.app.tabmodel.ChromeTabModelFilterFactory;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelper;
 import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tab.TabState;
@@ -110,25 +112,27 @@ public class TabPersistentStoreTest {
                         }
                     });
             mTabModelOrderController = new TabModelOrderControllerImpl(this);
+            NextTabPolicySupplier nextTabPolicySupplier = () -> NextTabPolicy.HIERARCHICAL;
 
             Callable<TabModelImpl> callable = new Callable<TabModelImpl>() {
                 @Override
                 public TabModelImpl call() {
-                    return new TabModelImpl(false, false,
+                    return new TabModelImpl(Profile.getLastUsedRegularProfile(), false,
                             getTabCreatorManager().getTabCreator(false),
                             getTabCreatorManager().getTabCreator(true), null,
                             mTabModelOrderController, null, mTabPersistentStore,
-                            ()
-                                    -> NextTabPolicy.HIERARCHICAL,
-                            AsyncTabParamsManager.getInstance(), TestTabModelSelector.this, true);
+                            nextTabPolicySupplier, AsyncTabParamsManagerSingleton.getInstance(),
+                            TestTabModelSelector.this, true);
                 }
             };
             TabModelImpl regularTabModel = TestThreadUtils.runOnUiThreadBlocking(callable);
-            TabModel incognitoTabModel = new IncognitoTabModel(new IncognitoTabModelImplCreator(
-                    getTabCreatorManager().getTabCreator(false),
-                    getTabCreatorManager().getTabCreator(true), null, mTabModelOrderController,
-                    null, mTabPersistentStore,
-                    () -> NextTabPolicy.HIERARCHICAL, AsyncTabParamsManager.getInstance(), this));
+            IncognitoTabModel incognitoTabModel =
+                    new IncognitoTabModelImpl(new IncognitoTabModelImplCreator(null,
+                            getTabCreatorManager().getTabCreator(false),
+                            getTabCreatorManager().getTabCreator(true), null,
+                            mTabModelOrderController, null, mTabPersistentStore,
+                            nextTabPolicySupplier, AsyncTabParamsManagerSingleton.getInstance(),
+                            this));
             initialize(regularTabModel, incognitoTabModel);
         }
 

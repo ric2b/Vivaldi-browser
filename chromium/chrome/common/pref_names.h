@@ -175,6 +175,10 @@ extern const char kContextualSearchEnabledValue[];
 extern const char kShowInternalAccessibilityTree[];
 extern const char kAccessibilityImageLabelsEnabled[];
 extern const char kAccessibilityImageLabelsOptInAccepted[];
+#if defined(OS_ANDROID)
+extern const char kAccessibilityImageLabelsEnabledAndroid[];
+extern const char kAccessibilityImageLabelsOnlyOnWifi[];
+#endif
 #if !defined(OS_CHROMEOS)
 extern const char kAccessibilityFocusHighlightEnabled[];
 #endif
@@ -187,8 +191,10 @@ extern const char kAccessibilityCaptionsTextShadow[];
 extern const char kAccessibilityCaptionsBackgroundOpacity[];
 #if !defined(OS_ANDROID)
 extern const char kLiveCaptionEnabled[];
+extern const char kLiveCaptionLanguageCode[];
 extern const char kSodaBinaryPath[];
 extern const char kSodaEnUsConfigPath[];
+extern const char kSodaJaJpConfigPath[];
 #endif
 #if defined(OS_MAC)
 extern const char kConfirmToQuitEnabled[];
@@ -256,13 +262,11 @@ extern const char kLastSessionType[];
 extern const char kLastSessionLength[];
 extern const char kTermsOfServiceURL[];
 extern const char kAttestationEnabled[];
-extern const char kAttestationExtensionWhitelist[];
+extern const char kAttestationExtensionAllowlist[];
 extern const char kMultiProfileNeverShowIntro[];
 extern const char kMultiProfileWarningShowDismissed[];
 extern const char kMultiProfileUserBehavior[];
 extern const char kFirstRunTutorialShown[];
-extern const char kSAMLOfflineSigninTimeLimit[];
-extern const char kSAMLLastGAIASignInTime[];
 extern const char kTimeOnOobe[];
 extern const char kFileSystemProviderMounted[];
 extern const char kTouchVirtualKeyboardEnabled[];
@@ -282,7 +286,7 @@ extern const char kFirstEolWarningDismissed[];
 extern const char kSecondEolWarningDismissed[];
 extern const char kPinUnlockFeatureNotificationShown[];
 extern const char kFingerprintUnlockFeatureNotificationShown[];
-extern const char kQuickUnlockModeWhitelist[];
+extern const char kQuickUnlockModeAllowlist[];
 extern const char kQuickUnlockTimeout[];
 extern const char kPinUnlockMinimumLength[];
 extern const char kPinUnlockMaximumLength[];
@@ -324,7 +328,8 @@ extern const char kPerAppTimeLimitsLastSuccessfulReportTime[];
 extern const char kPerAppTimeLimitsLatestLimitUpdateTime[];
 extern const char kPerAppTimeLimitsPolicy[];
 extern const char kPerAppTimeLimitsAllowlistPolicy[];
-extern const char kFamilyUserMetricsSessionEngagementStartTime[];
+extern const char kFamilyUserMetricsDayId[];
+extern const char kFamilyUserMetricsSessionEngagementDuration[];
 extern const char kDeviceWallpaperImageFilePath[];
 extern const char kKerberosRememberPasswordEnabled[];
 extern const char kKerberosAddAccountsAllowed[];
@@ -374,7 +379,6 @@ extern const char kRunAllFlashInAllowMode[];
 extern const char kPluginsMetadata[];
 extern const char kPluginsResourceCacheUpdate[];
 #endif
-extern const char kPluginsDeprecationInfobarLastShown[];
 extern const char kDefaultBrowserLastDeclined[];
 extern const char kResetCheckDefaultBrowser[];
 extern const char kDefaultBrowserSettingEnabled[];
@@ -395,7 +399,6 @@ extern const char kPinnedTabs[];
 #endif  // !defined(OS_ANDROID)
 
 extern const char kDisable3DAPIs[];
-extern const char kEnableDeprecatedWebPlatformFeatures[];
 extern const char kEnableHyperlinkAuditing[];
 extern const char kEnableReferrers[];
 extern const char kEnableDoNotTrack[];
@@ -461,7 +464,7 @@ extern const char kPrintingPinDefault[];
 extern const char kPrintingSendUsernameAndFilenameEnabled[];
 extern const char kPrintingMaxSheetsAllowed[];
 extern const char kPrintJobHistoryExpirationPeriod[];
-extern const char kPrintingAPIExtensionsWhitelist[];
+extern const char kPrintingAPIExtensionsAllowlist[];
 extern const char kDeletePrintJobHistoryAllowed[];
 #endif  // OS_CHROMEOS
 
@@ -500,6 +503,7 @@ extern const char kWebRTCIPHandlingPolicy[];
 extern const char kWebRTCUDPPortRange[];
 extern const char kWebRtcEventLogCollectionAllowed[];
 extern const char kWebRtcLocalIpsAllowedUrls[];
+extern const char kWebRTCAllowLegacyTLSProtocols[];
 
 #if !defined(OS_ANDROID)
 extern const char kHasSeenWelcomePage[];
@@ -509,12 +513,6 @@ extern const char kHasSeenWelcomePage[];
 // Only used in branded builds.
 extern const char kNaviOnboardGroup[];
 #endif  // defined(OS_WIN)
-
-// Deprecated preference for metric / crash reporting on Android. Use
-// kMetricsReportingEnabled instead.
-#if defined(OS_ANDROID)
-extern const char kCrashReportingEnabled[];
-#endif  // defined(OS_ANDROID)
 
 extern const char kQuietNotificationPermissionShouldShowPromo[];
 extern const char kQuietNotificationPermissionPromoWasShown[];
@@ -693,6 +691,7 @@ extern const char kDeviceSettingsCache[];
 extern const char kHardwareKeyboardLayout[];
 extern const char kShouldAutoEnroll[];
 extern const char kAutoEnrollmentPowerLimit[];
+extern const char kShouldRetrieveDeviceState[];
 extern const char kDeviceActivityTimes[];
 extern const char kAppActivityTimes[];
 extern const char kUserActivityTimes[];
@@ -748,9 +747,6 @@ extern const char kAutoScreenBrightnessMetricsSupportedAlsUserAdjustmentCount[];
 extern const char
     kAutoScreenBrightnessMetricsUnsupportedAlsUserAdjustmentCount[];
 extern const char kKnownUserParentAccessCodeConfig[];
-extern const char kSamlInSessionPasswordChangeEnabled[];
-extern const char kSamlPasswordExpirationAdvanceWarningDays[];
-extern const char kSamlLockScreenReauthenticationEnabled[];
 extern const char kLastRsuDeviceIdUploaded[];
 
 #endif  // defined(OS_CHROMEOS)
@@ -877,6 +873,7 @@ extern const char kAppListLocalState[];
 #endif
 
 extern const char kAppShortcutsVersion[];
+extern const char kAppShortcutsArch[];
 
 extern const char kDRMSalt[];
 extern const char kEnableDRM[];
@@ -928,12 +925,6 @@ extern const char kAllowDinosaurEasterEgg[];
 extern const char kClickedUpdateMenuItem[];
 extern const char kLatestVersionWhenClickedUpdateMenuItem[];
 #endif
-
-extern const char kMediaRouterCloudServicesPrefSet[];
-extern const char kMediaRouterEnableCloudServices[];
-extern const char kMediaRouterFirstRunFlowAcknowledged[];
-extern const char kMediaRouterMediaRemotingEnabled[];
-extern const char kMediaRouterTabMirroringSources[];
 
 extern const char kOriginTrialPublicKey[];
 extern const char kOriginTrialDisabledFeatures[];

@@ -765,6 +765,7 @@ std::pair<gfx::RRectF, bool> GetRoundedCornerRRect(
 }
 
 void UpdateRenderTarget(EffectTree* effect_tree) {
+  int last_backdrop_filter = kInvalidNodeId;
   for (int i = EffectTree::kContentsRootNodeId;
        i < static_cast<int>(effect_tree->size()); ++i) {
     EffectNode* node = effect_tree->Node(i);
@@ -776,6 +777,29 @@ void UpdateRenderTarget(EffectTree* effect_tree) {
     } else {
       node->target_id = effect_tree->parent(node)->target_id;
     }
+    if (!node->backdrop_filters.IsEmpty() ||
+        node->has_potential_backdrop_filter_animation)
+      last_backdrop_filter = node->id;
+    node->affected_by_backdrop_filter = false;
+  }
+
+  if (last_backdrop_filter == kInvalidNodeId)
+    return;
+
+  // Update effect nodes for the backdrop filter due to the target id change.
+  int current_target_id = effect_tree->Node(last_backdrop_filter)->target_id;
+  for (int i = last_backdrop_filter - 1; EffectTree::kContentsRootNodeId <= i;
+       --i) {
+    EffectNode* node = effect_tree->Node(i);
+    node->affected_by_backdrop_filter = current_target_id <= i ? true : false;
+    if (node->id == current_target_id)
+      current_target_id = kInvalidNodeId;
+    // While down to kContentsRootNodeId, move |current_target_id| forward if
+    // |node| has backdrop filter.
+    if ((!node->backdrop_filters.IsEmpty() ||
+         node->has_potential_backdrop_filter_animation) &&
+        current_target_id == kInvalidNodeId)
+      current_target_id = node->target_id;
   }
 }
 
@@ -939,12 +963,16 @@ void ComputeInitialRenderSurfaceList(LayerTreeImpl* layer_tree_impl,
     bool skip_layer = !is_root && (skip_draw_properties_computation ||
                                    skip_for_invertibility);
 
+    TransformNode* transform_noe =
+        property_trees->transform_tree.Node(layer->transform_tree_index());
+    const bool has_will_change_transform_hint =
+        transform_noe && transform_noe->will_change_transform;
     // Raster layers that are animated but currently have a non-invertible
     // matrix, or layers that have a will-change transform hint and might
     // animate to not be backface visible soon.
     layer->set_raster_even_if_not_drawn(
         (skip_for_invertibility && !skip_draw_properties_computation) ||
-        layer->has_will_change_transform_hint());
+        has_will_change_transform_hint);
     if (skip_layer)
       continue;
 

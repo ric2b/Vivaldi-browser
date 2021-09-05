@@ -9,6 +9,7 @@
 
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/position_with_affinity.h"
+#include "third_party/blink/renderer/core/editing/visible_units.h"
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/layout_analyzer.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
@@ -35,7 +36,6 @@ LayoutNGBlockFlowMixin<Base>::LayoutNGBlockFlowMixin(Element* element)
   static_assert(std::is_base_of<LayoutBlockFlow, Base>::value,
                 "Base class of LayoutNGBlockFlowMixin must be LayoutBlockFlow "
                 "or derived class.");
-  DCHECK(!element || !element->ShouldForceLegacyLayout());
 }
 
 template <typename Base>
@@ -75,7 +75,7 @@ void LayoutNGBlockFlowMixin<Base>::ClearNGInlineNodeData() {
 
 template <typename Base>
 void LayoutNGBlockFlowMixin<Base>::AddLayoutOverflowFromChildren() {
-  if (Base::LayoutBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren))
+  if (Base::ChildLayoutBlockedByDisplayLock())
     return;
 
   // |ComputeOverflow()| calls this, which is called from
@@ -183,8 +183,7 @@ template <typename Base>
 void LayoutNGBlockFlowMixin<Base>::Paint(const PaintInfo& paint_info) const {
   // Avoid painting dirty objects because descendants maybe already destroyed.
   if (UNLIKELY(Base::NeedsLayout() &&
-               !Base::LayoutBlockedByDisplayLock(
-                   DisplayLockLifecycleTarget::kChildren))) {
+               !Base::ChildLayoutBlockedByDisplayLock())) {
     NOTREACHED();
     return;
   }
@@ -221,14 +220,14 @@ bool LayoutNGBlockFlowMixin<Base>::NodeAtPoint(
     if (!Base::IsEffectiveRootScroller()) {
       // Check if we need to do anything at all.
       // If we have clipping, then we can't have any spillout.
-      PhysicalRect overflow_box = Base::HasOverflowClip()
+      PhysicalRect overflow_box = Base::IsScrollContainer()
                                       ? Base::PhysicalBorderBoxRect()
                                       : Base::PhysicalVisualOverflowRect();
       overflow_box.Move(accumulated_offset);
       if (!hit_test_location.Intersects(overflow_box))
         return false;
     }
-    if (Base::IsInSelfHitTestingPhase(action) && Base::HasOverflowClip() &&
+    if (Base::IsInSelfHitTestingPhase(action) && Base::IsScrollContainer() &&
         Base::HitTestOverflowControl(result, hit_test_location,
                                      accumulated_offset))
       return true;

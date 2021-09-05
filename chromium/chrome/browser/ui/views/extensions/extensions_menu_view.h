@@ -15,7 +15,6 @@
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
-#include "ui/views/controls/button/button.h"
 
 namespace views {
 class Button;
@@ -37,6 +36,8 @@ class ExtensionsMenuView : public views::BubbleDialogDelegateView,
                      Browser* browser,
                      ExtensionsContainer* extensions_container,
                      bool allow_pinning);
+  ExtensionsMenuView(const ExtensionsMenuView&) = delete;
+  ExtensionsMenuView& operator=(const ExtensionsMenuView&) = delete;
   ~ExtensionsMenuView() override;
 
   // Displays the ExtensionsMenu under |anchor_view|, attached to |browser|, and
@@ -102,18 +103,6 @@ class ExtensionsMenuView : public views::BubbleDialogDelegateView,
   // the view directly is more friendly to unit test setups.
   static base::AutoReset<bool> AllowInstancesForTesting();
 
- private:
-  class ButtonListener : public views::ButtonListener {
-   public:
-    explicit ButtonListener(Browser* browser);
-
-    // views::ButtonListener:
-    void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
-   private:
-    Browser* const browser_;
-  };
-
   // A "section" within the menu, based on the extension's current access to
   // the page.
   struct Section {
@@ -176,7 +165,6 @@ class ExtensionsMenuView : public views::BubbleDialogDelegateView,
   ToolbarActionsModel* const toolbar_model_;
   ScopedObserver<ToolbarActionsModel, ToolbarActionsModel::Observer>
       toolbar_model_observer_;
-  ButtonListener button_listener_;
   std::vector<ExtensionsMenuItemView*> extensions_menu_items_;
 
   views::Button* manage_extensions_button_for_testing_ = nullptr;
@@ -185,8 +173,6 @@ class ExtensionsMenuView : public views::BubbleDialogDelegateView,
   Section cant_access_;
   Section wants_access_;
   Section has_access_;
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionsMenuView);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSIONS_MENU_VIEW_H_

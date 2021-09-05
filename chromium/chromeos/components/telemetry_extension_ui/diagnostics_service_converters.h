@@ -14,11 +14,11 @@
 #include <vector>
 
 #include "chromeos/components/telemetry_extension_ui/mojom/diagnostics_service.mojom-forward.h"
-#include "chromeos/services/cros_healthd/public/mojom/cros_healthd_diagnostics.mojom-forward.h"
+#include "chromeos/services/cros_healthd/public/mojom/cros_healthd_diagnostics.mojom.h"
 #include "mojo/public/cpp/system/handle.h"
 
 namespace chromeos {
-namespace diagnostics_service_converters {
+namespace converters {
 
 // This file contains helper functions used by DiagnosticsService to convert its
 // types to/from cros_healthd DiagnosticsService types.
@@ -37,7 +37,13 @@ health::mojom::InteractiveRoutineUpdatePtr UncheckedConvertPtr(
 health::mojom::NonInteractiveRoutineUpdatePtr UncheckedConvertPtr(
     cros_healthd::mojom::NonInteractiveRoutineUpdatePtr input);
 
+health::mojom::RunRoutineResponsePtr UncheckedConvertPtr(
+    cros_healthd::mojom::RunRoutineResponsePtr input);
+
 }  // namespace unchecked
+
+base::Optional<health::mojom::DiagnosticRoutineEnum> Convert(
+    cros_healthd::mojom::DiagnosticRoutineEnum input);
 
 std::vector<health::mojom::DiagnosticRoutineEnum> Convert(
     const std::vector<cros_healthd::mojom::DiagnosticRoutineEnum>& input);
@@ -51,15 +57,16 @@ health::mojom::DiagnosticRoutineStatusEnum Convert(
 cros_healthd::mojom::DiagnosticRoutineCommandEnum Convert(
     health::mojom::DiagnosticRoutineCommandEnum input);
 
-std::string Convert(mojo::ScopedHandle handle);
+cros_healthd::mojom::AcPowerStatusEnum Convert(
+    health::mojom::AcPowerStatusEnum input);
 
-template <class InputT>
-auto ConvertPtr(InputT input) {
-  return (!input.is_null()) ? unchecked::UncheckedConvertPtr(std::move(input))
-                            : nullptr;
-}
+cros_healthd::mojom::NvmeSelfTestTypeEnum Convert(
+    health::mojom::NvmeSelfTestTypeEnum input);
 
-}  // namespace diagnostics_service_converters
+cros_healthd::mojom::DiskReadRoutineTypeEnum Convert(
+    health::mojom::DiskReadRoutineTypeEnum input);
+
+}  // namespace converters
 }  // namespace chromeos
 
 #endif  // CHROMEOS_COMPONENTS_TELEMETRY_EXTENSION_UI_DIAGNOSTICS_SERVICE_CONVERTERS_H_

@@ -5,7 +5,7 @@
 
 #include "base/supports_user_data.h"
 #include "chromium/content/common/content_export.h" // nogncheck
-#include "third_party/blink/public/common/page/web_drag_operation.h"
+#include "third_party/blink/public/common/page/drag_operation.h"
 
 namespace blink {
 class WebMouseEvent;
@@ -32,57 +32,70 @@ class CONTENT_EXPORT VivaldiEventHooks : public base::SupportsUserData::Data {
   // drag operation.
   static const int DRAG_CANCEL = 1 << 30;
 
-  static const void* UserDataKey();
-
-  static VivaldiEventHooks* FromRootView(
-      content::RenderWidgetHostViewBase* root_view);
-
-  static VivaldiEventHooks* FromRenderWidgetHost(
-      content::RenderWidgetHostImpl* widget_host);
-
-  static VivaldiEventHooks* FromWebContents(content::WebContents* web_contents);
-
-  // Handle a keyboard event before it is send to the renderer process. Return
-  // true to stop further event propagation or false to allow normal event flow.
-  virtual bool HandleKeyboardEvent(
-      const content::NativeWebKeyboardEvent& event) = 0;
-
   // Check for a mouse gesture event before it is dispatched to the web page
   // or default chromium handlers. Return true to stop further event
   // propagation or false to allow normal event flow.
-  virtual bool HandleMouseEvent(content::RenderWidgetHostViewBase* root_view,
-                                const blink::WebMouseEvent& event) = 0;
+  static bool HandleMouseEvent(content::RenderWidgetHostViewBase* root_view,
+                                const blink::WebMouseEvent& event);
 
   // Check for a wheel gesture event before it is dispatched to the web page
   // or default chromium handlers. Return true to stop further event
   // propagation or false to allow normal event flow.
-  virtual bool HandleWheelEvent(content::RenderWidgetHostViewBase* root_view,
+  static bool HandleWheelEvent(content::RenderWidgetHostViewBase* root_view,
                                 const blink::WebMouseWheelEvent& event,
-                                const ui::LatencyInfo& latency) = 0;
+                                const ui::LatencyInfo& latency);
 
-  // Check for a wheel gesture after the event was not consumed by a child view.
-  // If the event targets the root view, child_view is null. Compared with
-  // HandleWheelEvent in the latter case the hook is called after it is known
-  // for sure that the event targets the root view, not any of its ancestors.
-  // Return true to stop further event propagation or false to allow normal
-  // event flow.
-  virtual bool HandleWheelEventAfterChild(
+  // Check for a wheel gesture after the event was not consumed by any child
+  // view. Return true to stop further event propagation or false to allow
+  // normal event flow.
+  static bool HandleWheelEventAfterChild(
       content::RenderWidgetHostViewBase* root_view,
-      content::RenderWidgetHostViewBase* child_view,
-      const blink::WebMouseWheelEvent& event) = 0;
+      const blink::WebMouseWheelEvent& event);
+
+  // Handle a keyboard event before it is send to the renderer process. Return
+  // true to stop further event propagation or false to allow normal event flow.
+  static bool HandleKeyboardEvent(content::RenderWidgetHostImpl* widget_host,
+                                  const content::NativeWebKeyboardEvent& event);
 
   // Hook to notify UI about the end of the drag operation and pointer position
   // when the user released the pointer. Return true to prevent any default
   // action in Chromium. cancelled indicate that the platform API indicated
   // explicitly cancelled drag (currently can be true only on Windows).
-  virtual bool HandleDragEnd(blink::WebDragOperation operation,
-                             bool cancelled,
-                             int screen_x,
-                             int screen_y) = 0;
+  static bool HandleDragEnd(content::WebContents* web_contents,
+                            blink::DragOperation operation,
+                            bool cancelled,
+                            int screen_x,
+                            int screen_y);
+
+ protected:
+  static bool HasInstance();
+
+  static void InitInstance(VivaldiEventHooks& instance);
+
+  virtual bool DoHandleMouseEvent(
+      content::RenderWidgetHostViewBase* root_view,
+      const blink::WebMouseEvent& event) = 0;
+
+  virtual bool DoHandleWheelEvent(content::RenderWidgetHostViewBase* root_view,
+                                const blink::WebMouseWheelEvent& event,
+                                const ui::LatencyInfo& latency) = 0;
+
+  virtual bool DoHandleWheelEventAfterChild(
+      content::RenderWidgetHostViewBase* root_view,
+      const blink::WebMouseWheelEvent& event) = 0;
+
+  virtual bool DoHandleKeyboardEvent(
+      content::RenderWidgetHostImpl* widget_host,
+      const content::NativeWebKeyboardEvent& event) = 0;
+
+  virtual bool DoHandleDragEnd(content::WebContents* web_contents,
+                               blink::DragOperation operation,
+                               bool cancelled,
+                               int screen_x,
+                               int screen_y) = 0;
 
  private:
-  static VivaldiEventHooks* FromOutermostContents(
-      content::WebContents* web_contents);
+  static VivaldiEventHooks* instance_;
 };
 
 #endif  // UI_CONTENT_VIVALDI_EVENT_HOOKS_H_

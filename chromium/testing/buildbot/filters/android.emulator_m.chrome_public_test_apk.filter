@@ -42,12 +42,6 @@
 # crbug.com/1061214
 -org.chromium.chrome.browser.customtabs.CustomTabActivityTest.testHiddenTabAndChangingFragmentDontWait
 
-# crbug.com/1036553
--org.chromium.chrome.browser.translate.TranslateCompactInfoBarTest.testTabMenuDismissedOnOrientationChange
--org.chromium.chrome.browser.translate.TranslateCompactInfoBarTest.testTranslateCompactInfoBarAppears
--org.chromium.chrome.browser.translate.TranslateCompactInfoBarTest.testTranslateCompactInfoBarOverflowMenus
--org.chromium.chrome.browser.translate.TranslateCompactInfoBarTest.testTranslateCompactInfoBarReopenOnTarget
-
 # crbug.com/1041233
 -org.chromium.chrome.browser.gesturenav.NavigationHandlerTest.testSwipeNavigateOnNativePage
 -org.chromium.chrome.browser.gesturenav.NavigationHandlerTest.testSwipeNavigateOnRenderedPage
@@ -73,3 +67,15 @@
 # crbug.com/1112812
 -org.chromium.chrome.browser.autofill_assistant.AutofillAssistantAutostartTest.testAutostart
 -org.chromium.chrome.browser.autofill.AutofillUpstreamTest.testSaveCardInfoBarWithEmptyYear
+
+# crbug.com/1061178
+-org.chromium.chrome.browser.tasks.tab_management.TabGridDialogTest.testSwipeToDismiss_Dialog
+
+# crbug.com/1077552
+-org.chromium.chrome.features.start_surface.StartSurfaceLayoutTest.testRenderGrid_Incognito
+-org.chromium.chrome.features.start_surface.StartSurfaceLayoutTest.testRenderGrid_10WebTabs
+-org.chromium.chrome.features.start_surface.StartSurfaceLayoutTest.testRenderGrid_10WebTabs_InitialScroll
+
+# crbug.com/1130621
+-org.chromium.chrome.features.start_surface.StartSurfaceLayoutTest.testShowOnlyOneTabSuggestionMessageCard_withSoftCleanup
+-org.chromium.chrome.features.start_surface.StartSurfaceLayoutTest.testShowOnlyOneTabSuggestionMessageCard_withHardCleanup

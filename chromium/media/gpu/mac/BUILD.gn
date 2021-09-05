@@ -8,7 +8,6 @@ import("//media/gpu/args.gni")
 import("//media/media_options.gni")
 import("//tools/generate_stubs/rules.gni")
 import("//ui/gl/features.gni")
-import("//ui/ozone/ozone.gni")
 
 assert(is_mac)
 
@@ -47,6 +46,7 @@ source_set("mac") {
     ":vt_beta_stubs",
     "//base",
     "//components/crash/core/common:crash_key",
+    "//gpu/command_buffer/service:gles2",
     "//gpu/ipc/service",
     "//media",
     "//media/gpu:common",

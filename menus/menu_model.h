@@ -15,10 +15,6 @@
 
 class Profile;
 
-namespace base {
-class SequencedTaskRunner;
-}
-
 namespace content {
 class BrowserContext;
 }
@@ -38,7 +34,7 @@ class Menu_Model : public KeyedService {
   explicit Menu_Model(content::BrowserContext* context, Mode mode);
   ~Menu_Model() override;
 
-  void Load(const scoped_refptr<base::SequencedTaskRunner>& task_runner);
+  void Load();
   bool Save();
   void LoadFinished(std::unique_ptr<MenuLoadDetails> details);
 
@@ -87,6 +83,8 @@ class Menu_Model : public KeyedService {
   Menu_Node* mainmenu_node_ = nullptr;
   Menu_Node* contextmenu_node_ = nullptr;
   std::unique_ptr<Menu_Control> control_;
+
+  DISALLOW_COPY_AND_ASSIGN(Menu_Model);
 };
 
 }  // namespace menus

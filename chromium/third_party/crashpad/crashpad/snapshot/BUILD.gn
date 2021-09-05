@@ -22,7 +22,7 @@ if (crashpad_is_in_chromium) {
   set_sources_assignment_filter([])
 }
 
-static_library("snapshot") {
+crashpad_static_library("snapshot") {
   sources = [
     "annotation_snapshot.cc",
     "annotation_snapshot.h",
@@ -232,7 +232,8 @@ static_library("snapshot") {
     ]
   }
 
-  if (current_cpu == "x86" || current_cpu == "x64") {
+  if (current_cpu == "x86" || current_cpu == "x64" ||
+      (crashpad_is_mac && current_cpu == "mac_universal")) {
     sources += [
       "x86/cpuid_reader.cc",
       "x86/cpuid_reader.h",
@@ -240,6 +241,8 @@ static_library("snapshot") {
   }
 
   public_configs = [ "..:crashpad_config" ]
+
+  configs = [ "..:disable_ubsan" ]
 
   public_deps = [ ":context" ]
 
@@ -259,8 +262,6 @@ static_library("snapshot") {
     cflags = [ "/wd4201" ]  # nonstandard extension used : nameless struct/union
     libs = [ "powrprof.lib" ]
   }
-
-  configs += [ "..:disable_ubsan" ]
 }
 
 # :context is the only part of snapshot that minidump may depend on.

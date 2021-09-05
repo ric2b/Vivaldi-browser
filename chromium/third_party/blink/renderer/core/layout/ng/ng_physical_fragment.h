@@ -158,7 +158,7 @@ class CORE_EXPORT NGPhysicalFragment
            layout_object_->IsRubyBase();
   }
 
-  bool IsTable() const { return IsBox() && layout_object_->IsTable(); }
+  bool IsTable() const { return layout_object_->IsTable(); }
 
   // Return true if this fragment is a container established by a fieldset
   // element. Such a fragment contains an optional rendered legend fragment and
@@ -254,12 +254,18 @@ class CORE_EXPORT NGPhysicalFragment
 
   // True if overflow != 'visible', except for certain boxes that do not allow
   // overflow clip; i.e., AllowOverflowClip() returns false.
-  bool HasOverflowClip() const {
-    return IsCSSBox() && layout_object_->HasOverflowClip();
+  bool HasNonVisibleOverflow() const {
+    return IsCSSBox() && layout_object_->HasNonVisibleOverflow();
   }
 
-  bool ShouldClipOverflow() const {
-    return IsCSSBox() && layout_object_->ShouldClipOverflow();
+  // True if this is considered a scroll-container. See
+  // ComputedStyle::IsScrollContainer() for details.
+  bool IsScrollContainer() const {
+    return IsCSSBox() && layout_object_->IsScrollContainer();
+  }
+
+  bool ShouldClipOverflowAlongEitherAxis() const {
+    return IsCSSBox() && layout_object_->ShouldClipOverflowAlongEitherAxis();
   }
 
   bool IsFragmentationContextRoot() const {
@@ -291,7 +297,7 @@ class CORE_EXPORT NGPhysicalFragment
     const LayoutObject* layout_object = GetLayoutObject();
     if (!layout_object || !IsBox() || !layout_object->IsBox())
       return false;
-    return ToLayoutBox(layout_object)->GetPaginationBreakability() ==
+    return ToLayoutBox(layout_object)->GetNGPaginationBreakability() ==
            LayoutBox::kForbidBreaks;
   }
 
@@ -357,6 +363,7 @@ class CORE_EXPORT NGPhysicalFragment
       TextHeightType height_type) const;
   void AdjustScrollableOverflowForPropagation(
       const NGPhysicalBoxFragment& container,
+      TextHeightType height_type,
       PhysicalRect* overflow) const;
 
   // The allowed touch action is the union of the effective touch action
@@ -422,6 +429,8 @@ class CORE_EXPORT NGPhysicalFragment
                      NGFragmentType type,
                      unsigned sub_type);
 
+  NGPhysicalFragment(const NGPhysicalFragment& other);
+
   const ComputedStyle& SlowEffectiveStyle() const;
 
   const Vector<NGInlineItem>& InlineItemsOfContainingBlock() const;
@@ -445,10 +454,12 @@ class CORE_EXPORT NGPhysicalFragment
   unsigned include_border_right_ : 1;
   unsigned include_border_bottom_ : 1;
   unsigned include_border_left_ : 1;
+  unsigned has_layout_overflow_ : 1;
   unsigned has_borders_ : 1;
   unsigned has_padding_ : 1;
-  unsigned is_first_for_node_ : 1;
+  unsigned has_inflow_bounds_ : 1;
   unsigned has_rare_data_ : 1;
+  unsigned is_first_for_node_ : 1;
 
   LayoutObject* layout_object_;
   const PhysicalSize size_;

@@ -8,6 +8,7 @@ import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_E
 
 import android.content.Context;
 import android.media.AudioManager;
+import android.os.Build.VERSION_CODES;
 import android.support.test.InstrumentationRegistry;
 
 import androidx.test.filters.SmallTest;
@@ -20,13 +21,14 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.components.browser_ui.media.MediaNotificationManager;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -38,8 +40,7 @@ import org.chromium.net.test.EmbeddedTestServer;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class AutoplayMutedNotificationTest {
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     private static final String TEST_PATH = "/content/test/data/media/session/autoplay-muted.html";
     private static final String VIDEO_ID = "video";
@@ -56,7 +57,7 @@ public class AutoplayMutedNotificationTest {
     }
 
     private boolean isMediaNotificationVisible() {
-        return MediaNotificationManager.hasControllerForTesting(R.id.media_playback_notification);
+        return MediaNotificationManager.getController(R.id.media_playback_notification) != null;
     }
 
     private class MockAudioFocusChangeListener implements AudioManager.OnAudioFocusChangeListener {
@@ -221,6 +222,9 @@ public class AutoplayMutedNotificationTest {
     @Test
     @SmallTest
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
+    @DisableIf.
+    Build(sdk_is_greater_than = VERSION_CODES.LOLLIPOP_MR1, sdk_is_less_than = VERSION_CODES.N,
+            message = "Flaky on Marshmallow https://crbug.com/1122185")
     public void testUnmutedPlaybackTakesAudioFocus() throws Exception {
         Tab tab = mActivityTestRule.getActivity().getActivityTab();
 

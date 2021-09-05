@@ -20,6 +20,7 @@
 #include "net/url_request/referrer_policy.h"
 #include "services/network/public/cpp/optional_trust_token_params.h"
 #include "services/network/public/cpp/resource_request_body.h"
+#include "services/network/public/mojom/client_security_state.mojom.h"
 #include "services/network/public/mojom/cookie_access_observer.mojom.h"
 #include "services/network/public/mojom/cors.mojom-shared.h"
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
@@ -53,6 +54,7 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
     bool disable_secure_dns = false;
     bool has_user_activation = false;
     mojo::PendingRemote<mojom::CookieAccessObserver> cookie_observer;
+    mojom::ClientSecurityStatePtr client_security_state;
   };
 
   ResourceRequest();
@@ -70,7 +72,11 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
   net::SiteForCookies site_for_cookies;
   bool force_ignore_site_for_cookies = false;
   bool update_first_party_url_on_redirect = false;
+
+  // SECURITY NOTE: |request_initiator| is a security-sensitive field.  Please
+  // consult the doc comment for |request_initiator| in url_loader.mojom.
   base::Optional<url::Origin> request_initiator;
+
   base::Optional<url::Origin> isolated_world_origin;
   GURL referrer;
   net::ReferrerPolicy referrer_policy = net::ReferrerPolicy::NEVER_CLEAR;

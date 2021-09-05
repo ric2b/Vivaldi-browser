@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/modules/webgpu/gpu_bind_group.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_buffer.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_device.h"
+#include "third_party/blink/renderer/modules/webgpu/gpu_query_set.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_render_bundle.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_render_pipeline.h"
 
@@ -110,8 +111,26 @@ void GPURenderPassEncoder::setScissorRect(uint32_t x,
 void GPURenderPassEncoder::setIndexBuffer(GPUBuffer* buffer,
                                           uint64_t offset,
                                           uint64_t size) {
+  device_->AddConsoleWarning(
+      "Calling setIndexBuffer without a GPUIndexFormat is deprecated.");
   GetProcs().renderPassEncoderSetIndexBuffer(GetHandle(), buffer->GetHandle(),
                                              offset, size);
+}
+
+void GPURenderPassEncoder::setIndexBuffer(GPUBuffer* buffer,
+                                          const WTF::String& format,
+                                          uint64_t offset,
+                                          uint64_t size,
+                                          ExceptionState& exception_state) {
+  if (format != "uint16" && format != "uint32") {
+    exception_state.ThrowTypeError(
+        "The provided value '" + format +
+        "' is not a valid enum value of type GPUIndexFormat.");
+    return;
+  }
+  GetProcs().renderPassEncoderSetIndexBufferWithFormat(
+      GetHandle(), buffer->GetHandle(), AsDawnEnum<WGPUIndexFormat>(format),
+      offset, size);
 }
 
 void GPURenderPassEncoder::setVertexBuffer(uint32_t slot,
@@ -158,6 +177,12 @@ void GPURenderPassEncoder::executeBundles(
 
   GetProcs().renderPassEncoderExecuteBundles(GetHandle(), bundles.size(),
                                              dawn_bundles.get());
+}
+
+void GPURenderPassEncoder::writeTimestamp(GPUQuerySet* querySet,
+                                          uint32_t queryIndex) {
+  GetProcs().renderPassEncoderWriteTimestamp(GetHandle(), querySet->GetHandle(),
+                                             queryIndex);
 }
 
 void GPURenderPassEncoder::endPass() {

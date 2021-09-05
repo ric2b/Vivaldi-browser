@@ -23,6 +23,10 @@ namespace cc {
 class Layer;
 }
 
+namespace viz {
+class FrameSinkId;
+}
+
 namespace blink {
 
 class AssociatedInterfaceProvider;
@@ -47,6 +51,9 @@ class CORE_EXPORT RemoteFrame final : public Frame,
   RemoteFrame(RemoteFrameClient*,
               Page&,
               FrameOwner*,
+              Frame* parent,
+              Frame* previous_sibling,
+              FrameInsertType insert_type,
               const base::UnguessableToken& frame_token,
               WindowAgentFactory* inheriting_agent_factory,
               InterfaceRegistry*,
@@ -184,6 +191,8 @@ class CORE_EXPORT RemoteFrame final : public Frame,
   RemoteFrameToken GetRemoteFrameToken() const {
     return RemoteFrameToken(GetFrameToken());
   }
+
+  viz::FrameSinkId GetFrameSinkId();
 
  private:
   // Frame protected overrides:

@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "cc/test/pixel_test_utils.h"
 #include "components/viz/common/features.h"
 #include "content/browser/media/capture/content_capture_device_browsertest_base.h"
@@ -401,8 +402,8 @@ INSTANTIATE_TEST_SUITE_P(
 // compositing, whether the WebContents is visible/hidden or occluded/unoccluded
 // and whether the main document contains a cross-site iframe.
 
-// Fails on Linux only. http://crbug.com/1108205
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+// Fails on LACROS and linux. http://crbug.com/1108205
+#if BUILDFLAG(IS_LACROS) || defined(OS_LINUX)
 #define MAYBE_CapturesContentChanges DISABLED_CapturesContentChanges
 #else
 #define MAYBE_CapturesContentChanges CapturesContentChanges

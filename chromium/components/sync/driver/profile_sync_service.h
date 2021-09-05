@@ -19,6 +19,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/invalidation/public/identity_provider.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/base/model_type.h"
@@ -220,6 +221,16 @@ class ProfileSyncService : public SyncService,
   bool IsPassphrasePrompted() const;
   void SetPassphrasePrompted(bool prompted);
 
+#if defined(OS_ANDROID)
+  // Persists the fact that sync should no longer respect whether Android master
+  // sync is enabled. Only called on Android.
+  void SetDecoupledFromAndroidMasterSync();
+
+  // Gets the persisted information of whether sync should no longer respect
+  // if Android master sync is enabled. Only called on Android.
+  bool GetDecoupledFromAndroidMasterSync();
+#endif  // defined(OS_ANDROID)
+
   // Returns whether or not the underlying sync engine has made any
   // local changes to items that have not yet been synced with the
   // server.
@@ -297,9 +308,18 @@ class ProfileSyncService : public SyncService,
   // Helper to install and configure a data type manager.
   void ConfigureDataTypeManager(ConfigureReason reason);
 
+  bool UseTransportOnlyMode() const;
+
   // Returns the ModelTypes allowed in transport-only mode (i.e. those that are
   // not tied to sync-the-feature).
   ModelTypeSet GetModelTypesForTransportOnlyMode() const;
+
+  // If in transport-only mode, returns only preferred data types which are
+  // allowed in transport-only mode. Otherwise, returns all preferred data
+  // types.
+  ModelTypeSet GetDataTypesToConfigure() const;
+
+  void UpdateDataTypesForInvalidations();
 
  protected:
   // Shuts down the engine sync components.
@@ -344,8 +364,9 @@ class ProfileSyncService : public SyncService,
   // Tell the sync server that this client has disabled sync.
   void RemoveClientFromServer() const;
 
-  // Estimates and records memory usage histograms per type.
-  void RecordMemoryUsageHistograms();
+  // Records per type histograms for estimated memory usage and number of
+  // entities.
+  void RecordMemoryUsageAndCountsHistograms();
 
   // True if setup has been completed at least once and is not in progress.
   bool CanConfigureDataTypes(bool bypass_setup_in_progress_check) const;
@@ -497,6 +518,11 @@ class ProfileSyncService : public SyncService,
   // histogram needs to recorded. Set to false iff histogram was already
   // recorded or trusted vault passphrase type wasn't used on startup.
   bool should_record_trusted_vault_error_shown_on_startup_;
+
+  // Whether we want to receive invalidations for the SESSIONS data type. This
+  // is typically false on Android (to save network traffic), but true on all
+  // other platforms.
+  bool sessions_invalidations_enabled_;
 
   // This weak factory invalidates its issued pointers when Sync is disabled.
   base::WeakPtrFactory<ProfileSyncService> sync_enabled_weak_factory_{this};

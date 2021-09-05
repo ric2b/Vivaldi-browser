@@ -10,8 +10,6 @@
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/color_palette.h"
-#include "ui/gfx/color_utils.h"
-#include "ui/native_theme/native_theme.h"
 
 using TP = ThemeProperties;
 
@@ -59,6 +57,8 @@ int GetThemePropertyId(OmniboxPart part, OmniboxPartState state) {
       return OmniboxFieldTrial::IsExperimentalKeywordModeEnabled()
                  ? TP::COLOR_OMNIBOX_BUBBLE_OUTLINE_EXPERIMENTAL_KEYWORD_MODE
                  : TP::COLOR_OMNIBOX_BUBBLE_OUTLINE;
+    case OmniboxPart::RESULTS_BUTTON_BORDER:
+      return TP::COLOR_OMNIBOX_RESULTS_BUTTON_BORDER;
     default:
       NOTREACHED();
       return -1;

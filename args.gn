@@ -1,1 +1,3 @@
 enable_precompiled_headers=false
+vivaldi_disable_sparkle=true
+vivaldi_disable_widevine_verification=true

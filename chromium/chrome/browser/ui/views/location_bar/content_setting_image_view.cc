@@ -225,7 +225,7 @@ void ContentSettingImageView::UpdateImage() {
   gfx::Image icon = content_setting_image_model_->GetIcon(icon_color_.value_or(
       color_utils::DeriveDefaultIconColor(GetForegroundColor())));
   if (!icon.IsEmpty())
-    SetImage(icon.AsImageSkia());
+    SetImageModel(ui::ImageModel::FromImage(icon));
 }
 
 void ContentSettingImageView::AnimationEnded(const gfx::Animation* animation) {
@@ -243,8 +243,8 @@ void ContentSettingImageView::AnimationEnded(const gfx::Animation* animation) {
         IDS_NOTIFICATIONS_QUIET_PERMISSION_NEW_REQUEST_PROMO;
     bubble_params.anchor_view = this;
     bubble_params.arrow = views::BubbleBorder::TOP_RIGHT;
-    bubble_params.activation_action =
-        FeaturePromoBubbleParams::ActivationAction::ACTIVATE;
+    bubble_params.allow_focus = true;
+    bubble_params.persist_on_blur = false;
     bubble_params.preferred_width = promo_width;
 
     // Owned by its native widget. Will be destroyed as its widget is destroyed.

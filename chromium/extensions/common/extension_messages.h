@@ -59,6 +59,9 @@ IPC_ENUM_TRAITS_MAX_VALUE(extensions::UserScript::InjectionType,
 IPC_ENUM_TRAITS_MAX_VALUE(extensions::UserScript::RunLocation,
                           extensions::UserScript::RUN_LOCATION_LAST - 1)
 
+IPC_ENUM_TRAITS_MAX_VALUE(extensions::UserScript::ActionType,
+                          extensions::UserScript::ACTION_TYPE_LAST)
+
 IPC_ENUM_TRAITS_MAX_VALUE(extensions::MessagingEndpoint::Type,
                           extensions::MessagingEndpoint::Type::kLast)
 
@@ -163,7 +166,7 @@ IPC_STRUCT_BEGIN(ExtensionMsg_ExecuteCode_Params)
   IPC_STRUCT_MEMBER(HostID, host_id)
 
   // Whether the code is JavaScript or CSS.
-  IPC_STRUCT_MEMBER(bool, is_javascript)
+  IPC_STRUCT_MEMBER(extensions::UserScript::ActionType, action_type)
 
   // String of code to execute.
   IPC_STRUCT_MEMBER(std::string, code)
@@ -1087,6 +1090,12 @@ IPC_MESSAGE_CONTROL5(ExtensionHostMsg_DidStopServiceWorkerContext,
                      GURL /* service_worker_scope */,
                      int64_t /* service_worker_version_id */,
                      int /* worker_thread_id */)
+
+// Optional Ack message sent to the browser to notify that the response to a
+// function has been processed.
+IPC_MESSAGE_CONTROL2(ExtensionHostMsg_WorkerResponseAck,
+                     int /* request_id */,
+                     int64_t /* service_worker_version_id */)
 
 IPC_STRUCT_BEGIN(ExtensionMsg_AccessibilityEventBundleParams)
   // ID of the accessibility tree that this event applies to.

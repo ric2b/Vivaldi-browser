@@ -61,7 +61,7 @@ AvatarToolbarButton::AvatarToolbarButton(Browser* browser,
   // without drag-drop actions (specifically the adjacent browser menu).
   button_controller()->set_notify_action(
       views::ButtonController::NotifyAction::kOnPress);
-  set_triggerable_event_flags(ui::EF_LEFT_MOUSE_BUTTON);
+  SetTriggerableEventFlags(ui::EF_LEFT_MOUSE_BUTTON);
 
   SetID(VIEW_ID_AVATAR_BUTTON);
 
@@ -129,7 +129,7 @@ void AvatarToolbarButton::UpdateText() {
 
   switch (delegate_->GetState()) {
     case State::kIncognitoProfile: {
-      int incognito_window_count = delegate_->GetIncognitoWindowsCount();
+      const int incognito_window_count = delegate_->GetWindowCount();
       SetAccessibleName(l10n_util::GetPluralStringFUTF16(
           IDS_INCOGNITO_BUBBLE_ACCESSIBLE_TITLE, incognito_window_count));
       text = l10n_util::GetPluralStringFUTF16(IDS_AVATAR_BUTTON_INCOGNITO,
@@ -153,9 +153,14 @@ void AvatarToolbarButton::UpdateText() {
           gfx::kGoogleBlue050, gfx::kGoogleBlue900);
       text = l10n_util::GetStringUTF16(IDS_AVATAR_BUTTON_SYNC_PAUSED);
       break;
-    case State::kGuestSession:
-      text = l10n_util::GetStringUTF16(IDS_GUEST_PROFILE_NAME);
+    case State::kGuestSession: {
+      const int guest_window_count = delegate_->GetWindowCount();
+      SetAccessibleName(l10n_util::GetPluralStringFUTF16(
+          IDS_GUEST_BUBBLE_ACCESSIBLE_TITLE, guest_window_count));
+      text = l10n_util::GetPluralStringFUTF16(IDS_AVATAR_BUTTON_GUEST,
+                                              guest_window_count);
       break;
+    }
     case State::kGenericProfile:
     case State::kNormal:
       if (delegate_->IsHighlightAnimationVisible()) {

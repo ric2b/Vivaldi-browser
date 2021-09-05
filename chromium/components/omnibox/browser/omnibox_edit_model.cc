@@ -395,8 +395,7 @@ void OmniboxEditModel::AdjustTextForCopy(int sel_min,
   client_->GetAutocompleteClassifier()->Classify(*text, is_keyword_selected(),
                                                  true, GetPageClassification(),
                                                  &match_from_text, nullptr);
-  if (AutocompleteMatch::IsSearchType(match_from_text.type) ||
-      match_from_text.is_navigational_title_match)
+  if (AutocompleteMatch::IsSearchType(match_from_text.type))
     return;
 
   // Make our best GURL interpretation of |text|.
@@ -561,8 +560,8 @@ void OmniboxEditModel::StartAutocomplete(bool has_selected_text,
   input_.set_current_title(client_->GetTitle());
   input_.set_prevent_inline_autocomplete(
       prevent_inline_autocomplete || just_deleted_text_ ||
-      (has_selected_text && inline_autocomplete_text_.empty() &&
-       prefix_autocompletion_text_.empty()) ||
+      (has_selected_text && inline_autocompletion_.empty() &&
+       prefix_autocompletion_.empty()) ||
       (paste_state_ != NONE));
   input_.set_prefer_keyword(is_keyword_selected());
   input_.set_allow_exact_keyword_match(is_keyword_selected() ||
@@ -954,10 +953,11 @@ bool OmniboxEditModel::AcceptKeyword(
     original_user_text_with_keyword_ = user_text_;
   user_text_ = MaybeStripKeyword(user_text_);
 
-  if (PopupIsOpen())
+  if (PopupIsOpen()) {
     popup_model()->SetSelectedLineState(OmniboxPopupModel::KEYWORD_MODE);
-  else
+  } else {
     StartAutocomplete(false, true);
+  }
 
   // When entering keyword mode via tab, the new text to show is whatever the
   // newly-selected match in the dropdown is.  When entering via space, however,
@@ -1293,9 +1293,10 @@ bool OmniboxEditModel::MaybeStartQueryForPopup() {
 }
 
 void OmniboxEditModel::OnPopupDataChanged(
-    const base::string16& text,
+    const base::string16& temporary_text,
     bool is_temporary_text,
-    const base::string16& prefix_autocompletion_text,
+    const base::string16& inline_autocompletion,
+    const base::string16& prefix_autocompletion,
     const base::string16& keyword,
     bool is_keyword_hint,
     const base::string16& additional_text) {
@@ -1335,8 +1336,8 @@ void OmniboxEditModel::OnPopupDataChanged(
     if (save_original_selection) {
       // Save the original selection and URL so it can be reverted later.
       has_temporary_text_ = true;
-      inline_autocomplete_text_.clear();
-      prefix_autocompletion_text_.clear();
+      inline_autocompletion_.clear();
+      prefix_autocompletion_.clear();
       view_->OnInlineAutocompleteTextCleared();
     }
     // Arrowing around the popup cancels control-enter.
@@ -1350,22 +1351,21 @@ void OmniboxEditModel::OnPopupDataChanged(
 
     const AutocompleteMatch& match = CurrentMatch(nullptr);
     view_->OnTemporaryTextMaybeChanged(
-        MaybeStripKeyword(text), match,
+        MaybeStripKeyword(temporary_text), match,
         save_original_selection && original_user_text_with_keyword_.empty(),
         true);
     return;
   }
 
-  inline_autocomplete_text_ = text;
-  prefix_autocompletion_text_ = prefix_autocompletion_text;
-  if (inline_autocomplete_text_.empty() && prefix_autocompletion_text_.empty())
+  inline_autocompletion_ = inline_autocompletion;
+  prefix_autocompletion_ = prefix_autocompletion;
+  if (inline_autocompletion_.empty() && prefix_autocompletion_.empty())
     view_->OnInlineAutocompleteTextCleared();
 
   const base::string16& user_text =
       user_input_in_progress_ ? user_text_ : input_.text();
   if (keyword_state_changed && is_keyword_selected() &&
-      inline_autocomplete_text_.empty() &&
-      prefix_autocompletion_text_.empty()) {
+      inline_autocompletion_.empty() && prefix_autocompletion_.empty()) {
     // If we reach here, the user most likely entered keyword mode by inserting
     // a space between a keyword name and a search string (as pressing space or
     // tab after the keyword name alone would have been be handled in
@@ -1385,8 +1385,8 @@ void OmniboxEditModel::OnPopupDataChanged(
     view_->SetWindowTextAndCaretPos(user_text, 0, false, true);
   } else {
     view_->OnInlineAutocompleteTextMaybeChanged(
-        prefix_autocompletion_text_ + user_text + inline_autocomplete_text_,
-        prefix_autocompletion_text_.length(), user_text.length());
+        prefix_autocompletion_ + user_text + inline_autocompletion_,
+        prefix_autocompletion_.length(), user_text.length());
     view_->SetAdditionalText(additional_text);
   }
   // We need to invoke OnChanged in case the destination url changed (as could
@@ -1433,9 +1433,9 @@ bool OmniboxEditModel::OnAfterPossibleChange(
   // change any other state, lest arrowing around the omnibox do something like
   // reset |just_deleted_text_|.  Note that modifying the selection accepts any
   // inline autocompletion, which results in a user text change.
-  if (!state_changes.text_differs && (!state_changes.selection_differs ||
-                                      (inline_autocomplete_text_.empty() &&
-                                       prefix_autocompletion_text_.empty()))) {
+  if (!state_changes.text_differs &&
+      (!state_changes.selection_differs ||
+       (inline_autocompletion_.empty() && prefix_autocompletion_.empty()))) {
     if (state_changes.keyword_differs) {
       // We won't need the below logic for creating a keyword by a space at the
       // end or in the middle, or by typing a '?', but we do need to update the
@@ -1546,9 +1546,10 @@ void OmniboxEditModel::OnCurrentMatchChanged() {
   const base::string16 prefix_autocompletion(match.prefix_autocompletion);
   const base::string16 fill_into_edit_additional_text(
       match.fill_into_edit_additional_text);
-  OnPopupDataChanged(inline_autocompletion,
-                     /*is_temporary_text=*/false, prefix_autocompletion,
-                     keyword, is_keyword_hint, fill_into_edit_additional_text);
+  OnPopupDataChanged(base::string16(),
+                     /*is_temporary_text=*/false, inline_autocompletion,
+                     prefix_autocompletion, keyword, is_keyword_hint,
+                     fill_into_edit_additional_text);
 }
 
 // static
@@ -1567,8 +1568,8 @@ void OmniboxEditModel::InternalSetUserText(const base::string16& text) {
   user_text_ = text;
   original_user_text_with_keyword_.clear();
   just_deleted_text_ = false;
-  inline_autocomplete_text_.clear();
-  prefix_autocompletion_text_.clear();
+  inline_autocompletion_.clear();
+  prefix_autocompletion_.clear();
   view_->OnInlineAutocompleteTextCleared();
 }
 

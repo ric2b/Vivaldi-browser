@@ -521,9 +521,12 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method write
 [Worker] interface FontFace
 [Worker]     attribute @@toStringTag
+[Worker]     getter ascentOverride
+[Worker]     getter descentOverride
 [Worker]     getter display
 [Worker]     getter family
 [Worker]     getter featureSettings
+[Worker]     getter lineGapOverride
 [Worker]     getter loaded
 [Worker]     getter status
 [Worker]     getter stretch
@@ -533,9 +536,12 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter weight
 [Worker]     method constructor
 [Worker]     method load
+[Worker]     setter ascentOverride
+[Worker]     setter descentOverride
 [Worker]     setter display
 [Worker]     setter family
 [Worker]     setter featureSettings
+[Worker]     setter lineGapOverride
 [Worker]     setter stretch
 [Worker]     setter style
 [Worker]     setter unicodeRange
@@ -736,7 +742,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker] interface ImageData
 [Worker]     attribute @@toStringTag
 [Worker]     getter data
-[Worker]     getter dataUnion
 [Worker]     getter height
 [Worker]     getter width
 [Worker]     method constructor
@@ -980,9 +985,11 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method putImageData
 [Worker]     method quadraticCurveTo
 [Worker]     method rect
+[Worker]     method reset
 [Worker]     method resetTransform
 [Worker]     method restore
 [Worker]     method rotate
+[Worker]     method roundRect
 [Worker]     method save
 [Worker]     method scale
 [Worker]     method setLineDash
@@ -1025,6 +1032,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method moveTo
 [Worker]     method quadraticCurveTo
 [Worker]     method rect
+[Worker]     method roundRect
 [Worker] interface PaymentInstruments
 [Worker]     attribute @@toStringTag
 [Worker]     method clear
@@ -1285,7 +1293,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     attribute @@toStringTag
 [Worker]     getter active
 [Worker]     getter backgroundFetch
-[Worker]     getter cookies
 [Worker]     getter index
 [Worker]     getter installing
 [Worker]     getter navigationPreload
@@ -3672,6 +3679,18 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter url
 [Worker]     method close
 [Worker]     method constructor
+[Worker] interface WebTransport
+[Worker]     attribute @@toStringTag
+[Worker]     getter closed
+[Worker]     getter datagramReadable
+[Worker]     getter datagramWritable
+[Worker]     getter incomingBidirectionalStreams
+[Worker]     getter incomingUnidirectionalStreams
+[Worker]     getter ready
+[Worker]     method close
+[Worker]     method constructor
+[Worker]     method createBidirectionalStream
+[Worker]     method createUnidirectionalStream
 [Worker] interface WorkerGlobalScope : EventTarget
 [Worker]     attribute @@toStringTag
 [Worker]     getter addressSpace

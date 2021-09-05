@@ -27,15 +27,14 @@
 
 namespace blink {
 
-class HTMLTextAreaElement;
-
 class LayoutTextControlMultiLine final : public LayoutTextControl {
  public:
-  LayoutTextControlMultiLine(HTMLTextAreaElement*);
+  explicit LayoutTextControlMultiLine(Element*);
   ~LayoutTextControlMultiLine() override;
 
  private:
   bool IsOfType(LayoutObjectType type) const override {
+    NOT_DESTROYED();
     return type == kLayoutObjectTextArea || LayoutTextControl::IsOfType(type);
   }
 
@@ -56,6 +55,7 @@ class LayoutTextControlMultiLine final : public LayoutTextControl {
       LineDirectionMode,
       LinePositionMode = kPositionOnContainingLine) const override;
   LayoutUnit InlineBlockBaseline(LineDirectionMode) const override {
+    NOT_DESTROYED();
     return LayoutUnit(-1);
   }
 

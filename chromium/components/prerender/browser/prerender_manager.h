@@ -26,6 +26,7 @@
 #include "components/prerender/common/prerender_final_status.h"
 #include "components/prerender/common/prerender_origin.h"
 #include "content/public/browser/render_process_host_observer.h"
+#include "third_party/blink/public/mojom/prerender/prerender.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -110,7 +111,7 @@ class PrerenderManager : public content::RenderProcessHostObserver,
       int process_id,
       int route_id,
       const GURL& url,
-      uint32_t rel_types,
+      blink::mojom::PrerenderRelType rel_type,
       const content::Referrer& referrer,
       const url::Origin& initiator_origin,
       const gfx::Size& size);
@@ -172,11 +173,9 @@ class PrerenderManager : public content::RenderProcessHostObserver,
   static void SetMode(PrerenderManagerMode mode) { mode_ = mode; }
 
   // Query the list of current prerender pages to see if the given web contents
-  // is prerendering a page. The optional parameter |origin| is an output
-  // parameter which, if a prerender is found, is set to the Origin of the
-  // prerender |web_contents|.
-  bool IsWebContentsPrerendering(const content::WebContents* web_contents,
-                                 Origin* origin) const;
+  // is prerendering a page.
+  bool IsWebContentsPrerendering(
+      const content::WebContents* web_contents) const;
 
   // Whether the PrerenderManager has an active prerender with the given url and
   // SessionStorageNamespace associated with the given WebContents.
@@ -483,15 +482,6 @@ class PrerenderManager : public content::RenderProcessHostObserver,
   void SkipPrerenderContentsAndMaybePreconnect(const GURL& url,
                                                Origin origin,
                                                FinalStatus final_status) const;
-
-  // Swaps a prerender |prerender_data| for |url| into the tab, replacing
-  // |web_contents|.  Returns the new WebContents that was swapped in, or NULL
-  // if a swap-in was not possible.  If |should_replace_current_entry| is true,
-  // the current history entry in |web_contents| is replaced.
-  content::WebContents* SwapInternal(const GURL& url,
-                                     content::WebContents* web_contents,
-                                     PrerenderData* prerender_data,
-                                     bool should_replace_current_entry);
 
   // May initiate a preconnect to |url_arg| based on |origin|.
   void MaybePreconnect(Origin origin, const GURL& url_arg) const;

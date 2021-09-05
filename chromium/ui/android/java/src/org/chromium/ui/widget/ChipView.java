@@ -10,6 +10,7 @@ import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.ContextThemeWrapper;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -30,10 +31,13 @@ import org.chromium.ui.R;
  * - An optional start icon that can be rounded as well.
  * - An optional secondary text view that is shown to the right of the primary text view.
  * - An optional remove icon at the end, intended for use with input chips.
+ * - An optional boolean (solidColorChip) to remove the default chip border.
+ * - An optional boolean (allowMultipleLines) to avoid longer text strings to wrap to a second line.
  */
 public class ChipView extends LinearLayout {
     /** An id to use for {@link #setIcon(int, boolean)} when there is no icon on the chip. */
     public static final int INVALID_ICON_ID = -1;
+    private static final int MAX_LINES = 2;
 
     private final RippleBackgroundHelper mRippleBackgroundHelper;
     private final TextView mPrimaryText;
@@ -42,6 +46,8 @@ public class ChipView extends LinearLayout {
     private final @IdRes int mSecondaryTextAppearanceId;
     private final int mEndIconWidth;
     private final int mEndIconHeight;
+    private final int mEndIconStartPadding;
+    private final int mEndIconEndPadding;
 
     private ViewGroup mEndIconWrapper;
     private TextView mSecondaryText;
@@ -63,14 +69,25 @@ public class ChipView extends LinearLayout {
     private ChipView(Context context, AttributeSet attrs, @StyleRes int themeOverlay) {
         super(new ContextThemeWrapper(context, themeOverlay), attrs, R.attr.chipStyle);
 
-        @Px
-        int leadingElementPadding =
-                getResources().getDimensionPixelSize(R.dimen.chip_element_leading_padding);
-        @Px
-        int endPadding = getResources().getDimensionPixelSize(R.dimen.chip_end_padding);
-
         TypedArray a = getContext().obtainStyledAttributes(
                 attrs, R.styleable.ChipView, R.attr.chipStyle, 0);
+
+        @Px
+        int leadingElementPadding = a.getDimensionPixelSize(R.styleable.ChipView_leadingPadding,
+                getResources().getDimensionPixelSize(R.dimen.chip_element_leading_padding));
+        @Px
+        int endPadding = a.getDimensionPixelSize(R.styleable.ChipView_endPadding,
+                getResources().getDimensionPixelSize(R.dimen.chip_end_padding));
+
+        mEndIconStartPadding = a.getDimensionPixelSize(R.styleable.ChipView_endIconStartPadding,
+                getResources().getDimensionPixelSize(R.dimen.chip_end_icon_margin_start));
+
+        mEndIconEndPadding = a.getDimensionPixelSize(R.styleable.ChipView_endIconEndPadding,
+                getResources().getDimensionPixelSize(R.dimen.chip_end_padding_with_end_icon));
+
+        boolean solidColorChip = a.getBoolean(R.styleable.ChipView_solidColorChip, false);
+        int chipBorderWidthId =
+                solidColorChip ? R.dimen.chip_solid_border_width : R.dimen.chip_border_width;
         int chipColorId =
                 a.getResourceId(R.styleable.ChipView_chipColor, R.color.chip_background_color);
         int rippleColorId =
@@ -93,6 +110,8 @@ public class ChipView extends LinearLayout {
                 R.styleable.ChipView_secondaryTextAppearance, R.style.TextAppearance_ChipText);
         int verticalInset = a.getDimensionPixelSize(R.styleable.ChipView_verticalInset,
                 getResources().getDimensionPixelSize(R.dimen.chip_bg_vertical_inset));
+        boolean allowMultipleLines = a.getBoolean(R.styleable.ChipView_allowMultipleLines, false);
+        boolean textAlignStart = a.getBoolean(R.styleable.ChipView_textAlignStart, false);
         a.recycle();
 
         mStartIcon = new ChromeImageView(getContext());
@@ -104,17 +123,36 @@ public class ChipView extends LinearLayout {
             leadingElementPadding = (chipHeight - iconHeight) / 2;
         }
 
-        // Setting this enforces 16dp padding at the end and 8dp at the start. For text, the start
-        // padding needs to be 16dp which is why a ChipTextView contributes the remaining 8dp.
+        // Setting this enforces 16dp padding at the end and 8dp at the start (unless overridden).
+        // For text, the start padding needs to be 16dp which is why a ChipTextView contributes the
+        // remaining 8dp.
         ViewCompat.setPaddingRelative(this, leadingElementPadding, 0, endPadding, 0);
 
         mPrimaryText = new TextView(new ContextThemeWrapper(getContext(), R.style.ChipTextView));
         ApiCompatibilityUtils.setTextAppearance(mPrimaryText, primaryTextAppearance);
+
+        // If false fall back to single line defined in XML styles.
+        if (allowMultipleLines) {
+            mPrimaryText.setMaxLines(MAX_LINES);
+            // Vertical padding must be explicitly defined for the text view to create space if text
+            // wrapping causes the chip to increase in size vertically.
+            int minMultilineVerticalTextPadding = getResources().getDimensionPixelSize(
+                    R.dimen.chip_text_multiline_vertical_padding);
+            // TODO(benwgold): Test for non multiline chips to see if 4dp vertical padding can be
+            // safely applied to all chips without affecting styling.
+            mPrimaryText.setPaddingRelative(mPrimaryText.getPaddingStart(),
+                    minMultilineVerticalTextPadding, mPrimaryText.getPaddingEnd(),
+                    minMultilineVerticalTextPadding);
+        }
+        if (textAlignStart) {
+            // Default of 'center' is defined in the ChipTextView style.
+            mPrimaryText.setTextAlignment((View.TEXT_ALIGNMENT_VIEW_START));
+        }
         addView(mPrimaryText);
 
         // Reset icon and background:
         mRippleBackgroundHelper = new RippleBackgroundHelper(this, chipColorId, rippleColorId,
-                cornerRadius, R.color.chip_stroke_color, R.dimen.chip_border_width, verticalInset);
+                cornerRadius, R.color.chip_stroke_color, chipBorderWidthId, verticalInset);
         setIcon(INVALID_ICON_ID, false);
     }
 
@@ -172,10 +210,8 @@ public class ChipView extends LinearLayout {
 
         FrameLayout.LayoutParams layoutParams =
                 new FrameLayout.LayoutParams(mEndIconWidth, mEndIconHeight);
-        layoutParams.setMarginStart(
-                getResources().getDimensionPixelSize(R.dimen.chip_end_icon_margin_start));
-        layoutParams.setMarginEnd(
-                getResources().getDimensionPixelSize(R.dimen.chip_end_padding_with_end_icon));
+        layoutParams.setMarginStart(mEndIconStartPadding);
+        layoutParams.setMarginEnd(mEndIconEndPadding);
         layoutParams.gravity = Gravity.CENTER_VERTICAL;
         mEndIconWrapper.addView(endIcon, layoutParams);
         addView(mEndIconWrapper,

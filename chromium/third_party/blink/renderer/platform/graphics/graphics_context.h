@@ -31,7 +31,7 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "third_party/blink/public/platform/web_color_scheme.h"
+#include "third_party/blink/public/common/css/color_scheme.h"
 #include "third_party/blink/renderer/platform/fonts/font.h"
 #include "third_party/blink/renderer/platform/graphics/dark_mode_filter.h"
 #include "third_party/blink/renderer/platform/graphics/dark_mode_settings.h"
@@ -85,9 +85,12 @@ class PLATFORM_EXPORT GraphicsContext {
     return paint_controller_;
   }
 
-  const DarkModeSettings& dark_mode_settings() const {
-    return dark_mode_filter_.settings();
-  }
+  bool IsDarkModeEnabled() const { return is_dark_mode_enabled_; }
+  void SetDarkModeEnabled(bool enabled) { is_dark_mode_enabled_ = enabled; }
+
+  DarkModeFilter* GetDarkModeFilter();
+
+  void UpdateDarkModeSettingsForTest(const DarkModeSettings&);
 
   // ---------- State management methods -----------------
   void Save();
@@ -96,8 +99,6 @@ class PLATFORM_EXPORT GraphicsContext {
 #if DCHECK_IS_ON()
   unsigned SaveCount() const;
 #endif
-
-  void SetDarkMode(const DarkModeSettings&);
 
   float StrokeThickness() const {
     return ImmutableState()->GetStrokeData().Thickness();
@@ -367,7 +368,7 @@ class PLATFORM_EXPORT GraphicsContext {
                      float border_radius,
                      float min_border_width,
                      const Color&,
-                     WebColorScheme color_scheme);
+                     ColorScheme color_scheme);
   void DrawFocusRing(const Path&, float width, int offset, const Color&);
 
   enum Edge {
@@ -422,6 +423,12 @@ class PLATFORM_EXPORT GraphicsContext {
   static void AdjustLineToPixelBoundaries(FloatPoint& p1,
                                           FloatPoint& p2,
                                           float stroke_width);
+
+  static Path GetPathForTextLine(const FloatPoint&,
+                                 float width,
+                                 float stroke_thickness,
+                                 StrokeStyle);
+  static bool ShouldUseStrokeForTextLine(StrokeStyle);
 
   static int FocusRingOutsetExtent(int offset, int width);
 
@@ -539,12 +546,12 @@ class PLATFORM_EXPORT GraphicsContext {
 
   float device_scale_factor_;
 
-  // TODO(gilmanmh): Investigate making this base::Optional<DarkModeFilter>
-  DarkModeFilter dark_mode_filter_;
+  std::unique_ptr<DarkModeFilter> dark_mode_filter_;
 
   unsigned printing_ : 1;
   unsigned is_painting_preview_ : 1;
   unsigned in_drawing_recorder_ : 1;
+  unsigned is_dark_mode_enabled_ : 1;
 
   // The current node ID, which is used for marked content in a tagged PDF.
   DOMNodeId dom_node_id_ = kInvalidDOMNodeId;

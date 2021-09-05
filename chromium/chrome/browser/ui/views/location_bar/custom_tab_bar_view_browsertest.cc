@@ -20,6 +20,7 @@
 #include "components/security_interstitials/content/security_interstitial_controller_client.h"
 #include "components/security_interstitials/content/security_interstitial_page.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
+#include "components/security_interstitials/content/settings_page_helper.h"
 #include "components/security_interstitials/core/metrics_helper.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -134,7 +135,8 @@ class UrlHidingInterstitialPage
                 nullptr,
                 nullptr,
                 base::i18n::GetConfiguredLocale(),
-                GURL())) {}
+                GURL(),
+                nullptr /* settings_page_helper */)) {}
   void OnInterstitialClosing() override {}
   bool ShouldDisplayURL() const override { return false; }
 
@@ -197,18 +199,18 @@ class CustomTabBarViewBrowserTest
     custom_tab_bar_ = browser_view_->toolbar()->custom_tab_bar();
   }
 
-  void InstallPWA(const GURL& app_url) {
+  void InstallPWA(const GURL& start_url) {
     auto web_app_info = std::make_unique<WebApplicationInfo>();
-    web_app_info->app_url = app_url;
-    web_app_info->scope = app_url.GetWithoutFilename();
+    web_app_info->start_url = start_url;
+    web_app_info->scope = start_url.GetWithoutFilename();
     web_app_info->open_as_window = true;
     Install(std::move(web_app_info));
   }
 
-  void InstallBookmark(const GURL& app_url) {
+  void InstallBookmark(const GURL& start_url) {
     auto web_app_info = std::make_unique<WebApplicationInfo>();
-    web_app_info->app_url = app_url;
-    web_app_info->scope = app_url.GetOrigin();
+    web_app_info->start_url = start_url;
+    web_app_info->scope = start_url.GetOrigin();
     web_app_info->open_as_window = true;
     Install(std::move(web_app_info));
   }
@@ -221,11 +223,11 @@ class CustomTabBarViewBrowserTest
 
  private:
   void Install(std::unique_ptr<WebApplicationInfo> web_app_info) {
-    const GURL app_url = web_app_info->app_url;
+    const GURL start_url = web_app_info->start_url;
     web_app::AppId app_id = InstallWebApp(std::move(web_app_info));
 
     ui_test_utils::UrlLoadObserver url_observer(
-        app_url, content::NotificationService::AllSources());
+        start_url, content::NotificationService::AllSources());
     app_browser_ = LaunchWebAppBrowser(app_id);
     url_observer.Wait();
 

@@ -6,42 +6,125 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/check_op.h"
+#include "base/memory/ptr_util.h"
+#include "base/notreached.h"
+#include "base/thread_annotations.h"
+#include "base/threading/thread_checker.h"
 #include "cc/paint/paint_canvas.h"
+#include "net/cookies/site_for_cookies.h"
 #include "pdf/pdf_engine.h"
-#include "ppapi/cpp/url_loader.h"
+#include "pdf/pdf_init.h"
+#include "pdf/pdfium/pdfium_engine.h"
+#include "pdf/ppapi_migration/url_loader.h"
+#include "ppapi/c/pp_errors.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-shared.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
 #include "third_party/blink/public/platform/web_rect.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_error.h"
+#include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/platform/web_url_response.h"
+#include "third_party/blink/public/web/web_associated_url_loader.h"
+#include "third_party/blink/public/web/web_associated_url_loader_options.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_plugin_container.h"
 #include "third_party/blink/public/web/web_plugin_params.h"
 #include "ui/base/cursor/cursor.h"
 
 namespace chrome_pdf {
 
-PdfViewWebPlugin::PdfViewWebPlugin(const blink::WebPluginParams& params) {}
+namespace {
 
-PdfViewWebPlugin::~PdfViewWebPlugin() {
-  // Explicitly destroy the PDFEngine during destruction as it may call back
-  // into this object.
-  DestroyEngine();
-}
+// Initialization performed per renderer process. Initialization may be
+// triggered from multiple plugin instances, but should only execute once.
+//
+// TODO(crbug.com/1123621): We may be able to simplify this once we've figured
+// out exactly which processes need to initialize and shutdown PDFium.
+class PerProcessInitializer final {
+ public:
+  static PerProcessInitializer& GetInstance() {
+    static PerProcessInitializer instance;
+    return instance;
+  }
 
+  void Acquire() {
+    DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+    DCHECK_GE(init_count_, 0);
+    if (init_count_++ > 0)
+      return;
+
+    DCHECK(!IsSDKInitializedViaPlugin());
+    // TODO(crbug.com/1111024): Support JavaScript.
+    InitializeSDK(/*enable_v8=*/false);
+    SetIsSDKInitializedViaPlugin(true);
+  }
+
+  void Release() {
+    DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+    DCHECK_GT(init_count_, 0);
+    if (--init_count_ > 0)
+      return;
+
+    DCHECK(IsSDKInitializedViaPlugin());
+    ShutdownSDK();
+    SetIsSDKInitializedViaPlugin(false);
+  }
+
+ private:
+  int init_count_ GUARDED_BY_CONTEXT(thread_checker_) = 0;
+
+  // TODO(crbug.com/1123731): Assuming PDFium is thread-hostile for now, and
+  // must use one thread exclusively.
+  THREAD_CHECKER(thread_checker_);
+};
+
+}  // namespace
+
+PdfViewWebPlugin::PdfViewWebPlugin(const blink::WebPluginParams& params)
+    : initial_params_(params) {}
+
+PdfViewWebPlugin::~PdfViewWebPlugin() = default;
+
+// Modeled on `OutOfProcessInstance::Init()`.
 bool PdfViewWebPlugin::Initialize(blink::WebPluginContainer* container) {
   DCHECK_EQ(container->Plugin(), this);
   container_ = container;
-  InitializeEngine(/*enable_javascript=*/false);
+
+  std::string stream_url;
+  for (size_t i = 0; i < initial_params_.attribute_names.size(); ++i) {
+    if (initial_params_.attribute_names[i] == "stream-url")
+      stream_url = initial_params_.attribute_values[i].Utf8();
+  }
+
+  // Contents of `initial_params_` no longer needed.
+  initial_params_ = {};
+
+  PerProcessInitializer::GetInstance().Acquire();
+  InitializeEngine(PDFiumFormFiller::ScriptOption::kNoJavaScript);
+  LoadUrl(stream_url, /*is_print_preview=*/false);
   return true;
 }
 
 void PdfViewWebPlugin::Destroy() {
+  if (container_) {
+    // Explicitly destroy the PDFEngine during destruction as it may call back
+    // into this object.
+    DestroyEngine();
+    PerProcessInitializer::GetInstance().Release();
+  }
+
   container_ = nullptr;
   delete this;
 }
@@ -83,7 +166,7 @@ void PdfViewWebPlugin::DidFailLoading(const blink::WebURLError& error) {}
 
 void PdfViewWebPlugin::ProposeDocumentLayout(const DocumentLayout& layout) {}
 
-void PdfViewWebPlugin::Invalidate(const pp::Rect& rect) {}
+void PdfViewWebPlugin::Invalidate(const gfx::Rect& rect) {}
 
 void PdfViewWebPlugin::DidScroll(const gfx::Vector2d& offset) {}
 
@@ -106,8 +189,8 @@ void PdfViewWebPlugin::NavigateToDestination(int page,
 
 void PdfViewWebPlugin::UpdateCursor(PP_CursorType_Dev cursor) {}
 
-void PdfViewWebPlugin::UpdateTickMarks(const std::vector<pp::Rect>& tickmarks) {
-}
+void PdfViewWebPlugin::UpdateTickMarks(
+    const std::vector<gfx::Rect>& tickmarks) {}
 
 void PdfViewWebPlugin::NotifyNumberOfFindResultsChanged(int total,
                                                         bool final_result) {}
@@ -149,8 +232,8 @@ void PdfViewWebPlugin::SubmitForm(const std::string& url,
                                   const void* data,
                                   int length) {}
 
-pp::URLLoader PdfViewWebPlugin::CreateURLLoader() {
-  return pp::URLLoader();
+std::unique_ptr<UrlLoader> PdfViewWebPlugin::CreateUrlLoader() {
+  return nullptr;
 }
 
 std::vector<PDFEngine::Client::SearchStringResult>
@@ -161,9 +244,13 @@ PdfViewWebPlugin::SearchString(const base::char16* string,
 }
 
 void PdfViewWebPlugin::DocumentLoadComplete(
-    const PDFEngine::DocumentFeatures& document_features) {}
+    const PDFEngine::DocumentFeatures& document_features) {
+  NOTIMPLEMENTED();
+}
 
-void PdfViewWebPlugin::DocumentLoadFailed() {}
+void PdfViewWebPlugin::DocumentLoadFailed() {
+  NOTIMPLEMENTED();
+}
 
 pp::Instance* PdfViewWebPlugin::GetPluginInstance() {
   return nullptr;
@@ -187,8 +274,8 @@ uint32_t PdfViewWebPlugin::GetBackgroundColor() {
 
 void PdfViewWebPlugin::IsSelectingChanged(bool is_selecting) {}
 
-void PdfViewWebPlugin::SelectionChanged(const pp::Rect& left,
-                                        const pp::Rect& right) {}
+void PdfViewWebPlugin::SelectionChanged(const gfx::Rect& left,
+                                        const gfx::Rect& right) {}
 
 void PdfViewWebPlugin::EnteredEditMode() {}
 
@@ -197,5 +284,64 @@ float PdfViewWebPlugin::GetToolbarHeightInScreenCoords() {
 }
 
 void PdfViewWebPlugin::DocumentFocusChanged(bool document_has_focus) {}
+
+bool PdfViewWebPlugin::IsValid() const {
+  return container_ && container_->GetDocument().GetFrame();
+}
+
+blink::WebURL PdfViewWebPlugin::CompleteURL(
+    const blink::WebString& partial_url) const {
+  DCHECK(IsValid());
+  return container_->GetDocument().CompleteURL(partial_url);
+}
+
+net::SiteForCookies PdfViewWebPlugin::SiteForCookies() const {
+  DCHECK(IsValid());
+  return container_->GetDocument().SiteForCookies();
+}
+
+void PdfViewWebPlugin::SetReferrerForRequest(
+    blink::WebURLRequest& request,
+    const blink::WebURL& referrer_url) {
+  DCHECK(IsValid());
+  container_->GetDocument().GetFrame()->SetReferrerForRequest(request,
+                                                              referrer_url);
+}
+
+std::unique_ptr<blink::WebAssociatedURLLoader>
+PdfViewWebPlugin::CreateAssociatedURLLoader(
+    const blink::WebAssociatedURLLoaderOptions& options) {
+  // TODO(crbug.com/1127146): blink::WebLocalFrame::CreateAssociatedURLLoader()
+  // really should return a std::unique_ptr instead.
+  DCHECK(IsValid());
+  return base::WrapUnique(
+      container_->GetDocument().GetFrame()->CreateAssociatedURLLoader(options));
+}
+
+base::WeakPtr<PdfViewPluginBase> PdfViewWebPlugin::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
+std::unique_ptr<UrlLoader> PdfViewWebPlugin::CreateUrlLoaderInternal() {
+  auto loader = std::make_unique<BlinkUrlLoader>(weak_factory_.GetWeakPtr());
+  loader->GrantUniversalAccess();
+  return loader;
+}
+
+// Modeled on `OutOfProcessInstance::DidOpen()`.
+void PdfViewWebPlugin::DidOpen(std::unique_ptr<UrlLoader> loader,
+                               int32_t result) {
+  if (result == PP_OK) {
+    if (!engine()->HandleDocumentLoad(std::move(loader)))
+      DocumentLoadFailed();
+  } else {
+    NOTIMPLEMENTED();
+  }
+}
+
+void PdfViewWebPlugin::DidOpenPreview(std::unique_ptr<UrlLoader> loader,
+                                      int32_t result) {
+  NOTIMPLEMENTED();
+}
 
 }  // namespace chrome_pdf

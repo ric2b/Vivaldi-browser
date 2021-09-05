@@ -52,21 +52,11 @@ BUG_REPORT_URL = ('https://crbug.com and run'
 
 
 win_sdk_dir = None
-dia_dll = None
 def GetWinSDKDir():
-  """Get the location of the current SDK. Sets dia_dll as a side-effect."""
+  """Get the location of the current SDK."""
   global win_sdk_dir
-  global dia_dll
   if win_sdk_dir:
     return win_sdk_dir
-
-  # Bump after VC updates.
-  DIA_DLL = {
-      '2013': 'msdia120.dll',
-      '2015': 'msdia140.dll',
-      '2017': 'msdia140.dll',
-      '2019': 'msdia140.dll',
-  }
 
   # Don't let vs_toolchain overwrite our environment.
   environ_bak = os.environ
@@ -84,8 +74,6 @@ def GetWinSDKDir():
     else:
       vs_path = os.environ['GYP_MSVS_OVERRIDE_PATH']
     dia_path = os.path.join(vs_path, 'DIA SDK', 'bin', 'amd64')
-
-  dia_dll = os.path.join(dia_path, DIA_DLL[msvs_version])
 
   os.environ = environ_bak
   return win_sdk_dir
@@ -128,11 +116,6 @@ def CopyFile(src, dst):
   """Copy a file from src to dst."""
   print("Copying %s to %s" % (src, dst))
   shutil.copy(src, dst)
-
-
-def CopyDiaDllTo(target_dir):
-  GetWinSDKDir()
-  CopyFile(dia_dll, target_dir)
 
 
 def CopyDirectoryContents(src, dst):
@@ -253,7 +236,7 @@ def AddGnuWinToPath():
     return
 
   gnuwin_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, 'gnuwin')
-  GNUWIN_VERSION = '13'
+  GNUWIN_VERSION = '14'
   GNUWIN_STAMP = os.path.join(gnuwin_dir, 'stamp')
   if ReadStampFile(GNUWIN_STAMP) == GNUWIN_VERSION:
     print('GNU Win tools already up to date.')
@@ -305,6 +288,28 @@ def AddZlibToPath():
 
   os.environ['PATH'] = zlib_dir + os.pathsep + os.environ.get('PATH', '')
   return zlib_dir
+
+
+def DownloadRPMalloc():
+  """Download rpmalloc."""
+  rpmalloc_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, 'rpmalloc')
+  if os.path.exists(rpmalloc_dir):
+    RmTree(rpmalloc_dir)
+
+  # Using rpmalloc bc1923f rather than the latest release (1.4.1) because
+  # it contains the fix for https://github.com/mjansson/rpmalloc/pull/186
+  # which would cause lld to deadlock.
+  # The zip file was created and uploaded as follows:
+  # $ mkdir rpmalloc
+  # $ curl -L https://github.com/mjansson/rpmalloc/archive/bc1923f436539327707b08ef9751a7a87bdd9d2f.tar.gz \
+  #     | tar -C rpmalloc --strip-components=1 -xzf -
+  # $ GZIP=-9 tar vzcf rpmalloc-bc1923f.tgz rpmalloc
+  # $ gsutil.py cp -n -a public-read rpmalloc-bc1923f.tgz \
+  #     gs://chromium-browser-clang/tools/
+  zip_name = 'rpmalloc-bc1923f.tgz'
+  DownloadAndUnpack(CDS_URL + '/tools/' + zip_name, LLVM_BUILD_TOOLS_DIR)
+  rpmalloc_dir = rpmalloc_dir.replace('\\', '/')
+  return rpmalloc_dir
 
 
 def MaybeDownloadHostGcc(args):
@@ -543,6 +548,8 @@ def main():
       '-DLLVM_INCLUDE_GO_TESTS=OFF',
       # TODO(crbug.com/1113475): Update binutils.
       '-DENABLE_X86_RELAX_RELOCATIONS=NO',
+      # See crbug.com/1126219: Use native symbolizer instead of DIA
+      '-DLLVM_ENABLE_DIA_SDK=OFF',
   ]
 
   if args.gcc_toolchain:
@@ -583,6 +590,10 @@ def main():
     cflags.append('-I' + zlib_dir)
     cxxflags.append('-I' + zlib_dir)
     ldflags.append('-LIBPATH:' + zlib_dir)
+
+    # Use rpmalloc. For faster ThinLTO linking.
+    rpmalloc_dir = DownloadRPMalloc()
+    base_cmake_args.append('-DLLVM_INTEGRATED_CRT_ALLOC=' + rpmalloc_dir)
 
   if sys.platform != 'win32':
     # libxml2 is required by the Win manifest merging tool used in cross-builds.
@@ -661,8 +672,6 @@ def main():
       if sys.platform == 'darwin':
         # TODO(crbug.com/731375): Run check-all on Darwin too.
         test_targets = [ 'check-llvm', 'check-clang', 'check-builtins' ]
-      if sys.platform == 'win32':
-        CopyDiaDllTo(os.path.join(LLVM_BOOTSTRAP_DIR, 'bin'))
       RunCommand(['ninja'] + test_targets, msvc_arch='x64')
     RunCommand(['ninja', 'install'], msvc_arch='x64')
 
@@ -1061,8 +1070,6 @@ def main():
     RunCommand(['ninja', '-C', LLVM_BUILD_DIR, 'cr-check-all'], msvc_arch='x64')
 
   if args.run_tests:
-    if sys.platform == 'win32':
-      CopyDiaDllTo(os.path.join(LLVM_BUILD_DIR, 'bin'))
     test_targets = [ 'check-all' ]
     if sys.platform == 'darwin':
       # TODO(thakis): Run check-all on Darwin too, https://crbug.com/959361

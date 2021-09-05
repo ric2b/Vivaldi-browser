@@ -53,10 +53,6 @@ void RotateMatchToFront(ACMatches::iterator it, ACMatches* matches) {
   std::rotate(matches->begin(), it, next);
 }
 
-// This value should be comfortably larger than any max-autocomplete-matches
-// under consideration.
-constexpr size_t kMaxAutocompletePositionValue = 30;
-
 }  // namespace
 
 struct MatchGURLHash {
@@ -226,7 +222,7 @@ void AutocompleteResult::SortAndCull(
 
   DeduplicateMatches(&matches_);
 
-  // Sort the matches.
+  // Sort the matches by relevance and demotions.
   std::sort(matches_.begin(), matches_.end(), comparing_object);
 
   // Find the best match and rotate it to the front to become the default match.
@@ -265,6 +261,8 @@ void AutocompleteResult::SortAndCull(
     LimitNumberOfURLsShown(GetMaxMatches(is_zero_suggest), max_url_count,
                            comparing_object);
 
+  GroupAndDemoteMatchesWithHeaders();
+
   // Limit total matches accounting for suggestions score <= 0, sub matches, and
   // feature configs such as OmniboxUIExperimentMaxAutocompleteMatches,
   // OmniboxMaxZeroSuggestMatches, and OmniboxDynamicMaxAutocomplete.
@@ -272,6 +270,7 @@ void AutocompleteResult::SortAndCull(
       CalculateNumMatches(is_zero_suggest, matches_, comparing_object);
   matches_.resize(num_matches);
 
+  // Group search suggestions above URL suggestions.
 #if defined(OS_ANDROID)
   if (matches_.size() > 2 &&
       !base::FeatureList::IsEnabled(omnibox::kAdaptiveSuggestionsCount)) {
@@ -284,11 +283,13 @@ void AutocompleteResult::SortAndCull(
             matches_.front().type)) {
       while (next != matches_.end() &&
              (AutocompleteMatch::ShouldBeSkippedForGroupBySearchVsUrl(
-                 matches_.front().type))) {
+                 next->type))) {
         next = std::next(next);
       }
     }
-    GroupSuggestionsBySearchVsURL(next, matches_.end());
+    auto begin_url = GroupSuggestionsBySearchVsURL(next, matches_.end());
+    if (base::FeatureList::IsEnabled(omnibox::kBubbleUrlSuggestions))
+      BubbleURLSuggestions(next, begin_url, matches_);
   }
 
   // If we have a default match, run some sanity checks. Skip these checks if
@@ -321,6 +322,59 @@ void AutocompleteResult::SortAndCull(
       }
     }
   }
+}
+
+void AutocompleteResult::GroupAndDemoteMatchesWithHeaders() {
+  constexpr int kNoHeaderSuggesetionGroupId = -1;
+
+  // Create a map from suggestion group ID to the index it first appears.
+  // Reserve the first spot for matches without headers.
+  std::map<int, int> group_id_index_map = {{kNoHeaderSuggesetionGroupId, 0}};
+  for (auto it = matches_.begin(); it != matches_.end(); ++it) {
+    if (it->suggestion_group_id.has_value()) {
+      // Record group IDs and header strings, if available, into the
+      // additional_info field for chrome://omnibox.
+      int group_id = it->suggestion_group_id.value();
+      it->RecordAdditionalInfo("suggestion_group_id", group_id);
+      const base::string16 header = GetHeaderForGroupId(group_id);
+      if (!header.empty()) {
+        it->RecordAdditionalInfo("header string", header);
+      } else {
+        // Strip group IDs for which there is no header string from the matches.
+        // Otherwise, these matches may be shown at the bottom with an empty
+        // header row. They should instead be treated as ordinary matches with
+        // no group ID.
+        it->suggestion_group_id.reset();
+      }
+    }
+
+    int group_id =
+        it->suggestion_group_id.value_or(kNoHeaderSuggesetionGroupId);
+    // Use the 1-based index of the match to record the first appearance of its
+    // group ID since 0 is reserved for matches without headers. We are
+    // interested in the relative values of these indices only and their
+    // absolute values hardly matter.
+    int index = std::distance(matches_.begin(), it) + 1;
+    // map::insert doesn't insert the value if the map already contains the key.
+    group_id_index_map.insert(std::pair<int, int>(group_id, index));
+  }
+
+  // No need to group and demote matches with headers if none exists.
+  if (group_id_index_map.size() == 1)
+    return;
+
+  // Sort the matches based on the order in which their group IDs first appear
+  // while preserving the existing order of matches with the same group ID.
+  std::stable_sort(
+      matches_.begin(), matches_.end(),
+      [&group_id_index_map, kNoHeaderSuggesetionGroupId](const auto& a,
+                                                         const auto& b) {
+        const int a_group_id =
+            a.suggestion_group_id.value_or(kNoHeaderSuggesetionGroupId);
+        const int b_group_id =
+            b.suggestion_group_id.value_or(kNoHeaderSuggesetionGroupId);
+        return group_id_index_map[a_group_id] < group_id_index_map[b_group_id];
+      });
 }
 
 void AutocompleteResult::DemoteOnDeviceSearchSuggestions() {
@@ -391,9 +445,10 @@ void AutocompleteResult::DemoteOnDeviceSearchSuggestions() {
   }
 }
 
-void AutocompleteResult::ConvertInSuggestionPedalMatches(
-    AutocompleteProviderClient* client) {
-  OmniboxPedalProvider* provider = client->GetPedalProvider();
+void AutocompleteResult::AttachPedalsToMatches(
+    const AutocompleteInput& input,
+    const AutocompleteProviderClient& client) {
+  OmniboxPedalProvider* provider = client.GetPedalProvider();
   // Used to ensure we keep only one Pedal of each kind.
   std::unordered_set<OmniboxPedal*> pedals_found;
 
@@ -406,7 +461,7 @@ void AutocompleteResult::ConvertInSuggestionPedalMatches(
       continue;
     }
 
-    OmniboxPedal* const pedal = provider->FindPedalMatch(match.contents);
+    OmniboxPedal* const pedal = provider->FindPedalMatch(input, match.contents);
     if (pedal) {
       const auto result = pedals_found.insert(pedal);
       if (result.second)
@@ -491,6 +546,19 @@ bool AutocompleteResult::TopMatchIsStandaloneVerbatimMatch() const {
       return !i->IsVerbatimType();
   }
   return true;
+}
+
+void AutocompleteResult::GroupSuggestionsBySearchVsURL(int first_index,
+                                                       int last_index) const {
+  const int num_elements = matches_.size();
+  DCHECK_GE(first_index, 0);
+  DCHECK_LT(first_index, num_elements);
+  DCHECK_GT(last_index, 0);
+  DCHECK_LE(last_index, num_elements);
+  DCHECK_LT(first_index, last_index);
+  auto range_start = const_cast<ACMatches&>(matches_).begin();
+  GroupSuggestionsBySearchVsURL(range_start + first_index,
+                                range_start + last_index);
 }
 
 // static
@@ -621,6 +689,8 @@ size_t AutocompleteResult::CalculateNumMatchesPerUrlCount(
 
 void AutocompleteResult::Reset() {
   matches_.clear();
+  headers_map_.clear();
+  hidden_group_ids_.clear();
 }
 
 void AutocompleteResult::Swap(AutocompleteResult* other) {
@@ -767,6 +837,16 @@ bool AutocompleteResult::IsSuggestionGroupIdHidden(
 
   DCHECK_EQ(user_preference, omnibox::SuggestionGroupVisibility::DEFAULT);
   return base::Contains(hidden_group_ids_, suggestion_group_id);
+}
+
+void AutocompleteResult::MergeHeadersMap(
+    const SearchSuggestionParser::HeadersMap& headers_map) {
+  headers_map_.insert(headers_map.begin(), headers_map.end());
+}
+
+void AutocompleteResult::MergeHiddenGroupIds(
+    const std::vector<int>& hidden_group_ids) {
+  hidden_group_ids_.insert(hidden_group_ids.begin(), hidden_group_ids.end());
 }
 
 // static
@@ -971,9 +1051,60 @@ void AutocompleteResult::LimitNumberOfURLsShown(
 }
 
 // static
-void AutocompleteResult::GroupSuggestionsBySearchVsURL(iterator begin,
-                                                       iterator end) {
-  std::stable_partition(begin, end, [](const AutocompleteMatch& match) {
-    return match.IsSearchType(match.type);
+AutocompleteResult::iterator AutocompleteResult::GroupSuggestionsBySearchVsURL(
+    iterator begin,
+    iterator end) {
+  return std::stable_partition(begin, end, [](const AutocompleteMatch& match) {
+    return AutocompleteMatch::IsSearchType(match.type);
   });
+}
+
+// static
+void AutocompleteResult::BubbleURLSuggestions(iterator begin_search,
+                                              iterator begin_url,
+                                              ACMatches& matches) {
+  auto absolute_gap = base::GetFieldTrialParamByFeatureAsInt(
+      omnibox::kBubbleUrlSuggestions,
+      OmniboxFieldTrial::kBubbleUrlSuggestionsAbsoluteGapParam, 200);
+  auto relative_gap = base::GetFieldTrialParamByFeatureAsDouble(
+      omnibox::kBubbleUrlSuggestions,
+      OmniboxFieldTrial::kBubbleUrlSuggestionsRelativeGapParam, 1);
+  auto absolute_buffer = base::GetFieldTrialParamByFeatureAsInt(
+      omnibox::kBubbleUrlSuggestions,
+      OmniboxFieldTrial::kBubbleUrlSuggestionsAbsoluteBufferParam, 100);
+  auto relative_buffer = base::GetFieldTrialParamByFeatureAsDouble(
+      omnibox::kBubbleUrlSuggestions,
+      OmniboxFieldTrial::kBubbleUrlSuggestionsRelativeBufferParam, 1);
+
+  // |next_url| tracks the first (i.e. highest scoring) yet unbubbled URL
+  // suggestion.
+  auto next_url = begin_url;
+
+  for (auto next_search = begin_search;
+       next_search != next_url && next_url != matches.end();
+       next_search = std::next(next_search)) {
+    // Only bubble if there's a sufficient score gap between adjacent searches.
+    if (next_search != begin_search &&
+        std::prev(next_search)->relevance <
+            std::max(next_search->relevance + absolute_gap * 1.,
+                     next_search->relevance * relative_gap))
+      continue;
+    // Only bubble if there's a sufficient buffer between the URL and search.
+    if (next_url->relevance <
+        std::max(next_search->relevance + absolute_buffer * 1.,
+                 next_search->relevance * relative_buffer))
+      continue;
+
+    // Find the series of URLs to bubble: [next_url, last_bubble_url).
+    // Although |next_url| must score higher than the |next_search| by at least
+    // the buffer amount, the remaining URls in the series need to score only
+    // as high as |next_search|.
+    auto last_bubble_url = std::find_if(
+        std::next(next_url), matches.end(),
+        [&](auto& match) { return match.relevance < next_search->relevance; });
+
+    // Bubble [next_url, last_bubble_url) above |next_search|.
+    next_search = std::rotate(next_search, next_url, last_bubble_url);
+    next_url = last_bubble_url;
+  }
 }

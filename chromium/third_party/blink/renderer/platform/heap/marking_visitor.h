@@ -49,14 +49,6 @@ class PLATFORM_EXPORT MarkingVisitorBase : public Visitor {
   // to be in construction.
   void DynamicallyMarkAddress(ConstAddress);
 
-  // This callback mechanism is needed to account for backing store objects
-  // containing intra-object pointers, all of which must be relocated/rebased
-  // with respect to the moved-to location.
-  //
-  // For Blink, |HeapLinkedHashSet<>| is currently the only abstraction which
-  // relies on this feature.
-  void RegisterBackingStoreCallback(const void*, MovingObjectCallback) final;
-
   void RegisterMovableSlot(const void* const*) final;
 
   void RegisterWeakCallback(WeakCallback, const void*) final;
@@ -94,7 +86,6 @@ class PLATFORM_EXPORT MarkingVisitorBase : public Visitor {
   MovableReferenceWorklist::View movable_reference_worklist_;
   EphemeronPairsWorklist::View discovered_ephemeron_pairs_worklist_;
   EphemeronPairsWorklist::View ephemeron_pairs_to_process_worklist_;
-  BackingStoreCallbackWorklist::View backing_store_callback_worklist_;
   size_t marked_bytes_ = 0;
   const MarkingMode marking_mode_;
   int task_id_;
@@ -239,7 +230,7 @@ ALWAYS_INLINE void MarkingVisitor::TraceMarkedBackingStore(const void* value) {
 class PLATFORM_EXPORT ConcurrentMarkingVisitor : public MarkingVisitorBase {
  public:
   ConcurrentMarkingVisitor(ThreadState*, MarkingMode, int);
-  ~ConcurrentMarkingVisitor() override = default;
+  ~ConcurrentMarkingVisitor() override;
 
   virtual void FlushWorklists();
 
@@ -257,10 +248,15 @@ class PLATFORM_EXPORT ConcurrentMarkingVisitor : public MarkingVisitorBase {
     return true;
   }
 
+  size_t RecentlyMarkedBytes() {
+    return marked_bytes_ - std::exchange(last_marked_bytes_, marked_bytes_);
+  }
+
  private:
   NotSafeToConcurrentlyTraceWorklist::View
       not_safe_to_concurrently_trace_worklist_;
   NotFullyConstructedWorklist::View previously_not_fully_constructed_worklist_;
+  size_t last_marked_bytes_ = 0;
 };
 
 }  // namespace blink

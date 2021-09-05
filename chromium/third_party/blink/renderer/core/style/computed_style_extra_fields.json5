@@ -44,7 +44,7 @@
         "table-row", "table-column-group", "table-column", "table-cell",
         "table-caption", "-webkit-box", "-webkit-inline-box", "flex",
         "inline-flex", "grid", "inline-grid", "contents", "flow-root", "none",
-        "layout-custom", "inline-layout-custom", "math", "inline-math"
+        "layout-custom", "inline-layout-custom", "math", "block math"
       ],
       default_value: "inline",
     },
@@ -74,7 +74,7 @@
         "table-row", "table-column-group", "table-column", "table-cell",
         "table-caption", "-webkit-box", "-webkit-inline-box", "flex",
         "inline-flex", "grid", "inline-grid", "contents", "flow-root", "none",
-        "layout-custom", "inline-layout-custom", "math", "inline-math"
+        "layout-custom", "inline-layout-custom", "math", "block math"
       ],
       default_value: "inline",
     },
@@ -1001,13 +1001,22 @@
       getter: "GetMathFractionBarThickness",
     },
     {
-      name: "MathPaddedLSpace",
+      name: "MathLSpace",
       field_template: "external",
       default_value: "Length()",
       include_paths: ["third_party/blink/renderer/platform/geometry/length.h"],
       type_name: "Length",
       field_group: "*",
-      getter: "GetMathPaddedLSpace",
+      getter: "GetMathLSpace",
+    },
+    {
+      name: "MathRSpace",
+      field_template: "external",
+      default_value: "Length()",
+      include_paths: ["third_party/blink/renderer/platform/geometry/length.h"],
+      type_name: "Length",
+      field_group: "*",
+      getter: "GetMathRSpace",
     },
     {
       name: "MathPaddedVOffset",
@@ -1027,13 +1036,24 @@
       field_group: "*",
       getter: "GetMathPaddedDepth",
     },
+
     {
-      name: "MathScriptLevel",
-      inherited: true,
-      field_template: "primitive",
-      type_name: "short",
-      default_value: "0",
+      name: "MathMinSize",
+      field_template: "external",
+      default_value: "Length()",
+      include_paths: ["third_party/blink/renderer/platform/geometry/length.h"],
+      type_name: "Length",
       field_group: "*",
+      getter: "GetMathMinSize",
+    },
+    {
+      name: "MathMaxSize",
+      field_template: "external",
+      default_value: "Length()",
+      include_paths: ["third_party/blink/renderer/platform/geometry/length.h"],
+      type_name: "Length",
+      field_group: "*",
+      getter: "GetMathMaxSize",
     },
     {
       name: "EffectiveZIndexZero",

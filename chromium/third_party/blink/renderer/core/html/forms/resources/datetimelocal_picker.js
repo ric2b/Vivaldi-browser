@@ -36,6 +36,7 @@ class DateTimeLocalPicker extends HTMLElement {
     this.hadValidValueWhenOpened_ =
         (config.currentValue !== '') && (this.datePicker_.selection() != null);
     this.initialSelectedValue_ = this.selectedValue;
+    this.initialFocusedFieldIndex_ = config.focusedFieldIndex || 0;
 
     this.addEventListener('keydown', this.onKeyDown_);
     this.addEventListener('click', this.onClick_);
@@ -87,6 +88,8 @@ class DateTimeLocalPicker extends HTMLElement {
         break;
       case 'Home':
       case 'End':
+        window.pagePopupController.setValue(this.selectedValue);
+        event.stopPropagation();
         // Prevent an attempt to scroll to the end of
         // of an infinitely looping time picker column.
         event.preventDefault();
@@ -103,7 +106,14 @@ class DateTimeLocalPicker extends HTMLElement {
   };
 
   onWindowResize_ = (event) => {
-    this.datePicker_.calendarTableView.element.focus();
+    // Check if we should focus on time field by subtracting 3 (month, day, and
+    // year) from index
+    let timeFocusFieldIndex = this.initialFocusedFieldIndex_ - 3;
+    if (timeFocusFieldIndex < 0 ||
+        !this.timePicker_.focusOnFieldIndex(timeFocusFieldIndex)) {
+      // Default to focus on date
+      this.datePicker_.calendarTableView.element.focus();
+    }
   };
 
   // This will be false if neither the initial value of the

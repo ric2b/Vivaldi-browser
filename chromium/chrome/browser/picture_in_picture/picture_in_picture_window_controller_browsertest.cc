@@ -38,7 +38,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/web_preferences.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -48,6 +47,7 @@
 #include "services/media_session/public/cpp/features.h"
 #include "skia/ext/image_operations.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/views/controls/button/image_button.h"
@@ -2487,8 +2487,9 @@ class ChromeContentBrowserClientOverrideWebAppScope
   ChromeContentBrowserClientOverrideWebAppScope() = default;
   ~ChromeContentBrowserClientOverrideWebAppScope() override = default;
 
-  void OverrideWebkitPrefs(content::RenderViewHost* rvh,
-                           content::WebPreferences* web_prefs) override {
+  void OverrideWebkitPrefs(
+      content::RenderViewHost* rvh,
+      blink::web_pref::WebPreferences* web_prefs) override {
     ChromeContentBrowserClient::OverrideWebkitPrefs(rvh, web_prefs);
 
     web_prefs->web_app_scope = web_app_scope_;
@@ -2521,10 +2522,10 @@ class WebAppPictureInPictureWindowControllerBrowserTest
         "/extensions/auto_picture_in_picture/main.html");
   }
 
-  Browser* InstallAndLaunchPWA(const GURL& app_url) {
+  Browser* InstallAndLaunchPWA(const GURL& start_url) {
     auto web_app_info = std::make_unique<WebApplicationInfo>();
-    web_app_info->app_url = app_url;
-    web_app_info->scope = app_url.GetOrigin();
+    web_app_info->start_url = start_url;
+    web_app_info->scope = start_url.GetOrigin();
     web_app_info->open_as_window = true;
     const web_app::AppId app_id = InstallWebApp(std::move(web_app_info));
 

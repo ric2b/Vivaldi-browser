@@ -4,31 +4,120 @@
 
 module crosapi.mojom;
 
-import "chromeos/crosapi/mojom/attestation.mojom";
+import "chromeos/crosapi/mojom/feedback.mojom";
+import "chromeos/crosapi/mojom/keystore_service.mojom";
 import "chromeos/crosapi/mojom/message_center.mojom";
 import "chromeos/crosapi/mojom/screen_manager.mojom";
 import "chromeos/crosapi/mojom/select_file.mojom";
+import "services/device/public/mojom/hid.mojom";
+
+// LacrosInfo is a set of parameters passed to ash from lacros-chrome
+// upon lacros startup, which contains the lacros information such as version,
+// etc.
+[Stable]
+struct LacrosInfo {
+  // Version of lacros-chrome displayed to user in feedback report, etc.
+  // It includes both browser version and channel in the format of:
+  // {browser version} {channel}
+  // For example, "87.0.0.1 dev", "86.0.4240.38 beta".
+  string lacros_version@0;
+
+  // TODO(crbug.com/1119925): Add more parameters later.
+};
 
 // AshChromeService defines the APIs that live in ash-chrome and are
-// accessed from lacros-chrome.
+// accessed from lacros-chrome. When adding a major new API please note the
+// milestone when you added it, to help us reason about compatibility between
+// lacros-chrome and older ash-chrome binaries.
+[Stable]
 interface AshChromeService {
-  // Binds the Attestation interface for challenging keys.
-  BindAttestation@2(pending_receiver<Attestation> receiver);
+  // Binds the KeystoreService interface for challenging keys.
+  // Added in M87.
+  BindKeystoreService@2(pending_receiver<KeystoreService> receiver);
 
   // Binds the MessageCenter interface for showing notification messages.
+  // Added in M86.
   BindMessageCenter@3(pending_receiver<MessageCenter> receiver);
 
   // Binds the ScreenManager interface for interacting with windows, screens and
   // displays.
+  // Added in M86.
   BindScreenManager@1(pending_receiver<ScreenManager> receiver);
 
   // Binds the SelectFile interface for open/save dialogs.
+  // Added in M86.
   BindSelectFile@0(pending_receiver<SelectFile> receiver);
+
+  // Binds the HidManager interface for support HID devices.
+  // Added in M87.
+  BindHidManager@4(pending_receiver<device.mojom.HidManager> receiver);
+
+  // Binds the Feedback interface for showing feedback UI.
+  // Added in M87.
+  [MinVersion=3] BindFeedback@5(pending_receiver<Feedback> receiver);
+
+  // Passes generic lacros information such as lacros version, etc into ash
+  // in |lacros_info| during startup.
+  // Added in M87.
+  [MinVersion=3] OnLacrosStartup@6(LacrosInfo lacros_info);
+};
+
+[Stable, Extensible]
+enum SessionType {
+  kUnknown,
+  kRegularSession,
+  kGuestSession,
+  kPublicSession
+};
+
+// LacrosInitParams is a set of parameters for initialization of lacros-chrome,
+// which is passed from ash-chrome to lacros-chrome. Since ash-chrome and
+// lacros-chrome may have different versions, lacros-chrome must handle this
+// struct carefully.
+//
+// If ash-chrome is older than lacros-chrome, then some fields may not be
+// present in the serialized IPC message. This manifests as the newer (missing)
+// fields taking on default values in lacros-chrome. This means
+// that the default value for each field must always be interpreted to mean:
+// this field was not sent because ash-chrome was too old. If the default value
+// needs to have a different meaning, then we must also add a bool field
+// describing the validity of this field. Mojo currently does not support
+// optional primitives.
+//
+// If ash-chrome is newer than lacros-chrome, then some fields may not be
+// processed by lacros-chrome.
+[Stable]
+struct LacrosInitParams {
+  // This is ash-chrome's version of the AshChromeService interface. This is
+  // used by lacros-chrome to determine which interface methods are safe to
+  // call.
+  [MinVersion=1]
+  uint32 ash_chrome_service_version@0;
+
+  // Whether |ash_metrics_enabled| has a value. See struct comment.
+  [MinVersion=2]
+  bool ash_metrics_enabled_has_value@1;
+
+  // Whether metrics are enabled in ash-chrome. On lacros first run we inherit
+  // metrics consent from ash, because on Chrome OS metrics consent is chosen
+  // during the out-of-box experience. After first run lacros handles metrics
+  // consent via settings.
+  [MinVersion=2]
+  bool ash_metrics_enabled@2;
+
+  // Type of the ash-chrome session.
+  [MinVersion=3]
+  SessionType session_type@3;
 };
 
 // LacrosChromeService defines the APIs that live in lacros-chrome and
 // are accessed from ash-chrome.
+[Stable]
 interface LacrosChromeService {
+  // Ash-chrome can pass initialize parameters via this method.
+  // The parameters are available on lacros-chrome startup.
+  Init@2(LacrosInitParams params);
+
   // Returns the pending_receiver of AshChromeService.
   // Ash-chrome is expected to call this method on initialization.
   // Lacros-chrome may call AshChromeService APIs earlier than this

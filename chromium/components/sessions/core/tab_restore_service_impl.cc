@@ -116,6 +116,7 @@ const SessionCommand::id_type kCommandSetTabUserAgentOverride = 8;
 const SessionCommand::id_type kCommandWindow = 9;
 const SessionCommand::id_type kCommandGroup = 10;
 const SessionCommand::id_type kCommandSetTabUserAgentOverride2 = 11;
+const SessionCommand::id_type kCommandSetWindowUserTitle = 12;
 
 // Vivaldi extensions. Might be necessary to preserve these values
 const sessions::SessionCommand::id_type kCommandSetExtData = 200;
@@ -679,6 +680,11 @@ void TabRestoreServiceImpl::PersistenceDelegate::ScheduleCommandsForWindow(
         kCommandSetWindowAppName, window.id, window.app_name));
   }
 
+  if (!window.user_title.empty()) {
+    command_storage_manager_->ScheduleCommand(CreateSetWindowUserTitleCommand(
+        kCommandSetWindowUserTitle, window.id, window.user_title));
+  }
+
   VivaldiWindowsScheduleExtCommand(command_storage_manager_.get(), window);
 
   for (size_t i = 0; i < window.tabs.size(); ++i) {
@@ -1076,6 +1082,22 @@ void TabRestoreServiceImpl::PersistenceDelegate::CreateEntriesFromCommands(
         break;
       }
 
+      case kCommandSetWindowUserTitle: {
+        if (!current_window) {
+          // We should have created a window already.
+          NOTREACHED();
+          return;
+        }
+
+        SessionID window_id = SessionID::InvalidValue();
+        std::string title;
+        if (!RestoreSetWindowUserTitleCommand(command, &window_id, &title))
+          return;
+
+        current_window->user_title.swap(title);
+        break;
+      }
+
       // Macro defined in  vivaldi_persistent_tab_restore_service.inc
       VIVALDI_PERSISTENT_TAB_CASES
 
@@ -1184,9 +1206,12 @@ void TabRestoreServiceImpl::PersistenceDelegate::LoadStateChanged() {
   }
 
   staging_entries_.clear();
-  entries_to_write_ = 0;
 
   tab_restore_service_helper_->PruneEntries();
+
+  // Write the loaded entries into the current session.
+  entries_to_write_ = tab_restore_service_helper_->entries().size();
+
   tab_restore_service_helper_->NotifyTabsChanged();
 
   tab_restore_service_helper_->NotifyLoaded();

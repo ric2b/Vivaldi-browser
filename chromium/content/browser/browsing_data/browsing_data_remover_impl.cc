@@ -22,7 +22,7 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/browsing_data/browsing_data_filter_builder_impl.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -488,8 +488,8 @@ void BrowsingDataRemoverImpl::RemoveImpl(
         BrowsingDataFilterBuilder::Mode::kPreserve) {
       // When clearing cache, wipe accumulated network related data
       // (TransportSecurityState and HttpServerPropertiesManager data).
-      network_context->ClearNetworkingHistorySince(
-          delete_begin,
+      network_context->ClearNetworkingHistoryBetween(
+          delete_begin, delete_end,
           CreateTaskCompletionClosureForMojo(TracingDataType::kNetworkHistory));
     }
 
@@ -537,8 +537,10 @@ void BrowsingDataRemoverImpl::RemoveImpl(
       !(remove_mask & DATA_TYPE_AVOID_CLOSING_CONNECTIONS)) {
     BrowserContext::GetDefaultStoragePartition(browser_context_)
         ->GetNetworkContext()
-        ->ClearHttpAuthCache(delete_begin, CreateTaskCompletionClosureForMojo(
-                                               TracingDataType::kAuthCache));
+        ->ClearHttpAuthCache(
+            delete_begin_.is_null() ? base::Time::Min() : delete_begin_,
+            delete_end_.is_null() ? base::Time::Max() : delete_end_,
+            CreateTaskCompletionClosureForMojo(TracingDataType::kAuthCache));
   }
 
   //////////////////////////////////////////////////////////////////////////////

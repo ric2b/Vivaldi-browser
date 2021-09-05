@@ -98,6 +98,7 @@
 <translation id="4235360514405112390">Gilt</translation>
 <translation id="4250431568374086873">Tenging þín við þessa síðu er ekki fullkomlega örugg</translation>
 <translation id="4265872034478892965">Leyfi gefið af kerfisstjóra</translation>
+<translation id="4305666528087210886">Ekki var hægt að opna skrána þína</translation>
 <translation id="4312866146174492540">Hamla (sjálfvalið)</translation>
 <translation id="4356973930735388585">Tölvuþrjótar á þessari síðu gætu reynt að fá þig til þess að setja upp hættulegt forrit á tölvunni þinni sem stelur eða eyðir upplýsingunum þínum (til dæmis ljósmyndum, lykilorðum, skilaboðum eða kreditkortum).</translation>
 <translation id="4408413947728134509">Vafrakökur <ph name="NUM_COOKIES" /></translation>
@@ -201,7 +202,6 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="8041940743680923270">Nota algilda sjálfgefna stillingu (Spyrja)</translation>
 <translation id="808894953321890993">Breyta lykilorði</translation>
 <translation id="8119307142152921512">Rekjarar og auglýsingar</translation>
-<translation id="8142868475871995937">Heimsæktu &lt;strong&gt;vivaldi://policy&lt;/strong&gt; til þess að sjá lista yfir óleyfðan lista hlekka og aðrar stefnur sem er framfylgt af kerfinu þínu.</translation>
 <translation id="8149426793427495338">Tölvan þín fór að sofa.</translation>
 <translation id="8150722005171944719">Skráin í <ph name="URL" /> er ólesanleg. Hún gæti hafa verið fjarlægð, færð eða aðgangsstýring hamlað skráaraðgengi.</translation>
 <translation id="8184538546369750125">Nota algilda sjálfgefna stillingu (Leyfa)</translation>
@@ -224,6 +224,7 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="9011424611726486705">Opna stillingar fyrir síðu</translation>
 <translation id="9025348182339809926">(Ógilt)</translation>
 <translation id="9039213469156557790">Þessi síða geymir að auki önnur gögn sem ekki eru örugg. Aðrir geta skoðað þessi gögn þegar verið er að sækja þau og getur þeim verið breytt af tölvuþrjóti til þess að breyta hegðun á síðunni.</translation>
+<translation id="9062620674789239642">Hugsanlega var hún færð, henni breytt eða eytt.</translation>
 <translation id="9069693763241529744">Hamlað af viðbót</translation>
 <translation id="9169664750068251925">Aldrei leyfa á þessari síðu</translation>
 <translation id="9180553614777056266">Auglýsingavörn</translation>

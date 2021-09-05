@@ -47,8 +47,6 @@ import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelega
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.util.ColorUtils;
-import org.chromium.ui.vr.VrModeObserver;
-import org.chromium.ui.vr.VrModeProvider;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -68,7 +66,7 @@ import org.chromium.base.BuildConfig;
  */
 public class SelectableListToolbar<E>
         extends Toolbar implements SelectionObserver<E>, OnClickListener, OnEditorActionListener,
-                                   DisplayStyleObserver, VrModeObserver {
+                                   DisplayStyleObserver {
     /**
      * A delegate that handles searching the list of selectable items associated with this toolbar.
      */
@@ -102,7 +100,6 @@ public class SelectableListToolbar<E>
 
     protected boolean mIsSelectionEnabled;
     protected SelectionDelegate<E> mSelectionDelegate;
-    protected VrModeProvider mVrModeProvider;
 
     private boolean mIsSearching;
     private boolean mHasSearchView;
@@ -111,7 +108,6 @@ public class SelectableListToolbar<E>
     private ImageButton mClearTextButton;
     private SearchDelegate mSearchDelegate;
     private boolean mSearchEnabled;
-    private boolean mIsVrEnabled;
     private boolean mUpdateStatusBarColor;
 
     protected NumberRollView mNumberRollView;
@@ -164,7 +160,6 @@ public class SelectableListToolbar<E>
         mIsDestroyed = true;
         if (mSelectionDelegate != null) mSelectionDelegate.removeObserver(this);
         if (mSearchEditText != null) hideKeyboard();
-        if (mVrModeProvider != null) mVrModeProvider.unregisterVrModeObserver(this);
     }
 
     /**
@@ -180,10 +175,9 @@ public class SelectableListToolbar<E>
      * @param updateStatusBarColor Whether the status bar color should be updated to match the
      *                             toolbar color. If true, the status bar will only be updated if
      *                             the current device fully supports theming and is on Android M+.
-     * @param vrModeProvider Used to modify behavior based on VR state.
      */
     public void initialize(SelectionDelegate<E> delegate, int titleResId, int normalGroupResId,
-            int selectedGroupResId, boolean updateStatusBarColor, VrModeProvider vrModeProvider) {
+            int selectedGroupResId, boolean updateStatusBarColor) {
         mTitleResId = titleResId;
         mNormalGroupResId = normalGroupResId;
         mSelectedGroupResId = selectedGroupResId;
@@ -246,29 +240,9 @@ public class SelectableListToolbar<E>
             DrawableCompat.setTintList(mNavigationIconDrawable, mDarkIconColorList);
         }
 
-        mVrModeProvider = vrModeProvider;
-        mVrModeProvider.registerVrModeObserver(this);
-        if (mVrModeProvider.isInVr()) onEnterVr();
-
         mShowInfoIcon = true;
         mShowInfoStringId = R.string.show_info;
         mHideInfoStringId = R.string.hide_info;
-    }
-
-    @Override
-    public void onEnterVr() {
-        // TODO(https://crbug.com/817177): Editing text is not supported in VR, so we disable
-        // searching.
-        mIsVrEnabled = true;
-        if (mHasSearchView) updateSearchMenuItem();
-        updateInfoMenuItem(mShowInfoItem, mInfoShowing);
-    }
-
-    @Override
-    public void onExitVr() {
-        mIsVrEnabled = false;
-        if (mHasSearchView) updateSearchMenuItem();
-        updateInfoMenuItem(mShowInfoItem, mInfoShowing);
     }
 
     /**
@@ -633,8 +607,7 @@ public class SelectableListToolbar<E>
         if (!mHasSearchView) return;
         MenuItem searchMenuItem = getMenu().findItem(mSearchMenuItemId);
         if (searchMenuItem != null) {
-            searchMenuItem.setVisible(
-                    mSearchEnabled && !mIsSelectionEnabled && !mIsSearching && !mIsVrEnabled);
+            searchMenuItem.setVisible(mSearchEnabled && !mIsSelectionEnabled && !mIsSearching);
         }
     }
 
@@ -659,7 +632,7 @@ public class SelectableListToolbar<E>
 
     /**
      * Update icon, title, and visibility of info menu item.
-     *  @param showItem          Whether or not info menu item should show.
+     * @param showItem          Whether or not info menu item should show.
      * @param infoShowing       Whether or not info header is currently showing.
      */
     public void updateInfoMenuItem(boolean showItem, boolean infoShowing) {
@@ -677,16 +650,7 @@ public class SelectableListToolbar<E>
                 infoMenuItem.setIcon(iconDrawable);
             }
 
-            if (mVrModeProvider.isInVr()) {
-                // There seems to be a bug with the support library, only on Android N, where the
-                // toast showing the title shows up every time the info menu item is clicked or
-                // scrolled on, even if its long press handler is overridden. VR on N doesn't
-                // support toasts, which render monocularly over top of VR content, so we need to
-                // disable it.
-                infoMenuItem.setTitle("");
-            } else {
-                infoMenuItem.setTitle(infoShowing ? mHideInfoStringId : mShowInfoStringId);
-            }
+            infoMenuItem.setTitle(infoShowing ? mHideInfoStringId : mShowInfoStringId);
             infoMenuItem.setVisible(showItem);
         }
     }

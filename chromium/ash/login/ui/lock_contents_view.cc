@@ -13,7 +13,6 @@
 #include "ash/focus_cycler.h"
 #include "ash/ime/ime_controller_impl.h"
 #include "ash/login/login_screen_controller.h"
-#include "ash/login/parent_access_controller.h"
 #include "ash/login/ui/bottom_status_indicator.h"
 #include "ash/login/ui/lock_screen.h"
 #include "ash/login/ui/lock_screen_media_controls_view.h"
@@ -30,9 +29,10 @@
 #include "ash/login/ui/views_utils.h"
 #include "ash/media/media_controller_impl.h"
 #include "ash/public/cpp/ash_switches.h"
+#include "ash/public/cpp/child_accounts/parent_access_controller.h"
 #include "ash/public/cpp/login_accelerators.h"
-#include "ash/public/cpp/login_types.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/session/session_controller_impl.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
@@ -49,6 +49,7 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/components/proximity_auth/public/mojom/auth_type.mojom.h"
@@ -126,19 +127,27 @@ constexpr int kBottomStatusIndicatorChildSpacingDp = 8;
 // Spacing between child of LoginBaseBubbleView.
 constexpr int kBubbleBetweenChildSpacingDp = 16;
 
-// Width of the management pop-up.
-constexpr int kManagementPopUpWidth = 400;
+// Width of login screen pop-ups.
+constexpr int kLoginScreenPopUpWidth = 400;
 
-// Padding around the management bubble view.
+// Padding around the login screen bubble view.
 constexpr int kBubblePaddingDp = 16;
 
 // Size of the tooltip view info icon.
 constexpr int kInfoIconSizeDp = 20;
 
-// Maximum width of the management pop-up label.
-constexpr int kManagementLabelMaxWidth =
-    kManagementPopUpWidth - 2 * kBubblePaddingDp - kInfoIconSizeDp -
+// Horizontal and vertical padding of login tooltip view.
+constexpr int kHorizontalPaddingLoginTooltipViewDp = 8;
+constexpr int kVerticalPaddingLoginTooltipViewDp = 8;
+
+// Maximum width of the login screen pop-ups' labels.
+constexpr int kLoginPopUpLabelMaxWidth =
+    kLoginScreenPopUpWidth - 2 * kBubblePaddingDp - kInfoIconSizeDp -
     kBubbleBetweenChildSpacingDp;
+
+// Y of the user adding pop-up in the screen coordinates when the auth user view
+// is not set.
+constexpr int kUserAddingPopUpDefaultYPosition = 100;
 
 constexpr char kAuthErrorContainerName[] = "AuthErrorContainer";
 
@@ -314,29 +323,49 @@ class LockContentsView::AuthErrorBubble : public LoginErrorBubble,
   }
 };
 
-class LockContentsView::ManagementPopUp : public LoginTooltipView {
+class LockContentsView::LoginTooltipView : public LoginUnpositionedTooltipView {
  public:
-  ManagementPopUp(const base::string16& message, views::View* anchor_view)
-      : LoginTooltipView(message, anchor_view) {
+  LoginTooltipView(const base::string16& message, views::View* anchor_view)
+      : LoginUnpositionedTooltipView(message, anchor_view) {}
+
+  // LoginBaseBubbleView:
+  gfx::Point CalculatePosition() override {
+    return CalculatePositionUsingDefaultStrategy(
+        PositioningStrategy::kShowOnLeftSideOrRightSide,
+        kHorizontalPaddingLoginTooltipViewDp,
+        kVerticalPaddingLoginTooltipViewDp);
+  }
+};
+
+class LoginScreenPopUp : public LoginUnpositionedTooltipView {
+ public:
+  LoginScreenPopUp(const base::string16& message, views::View* anchor_view)
+      : LoginUnpositionedTooltipView(message, anchor_view) {
     views::BoxLayout* layout_manager =
         SetLayoutManager(std::make_unique<views::BoxLayout>(
             views::BoxLayout::Orientation::kHorizontal,
             gfx::Insets(kBubblePaddingDp), kBubbleBetweenChildSpacingDp));
     layout_manager->set_cross_axis_alignment(
         views::BoxLayout::CrossAxisAlignment::kStart);
-    label()->SetMaximumWidth(kManagementLabelMaxWidth);
+    label()->SetMaximumWidth(kLoginPopUpLabelMaxWidth);
     SetVisible(false);
   }
 
   // LoginBaseBubbleView:
   gfx::Size CalculatePreferredSize() const override {
     gfx::Size size;
-    size.set_width(kManagementPopUpWidth);
-    size.set_height(GetHeightForWidth(kManagementPopUpWidth));
+    size.set_width(kLoginScreenPopUpWidth);
+    size.set_height(GetHeightForWidth(kLoginScreenPopUpWidth));
     return size;
   }
+};
 
-  // LoginTooltipView:
+class LockContentsView::ManagementPopUp : public LoginScreenPopUp {
+ public:
+  ManagementPopUp(const base::string16& message, views::View* anchor_view)
+      : LoginScreenPopUp(message, anchor_view) {}
+
+  // LoginBaseBubbleView:
   gfx::Point CalculatePosition() override {
     DCHECK(GetAnchorView());
     gfx::Point top_center = GetAnchorView()->bounds().top_center();
@@ -347,6 +376,56 @@ class LockContentsView::ManagementPopUp : public LoginTooltipView {
                          parent() /*target*/, &position);
     return position;
   }
+};
+
+class LockContentsView::UserAddingPopUp : public LoginScreenPopUp {
+ public:
+  UserAddingPopUp(const base::string16& message,
+                  LockContentsView* lock_contents_view)
+      : LoginScreenPopUp(message, lock_contents_view),
+        lock_contents_view_(lock_contents_view) {}
+
+  // LoginBaseBubbleView:
+  bool IsPersistent() const override { return true; }
+  // The pop-up is placed mid-way between the top of the screen and the auth
+  // user view. When the pop-up is shown, the screen should look like this:
+  //  _____________________________________
+  // |                                     |
+  // |           _______________           |
+  // |           |   POP-UP    |           |
+  // |           _______________           |
+  // |                                     |
+  // |           _______________           |
+  // |           |             |           |
+  // |           |             |           |
+  // |           |  AUTH USER  |           |
+  // |           |    VIEW     |           |
+  // |           |             |           |
+  // |                 ...                 |
+  gfx::Point CalculatePosition() override {
+    DCHECK(lock_contents_view_);
+    gfx::Point popup_center;
+    popup_center.set_x(GetAnchorView()->bounds().width() / 2);
+    if (lock_contents_view_->CurrentBigUserView() &&
+        lock_contents_view_->CurrentBigUserView()->auth_user()) {
+      // Calculate auth_user y position in the screen coordinates.
+      gfx::Point auth_user_view_y(
+          0,
+          lock_contents_view_->CurrentBigUserView()->auth_user()->bounds().y());
+      ConvertPointToTarget(lock_contents_view_->CurrentBigUserView() /*source*/,
+                           GetAnchorView() /*target*/, &auth_user_view_y);
+      popup_center.set_y(auth_user_view_y.y() / 2);
+    } else {
+      popup_center.set_y(kUserAddingPopUpDefaultYPosition +
+                         GetPreferredSize().height() / 2);
+    }
+    // The position is defined by the coordinates of the top-left corner.
+    return popup_center - gfx::Vector2d(GetPreferredSize().width() / 2,
+                                        GetPreferredSize().height() / 2);
+  }
+
+ private:
+  LockContentsView* lock_contents_view_ = nullptr;
 };
 
 class LockContentsView::AutoLoginUserActivityHandler
@@ -409,11 +488,11 @@ views::View* LockContentsView::TestApi::note_action() const {
   return view_->note_action_;
 }
 
-LoginTooltipView* LockContentsView::TestApi::tooltip_bubble() const {
+views::View* LockContentsView::TestApi::tooltip_bubble() const {
   return view_->tooltip_bubble_;
 }
 
-LoginTooltipView* LockContentsView::TestApi::management_bubble() const {
+views::View* LockContentsView::TestApi::management_bubble() const {
   return view_->management_bubble_;
 }
 
@@ -433,6 +512,10 @@ LoginErrorBubble* LockContentsView::TestApi::warning_banner_bubble() const {
 LoginErrorBubble*
 LockContentsView::TestApi::supervised_user_deprecation_bubble() const {
   return view_->supervised_user_deprecation_bubble_;
+}
+
+views::View* LockContentsView::TestApi::user_adding_screen_bubble() const {
+  return view_->user_adding_screen_bubble_;
 }
 
 views::View* LockContentsView::TestApi::system_info() const {
@@ -509,6 +592,9 @@ LockContentsView::UserState::UserState(const LoginUserInfo& user_info)
   if (user_info.auth_type == proximity_auth::mojom::AuthType::ONLINE_SIGN_IN)
     force_online_sign_in = true;
   show_pin_pad_for_password = user_info.show_pin_pad_for_password;
+  disable_auth = !user_info.is_multiprofile_allowed &&
+                 Shell::Get()->session_controller()->GetSessionState() ==
+                     session_manager::SessionState::LOGIN_SECONDARY;
 }
 
 LockContentsView::UserState::UserState(UserState&&) = default;
@@ -613,6 +699,13 @@ LockContentsView::LockContentsView(
   warning_banner_bubble_->SetPersistent(true);
 
   auth_error_bubble_ = AddChildView(std::make_unique<AuthErrorBubble>());
+
+  if (Shell::Get()->session_controller()->GetSessionState() ==
+      session_manager::SessionState::LOGIN_SECONDARY) {
+    user_adding_screen_bubble_ = AddChildView(std::make_unique<UserAddingPopUp>(
+        l10n_util::GetStringUTF16(IDS_ASH_LOGIN_USER_ADDING_BANNER),
+        this /* anchor_view */));
+  }
 
   OnLockScreenNoteStateChanged(initial_note_action_state);
   chromeos::PowerManagerClient::Get()->AddObserver(this);
@@ -763,7 +856,7 @@ void LockContentsView::ShowParentAccessDialog() {
       account_id,
       base::BindOnce(&LockContentsView::OnParentAccessValidationFinished,
                      weak_ptr_factory_.GetWeakPtr(), account_id),
-      ParentAccessRequestReason::kUnlockTimeLimits, false, base::Time::Now());
+      SupervisedAction::kUnlockTimeLimits, false, base::Time::Now());
   Shell::Get()->login_screen_controller()->ShowParentAccessButton(false);
 }
 
@@ -1052,11 +1145,19 @@ void LockContentsView::OnAuthDisabledForUser(
 void LockContentsView::OnSetTpmLockedState(const AccountId& user,
                                            bool is_locked,
                                            base::TimeDelta time_left) {
+  LockContentsView::UserState* state = FindStateForUser(user);
+  if (!state) {
+    LOG(ERROR) << "Unable to find user when setting TPM lock state";
+    return;
+  }
+
+  state->time_until_tpm_unlock =
+      is_locked ? base::make_optional(time_left) : base::nullopt;
+
   LoginBigUserView* big_user =
-      TryToFindBigUser(user, false /*require_auth_active*/);
+      TryToFindBigUser(user, true /*require_auth_active*/);
   if (big_user && big_user->auth_user()) {
     LayoutAuth(big_user, nullptr /*opt_to_hide*/, true /*animate*/);
-    big_user->auth_user()->SetTpmLockedState(is_locked, time_left);
   }
 }
 
@@ -1787,7 +1888,12 @@ void LockContentsView::LayoutAuth(LoginBigUserView* to_update,
           view->auth_user()->current_user().basic_user_info.account_id);
       uint32_t to_update_auth;
       LoginAuthUserView::AuthMethodsMetadata auth_metadata;
-      if (state->force_online_sign_in) {
+      if (state->time_until_tpm_unlock.has_value()) {
+        // TPM is locked
+        to_update_auth = LoginAuthUserView::AUTH_DISABLED_TPM_LOCKED;
+        auth_metadata.time_until_tpm_unlock =
+            state->time_until_tpm_unlock.value();
+      } else if (state->force_online_sign_in) {
         to_update_auth = LoginAuthUserView::AUTH_ONLINE_SIGN_IN;
       } else if (state->disable_auth) {
         to_update_auth = LoginAuthUserView::AUTH_DISABLED;
@@ -1843,6 +1949,12 @@ void LockContentsView::LayoutAuth(LoginBigUserView* to_update,
   Layout();
   apply_animation_post_layout(to_update);
   apply_animation_post_layout(opt_to_hide);
+
+  // The user adding screen should be layout after the auth user view.
+  if (Shell::Get()->session_controller()->GetSessionState() ==
+      session_manager::SessionState::LOGIN_SECONDARY) {
+    user_adding_screen_bubble_->Show();
+  }
 }
 
 void LockContentsView::SwapToBigUser(int user_index) {
@@ -1990,7 +2102,8 @@ void LockContentsView::ShowAuthErrorMessage() {
     *bold_start += shortcut_offset_in_string;
   }
 
-  auto label = std::make_unique<views::StyledLabel>(error_text, this);
+  auto label = std::make_unique<views::StyledLabel>();
+  label->SetText(error_text);
   MakeSectionBold(label.get(), error_text, bold_start, bold_length);
   label->SetAutoColorReadabilityEnabled(false);
 
@@ -2256,8 +2369,7 @@ void LockContentsView::OnBottomStatusIndicatorTapped() {
   management_bubble_->Show();
 }
 
-BEGIN_METADATA(LockContentsView)
-METADATA_PARENT_CLASS(NonAccessibleView)
-END_METADATA()
+BEGIN_METADATA(LockContentsView, NonAccessibleView)
+END_METADATA
 
 }  // namespace ash

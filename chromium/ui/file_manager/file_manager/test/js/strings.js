@@ -3,15 +3,18 @@
 // found in the LICENSE file.
 
 // loadTimeData contains localized content.  It is populated with
-// file_manager_strings.grpd and chromeos_strings.grdp during build.
+// file_manager_strings.grdp and chromeos_strings.grdp during build.
 
 loadTimeData.data = $GRDP;
 
 // Extend with additional fields not found in grdp files.
 loadTimeData.overrideValues({
   'CROSTINI_ENABLED': true,
+  'DRIVE_BIDIRECTIONAL_NATIVE_MESSAGING_ENABLED': false,
   'FILES_NG_ENABLED': true,
-  'FILES_TRANSFER_DETAILS_ENABLED': false,
+  'FILES_SINGLE_PARTITION_FORMAT_ENABLED': false,
+  'FILES_TRANSFER_DETAILS_ENABLED': true,
+  'FILTERS_IN_RECENTS_ENABLED': false,
   'FEEDBACK_PANEL_ENABLED': false,
   'GOOGLE_DRIVE_REDEEM_URL': 'http://www.google.com/intl/en/chrome/devices' +
       '/goodies.html?utm_source=filesapp&utm_medium=banner&utm_campaign=gsg',

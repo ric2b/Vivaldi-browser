@@ -132,6 +132,8 @@ class CORE_EXPORT NGInlineCursorPosition {
   const PhysicalRect InkOverflow() const;
   const PhysicalRect SelfInkOverflow() const;
 
+  void RecalcInkOverflow(const NGInlineCursor& cursor) const;
+
   // Returns start/end of offset in text content of current text fragment.
   // It is error when this cursor doesn't point to text fragment.
   NGTextOffset TextOffset() const;
@@ -479,7 +481,6 @@ class CORE_EXPORT NGInlineCursor {
   bool CanMoveAcrossFragmentainer() const {
     return root_block_flow_ && IsItemCursor() && !IsDescendantsCursor();
   }
-  bool CanUseLayoutObjectIndex() const;
 
   // True if the current position is a last line in inline block. It is error
   // to call at end or the current position is not line.
@@ -568,9 +569,6 @@ class CORE_EXPORT NGInlineCursor {
   const LayoutBlockFlow* root_block_flow_ = nullptr;
   wtf_size_t fragment_index_ = 0;
   wtf_size_t max_fragment_index_ = 0;
-
-  // Used only when |!CanUseLayoutObjectIndex|.
-  const LayoutObject* layout_object_to_slow_move_to_ = nullptr;
 
   friend class NGInlineBackwardCursor;
 };

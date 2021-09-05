@@ -48,11 +48,45 @@ using ValueElementVector = std::vector<ValueElementPair>;
 // The field descriptions in the struct specification below are intended to
 // describe which fields are not strictly required when adding a saved password
 // entry to the database and how they can affect the matching process.
-
+//
+// TODO(crbug.com/1067347): Move complete class to password_manager namespace.
 struct PasswordForm {
-  using Scheme = mojom::PasswordForm_Scheme;
-  using Type = mojom::PasswordForm_Type;
-  using GenerationUploadStatus = mojom::PasswordForm_GenerationUploadStatus;
+  // Enum to differentiate between HTML form based authentication, and dialogs
+  // using basic or digest schemes. Default is kHtml. Only PasswordForms of the
+  // same Scheme will be matched/autofilled against each other.
+  enum class Scheme {
+    kHtml,
+    kBasic,
+    kDigest,
+    kOther,
+    kUsernameOnly,
+    kMinValue = kHtml,
+    kMaxValue = kUsernameOnly,
+  };
+
+  // Enum to differentiate between manually filled forms, forms with auto-
+  // generated passwords, and forms generated from the DOM API.
+  //
+  // Always append new types at the end. This enum is converted to int and
+  // stored in password store backends, so it is important to keep each
+  // value assigned to the same integer.
+  enum class Type {
+    kManual,
+    kGenerated,
+    kApi,
+    kMinValue = kManual,
+    kMaxValue = kApi,
+  };
+
+  // Enum to keep track of what information has been sent to the server about
+  // this form regarding password generation.
+  enum class GenerationUploadStatus {
+    kNoSignalSent,
+    kPositiveSignalSent,
+    kNegativeSignalSent,
+    kMinValue = kNoSignalSent,
+    kMaxValue = kNegativeSignalSent,
+  };
 
   Scheme scheme = Scheme::kHtml;
 
@@ -344,11 +378,8 @@ struct PasswordForm {
 bool ArePasswordFormUniqueKeysEqual(const PasswordForm& left,
                                     const PasswordForm& right);
 
-// Converts a vector of ValueElementPair to string.
-base::string16 ValueElementVectorToString(
-    const ValueElementVector& value_element_pairs);
-
 // For testing.
+std::ostream& operator<<(std::ostream& os, PasswordForm::Scheme scheme);
 std::ostream& operator<<(std::ostream& os, const PasswordForm& form);
 std::ostream& operator<<(std::ostream& os, PasswordForm* form);
 

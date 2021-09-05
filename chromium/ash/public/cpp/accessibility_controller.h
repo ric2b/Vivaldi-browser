@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "ash/public/cpp/accelerators.h"
 #include "ash/public/cpp/ash_public_export.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
@@ -86,7 +87,7 @@ class ASH_PUBLIC_EXPORT AccessibilityController {
   virtual void ToggleDictationFromSource(DictationToggleSource source) = 0;
 
   // Called when the Automatic Clicks extension finds scrollable bounds.
-  virtual void OnAutoclickScrollableBoundsFound(
+  virtual void HandleAutoclickScrollableBoundsFound(
       gfx::Rect& bounds_in_screen) = 0;
 
   // Retrieves a string description of the current battery status.
@@ -94,6 +95,10 @@ class ASH_PUBLIC_EXPORT AccessibilityController {
 
   // Shows or hides the virtual keyboard.
   virtual void SetVirtualKeyboardVisible(bool is_visible) = 0;
+
+  // Performs the given accelerator action.
+  virtual void PerformAcceleratorAction(
+      AcceleratorAction accelerator_action) = 0;
 
   // Notify observers that the accessibility status has changed. This is part of
   // the public interface because a11y features like screen magnifier are

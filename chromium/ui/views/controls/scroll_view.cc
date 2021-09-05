@@ -162,12 +162,18 @@ class ScrollView::Viewport : public View {
 };
 
 ScrollView::ScrollView()
+    : ScrollView(base::FeatureList::IsEnabled(
+                     ::features::kUiCompositorScrollWithLayers)
+                     ? ScrollWithLayers::kEnabled
+                     : ScrollWithLayers::kDisabled) {}
+
+ScrollView::ScrollView(ScrollWithLayers scroll_with_layers)
     : horiz_sb_(PlatformStyle::CreateScrollBar(true)),
       vert_sb_(PlatformStyle::CreateScrollBar(false)),
       corner_view_(std::make_unique<ScrollCornerView>()),
-      scroll_with_layers_enabled_(base::FeatureList::IsEnabled(
-          ::features::kUiCompositorScrollWithLayers)) {
-  set_notify_enter_exit_on_child(true);
+      scroll_with_layers_enabled_(scroll_with_layers ==
+                                  ScrollWithLayers::kEnabled) {
+  SetNotifyEnterExitOnChild(true);
 
   // Since |contents_viewport_| is accessed during the AddChildView call, make
   // sure the field is initialized.
@@ -1024,18 +1030,16 @@ void ScrollView::UpdateOverflowIndicatorVisibility(
           offset.x() < horiz_sb_->GetMaxPosition() && draw_overflow_indicator_);
 }
 
-BEGIN_METADATA(ScrollView)
-METADATA_PARENT_CLASS(View)
-ADD_READONLY_PROPERTY_METADATA(ScrollView, int, MinHeight)
-ADD_READONLY_PROPERTY_METADATA(ScrollView, int, MaxHeight)
-ADD_PROPERTY_METADATA(ScrollView, base::Optional<SkColor>, BackgroundColor)
-ADD_PROPERTY_METADATA(ScrollView,
-                      base::Optional<ui::NativeTheme::ColorId>,
+BEGIN_METADATA(ScrollView, View)
+ADD_READONLY_PROPERTY_METADATA(int, MinHeight)
+ADD_READONLY_PROPERTY_METADATA(int, MaxHeight)
+ADD_PROPERTY_METADATA(base::Optional<SkColor>, BackgroundColor)
+ADD_PROPERTY_METADATA(base::Optional<ui::NativeTheme::ColorId>,
                       BackgroundThemeColorId)
-ADD_PROPERTY_METADATA(ScrollView, bool, DrawOverflowIndicator)
-ADD_PROPERTY_METADATA(ScrollView, bool, HasFocusIndicator)
-ADD_PROPERTY_METADATA(ScrollView, bool, HideHorizontalScrollBar)
-END_METADATA()
+ADD_PROPERTY_METADATA(bool, DrawOverflowIndicator)
+ADD_PROPERTY_METADATA(bool, HasFocusIndicator)
+ADD_PROPERTY_METADATA(bool, HideHorizontalScrollBar)
+END_METADATA
 
 // VariableRowHeightScrollHelper ----------------------------------------------
 

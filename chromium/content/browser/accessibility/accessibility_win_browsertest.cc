@@ -69,7 +69,7 @@ class AccessibilityWinBrowserTest : public AccessibilityBrowserTest {
 
  protected:
   class AccessibleChecker;
-  base::string16 PrintAXTree() const;
+  std::string PrintAXTree() const;
   void SetUpInputField(Microsoft::WRL::ComPtr<IAccessibleText>* input_text);
   void SetUpScrollableInputField(
       Microsoft::WRL::ComPtr<IAccessibleText>* input_text);
@@ -139,7 +139,7 @@ AccessibilityWinBrowserTest::AccessibilityWinBrowserTest() = default;
 
 AccessibilityWinBrowserTest::~AccessibilityWinBrowserTest() = default;
 
-base::string16 AccessibilityWinBrowserTest::PrintAXTree() const {
+std::string AccessibilityWinBrowserTest::PrintAXTree() const {
   std::unique_ptr<AccessibilityTreeFormatter> formatter(
       AccessibilityTreeFormatter::Create());
   DCHECK(formatter);
@@ -147,7 +147,7 @@ base::string16 AccessibilityWinBrowserTest::PrintAXTree() const {
   formatter->SetPropertyFilters({AccessibilityTreeFormatter::PropertyFilter(
       "*", AccessibilityTreeFormatter::PropertyFilter::ALLOW)});
 
-  base::string16 str;
+  std::string str;
   formatter->FormatAccessibilityTreeForTesting(
       GetRootAccessibilityNode(shell()->web_contents()), &str);
   return str;
@@ -1924,40 +1924,24 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
 
   ASSERT_HRESULT_SUCCEEDED(input_text->get_nCharacters(&n_characters));
   // When the text field is empty, the placeholder text should become visible.
-  ASSERT_EQ(11, n_characters);
+  ASSERT_EQ(0, n_characters);
   LONG caret_offset;
   ASSERT_HRESULT_SUCCEEDED(input_text->get_caretOffset(&caret_offset));
   ASSERT_EQ(0, caret_offset);
 
-  {
-    base::win::ScopedBstr text;
-    ASSERT_HRESULT_SUCCEEDED(
-        input_text->get_text(0, IA2_TEXT_OFFSET_LENGTH, text.Receive()));
-    EXPECT_STREQ(L"placeholder", text.Get());
-  }
+  base::win::ScopedBstr text;
+  ASSERT_HRESULT_SUCCEEDED(input_text->get_text(0, -1, text.Receive()));
 
-  // Now that input is completely empty and the placeholder text is showing, the
-  // position of the caret should be returned for character 0. The x,y position,
-  // height and width should be the same as it was as when there was a single
-  // character.
-  {
-    LONG x, y, width, height;
+  // Now that input is completely empty, the position of the caret should be
+  // returned for character 0. The x,y position and height should be the same as
+  // it was as when there was single character, but the width should now be 1.
+  LONG x, y, width, height;
+  for (int offset = IA2_TEXT_OFFSET_CARET; offset <= 0; ++offset) {
     EXPECT_HRESULT_SUCCEEDED(input_text->get_characterExtents(
-        IA2_TEXT_OFFSET_CARET, IA2_COORDTYPE_SCREEN_RELATIVE, &x, &y, &width,
-        &height));
+        offset, IA2_COORDTYPE_SCREEN_RELATIVE, &x, &y, &width, &height));
     EXPECT_EQ(prev_x, x);
     EXPECT_EQ(prev_y, y);
-    EXPECT_EQ(prev_width, width);
-    EXPECT_EQ(prev_height, height);
-  }
-
-  {
-    LONG x, y, width, height;
-    EXPECT_HRESULT_SUCCEEDED(input_text->get_characterExtents(
-        0, IA2_COORDTYPE_SCREEN_RELATIVE, &x, &y, &width, &height));
-    EXPECT_EQ(prev_x, x);
-    EXPECT_EQ(prev_y, y);
-    EXPECT_EQ(prev_width, width);
+    EXPECT_EQ(1, width);
     EXPECT_EQ(prev_height, height);
   }
 
@@ -2498,9 +2482,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
 
   base::win::ScopedVariant childid_self(CHILDID_SELF);
   base::win::ScopedBstr new_value(L"New value");
-  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
-                                         ui::kAXModeComplete,
-                                         ax::mojom::Event::kValueChanged);
+  AccessibilityNotificationWaiter waiter(
+      shell()->web_contents(), ui::kAXModeComplete,
+      ui::AXEventGenerator::Event::VALUE_CHANGED);
   EXPECT_HRESULT_SUCCEEDED(input->put_accValue(childid_self, new_value.Get()));
   waiter.WaitForNotification();
 
@@ -2544,7 +2528,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestPutAccValueInEditable) {
   base::win::ScopedBstr new_value(L"New value");
   AccessibilityNotificationWaiter waiter(shell()->web_contents(),
                                          ui::kAXModeComplete,
-                                         ax::mojom::Event::kValueChanged);
+                                         ax::mojom::Event::kChildrenChanged);
   EXPECT_HRESULT_SUCCEEDED(
       paragraph->put_accValue(childid_self, new_value.Get()));
   waiter.WaitForNotification();

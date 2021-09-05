@@ -16,35 +16,38 @@ const ERROR_MESSAGE_FOR_CHANGE_PASSWORD =
 
 var availableTests = [
   function changeSavedPasswordSucceeds() {
-    chrome.passwordsPrivate.changeSavedPassword([0], 'new_pass', () => {
-      chrome.test.assertNoLastError();
-      chrome.test.succeed();
-    });
+    chrome.passwordsPrivate.changeSavedPassword(
+        [0], 'new_user', 'new_pass', () => {
+          chrome.test.assertNoLastError();
+          chrome.test.succeed();
+        });
   },
 
   function changeSavedPasswordWithIncorrectIdFails() {
-    chrome.passwordsPrivate.changeSavedPassword([-1], 'new_pass', () => {
-      chrome.test.assertLastError(ERROR_MESSAGE_FOR_CHANGE_PASSWORD);
-      chrome.test.succeed();
-    });
+    chrome.passwordsPrivate.changeSavedPassword(
+        [-1], 'new_user', 'new_pass', () => {
+          chrome.test.assertLastError(ERROR_MESSAGE_FOR_CHANGE_PASSWORD);
+          chrome.test.succeed();
+        });
   },
 
   function changeSavedPasswordWithOneIncorrectIdFromArrayFails() {
-    chrome.passwordsPrivate.changeSavedPassword([0, -1], 'new_pass', () => {
-      chrome.test.assertLastError(ERROR_MESSAGE_FOR_CHANGE_PASSWORD);
-      chrome.test.succeed();
-    });
+    chrome.passwordsPrivate.changeSavedPassword(
+        [0, -1], 'new_user', 'new_pass', () => {
+          chrome.test.assertLastError(ERROR_MESSAGE_FOR_CHANGE_PASSWORD);
+          chrome.test.succeed();
+        });
   },
 
   function changeSavedPasswordWithEmptyPasswordFails() {
-    chrome.passwordsPrivate.changeSavedPassword([0], '', () => {
+    chrome.passwordsPrivate.changeSavedPassword([0], 'new_user', '', () => {
       chrome.test.assertLastError(ERROR_MESSAGE_FOR_CHANGE_PASSWORD);
       chrome.test.succeed();
     });
   },
 
   function changeSavedPasswordWithEmptyArrayIdFails() {
-    chrome.passwordsPrivate.changeSavedPassword([], '', () => {
+    chrome.passwordsPrivate.changeSavedPassword([], 'new_user', '', () => {
       chrome.test.assertLastError(ERROR_MESSAGE_FOR_CHANGE_PASSWORD);
       chrome.test.succeed();
     });
@@ -314,17 +317,36 @@ var availableTests = [
               'https://example.com/change-password',
               compromisedCredential.changePasswordUrl);
           chrome.test.assertEq('alice', compromisedCredential.username);
-          const compromiseTime = new Date(compromisedCredential.compromiseTime);
+          const compromiseTime =
+              new Date(compromisedCredential.compromisedInfo.compromiseTime);
           chrome.test.assertEq(
               'Tue, 03 Mar 2020 12:00:00 GMT', compromiseTime.toUTCString());
           chrome.test.assertEq(
-              '3 days ago', compromisedCredential.elapsedTimeSinceCompromise);
-          chrome.test.assertEq('LEAKED', compromisedCredential.compromiseType);
+              '3 days ago',
+              compromisedCredential.compromisedInfo.elapsedTimeSinceCompromise);
+          chrome.test.assertEq(
+              'LEAKED', compromisedCredential.compromisedInfo.compromiseType);
           chrome.test.succeed();
         });
   },
 
-  function getPlaintextCompromisedPassword() {
+  function getWeakCredentials() {
+    chrome.passwordsPrivate.getWeakCredentials(weakCredentials => {
+      chrome.test.assertEq(1, weakCredentials.length);
+
+      var weakredential = weakCredentials[0];
+      chrome.test.assertEq('example.com', weakredential.formattedOrigin);
+      chrome.test.assertEq('https://example.com', weakredential.detailedOrigin);
+      chrome.test.assertFalse(weakredential.isAndroidCredential);
+      chrome.test.assertEq(
+          'https://example.com/change-password',
+          weakredential.changePasswordUrl);
+      chrome.test.assertEq('bob', weakredential.username);
+      chrome.test.succeed();
+    });
+  },
+
+  function getPlaintextInsecurePassword() {
     var compromisedCredential = {
       id: 0,
       formattedOrigin: 'example.com',
@@ -332,12 +354,14 @@ var availableTests = [
       isAndroidCredential: false,
       signonRealm: 'https://example.com',
       username: 'alice',
-      compromiseTime: COMPROMISE_TIME,
-      elapsedTimeSinceCompromise: '3 days ago',
-      compromiseType: 'LEAKED',
+      compromisedInfo: {
+        compromiseTime: COMPROMISE_TIME,
+        elapsedTimeSinceCompromise: '3 days ago',
+        compromiseType: 'LEAKED',
+      },
     };
 
-    chrome.passwordsPrivate.getPlaintextCompromisedPassword(
+    chrome.passwordsPrivate.getPlaintextInsecurePassword(
         compromisedCredential, chrome.passwordsPrivate.PlaintextReason.VIEW,
         credentialWithPassword => {
           chrome.test.assertEq('plaintext', credentialWithPassword.password);
@@ -345,7 +369,7 @@ var availableTests = [
         });
   },
 
-  function getPlaintextCompromisedPasswordFails() {
+  function getPlaintextInsecurePasswordFails() {
     var compromisedCredential = {
       id: 0,
       formattedOrigin: 'example.com',
@@ -353,66 +377,25 @@ var availableTests = [
       isAndroidCredential: false,
       signonRealm: 'https://example.com',
       username: 'alice',
-      compromiseTime: COMPROMISE_TIME,
-      elapsedTimeSinceCompromise: '3 days ago',
-      compromiseType: 'LEAKED',
+      compromisedInfo: {
+        compromiseTime: COMPROMISE_TIME,
+        elapsedTimeSinceCompromise: '3 days ago',
+        compromiseType: 'LEAKED',
+      },
     };
 
-    chrome.passwordsPrivate.getPlaintextCompromisedPassword(
+    chrome.passwordsPrivate.getPlaintextInsecurePassword(
         compromisedCredential, chrome.passwordsPrivate.PlaintextReason.VIEW,
         credentialWithPassword => {
           chrome.test.assertLastError(
-              'Could not obtain plaintext compromised password. Either the ' +
-              'user is not authenticated or no matching password could be ' +
-              'found.');
-          chrome.test.succeed();
-        });
-  },
-
-  function changeCompromisedCredentialWithEmptyPasswordFails() {
-    chrome.passwordsPrivate.changeCompromisedCredential(
-        {
-          id: 0,
-          formattedOrigin: 'example.com',
-          detailedOrigin: 'https://example.com',
-          isAndroidCredential: false,
-          signonRealm: 'https://example.com',
-          username: 'alice',
-          compromiseTime: COMPROMISE_TIME,
-          elapsedTimeSinceCompromise: '3 days ago',
-          compromiseType: 'LEAKED',
-        },
-        '', () => {
-          chrome.test.assertLastError(
-              'Could not change the compromised credential. The new password ' +
-              'can\'t be empty.');
-          chrome.test.succeed();
-        });
-  },
-
-  function changeCompromisedCredentialFails() {
-    chrome.passwordsPrivate.changeCompromisedCredential(
-        {
-          id: 0,
-          formattedOrigin: 'example.com',
-          detailedOrigin: 'https://example.com',
-          isAndroidCredential: false,
-          signonRealm: 'https://example.com',
-          username: 'alice',
-          compromiseTime: COMPROMISE_TIME,
-          elapsedTimeSinceCompromise: '3 days ago',
-          compromiseType: 'LEAKED',
-        },
-        'new_pass', () => {
-          chrome.test.assertLastError(
-              'Could not change the compromised credential. Either the user ' +
+              'Could not obtain plaintext insecure password. Either the user ' +
               'is not authenticated or no matching password could be found.');
           chrome.test.succeed();
         });
   },
 
-  function changeCompromisedCredentialSucceeds() {
-    chrome.passwordsPrivate.changeCompromisedCredential(
+  function changeInsecureCredentialWithEmptyPasswordFails() {
+    chrome.passwordsPrivate.changeInsecureCredential(
         {
           id: 0,
           formattedOrigin: 'example.com',
@@ -420,9 +403,57 @@ var availableTests = [
           isAndroidCredential: false,
           signonRealm: 'https://example.com',
           username: 'alice',
-          compromiseTime: COMPROMISE_TIME,
-          elapsedTimeSinceCompromise: '3 days ago',
-          compromiseType: 'LEAKED',
+          compromisedInfo: {
+            compromiseTime: COMPROMISE_TIME,
+            elapsedTimeSinceCompromise: '3 days ago',
+            compromiseType: 'LEAKED',
+          },
+        },
+        '', () => {
+          chrome.test.assertLastError(
+              'Could not change the insecure credential. The new password ' +
+              'can\'t be empty.');
+          chrome.test.succeed();
+        });
+  },
+
+  function changeInsecureCredentialFails() {
+    chrome.passwordsPrivate.changeInsecureCredential(
+        {
+          id: 0,
+          formattedOrigin: 'example.com',
+          detailedOrigin: 'https://example.com',
+          isAndroidCredential: false,
+          signonRealm: 'https://example.com',
+          username: 'alice',
+          compromisedInfo: {
+            compromiseTime: COMPROMISE_TIME,
+            elapsedTimeSinceCompromise: '3 days ago',
+            compromiseType: 'LEAKED',
+          },
+        },
+        'new_pass', () => {
+          chrome.test.assertLastError(
+              'Could not change the insecure credential. Either the user is ' +
+              'not authenticated or no matching password could be found.');
+          chrome.test.succeed();
+        });
+  },
+
+  function changeInsecureCredentialSucceeds() {
+    chrome.passwordsPrivate.changeInsecureCredential(
+        {
+          id: 0,
+          formattedOrigin: 'example.com',
+          detailedOrigin: 'https://example.com',
+          isAndroidCredential: false,
+          signonRealm: 'https://example.com',
+          username: 'alice',
+          compromisedInfo: {
+            compromiseTime: COMPROMISE_TIME,
+            elapsedTimeSinceCompromise: '3 days ago',
+            compromiseType: 'LEAKED',
+          },
         },
         'new_pass', () => {
           chrome.test.assertNoLastError();
@@ -430,8 +461,8 @@ var availableTests = [
         });
   },
 
-  function removeCompromisedCredentialFails() {
-    chrome.passwordsPrivate.removeCompromisedCredential(
+  function removeInsecureCredentialFails() {
+    chrome.passwordsPrivate.removeInsecureCredential(
         {
           id: 0,
           formattedOrigin: 'example.com',
@@ -439,21 +470,23 @@ var availableTests = [
           isAndroidCredential: false,
           signonRealm: 'https://example.com',
           username: 'alice',
-          compromiseTime: COMPROMISE_TIME,
-          elapsedTimeSinceCompromise: '3 days ago',
-          compromiseType: 'LEAKED',
+          compromisedInfo: {
+            compromiseTime: COMPROMISE_TIME,
+            elapsedTimeSinceCompromise: '3 days ago',
+            compromiseType: 'LEAKED',
+          },
         },
         () => {
           chrome.test.assertLastError(
-              'Could not remove the compromised credential. Probably no ' +
+              'Could not remove the insecure credential. Probably no ' +
               'matching password could be found.');
           // Ensure that the callback is invoked.
           chrome.test.succeed();
         });
   },
 
-  function removeCompromisedCredentialSucceeds() {
-    chrome.passwordsPrivate.removeCompromisedCredential(
+  function removeInsecureCredentialSucceeds() {
+    chrome.passwordsPrivate.removeInsecureCredential(
         {
           id: 0,
           formattedOrigin: 'example.com',
@@ -461,9 +494,11 @@ var availableTests = [
           isAndroidCredential: false,
           signonRealm: 'https://example.com',
           username: 'alice',
-          compromiseTime: COMPROMISE_TIME,
-          elapsedTimeSinceCompromise: '3 days ago',
-          compromiseType: 'LEAKED',
+          compromisedInfo: {
+            compromiseTime: COMPROMISE_TIME,
+            elapsedTimeSinceCompromise: '3 days ago',
+            compromiseType: 'LEAKED',
+          },
         },
         () => {
           chrome.test.assertNoLastError();

@@ -227,10 +227,10 @@ void GpuHostImpl::EstablishGpuChannel(int client_id,
 
   shutdown_timeout_.Stop();
 
-  // If GPU features are already blacklisted, no need to establish the channel.
+  // If GPU features are already blocklisted, no need to establish the channel.
   // FEATURE_FORCE_ACCESS_TO_GPU
   if (!(force_allow_access_to_gpu_ || delegate_->GpuAccessAllowed())) {
-    DVLOG(1) << "GPU blacklisted, refusing to open a GPU channel.";
+    DVLOG(1) << "GPU access blocked, refusing to open a GPU channel.";
     std::move(callback).Run(mojo::ScopedMessagePipeHandle(), gpu::GPUInfo(),
                             gpu::GpuFeatureInfo(),
                             EstablishChannelStatus::kGpuAccessDenied);
@@ -390,7 +390,7 @@ void GpuHostImpl::OnChannelEstablished(
   auto callback = std::move(channel_requests_.front());
   channel_requests_.pop();
 
-  // Currently if any of the GPU features are blacklisted, we don't establish a
+  // Currently if any of the GPU features are blocklisted, we don't establish a
   // GPU channel.
   // FEATURE_FORCE_ACCESS_TO_GPU
   if (channel_handle.is_valid() &&

@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "ui/views/controls/button/button.h"
 #include "ui/views/view.h"
 
 class Browser;
@@ -24,20 +23,19 @@ class ImageButton;
 // particular extension. Includes information about the extension in addition to
 // a button to pin the extension to the toolbar and a button for accessing the
 // associated context menu.
-class ExtensionsMenuItemView : public views::View,
-                               public views::ButtonListener {
+class ExtensionsMenuItemView : public views::View {
  public:
   static constexpr int kMenuItemHeightDp = 40;
+  static constexpr gfx::Size kIconSize{28, 28};
   static constexpr const char kClassName[] = "ExtensionsMenuItemView";
 
   ExtensionsMenuItemView(
       Browser* browser,
       std::unique_ptr<ToolbarActionViewController> controller,
       bool allow_pinning);
+  ExtensionsMenuItemView(const ExtensionsMenuItemView&) = delete;
+  ExtensionsMenuItemView& operator=(const ExtensionsMenuItemView&) = delete;
   ~ExtensionsMenuItemView() override;
-
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   // views::View:
   const char* GetClassName() const override;
@@ -45,9 +43,11 @@ class ExtensionsMenuItemView : public views::View,
 
   void UpdatePinButton();
 
-  bool IsContextMenuRunning();
+  bool IsContextMenuRunning() const;
+  bool IsPinned() const;
 
-  bool IsPinned();
+  void ContextMenuPressed();
+  void PinButtonPressed();
 
   ToolbarActionViewController* view_controller() { return controller_.get(); }
   const ToolbarActionViewController* view_controller() const {
@@ -78,8 +78,6 @@ class ExtensionsMenuItemView : public views::View,
   // This controller is responsible for showing the context menu for an
   // extension.
   std::unique_ptr<ExtensionContextMenuController> context_menu_controller_;
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionsMenuItemView);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSIONS_MENU_ITEM_VIEW_H_

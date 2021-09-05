@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Просмотр кода фрейма</translation>
 <translation id="1165039591588034296">Ошибка</translation>
 <translation id="1175364870820465910">&amp;Печать...</translation>
-<translation id="1177863135347784049">Добавить</translation>
 <translation id="1181037720776840403">Удалить</translation>
 <translation id="1187722533808055681">Переходы в активный режим</translation>
 <translation id="119944043368869598">Удалить всё</translation>
 <translation id="1221825588892235038">Только выбранные</translation>
 <translation id="1244303850296295656">Ошибка расширения</translation>
+<translation id="125220115284141797">По умолчанию</translation>
 <translation id="1274977772557788323">Настройки хранилища Adobe Flash Player</translation>
 <translation id="1297175357211070620">Принтер</translation>
 <translation id="1303101771013849280">HTML-файл закладок</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Новое окно</translation>
 <translation id="1725149567830788547">Показать &amp;управление</translation>
 <translation id="1729533290416704613">Также расширение изменило поисковую систему по умолчанию в поле поиска.</translation>
+<translation id="174123615272205933">Добавить</translation>
 <translation id="1744108098763830590">фоновая страница</translation>
 <translation id="176587472219019965">&amp;Новое окно</translation>
 <translation id="1769104665586091481">Открыть ссылку в новом &amp;окне</translation>
+<translation id="1779468444204342338">Минимальные</translation>
 <translation id="1815083418640426271">Вставить как обычный текст</translation>
 <translation id="1828901632669367785">Печать используя системный диалог...</translation>
 <translation id="1850508293116537636">Повернуть по &amp;часовой стрелке</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Спрашивать разрешение перед отправкой (рекомендуется)</translation>
 <translation id="241082044617551207">Неизвестный плагин</translation>
 <translation id="2423578206845792524">&amp;Сохранить картинку как...</translation>
-<translation id="2436707352762155834">Минимальные</translation>
 <translation id="2439110203301358333">Одна из программ на вашем компьютере установила расширение, которое может влиять на работу Vivaldi.</translation>
 <translation id="2445081178310039857">Требуется корневой каталог расширения.</translation>
 <translation id="2470702053775288986">Неподдерживаемые расширения отключены</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Предварительная обработка: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Микрофон</translation>
 <translation id="3241680850019875542">Выберите корневой каталог упаковываемого расширения. Для обновления расширения также укажите закрытый ключ.</translation>
+<translation id="3266179261140759675">Блокировать обмен данными с закрытыми веб-сайтами</translation>
 <translation id="3280237271814976245">Сохранить &amp;как...</translation>
 <translation id="3285322247471302225">Новая вкладка</translation>
 <translation id="3288047731229977326">Расширения, запущенные в режиме разработчика, могут причинить вред вашему компьютеру. Если вы не разработчик, их следует отключить, чтобы обеспечить безопасность данных.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Разрешить</translation>
 <translation id="5057110919553308744">При нажатии на расширение</translation>
 <translation id="5063480226653192405">Использование</translation>
-<translation id="5068918910148307423">Не разрешать недавно закрытым сайтам завершать отправку и получение данных</translation>
 <translation id="5116628073786783676">&amp;Сохранить аудио как...</translation>
 <translation id="5143374789336132547">Расширение "<ph name="EXTENSION_NAME" />" изменило домашнюю страницу по умолчанию.</translation>
 <translation id="5154108062446123722">Дополнительные настройки для<ph name="PRINTING_DESTINATION" /></translation>
@@ -264,7 +265,8 @@
 <translation id="5355926466126177564">Расширение "<ph name="EXTENSION_NAME" />" изменило поисковую систему по умолчанию в поле поиска.</translation>
 <translation id="5360150013186312835">Добавить на Панель инструментов</translation>
 <translation id="5362741141255528695">Выберите файл закрытого ключа.</translation>
-<translation id="5370819323174483825">&amp;Перезагрузить</translation>
+<translation id="536638840841140142">Нет</translation>
+<translation id="5370819323174483825">&amp;Обновить</translation>
 <translation id="5398572795982417028">Размер страницы больше максимально допустимого (лимит ‒ <ph name="MAXIMUM_PAGE" />)</translation>
 <translation id="5425042808445046667">Продолжить загрузку</translation>
 <translation id="5427459444770871191">Повернуть по &amp;часовой стрелке</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Получатель: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Установлено администратором</translation>
 <translation id="7685049629764448582">Память JavaScript</translation>
-<translation id="7701040980221191251">Нет</translation>
 <translation id="7701869757853594372">USER-дескрипторы</translation>
 <translation id="7704305437604973648">Задача</translation>
 <translation id="7710568461918838723">&amp;Трансляция...</translation>

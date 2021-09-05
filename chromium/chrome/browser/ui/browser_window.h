@@ -40,6 +40,7 @@ class SharingDialog;
 class DownloadShelf;
 class ExclusiveAccessContext;
 class ExtensionsContainer;
+class FeaturePromoController;
 class FindBar;
 class GURL;
 class LocationBar;
@@ -304,6 +305,12 @@ class BrowserWindow : public ui::BaseWindow {
   // Called when the associated window's tab dragging status changed.
   virtual void TabDraggingStatusChanged(bool is_dragging) = 0;
 
+  // Called when a link is opened in the window from a user gesture.
+  // Link will be opened with |disposition|.
+  // TODO(crbug.com/1129028): see if this can't be piped through TabStripModel
+  // events instead.
+  virtual void LinkOpeningFromGesture(WindowOpenDisposition disposition) = 0;
+
   // Focuses the app menu like it was a menu bar.
   //
   // Not used on the Mac, which has a "normal" menu bar.
@@ -411,7 +418,6 @@ class BrowserWindow : public ui::BaseWindow {
   virtual void ConfirmBrowserCloseWithPendingDownloads(
       int download_count,
       Browser::DownloadCloseType dialog_type,
-      bool app_modal,
       const base::Callback<void(bool)>& callback) = 0;
 
   // ThemeService calls this when a user has changed their theme, indicating
@@ -509,6 +515,10 @@ class BrowserWindow : public ui::BaseWindow {
 
   // Create and open the tab search bubble.
   virtual void CreateTabSearchBubble() = 0;
+
+  // Gets the windows's FeaturePromoController which manages display of
+  // in-product help.
+  virtual FeaturePromoController* GetFeaturePromoController() = 0;
 
  protected:
   friend class BrowserCloseManager;

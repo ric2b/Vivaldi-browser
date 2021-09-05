@@ -41,6 +41,7 @@ class V8XRFrameRequestCallback;
 class XRAnchor;
 class XRAnchorSet;
 class XRCanvasInputProvider;
+class XRDepthInformation;
 class XRDOMOverlayState;
 class XRHitTestOptionsInit;
 class XRHitTestSource;
@@ -77,6 +78,14 @@ class XRSession final
   static constexpr char kAnchorsFeatureNotSupported[] =
       "Anchors feature is not supported by the session.";
 
+  // Runs all the video.requestVideoFrameCallback() callbacks associated with
+  // one HTMLVideoElement. |double| is the |high_res_now_ms|, derived from
+  // MonotonicTimeToZeroBasedDocumentTime(|current_frame_time|), to be passed as
+  // the "now" parameter when executing rVFC callbacks. In other words, a
+  // video.rVFC and an xrSession.rAF callback share the same "now" parameters if
+  // they are run in the same turn of the render loop.
+  using ExecuteVfcCallback = base::OnceCallback<void(double)>;
+
   enum EnvironmentBlendMode {
     kBlendModeOpaque = 0,
     kBlendModeAdditive,
@@ -108,6 +117,7 @@ class XRSession final
             EnvironmentBlendMode environment_blend_mode,
             InteractionMode interaction_mode,
             bool uses_input_eventing,
+            float default_framebuffer_scale,
             bool sensorless_session,
             XRSessionFeatureSet enabled_features);
   ~XRSession() override = default;
@@ -242,7 +252,7 @@ class XRSession final
   void OnButtonEvent(
       device::mojom::blink::XRInputSourceStatePtr input_source) override;
 
-  Vector<XRViewData>& views();
+  const HeapVector<Member<XRViewData>>& views();
 
   void AddTransientInputSource(XRInputSource* input_source);
   void RemoveTransientInputSource(XRInputSource* input_source);
@@ -318,6 +328,8 @@ class XRSession final
   base::Optional<TransformationMatrix> GetMojoFrom(
       device::mojom::blink::XRReferenceSpaceType space_type) const;
 
+  XRDepthInformation* GetDepthInformation() const;
+
   // Creates presentation frame based on current state of the session.
   // State currently used in XRFrame creation is mojo_from_viewer_ and
   // world_information_. The created XRFrame also stores a reference to this
@@ -344,6 +356,10 @@ class XRSession final
 
   // Sets the metrics reporter for this session. This should only be done once.
   void SetMetricsReporter(std::unique_ptr<MetricsReporter> reporter);
+
+  // Queues up the execution of video.requestVideoFrameCallback() callbacks for
+  // a specific HTMLVideoELement, for the next requestAnimationFrame() call.
+  void ScheduleVideoFrameCallbacksExecution(ExecuteVfcCallback);
 
  private:
   class XRSessionResizeObserverDelegate;
@@ -410,7 +426,11 @@ class XRSession final
       const device::mojom::blink::XRHitTestSubscriptionResultsData*
           hit_test_data);
 
+  void ProcessDepthData(device::mojom::blink::XRDepthDataPtr depth_data);
+
   void HandleShutdown();
+
+  void ExecuteVideoFrameCallbacks(double timestamp);
 
   const Member<XRSystem> xr_;
   const device::mojom::blink::XRSessionMode mode_;
@@ -497,7 +517,7 @@ class XRSession final
   HashSet<uint64_t> hit_test_source_ids_;
   HashSet<uint64_t> hit_test_source_for_transient_input_ids_;
 
-  Vector<XRViewData> views_;
+  HeapVector<Member<XRViewData>> views_;
 
   Member<XRInputSourceArray> input_sources_;
   Member<XRWebGLLayer> prev_base_layer_;
@@ -524,9 +544,15 @@ class XRSession final
                              HeapMojoWrapperMode::kWithoutContextObserver>
       input_receiver_;
 
+  // Used to schedule video.rVFC callbacks for immersive sessions.
+  Vector<ExecuteVfcCallback> vfc_execution_queue_;
+
   Member<XRFrameRequestCallbackCollection> callback_collection_;
   // Viewer pose in mojo space.
   std::unique_ptr<TransformationMatrix> mojo_from_viewer_;
+
+  // Current depth data buffer.
+  device::mojom::blink::XRDepthDataUpdatedPtr depth_data_;
 
   bool pending_frame_ = false;
   bool resolving_frame_ = false;
@@ -544,6 +570,7 @@ class XRSession final
   int output_height_ = 1;
 
   bool uses_input_eventing_ = false;
+  float default_framebuffer_scale_ = 1.0;
 
   // Indicates that this is a sensorless session which should only support the
   // identity reference space.

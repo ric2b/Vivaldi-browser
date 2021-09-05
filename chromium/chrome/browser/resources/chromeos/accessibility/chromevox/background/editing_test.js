@@ -7,10 +7,6 @@ GEN_INCLUDE([
   '//chrome/browser/resources/chromeos/accessibility/chromevox/testing/chromevox_next_e2e_test_base.js',
 ]);
 
-GEN_INCLUDE([
-  '//chrome/browser/resources/chromeos/accessibility/chromevox/testing/mock_feedback.js'
-]);
-
 /**
  * Test fixture for editing tests.
  */
@@ -20,20 +16,17 @@ ChromeVoxEditingTest = class extends ChromeVoxNextE2ETest {
     window.RoleType = chrome.automation.RoleType;
   }
 
-  /**
-   * @return {!MockFeedback}
-   */
-  createMockFeedback() {
-    const mockFeedback =
-        new MockFeedback(this.newCallback(), this.newCallback.bind(this));
-    mockFeedback.install();
-    return mockFeedback;
-  }
-
   press(keyCode, modifiers) {
     return function() {
-      BackgroundKeyboardHandler.sendKeyPress(keyCode, modifiers);
+      EventGenerator.sendKeyPress(keyCode, modifiers);
     };
+  }
+
+  waitForEditableEvent() {
+    return new Promise(resolve => {
+      DesktopAutomationHandler.instance.textEditHandler_.onEvent = (e) =>
+          resolve(e);
+    });
   }
 };
 
@@ -82,13 +75,13 @@ TEST_F('ChromeVoxEditingTest', 'Multiline', function() {
             {startIndex: 9, endIndex: 9})
         .call(textarea.setSelection.bind(textarea, 1, 1))
         .expectSpeech('i')
-        .expectBraille('Line 1 mled', {startIndex: 1, endIndex: 1})
+        .expectBraille('Line 1\nmled', {startIndex: 1, endIndex: 1})
         .call(textarea.setSelection.bind(textarea, 7, 7))
         .expectSpeech('line 2')
-        .expectBraille('line 2', {startIndex: 0, endIndex: 0})
+        .expectBraille('line 2\n', {startIndex: 0, endIndex: 0})
         .call(textarea.setSelection.bind(textarea, 7, 13))
         .expectSpeech('line 2', 'selected')
-        .expectBraille('line 2', {startIndex: 0, endIndex: 6});
+        .expectBraille('line 2\n', {startIndex: 0, endIndex: 6});
 
     mockFeedback.replay();
   });
@@ -110,7 +103,7 @@ TEST_F('ChromeVoxEditingTest', 'TextButNoSelectionChange', function() {
           if (input.selectionStart == 0) {
             return;
           }
-          console.log('TIM' + 'ER');
+
           input.value = 'text2';
           window.clearInterval(timer);
         }
@@ -1205,18 +1198,18 @@ TEST_F('ChromeVoxEditingTest', 'BackwardWordDelete', function() {
       function(root) {
         const input = root.find({role: RoleType.TEXT_FIELD});
         this.listenOnce(input, 'focus', function() {
-          mockFeedback.call(this.press(35 /* end */, {ctrl: true}))
+          mockFeedback.call(this.press(KeyCode.END, {ctrl: true}))
               .expectSpeech('test')
-              .call(this.press(8 /* backspace */, {ctrl: true}))
+              .call(this.press(KeyCode.BACK, {ctrl: true}))
               .expectSpeech('test, deleted')
               .expectBraille('a\u00a0', {startIndex: 2, endIndex: 2})
-              .call(this.press(8 /* backspace */, {ctrl: true}))
+              .call(this.press(KeyCode.BACK, {ctrl: true}))
               .expectSpeech('a , deleted')
               .expectBraille('is\u00a0', {startIndex: 3, endIndex: 3})
-              .call(this.press(8 /* backspace */, {ctrl: true}))
+              .call(this.press(KeyCode.BACK, {ctrl: true}))
               .expectSpeech('is , deleted')
               .expectBraille('this\u00a0mled', {startIndex: 5, endIndex: 5})
-              .call(this.press(8 /* backspace */, {ctrl: true}))
+              .call(this.press(KeyCode.BACK, {ctrl: true}))
               .expectSpeech('this , deleted')
               .expectBraille(' mled', {startIndex: 0, endIndex: 0})
               .replay();
@@ -1241,17 +1234,17 @@ TEST_F(
           function(root) {
             const input = root.find({role: RoleType.TEXT_FIELD});
             this.listenOnce(input, 'focus', function() {
-              mockFeedback.call(this.press(35 /* end */, {ctrl: true}))
+              mockFeedback.call(this.press(KeyCode.END, {ctrl: true}))
                   .expectSpeech('line')
-                  .call(this.press(8 /* backspace */, {ctrl: true}))
+                  .call(this.press(KeyCode.BACK, {ctrl: true}))
                   .expectSpeech('line, deleted')
-                  .call(this.press(8 /* backspace */, {ctrl: true}))
+                  .call(this.press(KeyCode.BACK, {ctrl: true}))
                   .expectSpeech('second , deleted')
-                  .call(this.press(8 /* backspace */, {ctrl: true}))
+                  .call(this.press(KeyCode.BACK, {ctrl: true}))
                   .expectSpeech('line')
-                  .call(this.press(8 /* backspace */, {ctrl: true}))
+                  .call(this.press(KeyCode.BACK, {ctrl: true}))
                   .expectSpeech('line, deleted')
-                  .call(this.press(8 /* backspace */, {ctrl: true}))
+                  .call(this.press(KeyCode.BACK, {ctrl: true}))
                   .expectSpeech('first , deleted')
                   .replay();
             });
@@ -1319,11 +1312,11 @@ TEST_F(
           function(root) {
             const input = root.find({role: RoleType.TEXT_FIELD});
             this.listenOnce(input, 'focus', function() {
-              mockFeedback.call(this.press(35 /* end */, {ctrl: true}))
+              mockFeedback.call(this.press(KeyCode.END, {ctrl: true}))
                   .expectSpeech('hello')
-                  .call(this.press(13 /* return */))
+                  .call(this.press(KeyCode.RETURN))
                   .expectSpeech('\n')
-                  .call(this.press(65 /* a */))
+                  .call(this.press(KeyCode.A))
                   .expectSpeech('a')
                   .replay();
             });
@@ -1344,17 +1337,17 @@ TEST_F('ChromeVoxEditingTest', 'SelectAll', function() {
       function(root) {
         const input = root.find({role: RoleType.TEXT_FIELD});
         this.listenOnce(input, 'focus', function() {
-          mockFeedback.call(this.press(35 /* end */, {ctrl: true}))
+          mockFeedback.call(this.press(KeyCode.END, {ctrl: true}))
               .expectSpeech('third line')
-              .call(this.press(65 /* a */, {ctrl: true}))
+              .call(this.press(KeyCode.A, {ctrl: true}))
               .expectSpeech('first line second line third line', 'selected')
-              .call(this.press(38 /* up arrow */))
+              .call(this.press(KeyCode.UP))
               .expectSpeech('second line')
-              .call(this.press(65 /* a */, {ctrl: true}))
+              .call(this.press(KeyCode.A, {ctrl: true}))
               .expectSpeech('first line second line third line', 'selected')
-              .call(this.press(36 /* home */, {ctrl: true}))
+              .call(this.press(KeyCode.HOME, {ctrl: true}))
               .expectSpeech('first line')
-              .call(this.press(65 /* a */, {ctrl: true}))
+              .call(this.press(KeyCode.A, {ctrl: true}))
               .expectSpeech('first line second line third line', 'selected')
               .replay();
         });
@@ -1368,12 +1361,12 @@ TEST_F('ChromeVoxEditingTest', 'TextAreaBrailleEmptyLine', function() {
     const textarea = root.find({role: RoleType.TEXT_FIELD});
     this.listenOnce(textarea, 'focus', function() {
       this.listenOnce(textarea, 'valueChanged', function() {
-        mockFeedback.call(this.press(38 /* up arrow */)).expectBraille('\n');
-        mockFeedback.call(this.press(38 /* up arrow */)).expectBraille('two');
-        mockFeedback.call(this.press(38 /* up arrow */)).expectBraille('one');
-        mockFeedback.call(this.press(38 /* up arrow */)).expectBraille('\n');
-        mockFeedback.call(this.press(38 /* up arrow */))
-            .expectBraille('test mled')
+        mockFeedback.call(this.press(KeyCode.UP)).expectBraille('\n');
+        mockFeedback.call(this.press(KeyCode.UP)).expectBraille('two\n');
+        mockFeedback.call(this.press(KeyCode.UP)).expectBraille('one\n');
+        mockFeedback.call(this.press(KeyCode.UP)).expectBraille('\n');
+        mockFeedback.call(this.press(KeyCode.UP))
+            .expectBraille('test\nmled')
             .replay();
       });
     });
@@ -1394,17 +1387,17 @@ TEST_F('ChromeVoxEditingTest', 'MoveByCharacterIntent', function() {
       function(root) {
         const input = root.find({role: RoleType.TEXT_FIELD});
         this.listenOnce(input, 'focus', function() {
-          mockFeedback.call(this.press(39 /* right */))
+          mockFeedback.call(this.press(KeyCode.RIGHT))
               .expectSpeech('2')
-              .call(this.press(39 /* right */))
+              .call(this.press(KeyCode.RIGHT))
               .expectSpeech('3')
-              .call(this.press(39 /* right */))
+              .call(this.press(KeyCode.RIGHT))
               .expectSpeech('\n')
-              .call(this.press(39 /* right */))
+              .call(this.press(KeyCode.RIGHT))
               .expectSpeech('4')
-              .call(this.press(37 /* left */))
+              .call(this.press(KeyCode.LEFT))
               .expectSpeech('\n')
-              .call(this.press(37 /* left */))
+              .call(this.press(KeyCode.LEFT))
               .expectSpeech('3')
               .replay();
         });
@@ -1425,13 +1418,13 @@ TEST_F('ChromeVoxEditingTest', 'MoveByLineIntent', function() {
       function(root) {
         const input = root.find({role: RoleType.TEXT_FIELD});
         this.listenOnce(input, 'focus', function() {
-          mockFeedback.call(this.press(40 /* down */))
+          mockFeedback.call(this.press(KeyCode.DOWN))
               .expectSpeech('456')
-              .call(this.press(40 /* down */))
+              .call(this.press(KeyCode.DOWN))
               .expectSpeech('789')
-              .call(this.press(38 /* up */))
+              .call(this.press(KeyCode.UP))
               .expectSpeech('456')
-              .call(this.press(38 /* up */))
+              .call(this.press(KeyCode.UP))
               .expectSpeech('123')
               .replay();
         });
@@ -1448,9 +1441,9 @@ TEST_F('ChromeVoxEditingTest', 'SelectAllBareTextContent', function() {
       function(root) {
         const input = root.find({role: RoleType.TEXT_FIELD});
         this.listenOnce(input, 'focus', function() {
-          mockFeedback.call(this.press(35 /* end */, {ctrl: true}))
+          mockFeedback.call(this.press(KeyCode.END, {ctrl: true}))
               .expectSpeech('unread')
-              .call(this.press(65 /* a */, {ctrl: true}))
+              .call(this.press(KeyCode.A, {ctrl: true}))
               .expectSpeech('unread', 'selected')
               .replay();
         });
@@ -1483,4 +1476,112 @@ TEST_F('ChromeVoxEditingTest', 'NonBreakingSpaceNewLine', function() {
         });
         input.focus();
       });
+});
+
+TEST_F('ChromeVoxEditingTest', 'InputEvents', function() {
+  const site = `<input type="text"></input>`;
+  this.runWithLoadedTree(site, async function(root) {
+    const input = root.find({role: RoleType.TEXT_FIELD});
+    input.focus();
+    await new Promise(resolve => {
+      this.listenOnce(input, 'focus', resolve);
+    });
+
+    let event = await this.waitForEditableEvent();
+    assertEquals(EventType.TEXT_SELECTION_CHANGED, event.type);
+    assertEquals(input, event.target);
+    assertEquals('', input.value);
+
+    this.press(KeyCode.A)();
+
+    // Important to note that there's no document selection changes below.
+    event = await this.waitForEditableEvent();
+    assertEquals(EventType.VALUE_CHANGED, event.type);
+    assertEquals(input, event.target);
+    assertEquals('a', input.value);
+
+    event = await this.waitForEditableEvent();
+    assertEquals(EventType.TEXT_SELECTION_CHANGED, event.type);
+    assertEquals(input, event.target);
+    assertEquals('a', input.value);
+
+    // TODO(accessibility): this extra value change shouldn't happen.
+    // http://crbug.com/1135249.
+    event = await this.waitForEditableEvent();
+    assertEquals(EventType.VALUE_CHANGED, event.type);
+    assertEquals(input, event.target);
+    assertEquals('a', input.value);
+
+    this.press(KeyCode.B)();
+
+    event = await this.waitForEditableEvent();
+    assertEquals(EventType.VALUE_CHANGED, event.type);
+    assertEquals(input, event.target);
+    assertEquals('ab', input.value);
+
+    event = await this.waitForEditableEvent();
+    assertEquals(EventType.TEXT_SELECTION_CHANGED, event.type);
+    assertEquals(input, event.target);
+    assertEquals('ab', input.value);
+  });
+});
+
+TEST_F('ChromeVoxEditingTest', 'TextAreaEvents', function() {
+  const site = `<textarea></textarea>`;
+  this.runWithLoadedTree(site, async function(root) {
+    const textArea = root.find({role: RoleType.TEXT_FIELD});
+    textArea.focus();
+    await new Promise(resolve => {
+      this.listenOnce(textArea, 'focus', resolve);
+    });
+
+    let event = await this.waitForEditableEvent();
+    assertEquals(EventType.DOCUMENT_SELECTION_CHANGED, event.type);
+    assertEquals(textArea, event.target);
+    assertEquals('', textArea.value);
+
+    this.press(KeyCode.A)();
+
+    event = await this.waitForEditableEvent();
+    assertEquals(EventType.DOCUMENT_SELECTION_CHANGED, event.type);
+    assertEquals(textArea, event.target);
+    assertEquals('a', textArea.value);
+
+    this.press(KeyCode.B)();
+
+    event = await this.waitForEditableEvent();
+    assertEquals(EventType.DOCUMENT_SELECTION_CHANGED, event.type);
+    assertEquals(textArea, event.target);
+    assertEquals('ab', textArea.value);
+  });
+});
+
+TEST_F('ChromeVoxEditingTest', 'ContentEditableEvents', function() {
+  const site = `<div role="textbox" contenteditable></div>`;
+  this.runWithLoadedTree(site, async function(root) {
+    const contentEditable = root.find({role: RoleType.TEXT_FIELD});
+    contentEditable.focus();
+    await new Promise(resolve => {
+      this.listenOnce(contentEditable, 'focus', resolve);
+    });
+
+    let event = await this.waitForEditableEvent();
+    assertEquals(EventType.DOCUMENT_SELECTION_CHANGED, event.type);
+    assertEquals(contentEditable, event.target);
+    assertEquals('', contentEditable.value);
+
+    this.press(KeyCode.A)();
+
+    event = await this.waitForEditableEvent();
+    assertEquals(EventType.DOCUMENT_SELECTION_CHANGED, event.type);
+    assertEquals(contentEditable, event.target);
+    assertEquals('a', contentEditable.value);
+
+    this.press(KeyCode.B)();
+
+    event = await this.waitForEditableEvent();
+    assertEquals(EventType.DOCUMENT_SELECTION_CHANGED, event.type);
+    assertEquals(contentEditable, event.target);
+    assertEquals('ab', contentEditable.value);
+  });
 });

@@ -37,8 +37,8 @@ class SAChildNode {
   get actions() {}
 
   /**
-   * Returns the underlying automation node, if one exists.
-   * @return {AutomationNode}
+   * The automation node that most closely contains this node.
+   * @return {!AutomationNode}
    * @abstract
    */
   get automationNode() {}
@@ -205,8 +205,8 @@ class SAChildNode {
   /**
    * String-ifies the node (for debugging purposes).
    * @param {boolean} wholeTree Whether to recursively include descendants.
-   * @param {string=} prefix
-   * @param {SAChildNode=} currentNode the currentNode, to highlight.
+   * @param {string} prefix
+   * @param {?SAChildNode} currentNode the currentNode, to highlight.
    * @return {string}
    */
   debugString(wholeTree, prefix = '', currentNode = null) {
@@ -215,16 +215,15 @@ class SAChildNode {
           wholeTree, prefix + '  ', currentNode);
     }
 
-    let str = this.role + ' ';
+    let str = this.constructor.name + ' role(' + this.role + ') ';
 
-    const autoNode = this.automationNode;
-    if (autoNode && autoNode.name) {
-      str += 'name(' + autoNode.name + ') ';
+    if (this.automationNode.name) {
+      str += 'name(' + this.automationNode.name + ') ';
     }
 
     const loc = this.location;
     if (loc) {
-      str += 'loc(' + RectHelper.toString(loc) + ') ';
+      str += 'loc(' + RectUtil.toString(loc) + ') ';
     }
 
     if (this.isGroup()) {
@@ -251,15 +250,27 @@ class SAChildNode {
  * This class represents the root node of a Switch Access traversal group.
  */
 class SARootNode {
-  constructor() {
+  /**
+   * @param {!AutomationNode} autoNode The automation node that most closely
+   *     contains all of this node's children.
+   */
+  constructor(autoNode) {
     /** @private {!Array<!SAChildNode>} */
     this.children_ = [];
+
+    /** @private {!AutomationNode} */
+    this.automationNode_ = autoNode;
   }
 
   // ================= Getters and setters =================
 
-  /** @return {AutomationNode} */
-  get automationNode() {}
+  /**
+   * @return {!AutomationNode} The automation node that most closely
+   *     contains all of this node's children.
+   */
+  get automationNode() {
+    return this.automationNode_;
+  }
 
   /** @param {!Array<!SAChildNode>} newVal */
   set children(newVal) {
@@ -299,7 +310,7 @@ class SARootNode {
     const children =
         this.children_.filter((c) => !(c instanceof BackButtonNode));
     const childLocations = children.map((c) => c.location);
-    return RectHelper.unionAll(childLocations);
+    return RectUtil.unionAll(childLocations);
   }
 
   // ================= General methods =================
@@ -396,26 +407,22 @@ class SARootNode {
 
   /**
    * String-ifies the node (for debugging purposes).
-   * @param {boolean=} wholeTree Whether to recursively descend the tree
-   * @param {string=} prefix
-   * @param {SAChildNode} currentNode the currently focused node, to mark.
+   * @param {boolean} wholeTree Whether to recursively descend the tree
+   * @param {string} prefix
+   * @param {?SAChildNode} currentNode the currently focused node, to mark.
    * @return {string}
    */
   debugString(wholeTree = false, prefix = '', currentNode = null) {
-    const autoNode = this.automationNode;
-    let str = 'Root: ';
-    if (autoNode && autoNode.role) {
-      str += autoNode.role + ' ';
-    }
-    if (autoNode && autoNode.name) {
-      str += 'name(' + autoNode.name + ') ';
+    let str =
+        'Root: ' + this.constructor.name + ' ' + this.automationNode.role + ' ';
+    if (this.automationNode.name) {
+      str += 'name(' + this.automationNode.name + ') ';
     }
 
     const loc = this.location;
     if (loc) {
-      str += 'loc(' + RectHelper.toString(loc) + ') ';
+      str += 'loc(' + RectUtil.toString(loc) + ') ';
     }
-
 
     for (const child of this.children) {
       str += '\n' + prefix + ((child.equals(currentNode)) ? ' * ' : ' - ');

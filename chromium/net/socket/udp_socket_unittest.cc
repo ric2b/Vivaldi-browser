@@ -316,12 +316,11 @@ TEST_F(UDPSocketTest, PartialRecv) {
   EXPECT_EQ(second_packet, received);
 }
 
-#if defined(OS_APPLE) || defined(OS_ANDROID) || defined(OS_FUCHSIA)
+#if defined(OS_APPLE) || defined(OS_ANDROID)
 // - MacOS: requires root permissions on OSX 10.7+.
 // - Android: devices attached to testbots don't have default network, so
 // broadcasting to 255.255.255.255 returns error -109 (Address not reachable).
 // crbug.com/139144.
-// - Fuchsia: TODO(crbug.com/959314): broadcast support is not implemented yet.
 #define MAYBE_LocalBroadcast DISABLED_LocalBroadcast
 #else
 #define MAYBE_LocalBroadcast LocalBroadcast
@@ -635,6 +634,8 @@ TEST_F(UDPSocketTest, JoinMulticastGroup) {
 
   IPAddress group_ip;
   EXPECT_TRUE(group_ip.AssignFromIPLiteral(kGroup));
+// TODO(https://github.com/google/gvisor/issues/3839): don't guard on
+// OS_FUCHSIA.
 #if defined(OS_WIN) || defined(OS_FUCHSIA)
   IPEndPoint bind_address(IPAddress::AllZeros(group_ip.size()), 0 /* port */);
 #else
@@ -666,6 +667,8 @@ TEST_F(UDPSocketTest, MAYBE_SharedMulticastAddress) {
 
   IPAddress group_ip;
   ASSERT_TRUE(group_ip.AssignFromIPLiteral(kGroup));
+// TODO(https://github.com/google/gvisor/issues/3839): don't guard on
+// OS_FUCHSIA.
 #if defined(OS_WIN) || defined(OS_FUCHSIA)
   IPEndPoint receive_address(IPAddress::AllZeros(group_ip.size()),
                              0 /* port */);

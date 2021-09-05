@@ -45,8 +45,8 @@
 #include "build/build_config.h"
 #include "content/child/browser_exposed_child_interfaces.h"
 #include "content/child/child_process.h"
-#include "content/child/thread_safe_sender.h"
 #include "content/common/child_process.mojom.h"
+#include "content/common/content_constants_internal.h"
 #include "content/common/field_trial_recorder.mojom.h"
 #include "content/common/in_process_child_thread_params.h"
 #include "content/common/mojo_core_library_support.h"
@@ -74,7 +74,6 @@
 #include "services/device/public/cpp/power_monitor/power_monitor_broadcast_source.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/client_process_impl.h"
 #include "services/resource_coordinator/public/mojom/memory_instrumentation/memory_instrumentation.mojom.h"
-#include "services/service_manager/embedder/switches.h"
 #include "services/tracing/public/cpp/background_tracing/background_tracing_agent_impl.h"
 #include "services/tracing/public/cpp/background_tracing/background_tracing_agent_provider_impl.h"
 
@@ -226,9 +225,8 @@ mojo::IncomingInvitation InitializeMojoIPCChannel() {
   endpoint =
       mojo::PlatformChannelEndpoint(mojo::PlatformHandle(std::move(receive)));
 #elif defined(OS_POSIX)
-  endpoint = mojo::PlatformChannelEndpoint(mojo::PlatformHandle(
-      base::ScopedFD(base::GlobalDescriptors::GetInstance()->Get(
-          service_manager::kMojoIPCChannel))));
+  endpoint = mojo::PlatformChannelEndpoint(mojo::PlatformHandle(base::ScopedFD(
+      base::GlobalDescriptors::GetInstance()->Get(kMojoIPCChannel))));
 #endif
 
   return mojo::IncomingInvitation::Accept(
@@ -246,13 +244,11 @@ class ChildThreadImpl::IOThreadState
       scoped_refptr<base::SequencedTaskRunner> main_thread_task_runner,
       base::WeakPtr<ChildThreadImpl> weak_main_thread,
       base::RepeatingClosure quit_closure,
-      ChildThreadImpl::Options::ServiceBinder service_binder,
-      mojo::PendingReceiver<mojom::ChildProcessHost> host_receiver)
+      ChildThreadImpl::Options::ServiceBinder service_binder)
       : main_thread_task_runner_(std::move(main_thread_task_runner)),
         weak_main_thread_(std::move(weak_main_thread)),
         quit_closure_(std::move(quit_closure)),
-        service_binder_(std::move(service_binder)),
-        host_receiver_(std::move(host_receiver)) {}
+        service_binder_(std::move(service_binder)) {}
 
   // Used only in the deprecated Service Manager IPC mode.
   void BindChildProcessReceiver(
@@ -284,14 +280,6 @@ class ChildThreadImpl::IOThreadState
   ~IOThreadState() override = default;
 
   // mojom::ChildProcess:
-  void Initialize(mojo::PendingRemote<mojom::ChildProcessHostBootstrap>
-                      bootstrap) override {
-    // The browser only calls this method once.
-    DCHECK(host_receiver_);
-    mojo::Remote<mojom::ChildProcessHostBootstrap>(std::move(bootstrap))
-        ->BindProcessHost(std::move(host_receiver_));
-  }
-
   void ProcessShutdown() override {
     main_thread_task_runner_->PostTask(FROM_HERE,
                                        base::BindOnce(quit_closure_));
@@ -407,7 +395,6 @@ class ChildThreadImpl::IOThreadState
   mojo::BinderMap interface_binders_;
   bool wait_for_interface_binders_ = true;
   mojo::Receiver<mojom::ChildProcess> receiver_{this};
-  mojo::PendingReceiver<mojom::ChildProcessHost> host_receiver_;
 
   // The pending legacy IPC channel endpoint to fuse with one we will eventually
   // receiver on the ChildProcess interface. Only used when not in the
@@ -513,14 +500,9 @@ ChildThreadImpl::ChildThreadImpl(base::RepeatingClosure quit_closure,
       channel_connected_factory_(
           new base::WeakPtrFactory<ChildThreadImpl>(this)),
       ipc_task_runner_(options.ipc_task_runner) {
-  mojo::PendingRemote<mojom::ChildProcessHost> remote_host;
-  auto host_receiver = remote_host.InitWithNewPipeAndPassReceiver();
-  child_process_host_ = mojo::SharedRemote<mojom::ChildProcessHost>(
-      std::move(remote_host), GetIOTaskRunner());
   io_thread_state_ = base::MakeRefCounted<IOThreadState>(
       base::ThreadTaskRunnerHandle::Get(), weak_factory_.GetWeakPtr(),
-      quit_closure_, std::move(options.service_binder),
-      std::move(host_receiver));
+      quit_closure_, std::move(options.service_binder));
 
   // |ExposeInterfacesToBrowser()| must be called exactly once. Subclasses which
   // set |exposes_interfaces_to_browser| in Options signify that they take
@@ -575,10 +557,8 @@ void ChildThreadImpl::Init(const Options& options) {
     IPC::Logging::GetInstance()->SetIPCSender(this);
 #endif
 
-  // Only one of these will be made valid by the block below. This determines
-  // whether we were launched in normal IPC mode or deprecated Service Manager
-  // IPC mode.
-  mojo::ScopedMessagePipeHandle child_process_pipe;
+  mojo::ScopedMessagePipeHandle child_process_pipe_for_receiver;
+  mojo::ScopedMessagePipeHandle child_process_host_pipe_for_remote;
   if (!IsInBrowserProcess()) {
     // If using a shared Mojo Core library, IPC support is already initialized.
     if (!IsMojoCoreSharedLibraryEnabled()) {
@@ -594,14 +574,27 @@ void ChildThreadImpl::Init(const Options& options) {
           mojo::core::ScopedIPCSupport::ShutdownPolicy::FAST);
     }
     mojo::IncomingInvitation invitation = InitializeMojoIPCChannel();
-    child_process_pipe = invitation.ExtractMessagePipe(0);
+    child_process_pipe_for_receiver =
+        invitation.ExtractMessagePipe(kChildProcessReceiverAttachmentName);
+    child_process_host_pipe_for_remote =
+        invitation.ExtractMessagePipe(kChildProcessHostRemoteAttachmentName);
   } else {
-    child_process_pipe = options.mojo_invitation->ExtractMessagePipe(0);
+    child_process_pipe_for_receiver =
+        options.mojo_invitation->ExtractMessagePipe(
+            kChildProcessReceiverAttachmentName);
+    child_process_host_pipe_for_remote =
+        options.mojo_invitation->ExtractMessagePipe(
+            kChildProcessHostRemoteAttachmentName);
   }
 
+  // Now that we've recovered the message pipe for the ChildProcessHost, build
+  // our |child_process_host_| with it.
+  mojo::PendingRemote<mojom::ChildProcessHost> remote_host(
+      std::move(child_process_host_pipe_for_remote), /*version=*/0u);
+  child_process_host_ = mojo::SharedRemote<mojom::ChildProcessHost>(
+      std::move(remote_host), GetIOTaskRunner());
+
   sync_message_filter_ = channel_->CreateSyncMessageFilter();
-  thread_safe_sender_ =
-      new ThreadSafeSender(main_thread_runner_, sync_message_filter_.get());
 
   // In single process mode, browser-side tracing and memory will cover the
   // whole process including renderers.
@@ -645,7 +638,7 @@ void ChildThreadImpl::Init(const Options& options) {
     channel_->AddFilter(startup_filter);
   }
 
-  DCHECK(child_process_pipe.is_valid());
+  DCHECK(child_process_pipe_for_receiver.is_valid());
   mojo::PendingRemote<IPC::mojom::ChannelBootstrap> legacy_ipc_bootstrap;
   mojo::ScopedMessagePipeHandle legacy_ipc_channel_handle =
       legacy_ipc_bootstrap.InitWithNewPipeAndPassReceiver().PassPipe();
@@ -661,7 +654,7 @@ void ChildThreadImpl::Init(const Options& options) {
       base::BindOnce(&IOThreadState::BindChildProcessReceiverAndLegacyIpc,
                      io_thread_state_,
                      mojo::PendingReceiver<mojom::ChildProcess>(
-                         std::move(child_process_pipe)),
+                         std::move(child_process_pipe_for_receiver)),
                      std::move(legacy_ipc_bootstrap)));
 
   int connection_timeout = kConnectionTimeoutS;
@@ -775,14 +768,6 @@ IPC::MessageRouter* ChildThreadImpl::GetRouter() {
   return &router_;
 }
 
-mojom::RouteProvider* ChildThreadImpl::GetRemoteRouteProvider() {
-  if (!remote_route_provider_) {
-    DCHECK(channel_);
-    channel_->GetRemoteAssociatedInterface(&remote_route_provider_);
-  }
-  return remote_route_provider_.get();
-}
-
 bool ChildThreadImpl::OnMessageReceived(const IPC::Message& msg) {
   if (msg.routing_id() == MSG_ROUTING_CONTROL)
     return OnControlMessageReceived(msg);
@@ -793,17 +778,10 @@ bool ChildThreadImpl::OnMessageReceived(const IPC::Message& msg) {
 void ChildThreadImpl::OnAssociatedInterfaceRequest(
     const std::string& interface_name,
     mojo::ScopedInterfaceEndpointHandle handle) {
-  if (interface_name == mojom::RouteProvider::Name_) {
-    DCHECK(!route_provider_receiver_.is_bound());
-    route_provider_receiver_.Bind(
-        mojo::PendingAssociatedReceiver<mojom::RouteProvider>(
-            std::move(handle)),
-        ipc_task_runner_ ? ipc_task_runner_
-                         : base::ThreadTaskRunnerHandle::Get());
-  } else {
-    LOG(ERROR) << "Receiver for unknown Channel-associated interface: "
-               << interface_name;
-  }
+  // All associated interfaces are requested through RenderThreadImpl.
+  LOG(ERROR) << "Receiver for unknown Channel-associated interface: "
+             << interface_name;
+  NOTREACHED();
 }
 
 void ChildThreadImpl::ExposeInterfacesToBrowser(mojo::BinderMap binders) {
@@ -861,27 +839,18 @@ void ChildThreadImpl::EnsureConnected() {
   base::Process::TerminateCurrentProcessImmediately(0);
 }
 
-void ChildThreadImpl::GetRoute(
-    int32_t routing_id,
-    mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterfaceProvider>
-        receiver) {
-  associated_interface_provider_receivers_.Add(this, std::move(receiver),
-                                               routing_id);
+bool ChildThreadImpl::IsInBrowserProcess() const {
+  return static_cast<bool>(browser_process_io_runner_);
 }
 
 void ChildThreadImpl::GetAssociatedInterface(
+    int32_t routing_id,
     const std::string& name,
     mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterface>
         receiver) {
-  int32_t routing_id =
-      associated_interface_provider_receivers_.current_context();
   Listener* route = router_.GetRoute(routing_id);
   if (route)
     route->OnAssociatedInterfaceRequest(name, receiver.PassHandle());
-}
-
-bool ChildThreadImpl::IsInBrowserProcess() const {
-  return static_cast<bool>(browser_process_io_runner_);
 }
 
 }  // namespace content

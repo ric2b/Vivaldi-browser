@@ -30,7 +30,7 @@ class MockWebVideoFrameSubmitter : public blink::WebVideoFrameSubmitter {
  public:
   // blink::WebVideoFrameSubmitter implementation.
   void StopUsingProvider() override {}
-  MOCK_METHOD2(EnableSubmission, void(viz::SurfaceId, base::TimeTicks));
+  MOCK_METHOD1(EnableSubmission, void(viz::SurfaceId));
   MOCK_METHOD0(StartRendering, void());
   MOCK_METHOD0(StopRendering, void());
   MOCK_CONST_METHOD0(IsDrivingFrameUpdates, bool(void));
@@ -77,10 +77,9 @@ class VideoFrameCompositorTest : public VideoRendererSink::RenderCallback,
       EXPECT_CALL(*submitter_,
                   SetRotation(Eq(media::VideoRotation::VIDEO_ROTATION_90)));
       EXPECT_CALL(*submitter_, SetForceSubmit(false));
-      EXPECT_CALL(*submitter_, EnableSubmission(Eq(viz::SurfaceId()), _));
-      compositor_->EnableSubmission(viz::SurfaceId(), base::TimeTicks(),
-                                    media::VideoRotation::VIDEO_ROTATION_90,
-                                    false);
+      EXPECT_CALL(*submitter_, EnableSubmission(Eq(viz::SurfaceId())));
+      compositor_->EnableSubmission(
+          viz::SurfaceId(), media::VideoRotation::VIDEO_ROTATION_90, false);
     }
 
     compositor_->set_tick_clock_for_testing(&tick_clock_);
@@ -436,6 +435,35 @@ TEST_P(VideoFrameCompositorTest, UpdateCurrentFrameIfStale) {
 
   // Background rendering should tick another render callback.
   StopVideoRendererSink(false);
+}
+
+TEST_P(VideoFrameCompositorTest, UpdateCurrentFrameIfStale_ClientBypass) {
+  scoped_refptr<VideoFrame> opaque_frame_1 = CreateOpaqueFrame();
+  scoped_refptr<VideoFrame> opaque_frame_2 = CreateOpaqueFrame();
+  compositor_->set_background_rendering_for_testing(true);
+
+  EXPECT_CALL(*submitter_, IsDrivingFrameUpdates)
+      .Times(AnyNumber())
+      .WillRepeatedly(Return(true));
+
+  // Move the clock forward. Otherwise, the current time will be 0, will appear
+  // null, and will cause DCHECKs.
+  tick_clock_.Advance(base::TimeDelta::FromSeconds(1));
+
+  // Starting the video renderer should return a single frame.
+  EXPECT_CALL(*this, Render(_, _, true)).WillOnce(Return(opaque_frame_1));
+  StartVideoRendererSink();
+  EXPECT_EQ(opaque_frame_1, compositor()->GetCurrentFrame());
+
+  // This call should return true even if we have a client that is driving frame
+  // updates.
+  tick_clock_.Advance(base::TimeDelta::FromSeconds(1));
+  EXPECT_CALL(*this, Render(_, _, _)).WillOnce(Return(opaque_frame_2));
+  compositor()->UpdateCurrentFrameIfStale(
+      VideoFrameCompositor::UpdateType::kBypassClient);
+  EXPECT_EQ(opaque_frame_2, compositor()->GetCurrentFrame());
+
+  StopVideoRendererSink(true);
 }
 
 TEST_P(VideoFrameCompositorTest, PreferredRenderInterval) {

@@ -10,12 +10,12 @@
 
 #include "base/no_destructor.h"
 #include "content/browser/browser_url_handler_impl.h"
-#include "content/browser/frame_host/cross_process_frame_connector.h"
-#include "content/browser/frame_host/debug_urls.h"
-#include "content/browser/frame_host/navigation_entry_impl.h"
-#include "content/browser/frame_host/navigation_request.h"
-#include "content/browser/frame_host/navigator.h"
 #include "content/browser/portal/portal.h"
+#include "content/browser/renderer_host/cross_process_frame_connector.h"
+#include "content/browser/renderer_host/debug_urls.h"
+#include "content/browser/renderer_host/navigation_entry_impl.h"
+#include "content/browser/renderer_host/navigation_request.h"
+#include "content/browser/renderer_host/navigator.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/site_instance_impl.h"
@@ -167,7 +167,6 @@ void TestWebContents::TestDidNavigateWithSequenceNumber(
   params.redirects = std::vector<GURL>();
   params.should_update_history = true;
   params.contents_mime_type = std::string("text/html");
-  params.socket_address = net::HostPortPair();
   params.intended_as_new_entry = did_create_new_entry;
   params.did_create_new_entry = did_create_new_entry;
   params.should_replace_current_entry = false;
@@ -306,13 +305,10 @@ void TestWebContents::NavigateAndCommit(const GURL& url,
   navigation->Commit();
 }
 
-void TestWebContents::NavigateAndFail(
-    const GURL& url,
-    int error_code,
-    scoped_refptr<net::HttpResponseHeaders> response_headers) {
+void TestWebContents::NavigateAndFail(const GURL& url, int error_code) {
   std::unique_ptr<NavigationSimulator> navigation =
       NavigationSimulator::CreateBrowserInitiated(url, this);
-  navigation->FailWithResponseHeaders(error_code, std::move(response_headers));
+  navigation->Fail(error_code);
 }
 
 void TestWebContents::TestSetIsLoading(bool value) {
@@ -381,13 +377,6 @@ void TestWebContents::SetHistoryOffsetAndLength(int history_offset,
             history_length);
 }
 
-void TestWebContents::SetHttpResponseHeaders(
-    NavigationHandle* navigation_handle,
-    scoped_refptr<net::HttpResponseHeaders> response_headers) {
-  NavigationRequest::From(navigation_handle)
-      ->set_response_headers_for_testing(response_headers);
-}
-
 RenderFrameHostDelegate* TestWebContents::CreateNewWindow(
     RenderFrameHost* opener,
     const mojom::CreateNewWindowParams& params,
@@ -398,13 +387,13 @@ RenderFrameHostDelegate* TestWebContents::CreateNewWindow(
 }
 
 void TestWebContents::CreateNewWidget(
-    int32_t render_process_id,
+    AgentSchedulingGroupHost& agent_scheduling_group,
     int32_t route_id,
     mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost> blink_widget_host,
     mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {}
 
 void TestWebContents::CreateNewFullscreenWidget(
-    int32_t render_process_id,
+    AgentSchedulingGroupHost& agent_scheduling_group,
     int32_t route_id,
     mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost> blink_widget_host,
     mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {}

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors.All rights reserved.
+// Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -89,60 +89,9 @@ base::Value TimestampToReadableDictionary(
   return dict;
 }
 
-base::Value CheckContactReachabilityRequestToReadableDictionary(
-    const nearbyshare::proto::CheckContactsReachabilityRequest& request) {
-  base::Value dict(base::Value::Type::DICTIONARY);
-  base::Value contacts_list(base::Value::Type::LIST);
-  for (const auto& contact : request.contacts()) {
-    contacts_list.Append(ReachableContactToReadableDictionary(contact));
-  }
-  dict.SetKey("contacts", std::move(contacts_list));
-  return dict;
-}
-
-base::Value ReachableContactToReadableDictionary(
-    const nearbyshare::proto::CheckContactsReachabilityRequest::
-        ReachableContact& contact) {
-  base::Value dict(base::Value::Type::DICTIONARY);
-  dict.SetStringKey("contact_id", contact.contact_id());
-  base::Value phone_numbers_list(base::Value::Type::LIST);
-  for (const auto& phone_number : contact.phone_numbers()) {
-    phone_numbers_list.Append(phone_number);
-  }
-  dict.SetKey("phone_numbers", std::move(phone_numbers_list));
-  base::Value emails_list(base::Value::Type::LIST);
-  for (const auto& email : contact.emails()) {
-    emails_list.Append(email);
-  }
-  dict.SetKey("emails", std::move(emails_list));
-  return dict;
-}
-
-base::Value CheckContactReachabilityResponseToReadableDictionary(
-    const nearbyshare::proto::CheckContactsReachabilityResponse& response) {
-  base::Value dict(base::Value::Type::DICTIONARY);
-  base::Value results_list(base::Value::Type::LIST);
-  for (const auto& result : response.results()) {
-    results_list.Append(ResultToReadableDictionary(result));
-  }
-  dict.SetKey("results", std::move(results_list));
-  return dict;
-}
-
-base::Value ResultToReadableDictionary(
-    const nearbyshare::proto::CheckContactsReachabilityResponse::Result&
-        result) {
-  base::Value dict(base::Value::Type::DICTIONARY);
-  dict.SetStringKey("contact_id", result.contact_id());
-  dict.SetBoolKey("is_reachable", result.is_reachable());
-  dict.SetBoolKey("is_recommended", result.is_recommended());
-  return dict;
-}
-
 base::Value ListContactPeopleRequestToReadableDictionary(
     const nearbyshare::proto::ListContactPeopleRequest& request) {
   base::Value dict(base::Value::Type::DICTIONARY);
-  dict.SetStringKey("parent", request.parent());
   dict.SetIntKey("page_size", request.page_size());
   dict.SetStringKey("page_token", request.page_token());
   return dict;
@@ -209,7 +158,8 @@ base::Value DeviceToReadableDictionary(
   dict.SetKey("contacts", std::move(contacts_list));
   base::Value public_certificates_list(base::Value::Type::LIST);
   for (const auto& certificate : device.public_certificates()) {
-    contacts_list.Append(PublicCertificateToReadableDictionary(certificate));
+    public_certificates_list.Append(
+        PublicCertificateToReadableDictionary(certificate));
   }
   dict.SetKey("public_certificates", std::move(public_certificates_list));
   return dict;

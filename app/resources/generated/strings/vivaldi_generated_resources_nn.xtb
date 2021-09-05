@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">Sy&amp;n rammekjelda</translation>
 <translation id="1165039591588034296">Feil</translation>
 <translation id="1175364870820465910">Skriv &amp;ut …</translation>
-<translation id="1177863135347784049">Tilpassa</translation>
 <translation id="1181037720776840403">Fjern</translation>
 <translation id="1187722533808055681">Dvaleoppvaking</translation>
 <translation id="119944043368869598">Tøm alt</translation>
 <translation id="1221825588892235038">Berre utvalet</translation>
 <translation id="1244303850296295656">Utvidingsfeil</translation>
+<translation id="125220115284141797">Standard</translation>
 <translation id="1274977772557788323">Lagringsinnstillingar for Adobe Flash-spelaren</translation>
 <translation id="1297175357211070620">Mål</translation>
 <translation id="1303101771013849280">Bokmerke HTML-fil</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">Nytt &amp;vindauge</translation>
 <translation id="1725149567830788547">Syn &amp;kontrollar</translation>
 <translation id="1729533290416704613">Ho kontrollerer ogso kva side som vert vist når du søkjer frå Omnibox.</translation>
+<translation id="174123615272205933">Tilpassa</translation>
 <translation id="1744108098763830590">bakgrunnsside</translation>
 <translation id="176587472219019965">Nytt &amp;vindauge</translation>
 <translation id="1769104665586091481">Opna lenkja i eit nytt &amp;vindauge</translation>
+<translation id="1779468444204342338">Minimum</translation>
 <translation id="1815083418640426271">Lim inn som rein tekst</translation>
 <translation id="1828901632669367785">Skriv ut frå systemvindauget ...</translation>
 <translation id="1850508293116537636">Roter me&amp;d klokka</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Spør før sending (tilrådd)</translation>
 <translation id="241082044617551207">Ukjent programtillegg</translation>
 <translation id="2423578206845792524">Lagra &amp;bildet som …</translation>
-<translation id="2436707352762155834">Minimum</translation>
 <translation id="2439110203301358333">Eit anna program på maskina di la til ei utviding som kanskje endrar måten Vivaldi oppfører seg på.</translation>
 <translation id="2445081178310039857">Du må skriva rotkatalogen til utvidinga.</translation>
 <translation id="2470702053775288986">Ikkje-støtta utvidingar er slått av</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Førehandsoppteikning: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Vel rotkatalogen til utvidinga som skal pakkast. For å oppdatera utvidinga må du ogso velja den private nøkkelen som skal brukast på nytt.</translation>
+<translation id="3266179261140759675">Blokker lukka stadar frå å senda og motta data</translation>
 <translation id="3280237271814976245">Lagra &amp;som …</translation>
 <translation id="3285322247471302225">Ny &amp;fane</translation>
 <translation id="3288047731229977326">Utvidingar som køyrer i utviklarmodus kan skada maskina di. Om du ikkje er ein utviklar, bør du slå av dei utvidingane som nyttar utviklarmodus for å vera trygg.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Tillat</translation>
 <translation id="5057110919553308744">Når du vel utvidinga</translation>
 <translation id="5063480226653192405">Bruk</translation>
-<translation id="5068918910148307423">La ikkje nyleg lukka nettstadar få lov til å avslutta sending og mottak av data</translation>
 <translation id="5116628073786783676">Lagra &amp;lydfila som …</translation>
 <translation id="5143374789336132547">Utvidinga "<ph name="EXTENSION_NAME" />" har endra kva side som vert vist når du vel heim-knappen.</translation>
 <translation id="5154108062446123722">Avanserte innstillingar for <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">Utvidinga "<ph name="EXTENSION_NAME" />" har endra kva side som vert vist når du søkjer frå adressefeltet.</translation>
 <translation id="5360150013186312835">Syn på verktøylinja</translation>
 <translation id="5362741141255528695">Vel privatnøkkelfil.</translation>
+<translation id="536638840841140142">Ingen</translation>
 <translation id="5370819323174483825">Frisk &amp;opp att</translation>
 <translation id="5398572795982417028">Utanfor det gyldige sideområdet, grensa er <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Hald fram med nedlastinga</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Mottakar: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installert av administratoren din</translation>
 <translation id="7685049629764448582">JavaScript-minne</translation>
-<translation id="7701040980221191251">Ingen</translation>
 <translation id="7701869757853594372">BRUKAR-referansar</translation>
 <translation id="7704305437604973648">Oppgåve</translation>
 <translation id="7710568461918838723">&amp;Mediedeling ...</translation>

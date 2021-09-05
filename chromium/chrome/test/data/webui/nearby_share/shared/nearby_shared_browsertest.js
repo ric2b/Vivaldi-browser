@@ -9,7 +9,6 @@ GEN_INCLUDE(['//chrome/test/data/webui/polymer_browser_test_base.js']);
 
 GEN('#include "chrome/browser/browser_features.h"');
 GEN('#include "content/public/test/browser_test.h"');
-GEN('#include "services/network/public/cpp/features.h"');
 
 const NearbySharedBrowserTest = class extends PolymerTest {
   /** @override */
@@ -18,21 +17,23 @@ const NearbySharedBrowserTest = class extends PolymerTest {
   }
 
   /** @override */
+  setUp() {
+    super.setUp();
+    settings.ensureLazyLoaded('chromeos');
+  }
+
+  /** @override */
   get featureList() {
-    return {
-      enabled: [
-        'features::kNearbySharing',
-        // required for linux-blink-cors-rel builder (post CQ)
-        'network::features::kOutOfBlinkCors',
-      ]
-    };
+    return {enabled: ['features::kNearbySharing']};
   }
 
   /** @override */
   get extraLibraries() {
     return super.extraLibraries.concat([
       '../../test_util.js',
+      '../../settings/ensure_lazy_loaded.js',
       'fake_nearby_share_settings.js',
+      'fake_nearby_contact_manager.js',
     ]);
   }
 };
@@ -75,6 +76,25 @@ var NearbyVisibilityPageTest = class extends NearbySharedBrowserTest {
 };
 
 TEST_F('NearbyVisibilityPageTest', 'All', () => mocha.run());
+
+/**
+ * @extends {NearbySharedBrowserTest}
+ */
+var NearbyPageTemplateTest = class extends NearbySharedBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return super.browsePreload + 'shared/nearby_page_template.html';
+  }
+
+  /** @override */
+  get extraLibraries() {
+    return super.extraLibraries.concat([
+      'nearby_page_template_test.js',
+    ]);
+  }
+};
+
+TEST_F('NearbyPageTemplateTest', 'All', () => mocha.run());
 
 /**
  * @extends {NearbySharedBrowserTest}

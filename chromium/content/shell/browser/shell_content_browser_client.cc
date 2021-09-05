@@ -20,6 +20,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequence_local_storage_slot.h"
 #include "build/build_config.h"
+#include "components/performance_manager/embedder/performance_manager_registry.h"
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/login_delegate.h"
 #include "content/public/browser/navigation_throttle.h"
@@ -31,7 +32,6 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/user_agent.h"
-#include "content/public/common/web_preferences.h"
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_browser_main_parts.h"
@@ -48,6 +48,7 @@
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "url/gurl.h"
@@ -67,7 +68,7 @@
 #include "components/crash/content/browser/crash_handler_host_linux.h"
 #endif
 
-#if defined(OS_LINUX) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
 #include "components/crash/core/app/crash_switches.h"
 #include "components/crash/core/app/crashpad.h"
 #include "content/public/common/content_descriptors.h"
@@ -87,7 +88,7 @@ ShellContentBrowserClient* g_browser_client;
 int GetCrashSignalFD(const base::CommandLine& command_line) {
   return crashpad::CrashHandlerHost::Get()->GetDeathSignalSocket();
 }
-#elif defined(OS_LINUX)
+#elif defined(OS_LINUX) || defined(OS_CHROMEOS)
 int GetCrashSignalFD(const base::CommandLine& command_line) {
   int fd;
   pid_t pid;
@@ -224,7 +225,7 @@ void ShellContentBrowserClient::AppendExtraCommandLineSwitches(
                                  kForwardSwitches,
                                  base::size(kForwardSwitches));
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableCrashReporter)) {
     int fd;
@@ -235,7 +236,7 @@ void ShellContentBrowserClient::AppendExtraCommandLineSwitches(
           base::NumberToString(pid));
     }
   }
-#endif  // OS_LINUX
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 }
 
 std::string ShellContentBrowserClient::GetAcceptLangs(BrowserContext* context) {
@@ -248,8 +249,8 @@ std::string ShellContentBrowserClient::GetDefaultDownloadName() {
 
 WebContentsViewDelegate* ShellContentBrowserClient::GetWebContentsViewDelegate(
     WebContents* web_contents) {
-  if (web_contents_view_delegate_callback_)
-    return web_contents_view_delegate_callback_.Run(web_contents);
+  performance_manager::PerformanceManagerRegistry::GetInstance()
+      ->MaybeCreatePageNodeForWebContents(web_contents);
   return CreateShellWebContentsViewDelegate(web_contents);
 }
 
@@ -284,7 +285,7 @@ SpeechRecognitionManagerDelegate*
 
 void ShellContentBrowserClient::OverrideWebkitPrefs(
     RenderViewHost* render_view_host,
-    WebPreferences* prefs) {
+    blink::web_pref::WebPreferences* prefs) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kForceDarkMode)) {
     prefs->preferred_color_scheme = blink::PreferredColorScheme::kDark;
@@ -310,10 +311,9 @@ void ShellContentBrowserClient::ExposeInterfacesToRenderer(
     service_manager::BinderRegistry* registry,
     blink::AssociatedInterfaceRegistry* associated_registry,
     RenderProcessHost* render_process_host) {
-  if (expose_interfaces_to_renderer_callback_) {
-    expose_interfaces_to_renderer_callback_.Run(registry, associated_registry,
-                                                render_process_host);
-  }
+  performance_manager::PerformanceManagerRegistry::GetInstance()
+      ->CreateProcessNodeAndExposeInterfacesToRendererProcess(
+          registry, render_process_host);
 }
 
 mojo::Remote<::media::mojom::MediaService>
@@ -332,9 +332,8 @@ ShellContentBrowserClient::RunSecondaryMediaService() {
 void ShellContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
     RenderFrameHost* render_frame_host,
     mojo::BinderMapWithContext<RenderFrameHost*>* map) {
-  if (register_browser_interface_binders_for_frame_callback_)
-    register_browser_interface_binders_for_frame_callback_.Run(
-        render_frame_host, map);
+  performance_manager::PerformanceManagerRegistry::GetInstance()
+      ->ExposeInterfacesToRenderFrame(map);
 }
 
 void ShellContentBrowserClient::OpenURL(
@@ -406,7 +405,7 @@ void ShellContentBrowserClient::OverrideURLLoaderFactoryParams(
   }
 }
 
-#if defined(OS_LINUX) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
 void ShellContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
     const base::CommandLine& command_line,
     int child_process_id,
@@ -419,10 +418,10 @@ void ShellContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
 #endif
   int crash_signal_fd = GetCrashSignalFD(command_line);
   if (crash_signal_fd >= 0) {
-    mappings->Share(service_manager::kCrashDumpSignal, crash_signal_fd);
+    mappings->Share(kCrashDumpSignal, crash_signal_fd);
   }
 }
-#endif  // defined(OS_LINUX) || defined(OS_ANDROID)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
 
 void ShellContentBrowserClient::ConfigureNetworkContextParams(
     BrowserContext* context,
@@ -440,12 +439,10 @@ ShellContentBrowserClient::GetNetworkContextsParentDirectory() {
 }
 
 void ShellContentBrowserClient::BindBrowserControlInterface(
-    mojo::GenericPendingReceiver receiver) {
-  if (auto r = receiver.As<mojom::ShellController>()) {
-    mojo::MakeSelfOwnedReceiver(std::make_unique<ShellControllerImpl>(),
-                                std::move(r));
-    return;
-  }
+    mojo::ScopedMessagePipeHandle pipe) {
+  mojo::MakeSelfOwnedReceiver(
+      std::make_unique<ShellControllerImpl>(),
+      mojo::PendingReceiver<mojom::ShellController>(std::move(pipe)));
 }
 
 ShellBrowserContext* ShellContentBrowserClient::browser_context() {

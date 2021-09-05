@@ -18,6 +18,63 @@ namespace autofill {
 
 namespace {
 
+std::string ToString(PasswordForm::Store in_store) {
+  switch (in_store) {
+    case PasswordForm::Store::kNotSet:
+      return "Not Set";
+    case PasswordForm::Store::kProfileStore:
+      return "Profile Store";
+    case PasswordForm::Store::kAccountStore:
+      return "Account Store";
+  }
+}
+
+std::string ToString(PasswordForm::Scheme scheme) {
+  switch (scheme) {
+    case PasswordForm::Scheme::kHtml:
+      return "HTML";
+    case PasswordForm::Scheme::kBasic:
+      return "Basic";
+    case PasswordForm::Scheme::kDigest:
+      return "Digest";
+    case PasswordForm::Scheme::kOther:
+      return "Other";
+    case PasswordForm::Scheme::kUsernameOnly:
+      return "UsernameOnly";
+  }
+
+  NOTREACHED();
+  return std::string();
+}
+
+std::string ToString(PasswordForm::Type type) {
+  switch (type) {
+    case PasswordForm::Type::kManual:
+      return "Manual";
+    case PasswordForm::Type::kGenerated:
+      return "Generated";
+    case PasswordForm::Type::kApi:
+      return "API";
+  }
+
+  NOTREACHED();
+  return std::string();
+}
+
+std::string ToString(PasswordForm::GenerationUploadStatus status) {
+  switch (status) {
+    case PasswordForm::GenerationUploadStatus::kNoSignalSent:
+      return "No Signal Sent";
+    case PasswordForm::GenerationUploadStatus::kPositiveSignalSent:
+      return "Positive Signal Sent";
+    case PasswordForm::GenerationUploadStatus::kNegativeSignalSent:
+      return "Negative Signal Sent";
+  }
+
+  NOTREACHED();
+  return std::string();
+}
+
 // Utility function that creates a std::string from an object supporting the
 // ostream operator<<.
 template <typename T>
@@ -27,15 +84,14 @@ std::string ToString(const T& obj) {
   return ostream.str();
 }
 
-std::string StoreToString(PasswordForm::Store in_store) {
-  switch (in_store) {
-    case PasswordForm::Store::kNotSet:
-      return "Not Set";
-    case PasswordForm::Store::kProfileStore:
-      return "Profile Store";
-    case PasswordForm::Store::kAccountStore:
-      return "Account Store";
-  }
+base::string16 ValueElementVectorToString(
+    const ValueElementVector& value_element_pairs) {
+  std::vector<base::string16> pairs(value_element_pairs.size());
+  std::transform(value_element_pairs.begin(), value_element_pairs.end(),
+                 pairs.begin(), [](const ValueElementPair& p) {
+                   return p.first + base::ASCIIToUTF16("+") + p.second;
+                 });
+  return base::JoinString(pairs, base::ASCIIToUTF16(", "));
 }
 
 // Serializes a PasswordForm to a JSON object. Used only for logging in tests.
@@ -92,7 +148,7 @@ void PasswordFormToJSON(const PasswordForm& form,
   target->SetBoolean("is_gaia_with_skip_save_password_form",
                      form.form_data.is_gaia_with_skip_save_password_form);
   target->SetBoolean("is_new_password_reliable", form.is_new_password_reliable);
-  target->SetString("in_store", StoreToString(form.in_store));
+  target->SetString("in_store", ToString(form.in_store));
 
   std::vector<std::string> hashes;
   hashes.reserve(form.moving_blocked_for_list.size());
@@ -210,14 +266,8 @@ bool ArePasswordFormUniqueKeysEqual(const PasswordForm& left,
           left.password_element == right.password_element);
 }
 
-base::string16 ValueElementVectorToString(
-    const ValueElementVector& value_element_pairs) {
-  std::vector<base::string16> pairs(value_element_pairs.size());
-  std::transform(value_element_pairs.begin(), value_element_pairs.end(),
-                 pairs.begin(), [](const ValueElementPair& p) {
-                   return p.first + base::ASCIIToUTF16("+") + p.second;
-                 });
-  return base::JoinString(pairs, base::ASCIIToUTF16(", "));
+std::ostream& operator<<(std::ostream& os, PasswordForm::Scheme scheme) {
+  return os << ToString(scheme);
 }
 
 std::ostream& operator<<(std::ostream& os, const PasswordForm& form) {

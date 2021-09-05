@@ -5,7 +5,7 @@
 #ifndef UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_TOPLEVEL_WINDOW_H_
 #define UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_TOPLEVEL_WINDOW_H_
 
-#include "build/lacros_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 #include "ui/platform_window/extensions/wayland_extension.h"
@@ -76,6 +76,7 @@ class WaylandToplevelWindow : public WaylandWindow,
   void OnDragLeave() override;
   void OnDragSessionClose(uint32_t dnd_action) override;
   bool OnInitialize(PlatformWindowInitProperties properties) override;
+  bool IsActive() const override;
 
   // WmMoveLoopHandler:
   bool RunMoveLoop(const gfx::Vector2d& drag_offset) override;
@@ -96,6 +97,9 @@ class WaylandToplevelWindow : public WaylandWindow,
   void SetSizeConstraints();
 
   void SetOrResetRestoredBounds();
+
+  // Initializes the aura-shell EXO extension, if available.
+  void InitializeAuraShell();
 
   // Wrappers around shell surface.
   std::unique_ptr<ShellSurfaceWrapper> shell_surface_;
@@ -141,6 +145,8 @@ class WaylandToplevelWindow : public WaylandWindow,
   base::Optional<gfx::Size> max_size_;
 
   base::OnceClosure drag_loop_quit_closure_;
+
+  wl::Object<zaura_surface> aura_surface_;
 
   base::WeakPtrFactory<WaylandToplevelWindow> weak_ptr_factory_{this};
 };

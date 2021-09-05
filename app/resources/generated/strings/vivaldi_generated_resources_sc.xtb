@@ -6,11 +6,11 @@
 <translation id="1128109161498068552">No dones s'òrdine a giassu web perunu de impreare unu sistema esclusivu de messaggios pro impreare dispositivos MIDI</translation>
 <translation id="1165039591588034296">Faddina</translation>
 <translation id="1175364870820465910">&amp;Imprenta...</translation>
-<translation id="1177863135347784049">Personalitzadu</translation>
 <translation id="1181037720776840403">Lea</translation>
 <translation id="119944043368869598">Burra totu</translation>
 <translation id="1221825588892235038">Sa seberada ebbia</translation>
 <translation id="1244303850296295656">B'at una faddina de s'estensione</translation>
+<translation id="125220115284141797">Predefinidu</translation>
 <translation id="1274977772557788323">Assetios de ammentu de Adobe Flash Player</translation>
 <translation id="1297175357211070620">Destinatzione</translation>
 <translation id="1430915738399379752">Imprenta</translation>
@@ -24,7 +24,9 @@
 <translation id="1698122934742150150">Pro sa sessione privada de como ebbia</translation>
 <translation id="1706625117072057435">Livellos de zoom</translation>
 <translation id="1708338024780164500">(Inativu)</translation>
+<translation id="174123615272205933">Personalitzadu</translation>
 <translation id="1744108098763830590">pàgina de lugania</translation>
+<translation id="1779468444204342338">Su minimu</translation>
 <translation id="1886996562706621347">Permiti a zassos web de preguntare si podent diventare sos handlers predefinidos pro sos protocollos (cunsigiadu)</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">Lea-nde totu</translation>
@@ -48,7 +50,6 @@
 <translation id="2379281330731083556">Imprenta impreande su programa predefinidu de su sistema... <ph name="SHORTCUT_KEY" /></translation>
 <translation id="2381756643783702095">Pregunta-mi primu de imbiare (cunsigiadu)</translation>
 <translation id="241082044617551207">Plugin chi no si connoschet</translation>
-<translation id="2436707352762155834">Su minimu</translation>
 <translation id="2439110203301358333">B'at aterun'aplicu in su'elaboradore chi at agiuntu un'estensione chi podet mudare su comportamentu de Vivaldi.</translation>
 <translation id="2445081178310039857">Depes nàrrere in-ue cheres estrarre sa cartella istrinta.</translation>
 <translation id="2470702053775288986">Un'estensione chi no podet funtzionare cun Vivaldi est bistada istudada</translation>
@@ -149,7 +150,6 @@
 <translation id="5036662165765606524">No permites a giassu web perunu de iscarrigare prus files in automaticu</translation>
 <translation id="5039804452771397117">Permiti</translation>
 <translation id="5063480226653192405">Impreu</translation>
-<translation id="5068918910148307423">No permites a zassos web serrados dae pagu de acabare s'inviu e sa retzida de datos</translation>
 <translation id="5154108062446123722">Assetios avantzados pro <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5233231016133573565">ID de su protzessu</translation>
 <translation id="5265562206369321422">Est offline dae prus de una chida</translation>
@@ -158,6 +158,7 @@
 <translation id="5301954838959518834">AB, apo cumpresu</translation>
 <translation id="5317780077021120954">Ammenta</translation>
 <translation id="5362741141255528695">Sèbera su file de sa crae privada.</translation>
+<translation id="536638840841140142">Manc'unu</translation>
 <translation id="5370819323174483825">%Annoa</translation>
 <translation id="5398572795982417028">Su riferimentu de sa pàgina est foras de su limite chi est:<ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5431318178759467895">Colore</translation>
@@ -232,7 +233,6 @@
 <translation id="7658239707568436148">No lu fetes</translation>
 <translation id="7661259717474717992">Permiti a sos giassos web de ammentare e de legere sos datos de sos cookies</translation>
 <translation id="7663719505383602579">Retzidore: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7701040980221191251">Manc'unu</translation>
 <translation id="7704305437604973648">Task</translation>
 <translation id="7710568461918838723">&amp;Cast...</translation>
 <translation id="7751260505918304024">Ammustra totus</translation>

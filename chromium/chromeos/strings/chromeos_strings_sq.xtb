@@ -5,6 +5,7 @@
 <translation id="1195447618553298278">Gabim i panjohur.</translation>
 <translation id="1413240736185167732">Dështoi - Filtri dështoi</translation>
 <translation id="1468664791493211953">Ofertat</translation>
+<translation id="1478594628797167447">Skaner</translation>
 <translation id="1482734542997480527"><ph name="ENROLLMENT_DOMAIN" /> e menaxhon këtë pajisje dhe mund të jetë në gjendje të monitorojë aktivitetin tënd.</translation>
 <translation id="150962533380566081">Kodi PUK i pavlefshëm.</translation>
 <translation id="1510238584712386396">Nisësi</translation>
@@ -19,10 +20,12 @@
 <translation id="2161394479394250669">Anulo printimin</translation>
 <translation id="2338501278241028356">Aktivizo "Bluetooth-in" për të zbuluar pajisjet në afërsi</translation>
 <translation id="2375079107209812402"><ph name="ATTEMPTS_LEFT" /> përpjekje të mbetura</translation>
+<translation id="2517472476991765520">Skano</translation>
 <translation id="2805756323405976993">Aplikacionet</translation>
 <translation id="2872961005593481000">Ndërprit punën</translation>
 <translation id="3008341117444806826">RIFRESKO</translation>
 <translation id="3091839911843451378">Dështoi - Ndaloi</translation>
+<translation id="3246869037381808805">Printimet më të vjetra se 1 ditë do të hiqen</translation>
 <translation id="3268178239013324452">Dështoi - Kapaku i hapur</translation>
 <translation id="3369013195428705271">Je i sigurt që do ta pastrosh të gjithë historikun e printimit? Printimet e tua në vazhdim nuk do të pastrohen.</translation>
 <translation id="3456078764689556234">U printua faqja <ph name="PRINTED_PAGES" /> nga <ph name="TOTAL_PAGES" />.</translation>
@@ -33,13 +36,13 @@
 <translation id="38114475217616659">Fshi të gjithë historikun</translation>
 <translation id="3820172043799983114">Kodi PIN i pavlefshëm</translation>
 <translation id="3838338534323494292">Fjalëkalimi i ri</translation>
+<translation id="39823212440917567">Printimet më të vjetra se <ph name="NUMBER_OF_DAYS" /> ditë do të hiqen</translation>
 <translation id="4003259559679196451"><ph name="ENROLLMENT_DOMAIN" /> menaxhon këtë pajisje dhe ka qasje te i gjithë aktiviteti i përdoruesit, duke përfshirë faqet e uebit të vizituara, fjalëkalimet dhe email-i.</translation>
 <translation id="4003384961948020559">Dështoi - Dalja është plot</translation>
 <translation id="4027485274696301677">Kjo pajisje <ph name="DEVICE_TYPE" /> menaxhohet nga <ph name="ENROLLMENT_DOMAIN" />. Administratorët mund ta konfigurojnë në distancë pajisjen.</translation>
 <translation id="4034824040120875894">Printeri</translation>
 <translation id="4227825898293920515">Fjalëkalimi skadon për <ph name="TIME" /></translation>
 <translation id="4238516577297848345">Nuk ka printime në vazhdim</translation>
-<translation id="428217921675623177">Printimet më të vjetra se 90 ditë do të hiqen</translation>
 <translation id="4297501883039923494">Ndaloi - Gabim i panjohur</translation>
 <translation id="4429881212383817840">Bileta e Kerberos skadon së shpejti</translation>
 <translation id="445059817448385655">Fjalëkalimi i vjetër</translation>
@@ -52,6 +55,7 @@
 <translation id="4890353053343094602">Zgjidh një të re menjëherë</translation>
 <translation id="4917889632206600977">Ndaloi - Nuk ka letër</translation>
 <translation id="4932733599132424254">Data</translation>
+<translation id="520299634122159966">Nuk ka skanerë</translation>
 <translation id="5212543919916444558">Nuk mund të gjej diçka në ekranin tënd me të cilën mund të të ndihmoj. Provo të trokasësh te mikrofoni për të më kërkuar diçka.</translation>
 <translation id="5222676887888702881">Dil</translation>
 <translation id="5267975978099728568"><ph name="DOCUMENT_TITLE" />, <ph name="PRINTER_NAME" />, <ph name="CREATION_TIME" />, <ph name="ERROR_STATUS" /></translation>
@@ -70,6 +74,7 @@
 <translation id="649050271426829538">Ndaloi - Bllokim letre</translation>
 <translation id="6517239166834772319">Eksploro</translation>
 <translation id="6564646048574748301">Dështoi - Printeri është i paarritshëm</translation>
+<translation id="6620487321149975369">Printimet do të shfaqen te historiku, përveçse kur hiqen manualisht</translation>
 <translation id="6643016212128521049">Pastro</translation>
 <translation id="6747215703636344499">Ndaloi - Dalja është plot</translation>
 <translation id="7162487448488904999">Galeria</translation>
@@ -80,7 +85,9 @@
 <translation id="7805768142964895445">Statusi</translation>
 <translation id="808894953321890993">Ndrysho fjalëkalimin</translation>
 <translation id="8208861521865154048">Avantazhet</translation>
+<translation id="8294431847097064396">Burimi</translation>
 <translation id="8347227221149377169">Printimet</translation>
+<translation id="8352772353338965963">Shto një llogari në identifikimin e shumëfishtë. Të gjitha llogaritë e identifikuara mund të qasen pa fjalëkalim, prandaj ky funksion duhet të përdoret vetëm me llogari të besuara.</translation>
 <translation id="8701136875688985581"><ph name="ENROLLMENT_DOMAIN" /> e menaxhon këtë përdorues. Ai domen mund të menaxhojë në distancë cilësimet dhe të monitorojë aktivitetin e përdoruesit.</translation>
 <translation id="871560550817059752">Dështoi - Nuk ka bojë</translation>
 <translation id="8726019395068607495">Ndaloi - Dera e hapur</translation>

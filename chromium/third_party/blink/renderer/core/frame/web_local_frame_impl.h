@@ -143,8 +143,9 @@ class CORE_EXPORT WebLocalFrameImpl final
                          bool had_redirect,
                          const WebSourceLocation&) override;
   void SendOrientationChangeEvent() override;
-  PageSizeType GetPageSizeType(int page_index) override;
-  void GetPageDescription(int page_index, WebPrintPageDescription*) override;
+  PageSizeType GetPageSizeType(uint32_t page_index) override;
+  void GetPageDescription(uint32_t page_index,
+                          WebPrintPageDescription*) override;
   void ExecuteScript(const WebScriptSource&) override;
   void ExecuteScriptInIsolatedWorld(int32_t world_id,
                                     const WebScriptSource&) override;
@@ -154,6 +155,12 @@ class CORE_EXPORT WebLocalFrameImpl final
   void ClearIsolatedWorldCSPForTesting(int32_t world_id) override;
   v8::Local<v8::Value> ExecuteScriptAndReturnValue(
       const WebScriptSource&) override;
+  // Call the function with the given receiver and arguments
+  v8::MaybeLocal<v8::Value> ExecuteMethodAndReturnValue(
+      v8::Local<v8::Function>,
+      v8::Local<v8::Value>,
+      int argc,
+      v8::Local<v8::Value> argv[]) override;
   v8::MaybeLocal<v8::Value> CallFunctionEvenIfScriptDisabled(
       v8::Local<v8::Function>,
       v8::Local<v8::Value>,
@@ -205,6 +212,9 @@ class CORE_EXPORT WebLocalFrameImpl final
   WebRange SelectionRange() const override;
   WebString SelectionAsText() const override;
   WebString SelectionAsMarkup() const override;
+  void TextSelectionChanged(const WebString& selection_text,
+                            uint32_t offset,
+                            const gfx::Range& range) override;
   bool SelectWordAroundCaret() override;
   void SelectRange(const gfx::Point& base, const gfx::Point& extent) override;
   void SelectRange(const WebRange&,
@@ -257,7 +267,8 @@ class CORE_EXPORT WebLocalFrameImpl final
                       bool new_session,
                       bool wrap_within_frame,
                       bool async) override;
-  void SetTickmarks(const WebVector<WebRect>&) override;
+  void SetTickmarks(const WebElement& target,
+                    const WebVector<WebRect>& tickmarks) override;
   WebNode ContextMenuNode() const override;
   void CopyImageAtForTesting(const gfx::Point&) override;
   void UsageCountChromeLoadTimes(const WebString& metric) override;
@@ -267,7 +278,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   WebInputMethodController* GetInputMethodController() override;
   WebAssociatedURLLoader* CreateAssociatedURLLoader(
       const WebAssociatedURLLoaderOptions&) override;
-  void StopLoading() override;
+  void DeprecatedStopLoading() override;
   WebSize GetScrollOffset() const override;
   void SetScrollOffset(const WebSize&) override;
   WebSize DocumentSize() const override;
@@ -276,10 +287,10 @@ class CORE_EXPORT WebLocalFrameImpl final
   void DispatchBeforePrintEvent(
       base::WeakPtr<WebPrintClient> print_client) override;
   WebPlugin* GetPluginToPrint(const WebNode& constrain_to_node) override;
-  int PrintBegin(const WebPrintParams&,
-                 const WebNode& constrain_to_node) override;
-  float GetPrintPageShrink(int page) override;
-  float PrintPage(int page_to_print, cc::PaintCanvas*) override;
+  uint32_t PrintBegin(const WebPrintParams&,
+                      const WebNode& constrain_to_node) override;
+  float GetPrintPageShrink(uint32_t page) override;
+  float PrintPage(uint32_t page_to_print, cc::PaintCanvas*) override;
   void PrintEnd() override;
   void DispatchAfterPrintEvent() override;
   bool GetPrintPresetOptionsForPlugin(const WebNode&,
@@ -292,7 +303,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   bool IsAdSubframe() const override;
   void SetIsAdSubframe(blink::mojom::AdFrameType ad_frame_type) override;
   WebSize SpoolSizeInPixelsForTesting(const WebSize& page_size_in_pixels,
-                                      int page_count) override;
+                                      uint32_t page_count) override;
   void PrintPagesForTesting(cc::PaintCanvas*,
                             const WebSize& page_size_in_pixels,
                             const WebSize& spool_size_in_pixels) override;
@@ -306,8 +317,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   bool HasStickyUserActivation() override;
   bool HasTransientUserActivation() override;
   bool ConsumeTransientUserActivation(UserActivationUpdateSource) override;
-  void SetOptimizationGuideHints(
-      mojom::blink::DelayAsyncScriptExecutionDelayType delay_type) override;
+  void SetOptimizationGuideHints(const WebOptimizationGuideHints&) override;
 
   void SetCosmeticFilterClient(WebCosmeticFilterClient* client) override;
   WebCosmeticFilterClient* GetCosmeticFilterClient() override;
@@ -339,6 +349,9 @@ class CORE_EXPORT WebLocalFrameImpl final
   void InitializeCoreFrame(
       Page&,
       FrameOwner*,
+      WebFrame* parent,
+      WebFrame* previous_sibling,
+      FrameInsertType,
       const AtomicString& name,
       WindowAgentFactory*,
       WebFrame* opener,
@@ -546,11 +559,11 @@ class CORE_EXPORT WebLocalFrameImpl final
   // cleared upon close().
   SelfKeepAlive<WebLocalFrameImpl> self_keep_alive_;
 
-#if DCHECK_IS_ON()
   // True if DispatchBeforePrintEvent() was called, and
   // DispatchAfterPrintEvent() is not called yet.
+  // TODO(crbug.com/1121077) After fixing the bug, make this member variable
+  // only available when DCHECK_IS_ON().
   bool is_in_printing_ = false;
-#endif
 };
 
 template <>

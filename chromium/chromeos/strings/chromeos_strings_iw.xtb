@@ -5,6 +5,7 @@
 <translation id="1195447618553298278">שגיאה לא ידועה.</translation>
 <translation id="1413240736185167732">נכשלה – הסינון נכשל</translation>
 <translation id="1468664791493211953">מבצעים</translation>
+<translation id="1478594628797167447">סורק</translation>
 <translation id="1482734542997480527">הניהול של המכשיר הזה נעשה מהדומיין <ph name="ENROLLMENT_DOMAIN" /> וייתכן שאפשר יהיה לעקוב ממנו אחר הפעילות שלך.</translation>
 <translation id="150962533380566081">‏PUK לא חוקי.</translation>
 <translation id="1510238584712386396">מרכז האפליקציות</translation>
@@ -19,10 +20,12 @@
 <translation id="2161394479394250669">ביטול משימת ההדפסה</translation>
 <translation id="2338501278241028356">‏יש להפעיל את Bluetooth כדי לאתר מכשירים קרובים</translation>
 <translation id="2375079107209812402">נותרו <ph name="ATTEMPTS_LEFT" /> ניסיונות</translation>
+<translation id="2517472476991765520">סריקה</translation>
 <translation id="2805756323405976993">אפליקציות</translation>
 <translation id="2872961005593481000">כיבוי</translation>
 <translation id="3008341117444806826">רענון</translation>
 <translation id="3091839911843451378">נכשלה – משימת ההדפסה הופסקה</translation>
+<translation id="3246869037381808805">משימות הדפסה בנות יותר מיום אחד יוסרו</translation>
 <translation id="3268178239013324452">נכשלה – דלת המדפסת פתוחה</translation>
 <translation id="3369013195428705271">לנקות את כל היסטוריית ההדפסות? משימות ההדפסה הנוכחיות לא יימחקו.</translation>
 <translation id="3456078764689556234">הודפס עמוד <ph name="PRINTED_PAGES" /> מתוך <ph name="TOTAL_PAGES" />.</translation>
@@ -33,13 +36,13 @@
 <translation id="38114475217616659">ניקוי כל ההיסטוריה</translation>
 <translation id="3820172043799983114">‏PIN לא חוקי.</translation>
 <translation id="3838338534323494292">סיסמה חדשה</translation>
-<translation id="4003259559679196451">הניהול של המכשיר הזה מתבצע מהדומיין<ph name="ENROLLMENT_DOMAIN" /> ואפשר לגשת ממנו אל כל המידע על הפעילות של המשתמשים, כולל דפי אינטרנט שנכנסת אליהם, סיסמאות ואימייל.</translation>
+<translation id="39823212440917567">משימות הדפסה בנות יותר מ-<ph name="NUMBER_OF_DAYS" /> ימים יוסרו</translation>
+<translation id="4003259559679196451">הניהול של המכשיר הזה מתבצע מהדומיין <ph name="ENROLLMENT_DOMAIN" /> ואפשר לגשת ממנו אל כל המידע על הפעילות של המשתמשים, כולל דפי אינטרנט שנכנסת אליהם, סיסמאות ואימייל.</translation>
 <translation id="4003384961948020559">נכשלה – מגש הפלט מלא</translation>
 <translation id="4027485274696301677"><ph name="DEVICE_TYPE" /> זה מנוהל על-ידי <ph name="ENROLLMENT_DOMAIN" />. מנהלי מערכת עשויים להגדיר את המכשיר הזה מרחוק.</translation>
 <translation id="4034824040120875894">מדפסת</translation>
 <translation id="4227825898293920515">תוקף הסיסמה יפוג בעוד <ph name="TIME" /></translation>
 <translation id="4238516577297848345">אין משימות הדפסה שמתבצעות כרגע</translation>
-<translation id="428217921675623177">משימות הדפסה בנות יותר מ-90 ימים יוסרו</translation>
 <translation id="4297501883039923494">הפסיקה – שגיאה לא ידועה</translation>
 <translation id="4429881212383817840">‏התוקף של כרטיס Kerberos עומד לפוג בקרוב</translation>
 <translation id="445059817448385655">סיסמה ישנה</translation>
@@ -52,17 +55,18 @@
 <translation id="4890353053343094602">יש לבחור מיד סיסמה חדשה</translation>
 <translation id="4917889632206600977">הפסיקה – הנייר נגמר</translation>
 <translation id="4932733599132424254">תאריך</translation>
+<translation id="520299634122159966">אין סורקים זמינים</translation>
 <translation id="5212543919916444558">לא מצאתי במסך משהו שאוכל לעזור בו.
 אפשר להקיש על המיקרופון כדי לשאול אותי משהו.</translation>
 <translation id="5222676887888702881">יציאה</translation>
 <translation id="5267975978099728568"><ph name="DOCUMENT_TITLE" />, <ph name="PRINTER_NAME" />, <ph name="CREATION_TIME" />, <ph name="ERROR_STATUS" /></translation>
-<translation id="5317780077021120954">שמור</translation>
+<translation id="5317780077021120954">שמירה</translation>
 <translation id="5326394068492324457"><ph name="DOCUMENT_TITLE" />, <ph name="PRINTER_NAME" />, <ph name="CREATION_TIME" />, <ph name="COMPLETION_STATUS" /></translation>
 <translation id="5332948983412042822">יש לבחור סיסמה חדשה עכשיו</translation>
-<translation id="5457599981699367932">גלוש כאורח</translation>
+<translation id="5457599981699367932">גלישה כאורח</translation>
 <translation id="54609108002486618">מנוהל</translation>
 <translation id="5832805196449965646">הוספת משתמש</translation>
-<translation id="5895138241574237353">הפעל מחדש</translation>
+<translation id="5895138241574237353">הפעלה מחדש</translation>
 <translation id="6048107060512778456">נכשלה – חסימת נייר</translation>
 <translation id="6058625436358447366">כדי לסיים יש להזין את הסיסמה הישנה והחדשה</translation>
 <translation id="6106186594183574873">כדי לסיים יש להזין את הסיסמה הישנה</translation>
@@ -71,6 +75,7 @@
 <translation id="649050271426829538">הפסיקה – חסימת נייר</translation>
 <translation id="6517239166834772319">‏מה חדש ב-Chromebook</translation>
 <translation id="6564646048574748301">נכשלה – לא ניתן להתחבר אל המדפסת</translation>
+<translation id="6620487321149975369">משימות הדפסה יופיעו תחת היסטוריה אלא אם הן הוסרו ידנית</translation>
 <translation id="6643016212128521049">ניקוי</translation>
 <translation id="6747215703636344499">הפסיקה – מגש הפלט מלא</translation>
 <translation id="7162487448488904999">גלריה</translation>
@@ -81,7 +86,9 @@
 <translation id="7805768142964895445">סטטוס</translation>
 <translation id="808894953321890993">שינוי הסיסמה</translation>
 <translation id="8208861521865154048">הטבות</translation>
+<translation id="8294431847097064396">מקור</translation>
 <translation id="8347227221149377169">משימות הדפסה</translation>
+<translation id="8352772353338965963">יש להוסיף חשבון לכניסה עם מספר חשבונות. כל החשבונות שאליהם נכנסת נגישים ללא סיסמה, לכן יש להשתמש בתכונה זו עם חשבונות אמינים בלבד.</translation>
 <translation id="8701136875688985581">משתמש זה מנוהל על ידי <ph name="ENROLLMENT_DOMAIN" />. הדומיין עשוי לנהל מרחוק את ההגדרות ולעקוב אחרי פעילות המשתמש.</translation>
 <translation id="871560550817059752">נכשלה – הדיו נגמר</translation>
 <translation id="8726019395068607495">הפסיקה – דלת המדפסת פתוחה</translation>
@@ -90,5 +97,5 @@
 <translation id="8928727111548978589">נכשלה – הנייר נגמר</translation>
 <translation id="89415009803968170"><ph name="ERROR_MESSAGE" /> נותרו <ph name="ATTEMPTS_LEFT" /> ניסיונות</translation>
 <translation id="910415269708673980">רענון הכרטיס עבור <ph name="PRINCIPAL_NAME" /></translation>
-<translation id="9111102763498581341">בטל נעילה</translation>
+<translation id="9111102763498581341">ביטול נעילה</translation>
 </translationbundle>

@@ -14,7 +14,7 @@
 #include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
-#include "components/password_manager/core/browser/ui/compromised_credentials_manager.h"
+#include "components/password_manager/core/browser/ui/insecure_credentials_manager.h"
 #include "components/password_manager/core/browser/well_known_change_password_util.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
@@ -22,6 +22,7 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/driver/profile_sync_service.h"
 #include "components/url_formatter/url_formatter.h"
+#include "components/version_info/version_info.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace {
@@ -37,7 +38,7 @@ base::string16 GetDisplayUsername(const base::string16& username) {
 using autofill::PasswordForm;
 
 using CredentialsView =
-    password_manager::CompromisedCredentialsManager::CredentialsView;
+    password_manager::InsecureCredentialsManager::CredentialsView;
 using PasswordCheckUIStatus = password_manager::PasswordCheckUIStatus;
 using State = password_manager::BulkLeakCheckService::State;
 using SyncState = password_manager::SyncState;
@@ -62,8 +63,7 @@ CompromisedCredentialForUI::~CompromisedCredentialForUI() = default;
 PasswordCheckManager::PasswordCheckManager(Profile* profile, Observer* observer)
     : observer_(observer), profile_(profile) {
   observed_saved_passwords_presenter_.Add(&saved_passwords_presenter_);
-  observed_compromised_credentials_manager_.Add(
-      &compromised_credentials_manager_);
+  observed_insecure_credentials_manager_.Add(&insecure_credentials_manager_);
   observed_bulk_leak_check_service_.Add(
       BulkLeakCheckServiceFactory::GetForProfile(profile));
 
@@ -72,8 +72,9 @@ PasswordCheckManager::PasswordCheckManager(Profile* profile, Observer* observer)
   // GetCompromisedCredentials() that might happen until then will return an
   // empty list.
   saved_passwords_presenter_.Init();
-  compromised_credentials_manager_.Init();
-  if (!ShouldOfferAutomaticPasswordChange()) {
+  insecure_credentials_manager_.Init();
+
+  if (!ShouldFetchPasswordScripts()) {
     // Ensure that scripts are treated as initialized if they are unnecessary.
     FulfillPrecondition(kScriptsCachePrewarmed);
   }
@@ -109,7 +110,7 @@ base::Time PasswordCheckManager::GetLastCheckTimestamp() {
 }
 
 int PasswordCheckManager::GetCompromisedCredentialsCount() const {
-  return compromised_credentials_manager_.GetCompromisedCredentials().size();
+  return insecure_credentials_manager_.GetCompromisedCredentials().size();
 }
 
 int PasswordCheckManager::GetSavedPasswordsCount() const {
@@ -119,7 +120,7 @@ int PasswordCheckManager::GetSavedPasswordsCount() const {
 std::vector<CompromisedCredentialForUI>
 PasswordCheckManager::GetCompromisedCredentials() const {
   std::vector<CredentialWithPassword> credentials =
-      compromised_credentials_manager_.GetCompromisedCredentials();
+      insecure_credentials_manager_.GetCompromisedCredentials();
   std::vector<CompromisedCredentialForUI> ui_credentials;
   ui_credentials.reserve(credentials.size());
   for (const auto& credential : credentials) {
@@ -131,13 +132,12 @@ PasswordCheckManager::GetCompromisedCredentials() const {
 void PasswordCheckManager::UpdateCredential(
     const password_manager::CredentialView& credential,
     base::StringPiece new_password) {
-  compromised_credentials_manager_.UpdateCompromisedCredentials(credential,
-                                                                new_password);
+  insecure_credentials_manager_.UpdateCredential(credential, new_password);
 }
 
 void PasswordCheckManager::RemoveCredential(
     const password_manager::CredentialView& credential) {
-  compromised_credentials_manager_.RemoveCompromisedCredential(credential);
+  insecure_credentials_manager_.RemoveCredential(credential);
 }
 
 PasswordCheckManager::PasswordCheckProgress::PasswordCheckProgress() = default;
@@ -177,8 +177,7 @@ void PasswordCheckManager::OnSavedPasswordsChanged(
 }
 
 void PasswordCheckManager::OnCompromisedCredentialsChanged(
-    password_manager::CompromisedCredentialsManager::CredentialsView
-        credentials) {
+    password_manager::InsecureCredentialsManager::CredentialsView credentials) {
   if (AreScriptsRefreshed()) {
     FulfillPrecondition(kKnownCredentialsFetched);
   } else {
@@ -213,7 +212,7 @@ void PasswordCheckManager::OnCredentialDone(
   }
   if (is_leaked) {
     // TODO(crbug.com/1092444): Trigger single-credential update.
-    compromised_credentials_manager_.SaveCompromisedCredential(credential);
+    insecure_credentials_manager_.SaveCompromisedCredential(credential);
   }
 }
 
@@ -227,14 +226,19 @@ CompromisedCredentialForUI PasswordCheckManager::MakeUICredential(
       credential.signon_realm);
 
   ui_credential.display_username = GetDisplayUsername(credential.username);
-  ui_credential.has_script =
-      !credential.username.empty() && ShouldOfferAutomaticPasswordChange() &&
+  ui_credential.has_startable_script =
+      !credential.username.empty() && ShouldFetchPasswordScripts() &&
       password_script_fetcher_->IsScriptAvailable(
-          url::Origin::Create(credential.url.GetOrigin()));
+          url::Origin::Create(credential.url.GetOrigin()),
+          version_info::GetVersion());
+  ui_credential.has_auto_change_button =
+      ui_credential.has_startable_script &&
+      base::FeatureList::IsEnabled(
+          password_manager::features::kPasswordChangeInSettings);
 
   if (facet.IsValidAndroidFacetURI()) {
     const PasswordForm& android_form =
-        compromised_credentials_manager_.GetSavedPasswordsFor(credential)[0];
+        insecure_credentials_manager_.GetSavedPasswordsFor(credential)[0];
 
     ui_credential.package_name = facet.android_package_name();
 
@@ -305,7 +309,7 @@ bool PasswordCheckManager::AreScriptsRefreshed() const {
 }
 
 void PasswordCheckManager::RefreshScripts() {
-  if (!ShouldOfferAutomaticPasswordChange()) {
+  if (!ShouldFetchPasswordScripts()) {
     FulfillPrecondition(kScriptsCachePrewarmed);
     return;
   }
@@ -327,7 +331,7 @@ void PasswordCheckManager::OnScriptsFetched() {
   }
 }
 
-bool PasswordCheckManager::ShouldOfferAutomaticPasswordChange() const {
+bool PasswordCheckManager::ShouldFetchPasswordScripts() const {
   SyncState sync_state = password_manager_util::GetPasswordSyncState(
       ProfileSyncServiceFactory::GetForProfile(profile_));
 
@@ -338,7 +342,7 @@ bool PasswordCheckManager::ShouldOfferAutomaticPasswordChange() const {
   }
 
   return base::FeatureList::IsEnabled(
-      password_manager::features::kPasswordChangeInSettings);
+      password_manager::features::kPasswordScriptsFetching);
 }
 
 bool PasswordCheckManager::IsPreconditionFulfilled(

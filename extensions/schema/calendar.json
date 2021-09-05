@@ -89,6 +89,25 @@
         }
       },
       {
+        "id": "SupportedCalendarComponents",
+        "type": "object",
+        "description": "An object describing supported calendar component set.",
+        "properties": {
+          "vevent": {
+            "type": "boolean",
+            "description": "Does the calendar support vevent."
+          },
+          "vtodo": {
+            "type": "boolean",
+            "description": "Does the calendar support vtodo."
+          },
+          "vjournal": {
+            "type": "boolean",
+            "description": "Does the calendar support vjournal."
+          }
+        }
+      },
+      {
         "id": "Notification",
         "type": "object",
         "description": "An object describing notification.",
@@ -321,6 +340,46 @@
             "type": "string",
             "optional": true,
             "description": "The timezone of the event."
+          },
+          "due": {
+            "type": "number",
+            "optional": true,
+            "description": "The date and time that a to-do is expected to be completed."
+          },
+          "priority": {
+            "type": "integer",
+            "optional": true,
+            "description": "Priority of event or task. Must be in the range [0..9]. 0 is equivalent of no priority."
+          },
+          "status": {
+            "type": "string",
+            "optional": true,
+            "description": "The overall status or confirmation for the event or todo."
+          },
+          "percentage_complete": {
+            "type": "integer",
+            "optional": true,
+            "description": "The percent completion of a todo to the organizer."
+          },
+          "categories": {
+            "type": "string",
+            "optional": true,
+            "description": "Event or todo categories. A comma separated list."
+          },
+          "component_class": {
+            "type": "string",
+            "optional": true,
+            "description": "Access classification for a event or todo."
+          },
+          "attachment": {
+            "type": "string",
+            "optional": true,
+            "description": "Document object for a event or todo."
+          },
+          "completed": {
+            "type": "number",
+            "optional": true,
+            "description": "The date and time that a todo was actually completed."
           }
         }
       },
@@ -473,6 +532,46 @@
           "is_template": {
             "type": "boolean",
             "description": "Is  the event a template or not."
+          },
+          "due": {
+            "type": "number",
+            "optional": true,
+            "description": "The date and time that a to-do is expected to be completed."
+          },
+          "priority": {
+            "type": "integer",
+            "optional": true,
+            "description": "Priority of event or task. Must be in the range [0..9]. 0 is equivalent of no priority."
+          },
+          "status": {
+            "type": "string",
+            "optional": true,
+            "description": "The overall status or confirmation for the event or todo."
+          },
+          "percentage_complete": {
+            "type": "integer",
+            "optional": true,
+            "description": "The percent completion of a todo to the organizer."
+          },
+          "categories": {
+            "type": "string",
+            "optional": true,
+            "description": "Event or todo categories. A comma separated list."
+          },
+          "component_class": {
+            "type": "string",
+            "optional": true,
+            "description": "Access classification for a event or todo."
+          },
+          "attachment": {
+            "type": "string",
+            "optional": true,
+            "description": "Document object for a event or todo."
+          },
+          "completed": {
+            "type": "number",
+            "optional": true,
+            "description": "The date and time that a todo was actually completed."
           }
         }
       },
@@ -592,6 +691,15 @@
             "type": "string",
             "optional": true,
             "description": "The timezone of the calendar."
+          },
+          "ctag": {
+            "type": "string",
+            "optional": true,
+            "description": "The ctag field of the CalDAV calendar."
+          },
+          "supportedCalendarComponent": {
+            "optional": true,
+            "$ref": "SupportedCalendarComponents"
           }
         }
       },
@@ -657,6 +765,10 @@
             "type": "string",
             "optional": true,
             "description": "The timezone of the calendar."
+          },
+          "supportedCalendarComponent": {
+            "optional": true,
+            "$ref": "SupportedCalendarComponents"
           }
         }
       },
@@ -719,6 +831,10 @@
             "type": "string",
             "optional": true,
             "description": "The timezone of the calendar."
+          },
+          "supportedCalendarComponent": {
+            "optional": true,
+            "$ref": "SupportedCalendarComponents"
           }
         }
       },
@@ -1086,6 +1202,46 @@
                 "type": "string",
                 "optional": true,
                 "description": "The timezone of the event."
+              },
+              "due": {
+                "type": "number",
+                "optional": true,
+                "description": "The date and time that a to-do is expected to be completed."
+              },
+              "priority": {
+                "type": "integer",
+                "optional": true,
+                "description": "Priority of event or task. Must be in the range [0..9]. 0 is equivalent of no priority."
+              },
+              "status": {
+                "type": "string",
+                "optional": true,
+                "description": "The overall status or confirmation for the event or todo."
+              },
+              "percentage_complete": {
+                "type": "integer",
+                "optional": true,
+                "description": "The percent completion of a todo to the Organizer."
+              },
+              "categories": {
+                "type": "string",
+                "optional": true,
+                "description": "Event or todo categories. A comma separated list."
+              },
+              "component_class": {
+                "type": "string",
+                "optional": true,
+                "description": "Access classification for a event or todo."
+              },
+              "attachment": {
+                "type": "string",
+                "optional": true,
+                "description": "Access classification for a event or todo."
+              },
+              "completed": {
+                "type": "number",
+                "optional": true,
+                "description": "The date and time that a todo was actually completed."
               }
             }
           },
@@ -1328,6 +1484,60 @@
               },
               "when": {
                 "type": "number",
+                "description": "When the notification should fire. In milliseconds since the epoch."
+              },
+              "period": {
+                "type": "integer",
+                "optional": true,
+                "description": "If not null, the notification will repeat and will fire again in period minutes."
+              },
+              "delay": {
+                "type": "integer",
+                "optional": true,
+                "description": "The notification will fire after delay minutes from now. Can not be used together with when."
+              }
+            }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "notification",
+                "$ref": "Notification"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "updateNotification",
+        "type": "function",
+        "description": "Updates the properties of a notification. Specify only the properties that you want to change. Unspecified properties will be left unchanged.",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The id of the notification to update.",
+            "name": "id"
+          },
+          {
+            "type": "object",
+            "name": "changes",
+            "properties": {
+              "name": {
+                "type": "string",
+                "optional": true,
+                "description": "The name of the notification."
+              },
+              "description": {
+                "type": "string",
+                "optional": true,
+                "description": "The description of the notification."
+              },
+              "when": {
+                "type": "number",
+                "optional":  true,
                 "description": "When the notification should fire. In milliseconds since the epoch."
               },
               "period": {

@@ -40,15 +40,21 @@ GLImageGLX::~GLImageGLX() {
 }
 
 bool GLImageGLX::Initialize(XID pixmap) {
-  GLXFBConfig fb_config =
+  auto fbconfig_id =
       GLVisualPickerGLX::GetInstance()->GetFbConfigForFormat(format_);
-  if (!fb_config)
+
+  auto* connection = x11::Connection::Get();
+  int attrs[] = {GLX_FBCONFIG_ID, static_cast<uint32_t>(fbconfig_id), 0};
+  int nitems;
+  gfx::XScopedPtr<GLXFBConfig> configs(glXChooseFBConfig(
+      connection->display(), connection->DefaultScreenId(), attrs, &nitems));
+  if (!nitems)
     return false;
 
   int pixmap_attribs[] = {GLX_TEXTURE_TARGET_EXT, GLX_TEXTURE_2D_EXT,
                           GLX_TEXTURE_FORMAT_EXT, TextureFormat(format_), 0};
   glx_pixmap_ =
-      glXCreatePixmap(gfx::GetXDisplay(), fb_config, pixmap, pixmap_attribs);
+      glXCreatePixmap(gfx::GetXDisplay(), *configs, pixmap, pixmap_attribs);
   if (!glx_pixmap_) {
     DVLOG(0) << "glXCreatePixmap failed.";
     return false;

@@ -253,17 +253,6 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
             PhysicalOffset(FlooredIntPoint(point)));
   }
 
-  // Store text selection when it happens as it might be cleared when the
-  // browser will request |TextFragmentSelectorGenerator| to generator selector.
-  if (!selected_frame->Selection().SelectedText().IsEmpty()) {
-    VisibleSelectionInFlatTree selection =
-        selected_frame->Selection().ComputeVisibleSelectionInFlatTree();
-    EphemeralRangeInFlatTree selection_range(selection.Start(),
-                                             selection.End());
-    page_->GetTextFragmentSelectorGenerator().UpdateSelection(selected_frame,
-                                                              selection_range);
-  }
-
   WebContextMenuData data;
   data.mouse_position = selected_frame->View()->FrameToViewport(
       result.RoundedPointInInnerNodeFrame());
@@ -438,6 +427,11 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
         << "]\nVisibleSelection: "
         << selected_frame->Selection()
                .ComputeVisibleSelectionInDOMTreeDeprecated();
+
+    // Store text selection when it happens as it might be cleared when the
+    // browser will request |TextFragmentSelectorGenerator| to generate
+    // selector.
+    UpdateTextFragmentSelectorGenerator(selected_frame);
   }
 
   if (result.IsContentEditable()) {
@@ -566,6 +560,18 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
                                                 host_context_menu_location);
 
   return true;
+}
+
+void ContextMenuController::UpdateTextFragmentSelectorGenerator(
+    LocalFrame* selected_frame) {
+  if (!selected_frame->GetTextFragmentSelectorGenerator())
+    return;
+
+  VisibleSelectionInFlatTree selection =
+      selected_frame->Selection().ComputeVisibleSelectionInFlatTree();
+  EphemeralRangeInFlatTree selection_range(selection.Start(), selection.End());
+  selected_frame->GetTextFragmentSelectorGenerator()->UpdateSelection(
+      selected_frame, selection_range);
 }
 
 }  // namespace blink

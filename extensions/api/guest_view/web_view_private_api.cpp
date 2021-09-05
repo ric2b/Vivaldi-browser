@@ -166,21 +166,8 @@ void WebViewPrivateGetThumbnailFunction::ScaleAndEncodeOnWorkerThread(
     bitmap = ::vivaldi::skia_utils::SmartCropAndSize(bitmap, width_, height_);
   }
 
-  std::vector<unsigned char> data;
-  std::string mime_type;
-  bool encoded = ::vivaldi::skia_utils::EncodeBitmap(
-      bitmap, image_format_, image_quality_, data, mime_type);
-  if (!encoded)
-    return;
-
-  // Release no longer needed bitmap.
-  bitmap = SkBitmap();
-  base::StringPiece stream_as_string(reinterpret_cast<const char*>(data.data()),
-                                    data.size());
-
-  base::Base64Encode(stream_as_string, &base64_result_);
-  base64_result_.insert(
-      0, base::StringPrintf("data:%s;base64,", mime_type.c_str()));
+  base64_result_ = ::vivaldi::skia_utils::EncodeBitmapAsDataUrl(
+      std::move(bitmap), image_format_, image_quality_);
 }
 
 void WebViewPrivateGetThumbnailFunction::SendResult() {

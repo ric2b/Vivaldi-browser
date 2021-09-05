@@ -4,13 +4,12 @@
 
 #include "ui/gfx/x/connection.h"
 
-#include <X11/Xlib-xcb.h>
-#include <X11/Xlib.h>
-#include <X11/keysym.h>
 #include <xcb/xcb.h>
+#include <xcb/xcbext.h>
 
 #include <algorithm>
 
+#include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/i18n/case_conversion.h"
 #include "base/memory/scoped_refptr.h"
@@ -19,12 +18,41 @@
 #include "base/threading/thread_local.h"
 #include "ui/gfx/x/bigreq.h"
 #include "ui/gfx/x/event.h"
+#include "ui/gfx/x/keysyms/keysyms.h"
 #include "ui/gfx/x/randr.h"
+#include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_switches.h"
 #include "ui/gfx/x/xkb.h"
 #include "ui/gfx/x/xproto.h"
 #include "ui/gfx/x/xproto_internal.h"
 #include "ui/gfx/x/xproto_types.h"
+
+extern "C" {
+typedef struct {
+  int type;
+  unsigned long serial;
+  Bool send_event;
+  Display* display;
+  Window window;
+  Window root;
+  Window subwindow;
+  Time time;
+  int x, y;
+  int x_root, y_root;
+  unsigned int state;
+  unsigned int keycode;
+  Bool same_screen;
+} XKeyEvent;
+
+// This is temporarily required to fix XKB key event processing (bugs 1125886,
+// 1136265, 1136248, 1136206).  It should be removed and replaced with an
+// XProto equivalent.
+int XLookupString(XKeyEvent* event_struct,
+                  char* buffer_return,
+                  int bytes_buffer,
+                  ::KeySym* keysym_return,
+                  void* status_in_out);
+}
 
 namespace x11 {
 
@@ -194,12 +222,12 @@ void ConvertCase(KeySym sym, KeySym* lower, KeySym* upper) {
   *upper = static_cast<KeySym>(upper32);
 }
 
-bool IsKeypadKey(KeySym keysym) {
+bool IsXKeypadKey(KeySym keysym) {
   auto key = static_cast<uint32_t>(keysym);
   return key >= XK_KP_Space && key <= XK_KP_Equal;
 }
 
-bool IsPrivateKeypadKey(KeySym keysym) {
+bool IsPrivateXKeypadKey(KeySym keysym) {
   auto key = static_cast<uint32_t>(keysym);
   return key >= 0x11000000 && key <= 0x1100FFFF;
 }
@@ -231,7 +259,14 @@ void Connection::Set(std::unique_ptr<x11::Connection> connection) {
 }
 
 Connection::Connection(const std::string& address)
-    : XProto(this), display_(OpenNewXDisplay(address)) {
+    : XProto(this),
+      display_(OpenNewXDisplay(address)),
+      display_string_(address) {
+  char* host = nullptr;
+  int display = 0;
+  xcb_parse_display(address.c_str(), &host, &display, &default_screen_id_);
+  if (host)
+    free(host);
   if (display_) {
     XSetEventQueueOwner(display_, XCBOwnsEventQueue);
 
@@ -239,16 +274,7 @@ Connection::Connection(const std::string& address)
         xcb_get_setup(XcbConnection())));
     setup_ = Read<Setup>(&buf);
     default_screen_ = &setup_.roots[DefaultScreenId()];
-    default_root_depth_ = &*std::find_if(
-        default_screen_->allowed_depths.begin(),
-        default_screen_->allowed_depths.end(), [&](const Depth& depth) {
-          return depth.depth == default_screen_->root_depth;
-        });
-    default_root_visual_ = &*std::find_if(
-        default_root_depth_->visuals.begin(),
-        default_root_depth_->visuals.end(), [&](const VisualType visual) {
-          return visual.visual_id == default_screen_->root_visual;
-        });
+    InitRootDepthAndVisual();
   } else {
     // Default-initialize the setup data so we always have something to return.
     setup_.roots.emplace_back();
@@ -306,12 +332,22 @@ bool Connection::HasNextResponse() const {
                             requests_.front().sequence) >= 0;
 }
 
+int Connection::GetFd() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return Ready() ? xcb_get_file_descriptor(XcbConnection()) : -1;
+}
+
+const std::string& Connection::DisplayString() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return display_string_;
+}
+
 int Connection::DefaultScreenId() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // This is not part of the setup data as the server has no concept of a
   // default screen. Instead, it's part of the display name. Eg in
   // "localhost:0.0", the screen ID is the second "0".
-  return DefaultScreen(display_);
+  return default_screen_id_;
 }
 
 bool Connection::Ready() const {
@@ -327,15 +363,42 @@ void Connection::Flush() {
 
 void Connection::Sync() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  GetInputFocus({}).Sync();
+  if (syncing_)
+    return;
+  {
+    base::AutoReset<bool> auto_reset(&syncing_, true);
+    GetInputFocus({}).Sync();
+  }
+}
+
+void Connection::SynchronizeForTest(bool synchronous) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  XSynchronize(display(), synchronous);
+  synchronous_ = synchronous;
+  if (synchronous_)
+    Sync();
 }
 
 void Connection::ReadResponses() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   while (auto* event = xcb_poll_for_event(XcbConnection())) {
     events_.emplace_back(base::MakeRefCounted<MallocedRefCountedMemory>(event),
-                         this);
+                         this, true);
   }
+}
+
+Event Connection::WaitForNextEvent() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!events_.empty()) {
+    Event event = std::move(events_.front());
+    events_.pop_front();
+    return event;
+  }
+  if (auto* xcb_event = xcb_wait_for_event(XcbConnection())) {
+    return Event(base::MakeRefCounted<MallocedRefCountedMemory>(xcb_event),
+                 this, true);
+  }
+  return Event();
 }
 
 bool Connection::HasPendingResponses() const {
@@ -370,13 +433,21 @@ KeyCode Connection::KeysymToKeycode(KeySym keysym) {
 
 KeySym Connection::KeycodeToKeysym(uint32_t keycode, unsigned int modifiers) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  auto sym = TranslateKey(keycode, modifiers);
-  return sym == static_cast<KeySym>(XK_VoidSymbol) ? kNoSymbol : sym;
+
+  XKeyEvent key_event{
+      .type = KeyEvent::Press,
+      .display = display_,
+      .state = modifiers,
+      .keycode = keycode,
+  };
+  ::KeySym keysym;
+  XLookupString(&key_event, nullptr, 0, &keysym, nullptr);
+  return static_cast<x11::KeySym>(keysym);
 }
 
 std::unique_ptr<Connection> Connection::Clone() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return std::make_unique<Connection>(display_ ? XDisplayString(display_) : "");
+  return std::make_unique<Connection>(display_string_);
 }
 
 void Connection::DetachFromSequence() {
@@ -441,6 +512,19 @@ void Connection::Dispatch(Delegate* delegate) {
       break;
     }
   }
+}
+
+void Connection::InitRootDepthAndVisual() {
+  for (auto& depth : default_screen_->allowed_depths) {
+    for (auto& visual : depth.visuals) {
+      if (visual.visual_id == default_screen_->root_visual) {
+        default_root_depth_ = &depth;
+        default_root_visual_ = &visual;
+        return;
+      }
+    }
+  }
+  NOTREACHED();
 }
 
 void Connection::AddRequest(unsigned int sequence,
@@ -583,6 +667,9 @@ KeySym Connection::KeyCodetoKeySym(KeyCode keycode, int column) const {
 // Ported from _XTranslateKey:
 // https://gitlab.freedesktop.org/xorg/lib/libx11/-/blob/2b7598221d87049d03e9a95fcb541c37c8728184/src/KeyBind.c#L761
 KeySym Connection::TranslateKey(uint32_t key, unsigned int modifiers) const {
+  constexpr auto kShiftMask = static_cast<unsigned int>(x11::ModMask::Shift);
+  constexpr auto kLockMask = static_cast<unsigned int>(x11::ModMask::Lock);
+
   uint8_t min_key = static_cast<uint8_t>(setup_.min_keycode);
   uint8_t max_key = static_cast<uint8_t>(setup_.max_keycode);
   if (key < min_key || key > max_key)
@@ -601,9 +688,9 @@ KeySym Connection::TranslateKey(uint32_t key, unsigned int modifiers) const {
 
   if ((modifiers & num_lock_) &&
       (n_keysyms > 1 &&
-       (IsKeypadKey(syms[1]) || IsPrivateKeypadKey(syms[1])))) {
-    if ((modifiers & ShiftMask) ||
-        ((modifiers & LockMask) && (lock_meaning_ == XK_Shift_Lock))) {
+       (IsXKeypadKey(syms[1]) || IsPrivateXKeypadKey(syms[1])))) {
+    if ((modifiers & kShiftMask) ||
+        ((modifiers & kLockMask) && (lock_meaning_ == XK_Shift_Lock))) {
       return syms[0];
     }
     return syms[1];
@@ -611,8 +698,9 @@ KeySym Connection::TranslateKey(uint32_t key, unsigned int modifiers) const {
 
   KeySym lower;
   KeySym upper;
-  if (!(modifiers & ShiftMask) &&
-      (!(modifiers & LockMask) || (lock_meaning_ == NoSymbol))) {
+  if (!(modifiers & kShiftMask) &&
+      (!(modifiers & kLockMask) ||
+       (static_cast<x11::KeySym>(lock_meaning_) == kNoSymbol))) {
     if ((n_keysyms == 1) || (syms[1] == kNoSymbol)) {
       ConvertCase(syms[0], &lower, &upper);
       return lower;
@@ -620,7 +708,7 @@ KeySym Connection::TranslateKey(uint32_t key, unsigned int modifiers) const {
     return syms[0];
   }
 
-  if (!(modifiers & LockMask) || (lock_meaning_ != XK_Caps_Lock)) {
+  if (!(modifiers & kLockMask) || (lock_meaning_ != XK_Caps_Lock)) {
     if ((n_keysyms == 1) || ((upper = syms[1]) == kNoSymbol))
       ConvertCase(syms[0], &lower, &upper);
     return upper;
@@ -630,7 +718,7 @@ KeySym Connection::TranslateKey(uint32_t key, unsigned int modifiers) const {
   if ((n_keysyms == 1) || ((sym = syms[1]) == kNoSymbol))
     sym = syms[0];
   ConvertCase(sym, &lower, &upper);
-  if (!(modifiers & ShiftMask) && (sym != syms[0]) &&
+  if (!(modifiers & kShiftMask) && (sym != syms[0]) &&
       ((sym != upper) || (lower == upper)))
     ConvertCase(syms[0], &lower, &upper);
   return upper;

@@ -17,7 +17,6 @@
 #include "components/javascript_dialogs/app_modal_dialog_controller.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/zoom/zoom_observer.h"
-#include "content/common/drag_event_source_info.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/common/drop_data.h"
@@ -25,6 +24,7 @@
 #include "extensions/browser/extension_event_histogram_value.h"
 #include "extensions/browser/extension_function.h"
 #include "renderer/vivaldi_render_messages.h"
+#include "third_party/blink/public/mojom/page/drag.mojom.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 typedef base::OnceCallback<void(
@@ -282,7 +282,7 @@ class TabsPrivateStartDragFunction : public ExtensionFunction {
                      const SkBitmap& bitmap);
 
   content::DropData drop_data_;
-  content::DragEventSourceInfo event_info_;
+  blink::mojom::DragEventSourceInfo event_info_;
   gfx::Vector2d image_offset_;
 
   DISALLOW_COPY_AND_ASSIGN(TabsPrivateStartDragFunction);

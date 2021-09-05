@@ -13,17 +13,20 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.os.StrictMode;
 import android.util.AndroidRuntimeException;
 import android.util.Log;
 import android.webkit.ValueCallback;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.fragment.app.Fragment;
 
 import org.chromium.weblayer_private.interfaces.APICallException;
 import org.chromium.weblayer_private.interfaces.BrowserFragmentArgs;
 import org.chromium.weblayer_private.interfaces.IBrowserFragment;
+import org.chromium.weblayer_private.interfaces.IMediaRouteDialogFragment;
 import org.chromium.weblayer_private.interfaces.IProfile;
 import org.chromium.weblayer_private.interfaces.IRemoteFragmentClient;
 import org.chromium.weblayer_private.interfaces.ISiteSettingsFragment;
@@ -157,6 +160,11 @@ public class WebLayer {
         return sLoader;
     }
 
+    /** Returns whether WebLayer loading has at least started. */
+    static boolean hasWebLayerInitializationStarted() {
+        return sLoader != null;
+    }
+
     IWebLayer getImpl() {
         return mImpl;
     }
@@ -183,6 +191,14 @@ public class WebLayer {
     public static int getSupportedMajorVersion(@NonNull Context context) {
         ThreadCheck.ensureOnUiThread();
         return getWebLayerLoader(context).getMajorVersion();
+    }
+
+    // Returns true if version checks should be done. This is provided solely for testing, and
+    // specifically testing that does not run on device and load the implementation. It is only
+    // necessary to check this in code paths that don't require WebLayer to load the implementation
+    // and need to be callable in tests.
+    static boolean shouldPerformVersionChecks() {
+        return !"robolectric".equals(Build.FINGERPRINT);
     }
 
     // Internal version of getSupportedMajorVersion(). This should only be used when you know
@@ -375,12 +391,10 @@ public class WebLayer {
     private WebLayer(IWebLayer iWebLayer) {
         mImpl = iWebLayer;
 
-        if (getSupportedMajorVersionInternal() >= 83) {
-            try {
-                mImpl.setClient(new WebLayerClientImpl());
-            } catch (RemoteException e) {
-                throw new APICallException(e);
-            }
+        try {
+            mImpl.setClient(new WebLayerClientImpl());
+        } catch (RemoteException e) {
+            throw new APICallException(e);
         }
     }
 
@@ -403,16 +417,35 @@ public class WebLayer {
     }
 
     /**
-     * Return a list of Profile names currently on disk. This will not include the incognito
-     * profile. This will not include profiles that are being deleted from disk.
+     * Get or create the incognito profile with the name {@link profileName}.
+     *
+     * @param profileName The name of the profile. Null is mapped to an empty string.
+     *
+     * @since 87
+     */
+    @NonNull
+    public Profile getIncognitoProfile(@Nullable String profileName) {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 87) {
+            throw new UnsupportedOperationException();
+        }
+        IProfile iprofile;
+        try {
+            iprofile = mImpl.getIncognitoProfile(sanitizeProfileName(profileName));
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+        return Profile.of(iprofile);
+    }
+
+    /**
+     * Return a list of Profile names currently on disk. This does not include incognito
+     * profiles. This will not include profiles that are being deleted from disk.
      * WebLayer must be initialized before calling this.
      * @since 82
      */
     public void enumerateAllProfileNames(@NonNull Callback<String[]> callback) {
         ThreadCheck.ensureOnUiThread();
-        if (getSupportedMajorVersionInternal() < 82) {
-            throw new UnsupportedOperationException();
-        }
         try {
             ValueCallback<String[]> valueCallback = (String[] value) -> callback.onResult(value);
             mImpl.enumerateAllProfileNames(ObjectWrapper.wrap(valueCallback));
@@ -430,9 +463,6 @@ public class WebLayer {
      */
     public String getUserAgentString() {
         ThreadCheck.ensureOnUiThread();
-        if (getSupportedMajorVersionInternal() < 84) {
-            throw new UnsupportedOperationException();
-        }
         try {
             return mImpl.getUserAgentString();
         } catch (RemoteException e) {
@@ -492,16 +522,44 @@ public class WebLayer {
     @NonNull
     public static Fragment createBrowserFragment(
             @Nullable String profileName, @Nullable String persistenceId) {
+        String sanitizedName = sanitizeProfileName(profileName);
+        boolean isIncognito = "".equals(sanitizedName);
+        return createBrowserFragmentImpl(sanitizedName, persistenceId, isIncognito);
+    }
+
+    /**
+     * Creates a new WebLayer Fragment using the incognito profile with the specified name.
+     *
+     * @param profileName The name of the incongito profile, null is mapped to an empty string.
+     * @param persistenceId If non-null and not empty uniquely identifies the Browser for saving
+     * state.
+     *
+     * @throws UnsupportedOperationException If {@link params} is incognito and name is not empty
+     *         and <= 87.
+     *
+     * @since 87
+     */
+    @NonNull
+    public static Fragment createBrowserFragmentWithIncognitoProfile(
+            @Nullable String profileName, @Nullable String persistenceId) {
+        return createBrowserFragmentImpl(sanitizeProfileName(profileName), persistenceId, true);
+    }
+
+    private static Fragment createBrowserFragmentImpl(
+            @NonNull String profileName, @Nullable String persistenceId, boolean isIncognito) {
         ThreadCheck.ensureOnUiThread();
-        if (persistenceId != null && getSupportedMajorVersionInternal() < 81) {
+        if (WebLayer.getSupportedMajorVersionInternal() < 87 && isIncognito
+                && !"".equals(profileName)) {
+            // Incognito profiles are only allowed to have non-empty names in >= 87.
             throw new UnsupportedOperationException();
         }
-        // TODO: use a profile id instead of the path to the actual file.
+
         Bundle args = new Bundle();
-        args.putString(BrowserFragmentArgs.PROFILE_NAME, sanitizeProfileName(profileName));
+        args.putString(BrowserFragmentArgs.PROFILE_NAME, profileName);
         if (persistenceId != null) {
             args.putString(BrowserFragmentArgs.PERSISTENCE_ID, persistenceId);
         }
+        args.putBoolean(BrowserFragmentArgs.IS_INCOGNITO, isIncognito);
         BrowserFragment fragment = new BrowserFragment();
         fragment.setArguments(args);
         return fragment;
@@ -522,9 +580,6 @@ public class WebLayer {
     public void registerExternalExperimentIDs(
             @NonNull String trialName, @NonNull int[] experimentIds) {
         ThreadCheck.ensureOnUiThread();
-        if (getSupportedMajorVersionInternal() < 84) {
-            throw new UnsupportedOperationException();
-        }
         try {
             mImpl.registerExternalExperimentIDs(trialName, experimentIds);
         } catch (RemoteException e) {
@@ -550,9 +605,6 @@ public class WebLayer {
      */
     /* package */ ISiteSettingsFragment connectSiteSettingsFragment(
             IRemoteFragmentClient remoteFragmentClient, Bundle fragmentArgs) {
-        if (getSupportedMajorVersionInternal() < 84) {
-            throw new UnsupportedOperationException();
-        }
         try {
             return mImpl.createSiteSettingsFragmentImpl(
                     remoteFragmentClient, ObjectWrapper.wrap(fragmentArgs));
@@ -561,8 +613,33 @@ public class WebLayer {
         }
     }
 
+    /**
+     * Returns the remote counterpart of MediaRouteDialogFragment.
+     */
+    /* package */ IMediaRouteDialogFragment connectMediaRouteDialogFragment(
+            IRemoteFragmentClient remoteFragmentClient) {
+        if (getSupportedMajorVersionInternal() < 87) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            return mImpl.createMediaRouteDialogFragmentImpl(remoteFragmentClient);
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
     /* package */ static IWebLayer getIWebLayer(Context context) {
         return getWebLayerLoader(context).getIWebLayer();
+    }
+
+    @VisibleForTesting
+    /* package */ static Context getApplicationContextForTesting(Context appContext) {
+        try {
+            return (Context) ObjectWrapper.unwrap(
+                    getIWebLayer(appContext).getApplicationContext(), Context.class);
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
     }
 
     /**
@@ -686,6 +763,12 @@ public class WebLayer {
         }
 
         @Override
+        public Intent createImageDecoderServiceIntent() {
+            StrictModeWorkaround.apply();
+            return new Intent(WebLayer.getAppContext(), ImageDecoderService.class);
+        }
+
+        @Override
         public int getMediaSessionNotificationId() {
             StrictModeWorkaround.apply();
             // The id is part of the public library to avoid conflicts.
@@ -699,7 +782,12 @@ public class WebLayer {
         /** See {@link Context.createContextForSplit(String) }. */
         public static Context createContextForSplit(Context context, String name)
                 throws PackageManager.NameNotFoundException {
-            return context.createContextForSplit(name);
+            StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+            try {
+                return context.createContextForSplit(name);
+            } finally {
+                StrictMode.setThreadPolicy(oldPolicy);
+            }
         }
     }
 }

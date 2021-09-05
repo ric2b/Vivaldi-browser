@@ -10,6 +10,7 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -37,7 +38,7 @@ class PWAConfirmationBubbleViewBrowserTest : public InProcessBrowserTest {
   std::unique_ptr<WebApplicationInfo> GetAppInfo() {
     auto app_info = std::make_unique<WebApplicationInfo>();
     app_info->title = base::UTF8ToUTF16("Test app 2");
-    app_info->app_url = GURL("https://example2.com");
+    app_info->start_url = GURL("https://example2.com");
     app_info->open_as_window = true;
     return app_info;
   }
@@ -79,7 +80,7 @@ IN_PROC_BROWSER_TEST_F(PWAConfirmationBubbleViewBrowserTest,
                        ShowBubbleInPWAWindow) {
   auto app_info = std::make_unique<WebApplicationInfo>();
   app_info->title = base::UTF8ToUTF16("Test app");
-  app_info->app_url = GURL("https://example.com");
+  app_info->start_url = GURL("https://example.com");
   Profile* profile = browser()->profile();
   web_app::AppId app_id = web_app::InstallWebApp(profile, std::move(app_info));
   Browser* browser = web_app::LaunchWebAppBrowser(profile, app_id);
@@ -94,7 +95,7 @@ IN_PROC_BROWSER_TEST_F(PWAConfirmationBubbleViewBrowserTest,
   // shown.
   app_info = std::make_unique<WebApplicationInfo>();
   app_info->title = base::UTF8ToUTF16("Test app 3");
-  app_info->app_url = GURL("https://example3.com");
+  app_info->start_url = GURL("https://example3.com");
   app_info->open_as_window = true;
   chrome::ShowPWAInstallBubble(
       browser->tab_strip_model()->GetActiveWebContents(), std::move(app_info),
@@ -113,4 +114,29 @@ IN_PROC_BROWSER_TEST_F(PWAConfirmationBubbleViewBrowserTest,
   auto resulting_app_info =
       GetCallbackAppInfoFromDialog(/*run_on_os_login_checked=*/false);
   EXPECT_FALSE(resulting_app_info->run_on_os_login);
+}
+
+IN_PROC_BROWSER_TEST_F(PWAConfirmationBubbleViewBrowserTest,
+                       CancelledDialogReportsMetrics) {
+  auto app_info = GetAppInfo();
+  base::RunLoop loop;
+  // Show the PWA install dialog.
+  chrome::ShowPWAInstallBubble(
+      browser()->tab_strip_model()->GetActiveWebContents(), std::move(app_info),
+      base::BindLambdaForTesting(
+          [&](bool accepted,
+              std::unique_ptr<WebApplicationInfo> app_info_callback) {
+            loop.Quit();
+          }));
+
+  PWAConfirmationBubbleView* bubble_dialog =
+      PWAConfirmationBubbleView::GetBubbleForTesting();
+
+  base::HistogramTester histograms;
+  bubble_dialog->CancelDialog();
+  loop.Run();
+
+  histograms.ExpectUniqueSample(
+      "WebApp.InstallConfirmation.CloseReason",
+      views::Widget::ClosedReason::kCancelButtonClicked, 1);
 }

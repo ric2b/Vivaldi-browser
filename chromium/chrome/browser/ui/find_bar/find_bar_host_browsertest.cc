@@ -365,6 +365,40 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, NoAudibleAlertOnNavigation) {
   EXPECT_EQ(0u, GetFindBarAudibleAlertsForBrowser(browser()));
 }
 
+// See http://crbug.com/1131780
+IN_PROC_BROWSER_TEST_F(FindInPageControllerTest,
+                       AudibleAlertsWithPrepopulatedFind) {
+  ui_test_utils::NavigateToURL(browser(), GetURL(kSimple));
+
+  WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_EQ(0u, GetFindBarAudibleAlertsForBrowser(browser()));
+
+  // Do an initial find so the text will be prepopulated for the next one.
+  // This will produce an audible alert.
+  EXPECT_EQ(
+      0, FindInPageASCII(web_contents, "zzz", kFwd, kIgnoreCase, nullptr));
+  EXPECT_EQ(1u, GetFindBarAudibleAlertsForBrowser(browser()));
+  browser()->GetFindBarController()->EndFindSession(
+      find_in_page::SelectionAction::kKeep, find_in_page::ResultAction::kKeep);
+
+  // Now show the findbar (prepopulated) and ensure there's no alert.
+  browser()->GetFindBarController()->Show(false /*find_next*/);
+  EXPECT_EQ(ASCIIToUTF16("zzz"), GetFindBarText());
+  ui_test_utils::FindResultWaiter observer1(web_contents);
+  observer1.Wait();
+  EXPECT_EQ(0, observer1.number_of_matches());
+  EXPECT_EQ(1u, GetFindBarAudibleAlertsForBrowser(browser()));
+
+  // Now do a find-next and ensure there *is* an alert
+  browser()->GetFindBarController()->Show(true /*find_next*/);
+  EXPECT_EQ(ASCIIToUTF16("zzz"), GetFindBarText());
+  ui_test_utils::FindResultWaiter observer2(web_contents);
+  observer2.Wait();
+  EXPECT_EQ(0, observer2.number_of_matches());
+  EXPECT_EQ(2u, GetFindBarAudibleAlertsForBrowser(browser()));
+}
+
 // Verify search selection coordinates. The data file used is set-up such that
 // the text occurs on the same line, and we verify their positions by verifying
 // their relative positions.
@@ -442,7 +476,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, MAYBE_LargePage) {
 #else
 #define MAYBE_FindLongString FindLongString
 #endif
-IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, FindLongString) {
+IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, MAYBE_FindLongString) {
   WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ui_test_utils::NavigateToURL(browser(), GetURL("largepage.html"));
@@ -469,7 +503,13 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, BigString) {
 }
 
 // Search Back and Forward on a single occurrence.
-IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, SingleOccurrence) {
+// TODO(crbug.com/1119361): Test is flaky on ChromeOS.
+#if defined(OS_CHROMEOS)
+#define MAYBE_SingleOccurrence DISABLED_SingleOccurrence
+#else
+#define MAYBE_SingleOccurrence SingleOccurrence
+#endif
+IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, MAYBE_SingleOccurrence) {
   WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ui_test_utils::NavigateToURL(browser(), GetURL("FindRandomTests.html"));

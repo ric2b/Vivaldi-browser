@@ -97,10 +97,6 @@ Canvas2DLayerBridge::~Canvas2DLayerBridge() {
 
 void Canvas2DLayerBridge::SetCanvasResourceHost(CanvasResourceHost* host) {
   resource_host_ = host;
-
-  if (resource_host_ && GetOrCreateResourceProvider()) {
-    EnsureCleared();
-  }
 }
 
 void Canvas2DLayerBridge::ResetResourceProvider() {
@@ -179,12 +175,6 @@ void Canvas2DLayerBridge::Hibernate() {
   }
 
   TRACE_EVENT0("blink", "Canvas2DLayerBridge::hibernate");
-  sk_sp<SkSurface> temp_hibernation_surface =
-      SkSurface::MakeRasterN32Premul(size_.Width(), size_.Height());
-  if (!temp_hibernation_surface) {
-    logger_->ReportHibernationEvent(kHibernationAbortedDueToAllocationFailure);
-    return;
-  }
   // No HibernationEvent reported on success. This is on purppose to avoid
   // non-complementary stats. Each HibernationScheduled event is paired with
   // exactly one failure or exit event.
@@ -202,9 +192,7 @@ void Canvas2DLayerBridge::Hibernate() {
     logger_->ReportHibernationEvent(kHibernationAbortedDueSnapshotFailure);
     return;
   }
-  temp_hibernation_surface->getCanvas()->drawImage(
-      snapshot->PaintImageForCurrentFrame().GetSkImage(), 0, 0, &copy_paint);
-  hibernation_image_ = temp_hibernation_surface->makeImageSnapshot();
+  hibernation_image_ = snapshot->PaintImageForCurrentFrame().GetSwSkImage();
   ResetResourceProvider();
   if (layer_)
     layer_->ClearTexture();
@@ -267,7 +255,10 @@ CanvasResourceProvider* Canvas2DLayerBridge::GetOrCreateResourceProvider() {
   if (!resource_provider || !resource_provider->IsValid())
     return nullptr;
 
-  EnsureCleared();
+  // Calling to DidDraw because GetOrCreateResourceProvider created a new
+  // provider and cleared it
+  // TODO crbug/1090081: Check possibility to move DidDraw inside Clear.
+  DidDraw(FloatRect(0.f, 0.f, size_.Width(), size_.Height()));
 
   if (IsAccelerated() && !layer_) {
     layer_ = cc::TextureLayer::CreateForMailbox(this);
@@ -400,14 +391,6 @@ void Canvas2DLayerBridge::SkipQueuedDrawCommands() {
 
   if (rate_limiter_)
     rate_limiter_->Reset();
-}
-
-void Canvas2DLayerBridge::EnsureCleared() {
-  if (cleared_)
-    return;
-  cleared_ = true;
-  ResourceProvider()->Clear();
-  DidDraw(FloatRect(0.f, 0.f, size_.Width(), size_.Height()));
 }
 
 void Canvas2DLayerBridge::ClearPendingRasterTimers() {

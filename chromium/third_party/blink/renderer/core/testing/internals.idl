@@ -218,8 +218,8 @@
     sequence<DOMString> shortcutIconURLs(Document document);
     sequence<DOMString> allIconURLs(Document document);
     [RaisesException] long numberOfPages(optional double pageWidthInPixels = 800, optional double pageHeightInPixels = 600);
-    [RaisesException] DOMString pageProperty(DOMString propertyName, long pageNumber);
-    [RaisesException] DOMString pageSizeAndMarginsInPixels(long pageIndex, long width, long height, long marginTop, long marginRight, long marginBottom, long marginLeft);
+    [RaisesException] DOMString pageProperty(DOMString propertyName, unsigned long pageNumber);
+    [RaisesException] DOMString pageSizeAndMarginsInPixels(unsigned long pageIndex, long width, long height, long marginTop, long marginRight, long marginBottom, long marginLeft);
 
     [RaisesException] float pageScaleFactor();
     [RaisesException] void setPageScaleFactor(float scaleFactor);
@@ -320,6 +320,10 @@
     // navigation moves "interest" around a page, rather than focus. This
     // attribute returns the currently interested element on the page.
     readonly attribute Element? interestedElement;
+
+    // Returns true if page associated with current internals object is
+    // active.
+    boolean isActivated();
 
     boolean isInCanvasFontCache(Document document, DOMString fontString);
     unsigned long canvasFontCacheMaxFonts();
@@ -446,4 +450,6 @@
 
     // Request generation of a Reporting report.
     void generateTestReport(DOMString message);
+
+    [RaisesException] void setIsAdSubframe(HTMLIFrameElement iframe);
 };

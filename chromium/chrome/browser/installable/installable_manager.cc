@@ -16,7 +16,6 @@
 #include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
-#include "chrome/common/chrome_features.h"
 #include "components/security_state/core/security_state.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -29,6 +28,7 @@
 #include "content/public/common/url_constants.h"
 #include "net/base/url_util.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/manifest/manifest_icon_selector.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "url/origin.h"
@@ -591,9 +591,6 @@ void InstallableManager::CheckEligiblity() {
           ->IsOffTheRecord()) {
     eligibility_->errors.push_back(IN_INCOGNITO);
   }
-  if (web_contents->GetMainFrame()->GetParent()) {
-    eligibility_->errors.push_back(NOT_IN_MAIN_FRAME);
-  }
   if (!IsContentSecure(web_contents)) {
     eligibility_->errors.push_back(NOT_FROM_SECURE_ORIGIN);
   }
@@ -657,8 +654,8 @@ bool InstallableManager::IsManifestValidForWebApp(
     is_valid = false;
   }
 
-  if ((manifest.name.is_null() || manifest.name.string().empty()) &&
-      (manifest.short_name.is_null() || manifest.short_name.string().empty())) {
+  if ((!manifest.name || manifest.name->empty()) &&
+      (!manifest.short_name || manifest.short_name->empty())) {
     valid_manifest_->errors.push_back(MANIFEST_MISSING_NAME_OR_SHORT_NAME);
     is_valid = false;
   }
@@ -716,7 +713,8 @@ void InstallableManager::OnDidCheckHasServiceWorker(
 
   switch (capability) {
     case content::ServiceWorkerCapability::SERVICE_WORKER_WITH_FETCH_HANDLER:
-      if (base::FeatureList::IsEnabled(features::kCheckOfflineCapability)) {
+      if (base::FeatureList::IsEnabled(
+              blink::features::kCheckOfflineCapability)) {
         service_worker_context_->CheckOfflineCapability(
             manifest().scope,
             base::BindOnce(&InstallableManager::OnDidCheckOfflineCapability,

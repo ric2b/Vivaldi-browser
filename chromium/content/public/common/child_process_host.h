@@ -81,7 +81,7 @@ class CONTENT_EXPORT ChildProcessHost : public IPC::Sender {
     // No special behavior requested.
     CHILD_NORMAL = 0,
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
     // Indicates that the child execed after forking may be execced from
     // /proc/self/exe rather than using the "real" app path. This prevents
     // autoupdate from confusing us if it changes the file out from under us.
@@ -116,6 +116,15 @@ class CONTENT_EXPORT ChildProcessHost : public IPC::Sender {
     // ID as the main binary, so this flag should be used when needing to load
     // third-party plug-ins.
     CHILD_PLUGIN,
+
+#if defined(ARCH_CPU_ARM64)
+    // Launch the child process as CHILD_NORMAL, but as x86_64 code under
+    // Rosetta translation. The executable being launched must contain x86_64
+    // code, either as a thin Mach-O file targeting x86_64, or a fat file with
+    // an x86_64 slice. Aside from the architecture, semantics are identical to
+    // CHILD_NORMAL, and this cannot be combined with any other CHILD_* values.
+    CHILD_LAUNCH_X86_64,
+#endif  // ARCH_CPU_ARM64
 #endif
   };
 

@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">завршна напомена</translation>
 <translation id="1281252709823657822">дијалог</translation>
 <translation id="1306460908038601864">Искључено</translation>
+<translation id="1311894908970423688">Вредност мора да буде <ph name="VALUE_DATE_OR_TIME" />.</translation>
 <translation id="1335095011850992622">заслуге</translation>
 <translation id="1342835525016946179">article</translation>
 <translation id="1359897965706325498">банер</translation>
+<translation id="145015347812617860">Ставки: <ph name="COUNT" /></translation>
 <translation id="1480676835519562650">више опција за избор, изабраних: <ph name="SELECTED" /> од <ph name="COUNT" />.</translation>
 <translation id="1589122976691792535">регион</translation>
 <translation id="1591562245178063882">Овај месец</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033"><ph name="WEEKNUMBER" />. недеља, <ph name="YEAR" />.</translation>
 <translation id="2277199496770840904"><ph name="NUMBER" />. песма</translation>
 <translation id="2291999235780842123">поље за потврду</translation>
+<translation id="2307576640803031502">на листи, <ph name="INDEX" />. ставка од <ph name="COUNT" /></translation>
 <translation id="2311842470354187719">прелом странице</translation>
 <translation id="2335594187091864976">бирач датума и времена</translation>
 <translation id="2393030564806080191">Хексадецимална вредност боје</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">још опција</translation>
 <translation id="576709008726043716">увод</translation>
 <translation id="57838592816432529">Искључи звук</translation>
+<translation id="5860033963881614850">Искључено</translation>
 <translation id="588258955323874662">Цеo екран</translation>
 <translation id="5888666972993069672">Тренутно се пребацује на <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">оквир за претрагу</translation>
+<translation id="5916664084637901428">Укључено</translation>
 <translation id="5939518447894949180">Ресетуј</translation>
 <translation id="5966707198760109579">Недеља</translation>
 <translation id="5987525920412732405">дугме за промену вредности</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">Обриши</translation>
 <translation id="668171684555832681">Друго...</translation>
 <translation id="6692633176391053278">контрола за промене у корацима</translation>
+<translation id="6709093583001123835">Вредност мора да буде <ph name="VALUE" />.</translation>
 <translation id="6709570249143506788">Лош квалитет снимка</translation>
 <translation id="6755330956360078551">објашњење</translation>
 <translation id="6790428901817661496">Пусти</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, од <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Слика у слици</translation>
 <translation id="9168329111483466115">фуснота</translation>
+<translation id="945780513535800434">Делимично означено</translation>
 <translation id="954003015749068518">уђи у режим слике у слици</translation>
 <translation id="966787709310836684">мени</translation>
 </translationbundle>

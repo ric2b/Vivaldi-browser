@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
@@ -30,10 +31,10 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/os_crypt/os_crypt.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
@@ -53,15 +54,14 @@
 #include "url/url_constants.h"
 
 using autofill::GaiaIdHash;
-using autofill::PasswordForm;
 
 namespace password_manager {
 
 // The current version number of the login database schema.
-const int kCurrentVersionNumber = 27;
+const int kCurrentVersionNumber = 28;
 // The oldest version of the schema such that a legacy Chrome client using that
 // version can still read/write the current database.
-const int kCompatibleVersionNumber = 19;
+const int kCompatibleVersionNumber = 28;
 
 base::Pickle SerializeValueElementPairs(
     const autofill::ValueElementVector& vec) {
@@ -150,9 +150,6 @@ enum LoginDatabaseTableColumns {
   COLUMN_PASSWORD_VALUE,
   COLUMN_SUBMIT_ELEMENT,
   COLUMN_SIGNON_REALM,
-  // TODO(crbug.com/999949): The "preferred" column isn't used anymore and
-  // should be dropped from the schema in M84.
-  COLUMN_PREFERRED,
   COLUMN_DATE_CREATED,
   COLUMN_BLACKLISTED_BY_USER,
   COLUMN_SCHEME,
@@ -208,8 +205,6 @@ void BindAddStatement(const PasswordForm& form, sql::Statement* s) {
               static_cast<int>(form.encrypted_password.length()));
   s->BindString16(COLUMN_SUBMIT_ELEMENT, form.submit_element);
   s->BindString(COLUMN_SIGNON_REALM, form.signon_realm);
-  // The "preferred" column has been deprecated in M81.
-  s->BindInt(COLUMN_PREFERRED, 0);
   s->BindInt64(COLUMN_DATE_CREATED, form.date_created.ToInternalValue());
   s->BindInt(COLUMN_BLACKLISTED_BY_USER, form.blocked_by_user);
   s->BindInt(COLUMN_SCHEME, static_cast<int>(form.scheme));
@@ -438,6 +433,10 @@ void InitializeBuilders(SQLTableBuilders builders) {
   builders.logins->AddColumn("moving_blocked_for", "BLOB");
   SealVersion(builders, /*expected_version=*/27u);
 
+  // Version 28.
+  builders.logins->DropColumn("preferred");
+  SealVersion(builders, /*expected_version=*/28u);
+
   DCHECK_EQ(static_cast<size_t>(COLUMN_NUM), builders.logins->NumberOfColumns())
       << "Adjust LoginDatabaseTableColumns if you change column definitions "
          "here.";
@@ -532,26 +531,6 @@ bool MigrateLogins(unsigned current_version,
       return false;
   }
 
-  // "date_last_used" column has been introduced and we should migrate the data
-  // in "preferred" column. We set the value of "date_last_used"
-  // deterministically such the final output will be consistent across syncing
-  // clients.
-  // TODO(crbug.com/997670): Drop the "preferred" column together with this
-  // migration code in M82.
-  if (current_version < 25) {
-    sql::Statement preferred_stmt;
-    preferred_stmt.Assign(db->GetCachedStatement(
-        SQL_FROM_HERE,
-        "UPDATE logins SET date_last_used = ? WHERE preferred > 0"));
-    // Set the preferred password to be last used one day after the Windows
-    // Epoch to make sure the "preferred" password is used more recently.
-    // Non-preferred passwords carry the default value of 0 (which maps to the
-    // Windows Epoch).
-    preferred_stmt.BindInt64(0, base::TimeDelta::FromDays(1).InMicroseconds());
-    if (!preferred_stmt.Run())
-      return false;
-  }
-
   return true;
 }
 
@@ -601,6 +580,7 @@ std::string GeneratePlaceholders(size_t count) {
   return result;
 }
 
+#if defined(OS_MAC)
 // Fills |form| with necessary data required to be removed from the database
 // and returns it.
 PasswordForm GetFormForRemoval(const sql::Statement& statement) {
@@ -611,6 +591,17 @@ PasswordForm GetFormForRemoval(const sql::Statement& statement) {
   form.password_element = statement.ColumnString16(COLUMN_PASSWORD_ELEMENT);
   form.signon_realm = statement.ColumnString(COLUMN_SIGNON_REALM);
   return form;
+}
+#endif
+
+// This converts `i` to type `Enum`. Terminates in case `i` is outside the valid
+// ranges for `Enum`. Requires `Enum::kMinValue` and `Enum::kMaxValue` to exist
+// and have correct semantics.
+template <typename Enum>
+Enum ToEnumOrDie(int i) {
+  CHECK_LE(static_cast<int>(Enum::kMinValue), i);
+  CHECK_GE(static_cast<int>(Enum::kMaxValue), i);
+  return static_cast<Enum>(i);
 }
 
 }  // namespace
@@ -1084,7 +1075,6 @@ void LoginDatabase::ReportDuplicateCredentialsMetrics() {
 void LoginDatabase::ReportMetrics(const std::string& sync_username,
                                   bool custom_passphrase_sync_enabled,
                                   BulkCheckDone bulk_check_done) {
-
   TRACE_EVENT0("passwords", "LoginDatabase::ReportMetrics");
 
   ReportNumberOfAccountsMetrics(custom_passphrase_sync_enabled);
@@ -1143,6 +1133,7 @@ PasswordStoreChangeList LoginDatabase::AddLogin(const PasswordForm& form,
   const bool success = s.Run();
   if (success) {
     // If success, the row never existed so password was not changed.
+    FillFormInStore(&form_with_encrypted_password);
     list.emplace_back(PasswordStoreChange::ADD,
                       std::move(form_with_encrypted_password),
                       db_.GetLastInsertRowId(),
@@ -1161,8 +1152,11 @@ PasswordStoreChangeList LoginDatabase::AddLogin(const PasswordForm& form,
       db_.GetCachedStatement(SQL_FROM_HERE, add_replace_statement_.c_str()));
   BindAddStatement(form_with_encrypted_password, &s);
   if (s.Run()) {
-    list.emplace_back(PasswordStoreChange::REMOVE, form,
+    PasswordForm removed_form = form;
+    FillFormInStore(&removed_form);
+    list.emplace_back(PasswordStoreChange::REMOVE, removed_form,
                       old_primary_key_password.primary_key);
+    FillFormInStore(&form_with_encrypted_password);
     list.emplace_back(PasswordStoreChange::ADD,
                       std::move(form_with_encrypted_password),
                       db_.GetLastInsertRowId(), password_changed);
@@ -1207,8 +1201,6 @@ PasswordStoreChangeList LoginDatabase::UpdateLogin(const PasswordForm& form,
   s.BindBlob(next_param++, encrypted_password.data(),
              static_cast<int>(encrypted_password.length()));
   s.BindString16(next_param++, form.submit_element);
-  // This is the "preferred" column which has been deprecated in M81.
-  s.BindInt(next_param++, 0);
   s.BindInt64(next_param++, form.date_created.ToInternalValue());
   s.BindInt(next_param++, form.blocked_by_user);
   s.BindInt(next_param++, static_cast<int>(form.scheme));
@@ -1260,6 +1252,7 @@ PasswordStoreChangeList LoginDatabase::UpdateLogin(const PasswordForm& form,
         form.password_value != old_primary_key_password.decrypted_password;
     PasswordForm form_with_encrypted_password = form;
     form_with_encrypted_password.encrypted_password = encrypted_password;
+    FillFormInStore(&form_with_encrypted_password);
     list.emplace_back(PasswordStoreChange::UPDATE,
                       std::move(form_with_encrypted_password),
                       old_primary_key_password.primary_key, password_changed);
@@ -1296,7 +1289,9 @@ bool LoginDatabase::RemoveLogin(const PasswordForm& form,
     return false;
   }
   if (changes) {
-    changes->emplace_back(PasswordStoreChange::REMOVE, form,
+    PasswordForm removed_form = form;
+    FillFormInStore(&removed_form);
+    changes->emplace_back(PasswordStoreChange::REMOVE, removed_form,
                           old_primary_key_password.primary_key,
                           /*password_changed=*/true);
   }
@@ -1333,6 +1328,7 @@ bool LoginDatabase::RemoveLoginByPrimaryKey(int primary_key,
     return false;
   }
   if (changes) {
+    FillFormInStore(&form);
     changes->emplace_back(PasswordStoreChange::REMOVE, std::move(form),
                           primary_key, /*password_changed=*/true);
   }
@@ -1436,12 +1432,9 @@ LoginDatabase::EncryptionResult LoginDatabase::InitPasswordFormFromStatement(
   form->date_created =
       base::Time::FromInternalValue(s.ColumnInt64(COLUMN_DATE_CREATED));
   form->blocked_by_user = (s.ColumnInt(COLUMN_BLACKLISTED_BY_USER) > 0);
-  int scheme_int = s.ColumnInt(COLUMN_SCHEME);
-  form->scheme = static_cast<PasswordForm::Scheme>(scheme_int);
-  DCHECK(autofill::mojom::IsKnownEnumValue(form->scheme));
-  int type_int = s.ColumnInt(COLUMN_PASSWORD_TYPE);
-  form->type = static_cast<PasswordForm::Type>(type_int);
-  DCHECK(autofill::mojom::IsKnownEnumValue(form->type));
+  form->scheme = ToEnumOrDie<PasswordForm::Scheme>(s.ColumnInt(COLUMN_SCHEME));
+  form->type =
+      ToEnumOrDie<PasswordForm::Type>(s.ColumnInt(COLUMN_PASSWORD_TYPE));
   if (s.ColumnByteLength(COLUMN_POSSIBLE_USERNAME_PAIRS)) {
     base::Pickle pickle(
         static_cast<const char*>(s.ColumnBlob(COLUMN_POSSIBLE_USERNAME_PAIRS)),
@@ -1468,11 +1461,9 @@ LoginDatabase::EncryptionResult LoginDatabase::InitPasswordFormFromStatement(
   form->federation_origin =
       url::Origin::Create(GURL(s.ColumnString(COLUMN_FEDERATION_URL)));
   form->skip_zero_click = (s.ColumnInt(COLUMN_SKIP_ZERO_CLICK) > 0);
-  int generation_upload_status_int =
-      s.ColumnInt(COLUMN_GENERATION_UPLOAD_STATUS);
   form->generation_upload_status =
-      static_cast<PasswordForm::GenerationUploadStatus>(
-          generation_upload_status_int);
+      ToEnumOrDie<PasswordForm::GenerationUploadStatus>(
+          s.ColumnInt(COLUMN_GENERATION_UPLOAD_STATUS));
   form->date_last_used = base::Time::FromDeltaSinceWindowsEpoch(
       base::TimeDelta::FromMicroseconds(s.ColumnInt64(COLUMN_DATE_LAST_USED)));
   if (s.ColumnByteLength(COLUMN_MOVING_BLOCKED_FOR)) {
@@ -1481,8 +1472,6 @@ LoginDatabase::EncryptionResult LoginDatabase::InitPasswordFormFromStatement(
         s.ColumnByteLength(COLUMN_MOVING_BLOCKED_FOR));
     form->moving_blocked_for_list = DeserializeGaiaIdHashVector(pickle);
   }
-
-  DCHECK(autofill::mojom::IsKnownEnumValue(form->generation_upload_status));
   return ENCRYPTION_RESULT_SUCCESS;
 }
 
@@ -1570,7 +1559,7 @@ bool LoginDatabase::GetLogins(
 
 bool LoginDatabase::GetLoginsByPassword(
     const base::string16& plain_text_password,
-    std::vector<std::unique_ptr<autofill::PasswordForm>>* forms) {
+    std::vector<std::unique_ptr<PasswordForm>>* forms) {
   TRACE_EVENT0("passwords", "LoginDatabase::GetLoginsByPassword");
   DCHECK(forms);
   forms->clear();
@@ -1985,9 +1974,8 @@ FormRetrievalResult LoginDatabase::StatementToForms(
   key_to_form_map->clear();
   while (statement->Step()) {
     auto new_form = std::make_unique<PasswordForm>();
-    new_form->in_store = is_account_store()
-                             ? PasswordForm::Store::kAccountStore
-                             : PasswordForm::Store::kProfileStore;
+    FillFormInStore(new_form.get());
+
     int primary_key = -1;
     EncryptionResult result = InitPasswordFormFromStatement(
         *statement, /*decrypt_and_fill_password_value=*/true, &primary_key,
@@ -1995,8 +1983,6 @@ FormRetrievalResult LoginDatabase::StatementToForms(
     if (result == ENCRYPTION_RESULT_SERVICE_FAILURE)
       return FormRetrievalResult::kEncrytionServiceFailure;
     if (result == ENCRYPTION_RESULT_ITEM_FAILURE) {
-      if (IsUsingCleanupMechanism())
-        forms_to_be_deleted.push_back(GetFormForRemoval(*statement));
       continue;
     }
     DCHECK_EQ(ENCRYPTION_RESULT_SUCCESS, result);
@@ -2104,12 +2090,9 @@ void LoginDatabase::InitializeStatementStrings(const SQLTableBuilder& builder) {
                                all_unique_key_column_names;
 }
 
-bool LoginDatabase::IsUsingCleanupMechanism() const {
-#if defined(OS_MAC)
-  return base::FeatureList::IsEnabled(features::kDeleteCorruptedPasswords);
-#else
-  return false;
-#endif
+void LoginDatabase::FillFormInStore(PasswordForm* form) const {
+  form->in_store = is_account_store() ? PasswordForm::Store::kAccountStore
+                                      : PasswordForm::Store::kProfileStore;
 }
 
 }  // namespace password_manager

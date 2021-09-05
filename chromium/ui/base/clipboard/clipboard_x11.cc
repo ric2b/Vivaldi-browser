@@ -271,8 +271,8 @@ ClipboardX11::X11Details::X11Details()
       primary_owner_(connection_, x_window_, x11::Atom::PRIMARY) {
   SetStringProperty(x_window_, x11::Atom::WM_NAME, x11::Atom::STRING,
                     "Chromium clipboard");
-  x_window_events_ =
-      std::make_unique<XScopedEventSelector>(x_window_, PropertyChangeMask);
+  x_window_events_ = std::make_unique<XScopedEventSelector>(
+      x_window_, x11::EventMask::PropertyChange);
 
   if (X11EventSource::GetInstance())
     X11EventSource::GetInstance()->AddXEventDispatcher(this);
@@ -496,11 +496,6 @@ uint64_t ClipboardX11::GetSequenceNumber(ClipboardBuffer buffer) const {
     return SelectionChangeObserver::GetInstance()->primary_sequence_number();
 }
 
-void ClipboardX11::SetClipboardDlpController(
-    std::unique_ptr<ClipboardDlpController> dlp_controller) {
-  NOTIMPLEMENTED();
-}
-
 // |data_dst| is not used. It's only passed to be consistent with other
 // platforms.
 bool ClipboardX11::IsFormatAvailable(
@@ -639,6 +634,24 @@ void ClipboardX11::ReadHTML(ClipboardBuffer buffer,
     *fragment_start = 0;
     DCHECK_LE(markup->length(), std::numeric_limits<uint32_t>::max());
     *fragment_end = static_cast<uint32_t>(markup->length());
+  }
+}
+
+// |data_dst| is not used. It's only passed to be consistent with other
+// platforms.
+void ClipboardX11::ReadSvg(ClipboardBuffer buffer,
+                           const ClipboardDataEndpoint* data_dst,
+                           base::string16* result) const {
+  DCHECK(CalledOnValidThread());
+  RecordRead(ClipboardFormatMetric::kSvg);
+
+  SelectionData data(x11_details_->RequestAndWaitForTypes(
+      buffer,
+      x11_details_->GetAtomsForFormat(ClipboardFormatType::GetSvgType())));
+  if (data.IsValid()) {
+    std::string markup;
+    data.AssignTo(&markup);
+    *result = base::UTF8ToUTF16(markup);
   }
 }
 
@@ -783,6 +796,14 @@ void ClipboardX11::WriteHTML(const char* markup_data,
   scoped_refptr<base::RefCountedMemory> mem(
       base::RefCountedString::TakeString(&data));
   x11_details_->InsertMapping(kMimeTypeHTML, mem);
+}
+
+void ClipboardX11::WriteSvg(const char* markup_data, size_t markup_len) {
+  std::string str(markup_data, markup_len);
+  scoped_refptr<base::RefCountedMemory> mem(
+      base::RefCountedString::TakeString(&str));
+
+  x11_details_->InsertMapping(kMimeTypeSvg, mem);
 }
 
 void ClipboardX11::WriteRTF(const char* rtf_data, size_t data_len) {

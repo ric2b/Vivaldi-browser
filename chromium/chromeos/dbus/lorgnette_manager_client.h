@@ -5,6 +5,7 @@
 #ifndef CHROMEOS_DBUS_LORGNETTE_MANAGER_CLIENT_H_
 #define CHROMEOS_DBUS_LORGNETTE_MANAGER_CLIENT_H_
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
@@ -36,24 +37,25 @@ class COMPONENT_EXPORT(CHROMEOS_DBUS) LorgnetteManagerClient
   virtual void ListScanners(
       DBusMethodCallback<lorgnette::ListScannersResponse> callback) = 0;
 
-  // Request a scanned image and calls |callback| when completed with a string
-  // pointing at the scanned image data.  Image data will be stored in the .png
-  // format.
-  virtual void ScanImageToString(std::string device_name,
-                                 const ScanProperties& properties,
-                                 DBusMethodCallback<std::string> callback) = 0;
+  // Gets the capabilities of the scanner corresponding to |device_name| and
+  // returns them using the provided |callback|.
+  virtual void GetScannerCapabilities(
+      const std::string& device_name,
+      DBusMethodCallback<lorgnette::ScannerCapabilities> callback) = 0;
 
-  // Request a scanned image using lorgnette's StartScan API and calls
-  // |completion_callback| when completed with a string pointing at the scanned
-  // image data. Image data will be stored in the .png format.
+  // Request a scanned image using lorgnette's StartScan API. As each page is
+  // completed, calls |page_callback| with the page number and a string
+  // containing the image data. Calls |completion_callback| when the scan has
+  // completed. Image data will be stored in the .png format.
   //
   // If |progress_callback| is provided, it will be called as scan progress
-  // increases.The progress will be passed as a value from 0-100.
+  // increases. The progress will be passed as a value from 0-100.
   virtual void StartScan(
-      std::string device_name,
-      const ScanProperties& properties,
-      DBusMethodCallback<std::string> completion_callback,
-      base::Optional<base::RepeatingCallback<void(int)>> progress_callback) = 0;
+      const std::string& device_name,
+      const lorgnette::ScanSettings& settings,
+      VoidDBusMethodCallback completion_callback,
+      base::RepeatingCallback<void(std::string, uint32_t)> page_callback,
+      base::RepeatingCallback<void(int)> progress_callback) = 0;
 
   // Factory function, creates a new instance and returns ownership.
   // For normal usage, access the singleton via DBusThreadManager::Get().

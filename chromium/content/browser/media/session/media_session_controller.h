@@ -60,6 +60,7 @@ class CONTENT_EXPORT MediaSessionController
   bool IsPictureInPictureAvailable(int player_id) const override;
   bool HasVideo(int player_id) const override;
   std::string GetAudioOutputSinkId(int player_id) const override;
+  bool SupportsAudioOutputDeviceSwitching(int player_id) const override;
 
   // Test helpers.
   int get_player_id_for_testing() const { return player_id_; }
@@ -80,6 +81,9 @@ class CONTENT_EXPORT MediaSessionController
 
   // Called when the audio output device has changed.
   void OnAudioOutputSinkChanged(const std::string& raw_device_id);
+
+  // Called when the ability to switch audio output devices has been disabled.
+  void OnAudioOutputSinkChangingDisabled();
 
  private:
   bool IsMediaSessionNeeded() const;
@@ -102,6 +106,7 @@ class CONTENT_EXPORT MediaSessionController
   static int player_count_;
   const int player_id_ = player_count_++;
 
+  bool is_paused_ = true;
   // Playing or paused, but not ended.
   bool is_playback_in_progress_ = false;
   bool has_audio_ = false;
@@ -109,6 +114,7 @@ class CONTENT_EXPORT MediaSessionController
   bool is_picture_in_picture_available_ = false;
   std::string audio_output_sink_id_ =
       media::AudioDeviceDescription::kDefaultDeviceId;
+  bool supports_audio_output_device_switching_ = true;
   media::MediaContentType media_content_type_ =
       media::MediaContentType::Persistent;
 

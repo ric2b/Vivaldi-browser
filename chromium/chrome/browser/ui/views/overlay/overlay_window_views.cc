@@ -13,6 +13,9 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/views/overlay/back_to_tab_image_button.h"
 #include "chrome/browser/ui/views/overlay/close_image_button.h"
 #include "chrome/browser/ui/views/overlay/playback_image_button.h"
@@ -42,6 +45,13 @@
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/window_properties.h"  // nogncheck
 #include "ui/aura/window.h"
+#endif
+
+#if defined(OS_WIN)
+#include "chrome/browser/shell_integration_win.h"
+#include "ui/aura/window.h"
+#include "ui/aura/window_tree_host.h"
+#include "ui/base/win/shell.h"
 #endif
 
 namespace {
@@ -170,33 +180,24 @@ class OverlayWindowFrameView : public views::NonClientFrameView {
 // OverlayWindow implementation of WidgetDelegate.
 class OverlayWindowWidgetDelegate : public views::WidgetDelegate {
  public:
-  explicit OverlayWindowWidgetDelegate(views::Widget* widget)
-      : widget_(widget) {
-    DCHECK(widget_);
+  OverlayWindowWidgetDelegate() {
+    SetCanResize(true);
+    SetModalType(ui::MODAL_TYPE_NONE);
+    // While not shown, the title is still used to identify the window in the
+    // window switcher.
+    SetShowTitle(false);
+    SetTitle(IDS_PICTURE_IN_PICTURE_TITLE_TEXT);
+    SetOwnedByWidget(true);
   }
   ~OverlayWindowWidgetDelegate() override = default;
 
   // views::WidgetDelegate:
-  bool CanResize() const override { return true; }
-  ui::ModalType GetModalType() const override { return ui::MODAL_TYPE_NONE; }
-  base::string16 GetWindowTitle() const override {
-    // While the window title is not shown on the window itself, it is used to
-    // identify the window on the system tray.
-    return l10n_util::GetStringUTF16(IDS_PICTURE_IN_PICTURE_TITLE_TEXT);
-  }
-  bool ShouldShowWindowTitle() const override { return false; }
-  void DeleteDelegate() override { delete this; }
-  views::Widget* GetWidget() override { return widget_; }
-  const views::Widget* GetWidget() const override { return widget_; }
   std::unique_ptr<views::NonClientFrameView> CreateNonClientFrameView(
       views::Widget* widget) override {
     return std::make_unique<OverlayWindowFrameView>(widget);
   }
 
  private:
-  // Owns OverlayWindowWidgetDelegate.
-  views::Widget* widget_;
-
   DISALLOW_COPY_AND_ASSIGN(OverlayWindowWidgetDelegate);
 };
 
@@ -218,11 +219,31 @@ std::unique_ptr<content::OverlayWindow> OverlayWindowViews::Create(
   params.remove_standard_frame = true;
   params.name = "PictureInPictureWindow";
   params.layer_type = ui::LAYER_NOT_DRAWN;
-  // Set WidgetDelegate for more control over |widget_|.
-  params.delegate = new OverlayWindowWidgetDelegate(overlay_window.get());
+  params.delegate = new OverlayWindowWidgetDelegate();
 
   overlay_window->Init(std::move(params));
   overlay_window->OnRootViewReady();
+
+#if defined(OS_WIN)
+  base::string16 app_user_model_id;
+  Browser* browser =
+      chrome::FindBrowserWithWebContents(controller->GetWebContents());
+  if (browser) {
+    const base::FilePath& profile_path = browser->profile()->GetPath();
+    // Set the window app id to GetAppUserModelIdForApp if the original window
+    // is an app window, GetAppUserModelIdForBrowser if it's a browser window.
+    app_user_model_id =
+        browser->is_type_app()
+            ? shell_integration::win::GetAppUserModelIdForApp(
+                  base::UTF8ToWide(browser->app_name()), profile_path)
+            : shell_integration::win::GetAppUserModelIdForBrowser(profile_path);
+    if (!app_user_model_id.empty()) {
+      ui::win::SetAppIdForWindow(
+          app_user_model_id,
+          overlay_window->GetNativeWindow()->GetHost()->GetAcceleratedWidget());
+    }
+  }
+#endif  // defined(OS_WIN)
 
   return overlay_window;
 }

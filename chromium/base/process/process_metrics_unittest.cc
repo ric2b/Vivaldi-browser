@@ -26,7 +26,7 @@
 #include "base/test/multiprocess_test.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
-#include "build/lacros_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/multiprocess_func_list.h"
 
@@ -34,7 +34,7 @@
 #include <sys/mman.h>
 #endif
 
-#if defined(OS_LINUX) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
 #include "base/process/internal_linux.h"
 #endif
 
@@ -67,7 +67,7 @@ class SystemMetricsTest : public testing::Test {
   DISALLOW_COPY_AND_ASSIGN(SystemMetricsTest);
 };
 
-#if defined(OS_LINUX) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
 TEST_F(SystemMetricsTest, IsValidDiskName) {
   const char invalid_input1[] = "";
   const char invalid_input2[] = "s";
@@ -224,103 +224,111 @@ TEST_F(SystemMetricsTest, ParseMeminfo) {
 
 TEST_F(SystemMetricsTest, ParseVmstat) {
   VmStatInfo vmstat;
-  // part of vmstat from a 3.2 kernel with numa enabled
+  // Part of vmstat from a 4.19 kernel.
   const char valid_input1[] =
-      "nr_free_pages 905104\n"
-      "nr_inactive_anon 142478"
-      "nr_active_anon 1520046\n"
-      "nr_inactive_file 4481001\n"
-      "nr_active_file 8313439\n"
-      "nr_unevictable 5044\n"
-      "nr_mlock 5044\n"
-      "nr_anon_pages 1633780\n"
-      "nr_mapped 104742\n"
-      "nr_file_pages 12828218\n"
-      "nr_dirty 245\n"
-      "nr_writeback 0\n"
-      "nr_slab_reclaimable 831609\n"
-      "nr_slab_unreclaimable 41164\n"
-      "nr_page_table_pages 31470\n"
-      "nr_kernel_stack 1735\n"
-      "nr_unstable 0\n"
-      "nr_bounce 0\n"
-      "nr_vmscan_write 406\n"
-      "nr_vmscan_immediate_reclaim 281\n"
-      "nr_writeback_temp 0\n"
-      "nr_isolated_anon 0\n"
-      "nr_isolated_file 0\n"
-      "nr_shmem 28820\n"
-      "nr_dirtied 84674644\n"
-      "nr_written 75307109\n"
-      "nr_anon_transparent_hugepages 0\n"
-      "nr_dirty_threshold 1536206\n"
-      "nr_dirty_background_threshold 768103\n"
-      "pgpgin 30777108\n"
-      "pgpgout 319023278\n"
-      "pswpin 179\n"
-      "pswpout 406\n"
-      "pgalloc_dma 0\n"
-      "pgalloc_dma32 20833399\n"
-      "pgalloc_normal 1622609290\n"
+      "pgpgin 2358216\n"
+      "pgpgout 296072\n"
+      "pswpin 345219\n"
+      "pswpout 2605828\n"
+      "pgalloc_dma32 8380235\n"
+      "pgalloc_normal 3384525\n"
       "pgalloc_movable 0\n"
-      "pgfree 1644355583\n"
-      "pgactivate 75391882\n"
-      "pgdeactivate 4121019\n"
-      "pgfault 2542879679\n"
-      "pgmajfault 487192\n";
+      "allocstall_dma32 0\n"
+      "allocstall_normal 2028\n"
+      "allocstall_movable 32559\n"
+      "pgskip_dma32 0\n"
+      "pgskip_normal 0\n"
+      "pgskip_movable 0\n"
+      "pgfree 11802722\n"
+      "pgactivate 894917\n"
+      "pgdeactivate 3255711\n"
+      "pglazyfree 48\n"
+      "pgfault 10043657\n"
+      "pgmajfault 358901\n"
+      "pgmajfault_s 2100\n"
+      "pgmajfault_a 343211\n"
+      "pgmajfault_f 13590\n"
+      "pglazyfreed 0\n"
+      "pgrefill 3429488\n"
+      "pgsteal_kswapd 1466893\n"
+      "pgsteal_direct 1771759\n"
+      "pgscan_kswapd 1907332\n"
+      "pgscan_direct 2118930\n"
+      "pgscan_direct_throttle 154\n"
+      "pginodesteal 3176\n"
+      "slabs_scanned 293804\n"
+      "kswapd_inodesteal 16753\n"
+      "kswapd_low_wmark_hit_quickly 10\n"
+      "kswapd_high_wmark_hit_quickly 423\n"
+      "pageoutrun 441\n"
+      "pgrotated 1636\n"
+      "drop_pagecache 0\n"
+      "drop_slab 0\n"
+      "oom_kill 18\n";
   const char valid_input2[] =
-      "nr_free_pages 180125\n"
-      "nr_inactive_anon 51\n"
-      "nr_active_anon 38832\n"
-      "nr_inactive_file 50171\n"
-      "nr_active_file 47510\n"
-      "nr_unevictable 0\n"
-      "nr_mlock 0\n"
-      "nr_anon_pages 38825\n"
-      "nr_mapped 24043\n"
-      "nr_file_pages 97733\n"
-      "nr_dirty 0\n"
-      "nr_writeback 0\n"
-      "nr_slab_reclaimable 4032\n"
-      "nr_slab_unreclaimable 2848\n"
-      "nr_page_table_pages 1505\n"
-      "nr_kernel_stack 626\n"
-      "nr_unstable 0\n"
-      "nr_bounce 0\n"
-      "nr_vmscan_write 0\n"
-      "nr_vmscan_immediate_reclaim 0\n"
-      "nr_writeback_temp 0\n"
-      "nr_isolated_anon 0\n"
-      "nr_isolated_file 0\n"
-      "nr_shmem 58\n"
-      "nr_dirtied 435358\n"
-      "nr_written 401258\n"
-      "nr_anon_transparent_hugepages 0\n"
-      "nr_dirty_threshold 18566\n"
-      "nr_dirty_background_threshold 4641\n"
-      "pgpgin 299464\n"
-      "pgpgout 2437788\n"
+      "pgpgin 2606135\n"
+      "pgpgout 1359128\n"
+      "pswpin 899959\n"
+      "pswpout 19761244\n"
+      "pgalloc_dma 31\n"
+      "pgalloc_dma32 18139339\n"
+      "pgalloc_normal 44085950\n"
+      "pgalloc_movable 0\n"
+      "allocstall_dma 0\n"
+      "allocstall_dma32 0\n"
+      "allocstall_normal 18881\n"
+      "allocstall_movable 169527\n"
+      "pgskip_dma 0\n"
+      "pgskip_dma32 0\n"
+      "pgskip_normal 0\n"
+      "pgskip_movable 0\n"
+      "pgfree 63060999\n"
+      "pgactivate 1703494\n"
+      "pgdeactivate 20537803\n"
+      "pglazyfree 163\n"
+      "pgfault 45201169\n"
+      "pgmajfault 609626\n"
+      "pgmajfault_s 7488\n"
+      "pgmajfault_a 591793\n"
+      "pgmajfault_f 10345\n"
+      "pglazyfreed 0\n"
+      "pgrefill 20673453\n"
+      "pgsteal_kswapd 11802772\n"
+      "pgsteal_direct 8618160\n"
+      "pgscan_kswapd 12640517\n"
+      "pgscan_direct 9092230\n"
+      "pgscan_direct_throttle 638\n"
+      "pginodesteal 1716\n"
+      "slabs_scanned 2594642\n"
+      "kswapd_inodesteal 67358\n"
+      "kswapd_low_wmark_hit_quickly 52\n"
+      "kswapd_high_wmark_hit_quickly 11\n"
+      "pageoutrun 83\n"
+      "pgrotated 977\n"
+      "drop_pagecache 1\n"
+      "drop_slab 1\n"
+      "oom_kill 1\n"
+      "pgmigrate_success 3202\n"
+      "pgmigrate_fail 795\n";
+  const char valid_input3[] =
       "pswpin 12\n"
       "pswpout 901\n"
-      "pgalloc_normal 144213030\n"
-      "pgalloc_high 164501274\n"
-      "pgalloc_movable 0\n"
-      "pgfree 308894908\n"
-      "pgactivate 239320\n"
-      "pgdeactivate 1\n"
-      "pgfault 716044601\n"
-      "pgmajfault 2023\n"
-      "pgrefill_normal 0\n"
-      "pgrefill_high 0\n"
-      "pgrefill_movable 0\n";
+      "pgmajfault 18881\n";
   EXPECT_TRUE(ParseProcVmstat(valid_input1, &vmstat));
-  EXPECT_EQ(179LU, vmstat.pswpin);
-  EXPECT_EQ(406LU, vmstat.pswpout);
-  EXPECT_EQ(487192LU, vmstat.pgmajfault);
+  EXPECT_EQ(345219LU, vmstat.pswpin);
+  EXPECT_EQ(2605828LU, vmstat.pswpout);
+  EXPECT_EQ(358901LU, vmstat.pgmajfault);
+  EXPECT_EQ(18LU, vmstat.oom_kill);
   EXPECT_TRUE(ParseProcVmstat(valid_input2, &vmstat));
+  EXPECT_EQ(899959LU, vmstat.pswpin);
+  EXPECT_EQ(19761244LU, vmstat.pswpout);
+  EXPECT_EQ(609626LU, vmstat.pgmajfault);
+  EXPECT_EQ(1LU, vmstat.oom_kill);
+  EXPECT_TRUE(ParseProcVmstat(valid_input3, &vmstat));
   EXPECT_EQ(12LU, vmstat.pswpin);
   EXPECT_EQ(901LU, vmstat.pswpout);
-  EXPECT_EQ(2023LU, vmstat.pgmajfault);
+  EXPECT_EQ(18881LU, vmstat.pgmajfault);
+  EXPECT_EQ(0LU, vmstat.oom_kill);
 
   const char missing_pgmajfault_input[] =
       "pswpin 12\n"
@@ -329,7 +337,7 @@ TEST_F(SystemMetricsTest, ParseVmstat) {
   const char empty_input[] = "";
   EXPECT_FALSE(ParseProcVmstat(empty_input, &vmstat));
 }
-#endif  // defined(OS_LINUX) || defined(OS_ANDROID)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS) || \
     defined(OS_WIN)
@@ -426,7 +434,7 @@ TEST_F(SystemMetricsTest, ParseZramStat) {
 #endif  // defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
 
 #if defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) || \
-    defined(OS_ANDROID)
+    defined(OS_CHROMEOS) || defined(OS_ANDROID)
 TEST(SystemMetrics2Test, GetSystemMemoryInfo) {
   SystemMemoryInfoKB info;
   EXPECT_TRUE(GetSystemMemoryInfo(&info));
@@ -438,26 +446,26 @@ TEST(SystemMetrics2Test, GetSystemMemoryInfo) {
 #else
   EXPECT_GT(info.free, 0);
 #endif
-#if defined(OS_LINUX) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
   EXPECT_GT(info.buffers, 0);
   EXPECT_GT(info.cached, 0);
   EXPECT_GT(info.active_anon + info.inactive_anon, 0);
   EXPECT_GT(info.active_file + info.inactive_file, 0);
-#endif  // defined(OS_LINUX) || defined(OS_ANDROID)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
 
   // All the values should be less than the total amount of memory.
 #if !defined(OS_WIN) && !defined(OS_IOS)
   // TODO(crbug.com/711450): re-enable the following assertion on iOS.
   EXPECT_LT(info.free, info.total);
 #endif
-#if defined(OS_LINUX) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
   EXPECT_LT(info.buffers, info.total);
   EXPECT_LT(info.cached, info.total);
   EXPECT_LT(info.active_anon, info.total);
   EXPECT_LT(info.inactive_anon, info.total);
   EXPECT_LT(info.active_file, info.total);
   EXPECT_LT(info.inactive_file, info.total);
-#endif  // defined(OS_LINUX) || defined(OS_ANDROID)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
 
 #if defined(OS_APPLE)
   EXPECT_GT(info.file_backed, 0);
@@ -467,14 +475,12 @@ TEST(SystemMetrics2Test, GetSystemMemoryInfo) {
   // Chrome OS exposes shmem.
   EXPECT_GT(info.shmem, 0);
   EXPECT_LT(info.shmem, info.total);
-  // Chrome unit tests are not run on actual Chrome OS hardware, so gem_objects
-  // and gem_size cannot be tested here.
 #endif
 }
 #endif  // defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) ||
-        // defined(OS_ANDROID)
+        // defined(OS_CHROMEOS) || defined(OS_ANDROID)
 
-#if defined(OS_LINUX) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
 TEST(ProcessMetricsTest, ParseProcStatCPU) {
   // /proc/self/stat for a process running "top".
   const char kTopStat[] = "960 (top) S 16230 960 16230 34818 960 "
@@ -581,11 +587,11 @@ TEST(ProcessMetricsTest, ParseProcTimeInState) {
                                     "invalid334 4\n",  // invalid header / line
                                     123, time_in_state));
 }
-#endif  // defined(OS_LINUX) || defined(OS_ANDROID)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
 
 // Disable on Android because base_unittests runs inside a Dalvik VM that
 // starts and stop threads (crbug.com/175563).
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 // http://crbug.com/396455
 TEST(ProcessMetricsTest, DISABLED_GetNumberOfThreads) {
   const ProcessHandle current = GetCurrentProcessHandle();
@@ -603,9 +609,9 @@ TEST(ProcessMetricsTest, DISABLED_GetNumberOfThreads) {
   // The Thread destructor will stop them.
   ASSERT_EQ(initial_threads, GetNumberOfThreads(current));
 }
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
-#if defined(OS_LINUX) || defined(OS_MAC)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_MAC)
 namespace {
 
 // Keep these in sync so the GetChildOpenFdCount test can refer to correct test
@@ -729,9 +735,9 @@ TEST(ProcessMetricsTest, GetOpenFdCount) {
   EXPECT_EQ(new_fd_count, fd_count + 1);
 }
 
-#endif  // defined(OS_LINUX) || defined(OS_MAC)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_MAC)
 
-#if defined(OS_ANDROID) || defined(OS_LINUX)
+#if defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 TEST(ProcessMetricsTestLinux, GetPageFaultCounts) {
   std::unique_ptr<base::ProcessMetrics> process_metrics(
@@ -875,7 +881,7 @@ TEST(ProcessMetricsTestLinux, GetPerThreadCumulativeCPUTimeInState) {
   }
 }
 
-#endif  // defined(OS_ANDROID) || defined(OS_LINUX)
+#endif  // defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
 TEST(ProcessMetricsTest, GetDiskUsageBytesPerSecond) {

@@ -418,6 +418,19 @@ class ServerProc(object):
 
     def create_daemon(self, init_func, host, port, paths, routes, bind_address,
                       config, **kwargs):
+        if sys.platform == "darwin":
+            # on Darwin, NOFILE starts with a very low limit (256), so bump it up a little
+            # by way of comparison, Debian starts with a limit of 1024, Windows 512
+            import resource  # local, as it only exists on Unix-like systems
+            maxfilesperproc = int(subprocess.check_output(
+                ["sysctl", "-n", "kern.maxfilesperproc"]
+            ).strip())
+            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+            # 2048 is somewhat arbitrary, but gives us some headroom for wptrunner --parallel
+            # note that it's expected that 2048 will be the min here
+            new_soft = min(2048, maxfilesperproc, hard)
+            if soft < new_soft:
+                resource.setrlimit(resource.RLIMIT_NOFILE, (new_soft, hard))
         try:
             self.daemon = init_func(host, port, paths, routes, bind_address, config, **kwargs)
         except socket.error:
@@ -940,6 +953,7 @@ def get_parser():
     parser.add_argument("--no-h2", action="store_false", dest="h2", default=None,
                         help="Disable the HTTP/2.0 server")
     parser.add_argument("--quic-transport", action="store_true", help="Enable QUIC server for WebTransport")
+    parser.add_argument("--exit-after-start", action="store_true", help="Exit after starting servers")
     parser.set_defaults(report=False)
     parser.set_defaults(is_wave=False)
     return parser
@@ -990,7 +1004,7 @@ def run(config_cls=ConfigBuilder, route_builder=None, **kwargs):
             signal.signal(signal.SIGINT, handle_signal)
 
             while (all(subproc.is_alive() for subproc in iter_procs(servers)) and
-                   not received_signal.is_set()):
+                   not received_signal.is_set() and not kwargs["exit_after_start"]):
                 for subproc in iter_procs(servers):
                     subproc.join(1)
 

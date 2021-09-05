@@ -2603,7 +2603,7 @@ TEST_P(VisualViewportTest, PaintScrollbar) {
     EXPECT_FALSE(scrollbar->HitTestable());
     EXPECT_TRUE(scrollbar->IsScrollbarLayerForTesting());
     EXPECT_EQ(
-        cc::VERTICAL,
+        cc::ScrollbarOrientation::VERTICAL,
         static_cast<const cc::ScrollbarLayerBase*>(scrollbar)->orientation());
     EXPECT_EQ(gfx::Size(7, 393), scrollbar->bounds());
     EXPECT_EQ(gfx::Vector2dF(393, 0), scrollbar->offset_to_transform_parent());
@@ -2724,7 +2724,7 @@ TEST_F(VisualViewportSimTest, UsedColorSchemeFromRootElement) {
   const VisualViewport& visual_viewport =
       WebView().GetPage()->GetVisualViewport();
 
-  EXPECT_EQ(WebColorScheme::kLight, visual_viewport.UsedColorScheme());
+  EXPECT_EQ(ColorScheme::kLight, visual_viewport.UsedColorScheme());
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -2736,7 +2736,7 @@ TEST_F(VisualViewportSimTest, UsedColorSchemeFromRootElement) {
       )HTML");
   Compositor().BeginFrame();
 
-  EXPECT_EQ(WebColorScheme::kDark, visual_viewport.UsedColorScheme());
+  EXPECT_EQ(ColorScheme::kDark, visual_viewport.UsedColorScheme());
 }
 
 TEST_P(VisualViewportTest, SetLocationBeforePrePaint) {

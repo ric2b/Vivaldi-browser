@@ -73,49 +73,70 @@ HardwareDisplayController::HardwareDisplayController(
 
 HardwareDisplayController::~HardwareDisplayController() = default;
 
-bool HardwareDisplayController::Modeset(const DrmOverlayPlane& primary,
-                                        const drmModeModeInfo& mode) {
-  TRACE_EVENT0("drm", "HDC::Modeset");
-  return ModesetCrtc(primary, /*use_current_crtc_mode=*/false, mode);
+void HardwareDisplayController::GetModesetProps(CommitRequest* commit_request,
+                                                const DrmOverlayPlane& primary,
+                                                const drmModeModeInfo& mode) {
+  TRACE_EVENT0("drm", "HDC::GetModesetProps");
+  GetModesetPropsForCrtcs(commit_request, primary,
+                          /*use_current_crtc_mode=*/false, mode);
 }
 
-bool HardwareDisplayController::Enable(const DrmOverlayPlane& primary) {
-  TRACE_EVENT0("drm", "HDC::Enable");
+void HardwareDisplayController::GetEnableProps(CommitRequest* commit_request,
+                                               const DrmOverlayPlane& primary) {
+  TRACE_EVENT0("drm", "HDC::GetEnableProps");
+  // TODO(markyacoub): Simplify and remove the use of empty_mode.
   drmModeModeInfo empty_mode = {};
-  return ModesetCrtc(primary, /*use_current_crtc_mode=*/true, empty_mode);
+  GetModesetPropsForCrtcs(commit_request, primary,
+                          /*use_current_crtc_mode=*/true, empty_mode);
 }
 
-bool HardwareDisplayController::ModesetCrtc(const DrmOverlayPlane& primary,
-                                            bool use_current_crtc_mode,
-                                            const drmModeModeInfo& mode) {
-  DCHECK(primary.buffer.get());
-  bool status = true;
-  for (const auto& controller : crtc_controllers_)
-    status &= controller->Modeset(
-        primary, use_current_crtc_mode ? controller->mode() : mode,
-        owned_hardware_planes_);
+void HardwareDisplayController::GetModesetPropsForCrtcs(
+    CommitRequest* commit_request,
+    const DrmOverlayPlane& primary,
+    bool use_current_crtc_mode,
+    const drmModeModeInfo& mode) {
+  DCHECK(commit_request);
 
-  is_disabled_ = false;
-  ResetCursor();
-  OnModesetComplete(primary);
-  return status;
+  GetDrmDevice()->plane_manager()->BeginFrame(&owned_hardware_planes_);
+
+  for (const auto& controller : crtc_controllers_) {
+    drmModeModeInfo modeset_mode =
+        use_current_crtc_mode ? controller->mode() : mode;
+
+    DrmOverlayPlaneList overlays;
+    overlays.push_back(primary.Clone());
+
+    CrtcCommitRequest request = CrtcCommitRequest::EnableCrtcRequest(
+        controller->crtc(), controller->connector(), modeset_mode,
+        &owned_hardware_planes_, std::move(overlays));
+    commit_request->push_back(std::move(request));
+  }
 }
 
-void HardwareDisplayController::Disable() {
-  TRACE_EVENT0("drm", "HDC::Disable");
+void HardwareDisplayController::GetDisableProps(CommitRequest* commit_request) {
+  TRACE_EVENT0("drm", "HDC::GetDisableProps");
 
-  for (const auto& controller : crtc_controllers_)
-    // TODO(crbug.com/1015104): Modeset and Disable operations should go
-    // together. The current split is due to how the legacy/atomic split
-    // evolved. It should be cleaned up under the more generic
-    // HardwareDisplayPlaneManager{Legacy,Atomic} calls.
-    controller->Disable();
+  for (const auto& controller : crtc_controllers_) {
+    CrtcCommitRequest request = CrtcCommitRequest::DisableCrtcRequest(
+        controller->crtc(), controller->connector(), &owned_hardware_planes_);
+    commit_request->push_back(std::move(request));
+  }
+}
 
-  bool ret = GetDrmDevice()->plane_manager()->DisableOverlayPlanes(
-      &owned_hardware_planes_);
-  LOG_IF(ERROR, !ret) << "Can't disable overlays when disabling HDC.";
+void HardwareDisplayController::UpdateState(
+    bool is_enabled,
+    const DrmOverlayPlane* primary_plane) {
+  // TODO(markyacoub): Update how we report the controller state. Right now, the
+  // controller state is independent of its CRTCs; however, it should reflect
+  // its CRTCs active states.
+  is_disabled_ = !is_enabled;
 
-  is_disabled_ = true;
+  if (is_enabled) {
+    DCHECK(primary_plane);
+    // TODO(markyacoub): This should be absorbed in the commit request.
+    ResetCursor();
+    OnModesetComplete(*primary_plane);
+  }
 }
 
 void HardwareDisplayController::SchedulePageFlip(
@@ -176,12 +197,13 @@ bool HardwareDisplayController::ScheduleOrTestPageFlip(
 
   bool status = true;
   for (const auto& controller : crtc_controllers_) {
-    status &= controller->AssignOverlayPlanes(&owned_hardware_planes_,
-                                              pending_planes);
+    status &= controller->AssignOverlayPlanes(
+        &owned_hardware_planes_, pending_planes, /*is_modesetting=*/false);
   }
 
   status &= GetDrmDevice()->plane_manager()->Commit(
-      &owned_hardware_planes_, page_flip_request, out_fence);
+      &owned_hardware_planes_, /*should_modeset=*/false, page_flip_request,
+      out_fence);
 
   return status;
 }
@@ -345,8 +367,10 @@ void HardwareDisplayController::OnPageFlipComplete(
     return;  // Modeset occured during this page flip.
   time_of_last_flip_ = presentation_feedback.timestamp;
   current_planes_ = std::move(pending_planes);
-  for (const auto& controller : crtc_controllers_)
-    controller->OnPageFlipComplete();
+  for (const auto& controller : crtc_controllers_) {
+    GetDrmDevice()->plane_manager()->ResetModesetBufferOfCrtc(
+        controller->crtc());
+  }
   page_flip_request_ = nullptr;
 }
 
@@ -357,6 +381,7 @@ void HardwareDisplayController::OnModesetComplete(
   // pending planes to the same values so that the callback keeps the correct
   // state.
   page_flip_request_ = nullptr;
+  owned_hardware_planes_.legacy_page_flips.clear();
   current_planes_.clear();
   current_planes_.push_back(primary.Clone());
   time_of_last_flip_ = base::TimeTicks::Now();

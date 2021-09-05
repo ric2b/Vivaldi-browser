@@ -128,6 +128,7 @@ const gfx::VectorIcon& GetVectorIconForMediaAction(MediaSessionAction action) {
     case MediaSessionAction::kScrubTo:
     case MediaSessionAction::kEnterPictureInPicture:
     case MediaSessionAction::kExitPictureInPicture:
+    case MediaSessionAction::kSwitchAudioDevice:
       NOTREACHED();
       break;
   }
@@ -145,7 +146,7 @@ class MediaActionButton : public views::ImageButton {
                     const base::string16& accessible_name)
       : views::ImageButton(listener), icon_size_(icon_size) {
     SetInkDropMode(views::Button::InkDropMode::ON);
-    set_has_ink_drop_action_on_click(true);
+    SetHasInkDropActionOnClick(true);
     SetImageHorizontalAlignment(views::ImageButton::ALIGN_CENTER);
     SetImageVerticalAlignment(views::ImageButton::ALIGN_MIDDLE);
     SetBorder(
@@ -173,8 +174,7 @@ class MediaActionButton : public views::ImageButton {
     views::SetImageFromVectorIcon(
         this, GetVectorIconForMediaAction(action), icon_size_,
         AshColorProvider::Get()->GetContentLayerColor(
-            AshColorProvider::ContentLayerType::kIconColorPrimary,
-            AshColorProvider::AshColorMode::kDark));
+            AshColorProvider::ContentLayerType::kIconColorPrimary));
   }
 
   std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
@@ -227,15 +227,14 @@ LockScreenMediaControlsView::LockScreenMediaControlsView(
   // Media controls have not been dismissed initially.
   Shell::Get()->media_controller()->SetMediaControlsDismissed(false);
 
-  set_notify_enter_exit_on_child(true);
+  SetNotifyEnterExitOnChild(true);
 
   contents_view_ = AddChildView(std::make_unique<views::View>());
   contents_view_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, kMediaControlsInsets));
   contents_view_->SetBackground(views::CreateRoundedRectBackground(
       AshColorProvider::Get()->GetBaseLayerColor(
-          AshColorProvider::BaseLayerType::kTransparent80,
-          AshColorProvider::AshColorMode::kDark),
+          AshColorProvider::BaseLayerType::kTransparent80),
       kMediaControlsCornerRadius));
 
   contents_view_->SetPaintToLayer();  // Needed for opacity animation.
@@ -280,8 +279,7 @@ LockScreenMediaControlsView::LockScreenMediaControlsView(
   title_label->SetFontList(base_font_list.Derive(
       2, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::BOLD));
   title_label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kTextColorPrimary,
-      AshColorProvider::AshColorMode::kDark));
+      AshColorProvider::ContentLayerType::kTextColorPrimary));
   title_label->SetAutoColorReadabilityEnabled(false);
   title_label->SetElideBehavior(gfx::ELIDE_TAIL);
   title_label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
@@ -291,8 +289,7 @@ LockScreenMediaControlsView::LockScreenMediaControlsView(
   artist_label->SetFontList(base_font_list.Derive(
       0, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::LIGHT));
   artist_label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kTextColorSecondary,
-      AshColorProvider::AshColorMode::kDark));
+      AshColorProvider::ContentLayerType::kTextColorSecondary));
   artist_label->SetAutoColorReadabilityEnabled(false);
   artist_label->SetElideBehavior(gfx::ELIDE_TAIL);
   artist_label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
@@ -435,8 +432,12 @@ LockScreenMediaControlsView::~LockScreenMediaControlsView() {
     if (!hide_reason_ && !Shell::Get()->session_controller()->IsScreenLocked())
       hide_reason_ = HideReason::kUnlocked;
 
-    base::UmaHistogramEnumeration(kMediaControlsHideHistogramName,
-                                  *hide_reason_);
+    // Only record hide reason if there is one. The value could be missing
+    // when ash shuts down with the media controls.
+    if (hide_reason_) {
+      base::UmaHistogramEnumeration(kMediaControlsHideHistogramName,
+                                    *hide_reason_);
+    }
   }
 
   base::PowerMonitor::RemoveObserver(this);
@@ -872,8 +873,7 @@ void LockScreenMediaControlsView::RunResetControlsAnimation() {
   contents_view_->layer()->SetOpacity(1);
 }
 
-BEGIN_METADATA(LockScreenMediaControlsView)
-METADATA_PARENT_CLASS(views::View)
-END_METADATA()
+BEGIN_METADATA(LockScreenMediaControlsView, views::View)
+END_METADATA
 
 }  // namespace ash

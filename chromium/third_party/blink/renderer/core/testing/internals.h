@@ -380,9 +380,11 @@ class Internals final : public ScriptWrappable {
   int numberOfPages(float page_width_in_pixels,
                     float page_height_in_pixels,
                     ExceptionState&);
-  String pageProperty(String, int, ExceptionState& = ASSERT_NO_EXCEPTION) const;
+  String pageProperty(String,
+                      unsigned,
+                      ExceptionState& = ASSERT_NO_EXCEPTION) const;
   String pageSizeAndMarginsInPixels(
-      int,
+      unsigned,
       int,
       int,
       int,
@@ -500,6 +502,10 @@ class Internals final : public ScriptWrappable {
 
   Element* interestedElement();
 
+  // Check if frame associated with current internals object is
+  // active or not.
+  bool isActivated();
+
   bool isInCanvasFontCache(Document*, const String&);
   unsigned canvasFontCacheMaxFonts();
 
@@ -604,6 +610,9 @@ class Internals final : public ScriptWrappable {
   bool overlayScrollbarsEnabled() const;
 
   void generateTestReport(const String& message);
+
+  void setIsAdSubframe(HTMLIFrameElement* iframe,
+                       ExceptionState& exception_state);
 
  private:
   Document* ContextDocument() const;

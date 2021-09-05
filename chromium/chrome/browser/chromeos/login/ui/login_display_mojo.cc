@@ -173,6 +173,7 @@ void LoginDisplayMojo::ShowError(int error_msg_id,
   // related.
   if (error_msg_id != IDS_LOGIN_ERROR_ALLOWLIST &&
       error_msg_id != IDS_ENTERPRISE_LOGIN_ERROR_ALLOWLIST &&
+      error_msg_id != IDS_ENTERPRISE_AND_FAMILY_LINK_LOGIN_ERROR_ALLOWLIST &&
       error_msg_id != IDS_LOGIN_ERROR_OWNER_KEY_LOST &&
       error_msg_id != IDS_LOGIN_ERROR_OWNER_REQUIRED &&
       error_msg_id != IDS_LOGIN_ERROR_GOOGLE_ACCOUNT_NOT_ALLOWED &&
@@ -204,8 +205,8 @@ void LoginDisplayMojo::ShowSigninUI(const std::string& email) {
   host_->ShowSigninUI(email);
 }
 
-void LoginDisplayMojo::ShowWhitelistCheckFailedError() {
-  host_->ShowWhitelistCheckFailedError();
+void LoginDisplayMojo::ShowAllowlistCheckFailedError() {
+  host_->ShowAllowlistCheckFailedError();
 }
 
 void LoginDisplayMojo::Login(const UserContext& user_context,

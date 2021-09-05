@@ -16,17 +16,6 @@
 #if defined(OS_POSIX) && !defined(__STDC_FORMAT_MACROS)
 #define __STDC_FORMAT_MACROS
 #endif
-#if defined(USE_GLX)
-// Must be included before GL headers or they might pollute the global
-// namespace with X11 macros indirectly.
-#include "ui/gfx/x/x11.h"
-
-// GL headers expect Bool and Status this to be defined but we avoid
-// defining them since they clash with too much code. Instead we have
-// to add them temporarily here and undef them again below.
-#define Bool int
-#define Status int
-#endif  // USE_GLX
 
 #include <GL/gl.h>
 #include <GL/glext.h>
@@ -48,12 +37,20 @@
 #elif defined(OS_APPLE)
 #include <OpenGL/OpenGL.h>
 #elif defined(USE_GLX)
-#include <GL/glx.h>
-#include <GL/glxext.h>
+using XID = unsigned long;
+using GLXPixmap = XID;
+using GLXWindow = XID;
+using GLXDrawable = XID;
+using GLXPbuffer = XID;
+using GLXContextID = XID;
+using GLXContext = struct __GLXcontextRec*;
+using GLXFBConfig = struct __GLXFBConfigRec*;
+struct XVisualInfo;
 
-// Done with these temporary macros now
-#undef Bool
-#undef Status
+#include "ui/gfx/x/x11.h"
+
+#include <GL/glxext.h>
+#include <GL/glxtokens.h>
 #endif
 
 // GLES2 defines not part of Desktop GL
@@ -507,10 +504,6 @@ typedef uint64_t EGLuint64CHROMIUM;
 #include "gl_bindings_autogen_egl.h"
 #endif
 
-#if defined(OS_WIN)
-#include "gl_bindings_autogen_wgl.h"
-#endif
-
 #if defined(USE_GLX)
 #include "gl_bindings_autogen_glx.h"
 #endif
@@ -539,20 +532,6 @@ struct GL_EXPORT CurrentGL {
   DriverGL* Driver = nullptr;
   const GLVersionInfo* Version = nullptr;
 };
-
-#if defined(OS_WIN)
-struct GL_EXPORT DriverWGL {
-  void InitializeStaticBindings();
-  void InitializeExtensionBindings();
-  void ClearBindings();
-
-  ProcsWGL fn;
-  ExtensionsWGL ext;
-
- private:
-  static std::string GetPlatformExtensions();
-};
-#endif
 
 #if defined(USE_EGL)
 struct GL_EXPORT DriverEGL {
@@ -593,11 +572,6 @@ GL_EXPORT extern base::ThreadLocalPointer<CurrentGL>* g_current_gl_context_tls;
 #if defined(USE_EGL)
 GL_EXPORT extern EGLApi* g_current_egl_context;
 GL_EXPORT extern DriverEGL g_driver_egl;
-#endif
-
-#if defined(OS_WIN)
-GL_EXPORT extern WGLApi* g_current_wgl_context;
-GL_EXPORT extern DriverWGL g_driver_wgl;
 #endif
 
 #if defined(USE_GLX)

@@ -238,6 +238,61 @@ public class WebViewBrowserActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Enables StrictMode to catch as much as reasonable. This selectively disables some StrictMode
+     * policies for some devices, as some manufacturers modify the Android framework in such a
+     * way as to unavoidably violate StrictMode (ex. the platform code which opens the 3-dots menu
+     * is not controlled by WebView or by WebView shell browser).
+     */
+    private void enableStrictMode() {
+        String manufacturer = Build.MANUFACTURER.toLowerCase(Locale.US);
+
+        StrictMode.ThreadPolicy.Builder threadPolicyBuilder =
+                new StrictMode.ThreadPolicy.Builder().detectAll().penaltyLog().penaltyDeath();
+
+        if (manufacturer.equals("samsung")) {
+            // See crbug.com/1056368, Samsung device has an internal method
+            // "android.util.GeneralUtil#isSupportedGloveModeInternal", which reads file and
+            // violates strict mode policy. This method is called when showing the dropdown menu
+            // after user clicks the 3-dots menu. However this showing code is part of Android
+            // framework and not controlled by this app, so we need to permit disk read for the UI
+            // thread.
+            threadPolicyBuilder = threadPolicyBuilder.permitDiskReads();
+            // See crbug.com/1082701 and https://crbug.com/1090841#c38, Samsung device uses OEM
+            // specific clipboard API, which will need to read the disk on UI thread. This app can't
+            // control it because it is in the framework. We need to permit disk write for the UI
+            // thread.
+            //
+            // Also: https://crbug.com/1090841#c31
+            threadPolicyBuilder = threadPolicyBuilder.permitDiskWrites();
+        } else if (manufacturer.equals("htc")) {
+            // https://crbug.com/1090841#c30
+            threadPolicyBuilder = threadPolicyBuilder.permitDiskReads();
+        } else if (manufacturer.equals("huawei")) {
+            // https://crbug.com/1090841#c32
+            threadPolicyBuilder = threadPolicyBuilder.permitDiskReads();
+        } else if (manufacturer.equals("lge")) {
+            // https://crbug.com/1090841#c33
+            threadPolicyBuilder = threadPolicyBuilder.permitDiskReads();
+        } else if (manufacturer.equals("oneplus")) {
+            // https://crbug.com/1090841#c37
+            threadPolicyBuilder = threadPolicyBuilder.permitDiskReads();
+        }
+        StrictMode.setThreadPolicy(threadPolicyBuilder.build());
+
+        // Omissions:
+        // * detectCleartextNetwork() to permit testing http:// URLs
+        // * detectFileUriExposure() to permit testing file:// URLs
+        // * detectLeakedClosableObjects() because of drag and drop (https://crbug.com/1090841#c40)
+        StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder()
+                .detectActivityLeaks()
+                .detectLeakedRegistrationObjects()
+                .detectLeakedSqlLiteObjects()
+                .penaltyLog()
+                .penaltyDeath()
+                .build());
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -255,32 +310,7 @@ public class WebViewBrowserActivity extends AppCompatActivity {
         });
         findViewById(R.id.btn_load_url).setOnClickListener((view) -> loadUrlFromUrlBar(view));
 
-        StrictMode.ThreadPolicy.Builder threadPolicyBuilder =
-                new StrictMode.ThreadPolicy.Builder().detectAll().penaltyLog().penaltyDeath();
-        if (Build.MANUFACTURER.toLowerCase(Locale.US).equals("samsung")) {
-            // See crbug.com/1056368, Samsung device has an internal method
-            // "android.util.GeneralUtil#isSupportedGloveModeInternal", which reads file and
-            // violates strict mode policy. This method is called when showing the dropdown menu
-            // after user clicks the 3-dots menu. However this showing code is part of Android
-            // framework and not controlled by this app, so we need to permit disk read for the UI
-            // thread.
-            threadPolicyBuilder.permitDiskReads();
-            // See crbug.com/1082701, Samsung device uses OEM specific clipboard API, which will
-            // need to read the disk on UI thread. This app can't control it because it is in the
-            // framework. We need to permit disk write for the UI thread.
-            threadPolicyBuilder.permitDiskWrites();
-        }
-        StrictMode.setThreadPolicy(threadPolicyBuilder.build());
-        // Conspicuously omitted: detectCleartextNetwork() and detectFileUriExposure() to permit
-        // http:// and file:// origins.
-        StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder()
-                .detectActivityLeaks()
-                .detectLeakedClosableObjects()
-                .detectLeakedRegistrationObjects()
-                .detectLeakedSqlLiteObjects()
-                .penaltyLog()
-                .penaltyDeath()
-                .build());
+        enableStrictMode();
 
         createAndInitializeWebView();
 
@@ -574,77 +604,76 @@ public class WebViewBrowserActivity extends AppCompatActivity {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        switch(item.getItemId()) {
-            case R.id.menu_reset_webview:
-                if (mWebView != null) {
-                    ViewGroup container = getContainer();
-                    container.removeView(mWebView);
-                    mWebView.destroy();
-                    mWebView = null;
-                }
-                createAndInitializeWebView();
-                return true;
-            case R.id.menu_clear_cache:
-                if (mWebView != null) {
-                    mWebView.clearCache(true);
-                }
-                return true;
-            case R.id.menu_enable_tracing:
-                mEnableTracing = !mEnableTracing;
-                item.setChecked(mEnableTracing);
+        int itemId = item.getItemId();
+        if (itemId == R.id.menu_reload_webview) {
+            if (mWebView != null) mWebView.reload();
+        } else if (itemId == R.id.menu_reset_webview) {
+            if (mWebView != null) {
+                ViewGroup container = getContainer();
+                container.removeView(mWebView);
+                mWebView.destroy();
+                mWebView = null;
+            }
+            createAndInitializeWebView();
+            return true;
+        } else if (itemId == R.id.menu_clear_cache) {
+            if (mWebView != null) {
+                mWebView.clearCache(true);
+            }
+            return true;
+        } else if (itemId == R.id.menu_enable_tracing) {
+            mEnableTracing = !mEnableTracing;
+            item.setChecked(mEnableTracing);
 
-                TracingController tracingController = TracingController.getInstance();
-                if (mEnableTracing) {
-                    tracingController.start(
-                            new TracingConfig.Builder()
-                                    .addCategories(TracingConfig.CATEGORIES_WEB_DEVELOPER)
-                                    .setTracingMode(TracingConfig.RECORD_CONTINUOUSLY)
-                                    .build());
-                } else {
-                    try (StrictModeContext ignored = StrictModeContext.allowDiskWrites()) {
-                        String outFileName = getFilesDir() + "/webview_tracing.json";
-                        try {
-                            tracingController.stop(new TracingLogger(outFileName, this),
-                                    Executors.newSingleThreadExecutor());
-                        } catch (FileNotFoundException e) {
-                            throw new RuntimeException(e);
-                        }
+            TracingController tracingController = TracingController.getInstance();
+            if (mEnableTracing) {
+                tracingController.start(
+                        new TracingConfig.Builder()
+                                .addCategories(TracingConfig.CATEGORIES_WEB_DEVELOPER)
+                                .setTracingMode(TracingConfig.RECORD_CONTINUOUSLY)
+                                .build());
+            } else {
+                try (StrictModeContext ignored = StrictModeContext.allowDiskWrites()) {
+                    String outFileName = getFilesDir() + "/webview_tracing.json";
+                    try {
+                        tracingController.stop(new TracingLogger(outFileName, this),
+                                Executors.newSingleThreadExecutor());
+                    } catch (FileNotFoundException e) {
+                        throw new RuntimeException(e);
                     }
                 }
-                return true;
-            case R.id.menu_force_dark_off:
-                WebSettingsCompat.setForceDark(
-                        mWebView.getSettings(), WebSettingsCompat.FORCE_DARK_OFF);
-                item.setChecked(true);
-                return true;
-            case R.id.menu_force_dark_auto:
-                WebSettingsCompat.setForceDark(
-                        mWebView.getSettings(), WebSettingsCompat.FORCE_DARK_AUTO);
-                item.setChecked(true);
-                return true;
-            case R.id.menu_force_dark_on:
-                WebSettingsCompat.setForceDark(
-                        mWebView.getSettings(), WebSettingsCompat.FORCE_DARK_ON);
-                item.setChecked(true);
-                return true;
-            case R.id.start_animation_activity:
-                startActivity(new Intent(this, WebViewAnimationTestActivity.class));
-                return true;
-            case R.id.menu_print:
-                PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
-                String jobName = "WebViewShell document";
-                PrintDocumentAdapter printAdapter = mWebView.createPrintDocumentAdapter(jobName);
-                printManager.print(jobName, printAdapter, new PrintAttributes.Builder().build());
-                return true;
-            case R.id.menu_about:
-                about();
-                hideKeyboard(mUrlBar);
-                return true;
-            case R.id.menu_devui:
-                launchWebViewDevUI();
-                return true;
-            default:
-                break;
+            }
+            return true;
+        } else if (itemId == R.id.menu_force_dark_off) {
+            WebSettingsCompat.setForceDark(
+                    mWebView.getSettings(), WebSettingsCompat.FORCE_DARK_OFF);
+            item.setChecked(true);
+            return true;
+        } else if (itemId == R.id.menu_force_dark_auto) {
+            WebSettingsCompat.setForceDark(
+                    mWebView.getSettings(), WebSettingsCompat.FORCE_DARK_AUTO);
+            item.setChecked(true);
+            return true;
+        } else if (itemId == R.id.menu_force_dark_on) {
+            WebSettingsCompat.setForceDark(mWebView.getSettings(), WebSettingsCompat.FORCE_DARK_ON);
+            item.setChecked(true);
+            return true;
+        } else if (itemId == R.id.start_animation_activity) {
+            startActivity(new Intent(this, WebViewAnimationTestActivity.class));
+            return true;
+        } else if (itemId == R.id.menu_print) {
+            PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+            String jobName = "WebViewShell document";
+            PrintDocumentAdapter printAdapter = mWebView.createPrintDocumentAdapter(jobName);
+            printManager.print(jobName, printAdapter, new PrintAttributes.Builder().build());
+            return true;
+        } else if (itemId == R.id.menu_about) {
+            about();
+            hideKeyboard(mUrlBar);
+            return true;
+        } else if (itemId == R.id.menu_devui) {
+            launchWebViewDevUI();
+            return true;
         }
         return super.onOptionsItemSelected(item);
     }

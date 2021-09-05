@@ -10,7 +10,6 @@
 #include "third_party/blink/public/common/css/forced_colors.h"
 #include "third_party/blink/public/common/css/navigation_controls.h"
 #include "third_party/blink/public/common/css/preferred_color_scheme.h"
-#include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/public/platform/web_theme_engine.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_shadow_root_init.h"
@@ -35,6 +34,7 @@
 #include "third_party/blink/renderer/core/frame/viewport_data.h"
 #include "third_party/blink/renderer/core/html/html_collection.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
+#include "third_party/blink/renderer/core/html/html_iframe_element.h"
 #include "third_party/blink/renderer/core/html/html_span_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
 #include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
@@ -42,10 +42,14 @@
 #include "third_party/blink/renderer/core/page/viewport_description.h"
 #include "third_party/blink/renderer/core/testing/color_scheme_helper.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
+#include "third_party/blink/renderer/core/testing/sim/sim_request.h"
+#include "third_party/blink/renderer/core/testing/sim/sim_test.h"
 #include "third_party/blink/renderer/platform/geometry/float_size.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/network/network_state_notifier.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
+#include "third_party/blink/renderer/platform/testing/testing_platform_support.h"
+#include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 
 namespace blink {
 
@@ -1221,31 +1225,12 @@ TEST_F(StyleEngineTest, StyleSheetsForStyleSheetList_ShadowRoot) {
   EXPECT_TRUE(GetStyleEngine().NeedsActiveStyleUpdate());
 }
 
-class StyleEngineClient : public frame_test_helpers::TestWebWidgetClient {
- public:
-  // WebWidgetClient overrides.
-  void ConvertWindowToViewport(WebFloatRect* rect) override {
-    rect->x *= device_scale_factor_;
-    rect->y *= device_scale_factor_;
-    rect->width *= device_scale_factor_;
-    rect->height *= device_scale_factor_;
-  }
-
-  void set_device_scale_factor(float device_scale_factor) {
-    device_scale_factor_ = device_scale_factor;
-  }
-
- private:
-  float device_scale_factor_ = 1.f;
-};
-
 TEST_F(StyleEngineTest, ViewportDescriptionForZoomDSF) {
-  StyleEngineClient client;
-  client.set_device_scale_factor(1.f);
-
+  ScopedTestingPlatformSupport<TestingPlatformSupport> platform;
+  platform->SetUseZoomForDSF(true);
   frame_test_helpers::WebViewHelper web_view_helper;
-  WebViewImpl* web_view_impl =
-      web_view_helper.Initialize(nullptr, nullptr, &client);
+  WebViewImpl* web_view_impl = web_view_helper.Initialize();
+  web_view_impl->MainFrameWidget()->SetDeviceScaleFactorForTesting(1.f);
   web_view_impl->MainFrameWidget()->UpdateAllLifecyclePhases(
       DocumentUpdateReason::kTest);
 
@@ -1259,7 +1244,8 @@ TEST_F(StyleEngineTest, ViewportDescriptionForZoomDSF) {
   float max_height = desc.max_height.GetFloatValue();
 
   const float device_scale = 3.5f;
-  client.set_device_scale_factor(device_scale);
+  web_view_impl->MainFrameWidget()->SetDeviceScaleFactorForTesting(
+      device_scale);
   web_view_impl->MainFrameWidget()->UpdateAllLifecyclePhases(
       DocumentUpdateReason::kTest);
 
@@ -1739,6 +1725,42 @@ TEST_F(StyleEngineTest, MediaQueriesColorSchemeOverride) {
                 GetCSSPropertyColor()));
 }
 
+TEST_F(StyleEngineTest, PreferredColorSchemeMetric) {
+  ColorSchemeHelper color_scheme_helper(GetDocument());
+  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kLight);
+  EXPECT_FALSE(IsUseCounted(WebFeature::kPreferredColorSchemeDark));
+  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
+  EXPECT_TRUE(IsUseCounted(WebFeature::kPreferredColorSchemeDark));
+}
+
+// The preferred color scheme setting can differ from the preferred color
+// scheme when forced dark mode is enabled. This is so that forced dark mode
+// does not invert pages that support dark mode.
+TEST_F(StyleEngineTest, PreferredColorSchemeSettingMetric) {
+  ColorSchemeHelper color_scheme_helper(GetDocument());
+  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kLight);
+  GetDocument().GetSettings()->SetForceDarkModeEnabled(false);
+  EXPECT_FALSE(IsUseCounted(WebFeature::kPreferredColorSchemeDark));
+  EXPECT_FALSE(IsUseCounted(WebFeature::kPreferredColorSchemeDarkSetting));
+
+  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
+  // Clear the UseCounters before they are updated by the
+  // |SetForceDarkModeEnabled| call, below.
+  ClearUseCounter(WebFeature::kPreferredColorSchemeDark);
+  ClearUseCounter(WebFeature::kPreferredColorSchemeDarkSetting);
+  GetDocument().GetSettings()->SetForceDarkModeEnabled(true);
+
+  EXPECT_FALSE(IsUseCounted(WebFeature::kPreferredColorSchemeDark));
+  EXPECT_TRUE(IsUseCounted(WebFeature::kPreferredColorSchemeDarkSetting));
+}
+
+TEST_F(StyleEngineTest, ForcedDarkModeMetric) {
+  GetDocument().GetSettings()->SetForceDarkModeEnabled(false);
+  EXPECT_FALSE(IsUseCounted(WebFeature::kForcedDarkMode));
+  GetDocument().GetSettings()->SetForceDarkModeEnabled(true);
+  EXPECT_TRUE(IsUseCounted(WebFeature::kForcedDarkMode));
+}
+
 TEST_F(StyleEngineTest, MediaQueriesReducedMotionOverride) {
   EXPECT_FALSE(GetDocument().GetSettings()->GetPrefersReducedMotion());
 
@@ -2183,7 +2205,7 @@ TEST_F(StyleEngineTest, ColorSchemeBaseBackgroundChange) {
   color_scheme_helper.SetForcedColors(GetDocument(), ForcedColors::kActive);
   UpdateAllLifecyclePhases();
   Color system_background_color = LayoutTheme::GetTheme().SystemColor(
-      CSSValueID::kCanvas, WebColorScheme::kLight);
+      CSSValueID::kCanvas, ColorScheme::kLight);
 
   EXPECT_EQ(system_background_color,
             GetDocument().View()->BaseBackgroundColor());
@@ -2201,7 +2223,7 @@ TEST_F(StyleEngineTest, ColorSchemeOverride) {
   UpdateAllLifecyclePhases();
 
   EXPECT_EQ(
-      WebColorScheme::kLight,
+      ColorScheme::kLight,
       GetDocument().documentElement()->GetComputedStyle()->UsedColorScheme());
 
   GetDocument().GetPage()->SetMediaFeatureOverride("prefers-color-scheme",
@@ -2209,7 +2231,7 @@ TEST_F(StyleEngineTest, ColorSchemeOverride) {
 
   UpdateAllLifecyclePhases();
   EXPECT_EQ(
-      WebColorScheme::kDark,
+      ColorScheme::kDark,
       GetDocument().documentElement()->GetComputedStyle()->UsedColorScheme());
 }
 
@@ -2327,8 +2349,8 @@ TEST_F(StyleEngineTest, GetComputedStyleOutsideFlatTree) {
   EXPECT_FALSE(innermost->GetComputedStyle());
 
   inner->EnsureComputedStyle();
-  auto* outer_style = outer->GetComputedStyle();
-  auto* inner_style = inner->GetComputedStyle();
+  scoped_refptr<const ComputedStyle> outer_style = outer->GetComputedStyle();
+  scoped_refptr<const ComputedStyle> inner_style = inner->GetComputedStyle();
 
   ASSERT_TRUE(outer_style);
   ASSERT_TRUE(inner_style);
@@ -2813,7 +2835,7 @@ TEST_F(StyleEngineTest, PrintNoDarkColorScheme) {
 
   EXPECT_EQ(Color::kWhite, root->GetComputedStyle()->VisitedDependentColor(
                                GetCSSPropertyColor()));
-  EXPECT_EQ(WebColorScheme::kDark,
+  EXPECT_EQ(ColorScheme::kDark,
             root->GetComputedStyle()->UsedColorSchemeForInitialColors());
   EXPECT_EQ(MakeRGB(255, 0, 0), body->GetComputedStyle()->VisitedDependentColor(
                                     GetCSSPropertyColor()));
@@ -2822,7 +2844,7 @@ TEST_F(StyleEngineTest, PrintNoDarkColorScheme) {
   GetDocument().GetFrame()->StartPrinting(page_size, page_size, 1);
   EXPECT_EQ(Color::kBlack, root->GetComputedStyle()->VisitedDependentColor(
                                GetCSSPropertyColor()));
-  EXPECT_EQ(WebColorScheme::kLight,
+  EXPECT_EQ(ColorScheme::kLight,
             root->GetComputedStyle()->UsedColorSchemeForInitialColors());
   EXPECT_EQ(MakeRGB(0, 128, 0), body->GetComputedStyle()->VisitedDependentColor(
                                     GetCSSPropertyColor()));
@@ -2830,7 +2852,7 @@ TEST_F(StyleEngineTest, PrintNoDarkColorScheme) {
   GetDocument().GetFrame()->EndPrinting();
   EXPECT_EQ(Color::kWhite, root->GetComputedStyle()->VisitedDependentColor(
                                GetCSSPropertyColor()));
-  EXPECT_EQ(WebColorScheme::kDark,
+  EXPECT_EQ(ColorScheme::kDark,
             root->GetComputedStyle()->UsedColorSchemeForInitialColors());
   EXPECT_EQ(MakeRGB(255, 0, 0), body->GetComputedStyle()->VisitedDependentColor(
                                     GetCSSPropertyColor()));
@@ -3184,20 +3206,8 @@ TEST_F(StyleEngineTest, InvalidVariableUnsetUseCount) {
   ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
 }
 
-class ParameterizedStyleEngineTest
-    : public testing::WithParamInterface<bool>,
-      private ScopedCSSReducedFontLoadingInvalidationsForTest,
-      public StyleEngineTest {
- public:
-  ParameterizedStyleEngineTest()
-      : ScopedCSSReducedFontLoadingInvalidationsForTest(GetParam()) {}
-};
-
-INSTANTIATE_TEST_SUITE_P(All, ParameterizedStyleEngineTest, testing::Bool());
-
 // https://crbug.com/1050564
-TEST_P(ParameterizedStyleEngineTest,
-       MediaAttributeChangeUpdatesFontCacheVersion) {
+TEST_F(StyleEngineTest, MediaAttributeChangeUpdatesFontCacheVersion) {
   GetDocument().body()->setInnerHTML(R"HTML(
     <style>
       @font-face { font-family: custom-font; src: url(fake-font.woff); }
@@ -3215,6 +3225,130 @@ TEST_P(ParameterizedStyleEngineTest,
 
   // Shouldn't crash.
   UpdateAllLifecyclePhases();
+}
+
+// https://crbug.com/1137624
+TEST_F(StyleEngineTest, DisabledAdvanceOverrideDescriptor) {
+  ScopedCSSFontFaceAdvanceOverrideForTest advance_override_disabled(false);
+
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @font-face {
+        font-family: custom-font;
+        src: url(fake-font.woff);
+        advance-override: 0.1;
+      }
+    </style>
+  )HTML");
+
+  // Shouldn't crash.
+  UpdateAllLifecyclePhases();
+
+  // 'advance-override' should be ignored when disabled.
+  const FontFace* font_face = GetStyleEngine()
+                                  .GetFontSelector()
+                                  ->GetFontFaceCache()
+                                  ->CssConnectedFontFaces()
+                                  .front()
+                                  .Get();
+  ASSERT_TRUE(font_face);
+  EXPECT_FALSE(font_face->HasFontMetricsOverride());
+}
+
+class StyleEngineSimTest : public SimTest {};
+
+TEST_F(StyleEngineSimTest, OwnerColorScheme) {
+  SimRequest main_resource("https://example.com", "text/html");
+  SimRequest frame_resource("https://example.com/frame.html", "text/html");
+
+  LoadURL("https://example.com");
+
+  main_resource.Complete(R"HTML(
+    <!doctype html>
+    <style>
+      iframe { color-scheme: dark }
+    </style>
+    <iframe id="frame" src="https://example.com/frame.html"></iframe>
+  )HTML");
+
+  frame_resource.Complete(R"HTML(
+    <!doctype html>
+    <p>Frame</p>
+  )HTML");
+
+  test::RunPendingTasks();
+  Compositor().BeginFrame();
+
+  auto* frame_element =
+      To<HTMLIFrameElement>(GetDocument().getElementById("frame"));
+  auto* frame_document = frame_element->contentDocument();
+  ASSERT_TRUE(frame_document);
+  EXPECT_EQ(ColorScheme::kDark,
+            frame_document->GetStyleEngine().GetOwnerColorScheme());
+
+  frame_element->SetInlineStyleProperty(CSSPropertyID::kColorScheme, "light");
+
+  test::RunPendingTasks();
+  Compositor().BeginFrame();
+  EXPECT_EQ(ColorScheme::kLight,
+            frame_document->GetStyleEngine().GetOwnerColorScheme());
+}
+
+TEST_F(StyleEngineSimTest, OwnerColorSchemeBaseBackground) {
+  ScopedCSSColorSchemeForTest enable_color_scheme(true);
+
+  SimRequest main_resource("https://example.com", "text/html");
+  SimRequest dark_frame_resource("https://example.com/dark.html", "text/html");
+  SimRequest light_frame_resource("https://example.com/light.html",
+                                  "text/html");
+
+  LoadURL("https://example.com");
+
+  main_resource.Complete(R"HTML(
+    <style>
+      .dark { color-scheme: dark }
+    </style>
+    <iframe id="dark-frame" src="dark.html"></iframe>
+    <iframe id="light-frame" src="light.html"></iframe>
+  )HTML");
+
+  dark_frame_resource.Complete(R"HTML(
+    <!doctype html>
+    <meta name=color-scheme content="dark">
+    <p>Frame</p>
+  )HTML");
+
+  light_frame_resource.Complete(R"HTML(
+    <!doctype html>
+    <p>Frame</p>
+  )HTML");
+
+  test::RunPendingTasks();
+  Compositor().BeginFrame();
+
+  auto* dark_document =
+      To<HTMLIFrameElement>(GetDocument().getElementById("dark-frame"))
+          ->contentDocument();
+  auto* light_document =
+      To<HTMLIFrameElement>(GetDocument().getElementById("light-frame"))
+          ->contentDocument();
+  ASSERT_TRUE(dark_document);
+  ASSERT_TRUE(light_document);
+
+  EXPECT_TRUE(dark_document->View()->ShouldPaintBaseBackgroundColor());
+  EXPECT_EQ(Color(0x12, 0x12, 0x12),
+            dark_document->View()->BaseBackgroundColor());
+  EXPECT_FALSE(light_document->View()->ShouldPaintBaseBackgroundColor());
+
+  GetDocument().documentElement()->setAttribute(blink::html_names::kClassAttr,
+                                                "dark");
+
+  test::RunPendingTasks();
+  Compositor().BeginFrame();
+
+  EXPECT_FALSE(dark_document->View()->ShouldPaintBaseBackgroundColor());
+  EXPECT_TRUE(light_document->View()->ShouldPaintBaseBackgroundColor());
+  EXPECT_EQ(Color::kWhite, light_document->View()->BaseBackgroundColor());
 }
 
 }  // namespace blink

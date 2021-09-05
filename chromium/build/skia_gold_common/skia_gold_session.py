@@ -5,6 +5,7 @@
 
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -61,7 +62,6 @@ class SkiaGoldSession(object):
     """
     self._working_dir = working_dir
     self._gold_properties = gold_properties
-    self._keys_file = keys_file
     self._corpus = corpus
     self._instance = instance
     self._triage_link_file = tempfile.NamedTemporaryFile(suffix='.txt',
@@ -71,6 +71,11 @@ class SkiaGoldSession(object):
     self._comparison_results = {}
     self._authenticated = False
     self._initialized = False
+
+    # Copy the given keys file to the working directory in case it ends up
+    # getting deleted before we try to use it.
+    self._keys_file = os.path.join(working_dir, 'gold_keys.json')
+    shutil.copy(keys_file, self._keys_file)
 
   def RunComparison(self,
                     name,
@@ -282,9 +287,16 @@ class SkiaGoldSession(object):
       try:
         with open(self._triage_link_file) as tlf:
           triage_link = tlf.read().strip()
-        self._comparison_results[name].internal_triage_link = triage_link
-        self._comparison_results[name].public_triage_link =\
-            self._GeneratePublicTriageLink(triage_link)
+        if not triage_link:
+          self._comparison_results[name].triage_link_omission_reason = (
+              'Gold did not provide a triage link. This is likely a bug on '
+              "Gold's end.")
+          self._comparison_results[name].internal_triage_link = None
+          self._comparison_results[name].public_triage_link = None
+        else:
+          self._comparison_results[name].internal_triage_link = triage_link
+          self._comparison_results[name].public_triage_link =\
+              self._GeneratePublicTriageLink(triage_link)
       except IOError:
         self._comparison_results[name].triage_link_omission_reason = (
             'Failed to read triage link from file')
@@ -318,25 +330,36 @@ class SkiaGoldSession(object):
           'tests locally.')
 
     output_dir = self._CreateDiffOutputDir()
-    diff_cmd = [
-        GOLDCTL_BINARY,
-        'diff',
-        '--corpus',
-        self._corpus,
-        '--instance',
-        self._instance,
-        '--input',
-        png_file,
-        '--test',
-        name,
-        '--work-dir',
-        self._working_dir,
-        '--out-dir',
-        output_dir,
-    ]
-    rc, stdout = self._RunCmdForRcAndOutput(diff_cmd)
-    self._StoreDiffLinks(name, output_manager, output_dir)
-    return rc, stdout
+    # TODO(skbug.com/10611): Remove this temporary work dir and instead just use
+    # self._working_dir once `goldctl diff` stops clobbering the auth files in
+    # the provided work directory.
+    temp_work_dir = tempfile.mkdtemp()
+    # shutil.copytree() fails if the destination already exists, so use a
+    # subdirectory of the temporary directory.
+    temp_work_dir = os.path.join(temp_work_dir, 'diff_work_dir')
+    try:
+      shutil.copytree(self._working_dir, temp_work_dir)
+      diff_cmd = [
+          GOLDCTL_BINARY,
+          'diff',
+          '--corpus',
+          self._corpus,
+          '--instance',
+          self._GetDiffGoldInstance(),
+          '--input',
+          png_file,
+          '--test',
+          name,
+          '--work-dir',
+          temp_work_dir,
+          '--out-dir',
+          output_dir,
+      ]
+      rc, stdout = self._RunCmdForRcAndOutput(diff_cmd)
+      self._StoreDiffLinks(name, output_manager, output_dir)
+      return rc, stdout
+    finally:
+      shutil.rmtree(os.path.realpath(os.path.join(temp_work_dir, '..')))
 
   def GetTriageLinks(self, name):
     """Gets the triage links for the given image.
@@ -443,6 +466,17 @@ class SkiaGoldSession(object):
 
   def _CreateDiffOutputDir(self):
     return tempfile.mkdtemp(dir=self._working_dir)
+
+  def _GetDiffGoldInstance(self):
+    """Gets the Skia Gold instance to use for the Diff step.
+
+    This can differ based on how a particular instance is set up, mainly
+    depending on whether it is set up for internal results or not.
+    """
+    # TODO(skbug.com/10610): Decide whether to use the public or
+    # non-public instance once authentication is fixed for the non-public
+    # instance.
+    return str(self._instance) + '-public'
 
   def _StoreDiffLinks(self, image_name, output_manager, output_dir):
     """Stores the local diff files as links.

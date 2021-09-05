@@ -5,12 +5,6 @@
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 
-# Reset sources_assignment_filter for the BUILD.gn file to prevent
-# regression during the migration of Chromium away from the feature.
-# See docs/no_sources_assignment_filter.md for more information.
-# TODO(crbug.com/1018739): remove this when migration is done.
-set_sources_assignment_filter([])
-
 component("snapshot") {
   sources = [
     "screenshot_grabber.cc",
@@ -91,9 +85,7 @@ source_set("snapshot_export") {
 }
 
 test("snapshot_unittests") {
-  if ((is_linux && !is_chromeos) || chromeos_is_browser_only) {
-    use_xvfb = true
-  }
+  use_xvfb = use_xvfb_in_this_config
 
   sources = [ "test/run_all_unittests.cc" ]
 

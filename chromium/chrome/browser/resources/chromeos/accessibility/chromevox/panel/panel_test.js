@@ -7,10 +7,6 @@ GEN_INCLUDE([
   '//chrome/browser/resources/chromeos/accessibility/chromevox/testing/chromevox_next_e2e_test_base.js'
 ]);
 
-GEN_INCLUDE([
-  '//chrome/browser/resources/chromeos/accessibility/chromevox/testing/mock_feedback.js'
-]);
-
 /**
  * Test fixture for Panel.
  */
@@ -18,16 +14,6 @@ ChromeVoxPanelTest = class extends ChromeVoxNextE2ETest {
   /** @override */
   testGenCppIncludes() {
     ChromeVoxE2ETest.prototype.testGenCppIncludes.call(this);
-  }
-
-  /**
-   * @return {!MockFeedback}
-   */
-  createMockFeedback() {
-    const mockFeedback =
-        new MockFeedback(this.newCallback(), this.newCallback.bind(this));
-    mockFeedback.install();
-    return mockFeedback;
   }
 
   getPanelWindow() {
@@ -139,9 +125,9 @@ TEST_F('ChromeVoxPanelTest', 'LinkMenu', function() {
     this.fireMockEvent('ArrowLeft')();
     this.assertActiveMenuItem('role_landmark', 'No items');
     this.fireMockEvent('ArrowRight')();
-    this.assertActiveMenuItem('role_link', 'apple Link');
+    this.assertActiveMenuItem('role_link', 'apple Internal link');
     this.fireMockEvent('ArrowUp')();
-    this.assertActiveMenuItem('role_link', 'banana Link');
+    this.assertActiveMenuItem('role_link', 'banana Internal link');
   });
 });
 

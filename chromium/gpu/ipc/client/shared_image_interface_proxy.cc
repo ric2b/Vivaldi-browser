@@ -5,6 +5,7 @@
 #include "gpu/ipc/client/shared_image_interface_proxy.h"
 
 #include "base/bits.h"
+#include "base/logging.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
@@ -161,6 +162,7 @@ Mailbox SharedImageInterfaceProxy::CreateSharedImage(
     uint32_t usage) {
   DCHECK(gpu_memory_buffer->GetType() == gfx::NATIVE_PIXMAP ||
          gpu_memory_buffer->GetType() == gfx::ANDROID_HARDWARE_BUFFER ||
+         gpu_memory_buffer->GetType() == gfx::DXGI_SHARED_HANDLE ||
          gpu_memory_buffer_manager);
 
   auto mailbox = Mailbox::GenerateForSharedImage();
@@ -201,7 +203,7 @@ Mailbox SharedImageInterfaceProxy::CreateSharedImage(
   }
 
   base::AutoLock lock(lock_);
-  AddMailbox(params.mailbox, usage);
+  AddMailbox(mailbox, usage);
   return mailbox;
 }
 
@@ -242,10 +244,13 @@ void SharedImageInterfaceProxy::UpdateSharedImage(
       GenerateDependenciesFromSyncToken(std::move(sync_token), host_);
   {
     base::AutoLock lock(lock_);
+
+    // IPC accepts handles by const reference. However, on platforms where the
+    // handle is backed by base::ScopedFD, const is casted away and the handle
+    // is forcibly taken from you.
     gfx::GpuFenceHandle acquire_fence_handle;
     if (acquire_fence) {
-      acquire_fence_handle =
-          gfx::CloneHandleForIPC(acquire_fence->GetGpuFenceHandle());
+      acquire_fence_handle = acquire_fence->GetGpuFenceHandle().Clone();
       // TODO(dcastagna): This message will be wrapped, handles can't be passed
       // in inner messages. Use EnqueueDeferredMessage if it will be possible to
       // have handles in inner messages in the future.
@@ -431,9 +436,10 @@ void SharedImageInterfaceProxy::RegisterSysmemBufferCollection(
     gfx::SysmemBufferCollectionId id,
     zx::channel token,
     gfx::BufferFormat format,
-    gfx::BufferUsage usage) {
+    gfx::BufferUsage usage,
+    bool register_with_image_pipe) {
   host_->Send(new GpuChannelMsg_RegisterSysmemBufferCollection(
-      route_id_, id, token, format, usage));
+      route_id_, id, token, format, usage, register_with_image_pipe));
 }
 
 void SharedImageInterfaceProxy::ReleaseSysmemBufferCollection(

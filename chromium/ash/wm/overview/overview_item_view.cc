@@ -134,7 +134,7 @@ class OverviewCloseButton : public views::ImageButton {
   ~OverviewCloseButton() override = default;
 
   // Resets the listener so that the listener can go out of scope.
-  void ResetListener() { listener_ = nullptr; }
+  void ResetListener() { set_callback(views::Button::PressedCallback()); }
 
  protected:
   // views::Button:
@@ -436,6 +436,10 @@ bool OverviewItemView::CanAcceptEvent(const ui::Event& event) {
 
 void OverviewItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   WindowMiniView::GetAccessibleNodeData(node_data);
+
+  // TODO: This doesn't allow |this| to be navigated by ChromeVox, find a way
+  // to allow |this| as well as the title and close button.
+  node_data->role = ax::mojom::Role::kGenericContainer;
   node_data->AddStringAttribute(
       ax::mojom::StringAttribute::kDescription,
       l10n_util::GetStringUTF8(

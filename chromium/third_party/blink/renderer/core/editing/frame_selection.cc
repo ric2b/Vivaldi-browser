@@ -349,6 +349,17 @@ void FrameSelection::DidSetSelectionDeprecated(
       TaskType::kMiscPlatformAPI);
 }
 
+void FrameSelection::SetSelectionForAccessibility(
+    const SelectionInDOMTree& selection,
+    const SetSelectionOptions& options) {
+  ClearDocumentCachedRange();
+
+  const bool did_set = SetSelectionDeprecated(selection, options);
+  CacheRangeOfDocument(CreateRange(selection.ComputeRange()));
+  if (did_set)
+    DidSetSelectionDeprecated(selection, options);
+}
+
 void FrameSelection::NodeChildrenWillBeRemoved(ContainerNode& container) {
   if (!container.InActiveDocument())
     return;
@@ -863,9 +874,7 @@ void FrameSelection::FocusedOrActiveStateChanged() {
   // Caret appears in the active frame.
   if (active_and_focused)
     SetSelectionFromNone();
-  frame_caret_->SetCaretVisibility(active_and_focused
-                                       ? CaretVisibility::kVisible
-                                       : CaretVisibility::kHidden);
+  frame_caret_->SetCaretEnabled(active_and_focused);
 
   // Update for caps lock state
   frame_->GetEventHandler().CapsLockStateMayHaveChanged();
@@ -1257,9 +1266,8 @@ void FrameSelection::MoveRangeSelectionInternal(
                                     .Build());
 }
 
-void FrameSelection::SetCaretVisible(bool caret_is_visible) {
-  frame_caret_->SetCaretVisibility(caret_is_visible ? CaretVisibility::kVisible
-                                                    : CaretVisibility::kHidden);
+void FrameSelection::SetCaretEnabled(bool enabled) {
+  frame_caret_->SetCaretEnabled(enabled);
 }
 
 void FrameSelection::SetCaretBlinkingSuspended(bool suspended) {

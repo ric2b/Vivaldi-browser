@@ -59,12 +59,15 @@
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/services/app_service/public/cpp/app_registry_cache_wrapper.h"
 #include "extensions/common/constants.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
+#include "ui/message_center/message_center.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/public/activation_client.h"
@@ -188,9 +191,11 @@ GetTransitionFromMetricsAnimationInfo(
 
 AppListControllerImpl::AppListControllerImpl()
     : model_(std::make_unique<AppListModel>()),
-      presenter_(std::make_unique<AppListPresenterDelegateImpl>(this)) {
+      color_provider_(AppListColorProviderImpl()),
+      presenter_(std::make_unique<AppListPresenterDelegateImpl>(this)),
+      is_notification_indicator_enabled_(
+          ::features::IsNotificationIndicatorEnabled()) {
   model_->AddObserver(this);
-
   SessionControllerImpl* session_controller =
       Shell::Get()->session_controller();
   session_controller->AddObserver(this);
@@ -211,6 +216,7 @@ AppListControllerImpl::AppListControllerImpl()
   shell->mru_window_tracker()->AddObserver(this);
   AssistantController::Get()->AddObserver(this);
   AssistantUiController::Get()->GetModel()->AddObserver(this);
+  message_center::MessageCenter::Get()->AddObserver(this);
 }
 
 AppListControllerImpl::~AppListControllerImpl() {
@@ -499,10 +505,42 @@ bool AppListControllerImpl::IsVisible(
 
 void AppListControllerImpl::OnAppListItemAdded(AppListItem* item) {
   client_->OnItemAdded(profile_id_, item->CloneMetadata());
+
+  if (is_notification_indicator_enabled_ && cache_ &&
+      notification_badging_pref_enabled_.value_or(false)) {
+    // Update the notification badge indicator for the newly added app list
+    // item.
+    cache_->ForOneApp(item->id(), [item](const apps::AppUpdate& update) {
+      item->UpdateBadge(update.HasBadge() == apps::mojom::OptionalBool::kTrue);
+    });
+  }
 }
 
 void AppListControllerImpl::OnActiveUserPrefServiceChanged(
-    PrefService* /* pref_service */) {
+    PrefService* pref_service) {
+  if (is_notification_indicator_enabled_) {
+    pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
+    pref_change_registrar_->Init(pref_service);
+
+    pref_change_registrar_->Add(
+        prefs::kAppNotificationBadgingEnabled,
+        base::BindRepeating(&AppListControllerImpl::UpdateAppBadging,
+                            base::Unretained(this)));
+
+    // Observe AppRegistryCache for the current active account to get
+    // notification updates.
+    AccountId account_id =
+        Shell::Get()->session_controller()->GetActiveAccountId();
+    cache_ =
+        apps::AppRegistryCacheWrapper::Get().GetAppRegistryCache(account_id);
+    Observe(cache_);
+
+    // Resetting the recorded pref forces the next call to UpdateAppBadging()
+    // to update notification badging for every app item.
+    notification_badging_pref_enabled_.reset();
+    UpdateAppBadging();
+  }
+
   if (!IsTabletMode()) {
     DismissAppList();
     return;
@@ -1141,30 +1179,9 @@ void AppListControllerImpl::OpenSearchResult(const std::string& result_id,
     }
   }
 
-  if (presenter_.IsVisibleDeprecated() && result->is_omnibox_search() &&
-      IsAssistantAllowedAndEnabled() &&
-      app_list_features::IsAssistantSearchEnabled()) {
-    // Record the assistant result. Other types of results are recorded in
-    // |client_| where there is richer data on SearchResultType.
-    DCHECK_EQ(AppListLaunchedFrom::kLaunchedFromSearchBox, launched_from)
-        << "Only log search results which are represented to the user as "
-           "search results (ie. search results in the search result page) not "
-           "chips.";
-    RecordSearchResultOpenTypeHistogram(launched_from, ASSISTANT_OMNIBOX_RESULT,
-                                        IsTabletMode());
-    if (!GetLastQueryLength()) {
-      RecordZeroStateSuggestionOpenTypeHistogram(ASSISTANT_OMNIBOX_RESULT);
-    }
-    AssistantUiController::Get()->ShowUi(
-        AssistantEntryPoint::kLauncherSearchResult);
-    AssistantController::Get()->OpenUrl(
-        assistant::util::CreateAssistantQueryDeepLink(
-            base::UTF16ToUTF8(result->title())));
-  } else {
-    if (client_)
-      client_->OpenSearchResult(result_id, event_flags, launched_from,
-                                launch_type, suggestion_index,
-                                launch_as_default);
+  if (client_) {
+    client_->OpenSearchResult(result_id, event_flags, launched_from,
+                              launch_type, suggestion_index, launch_as_default);
   }
 
   ResetHomeLauncherIfShown();
@@ -1472,6 +1489,10 @@ int AppListControllerImpl::GetShelfSize() {
 
 bool AppListControllerImpl::IsInTabletMode() {
   return Shell::Get()->tablet_mode_controller()->InTabletMode();
+}
+
+AppListColorProviderImpl* AppListControllerImpl::GetColorProvider() {
+  return &color_provider_;
 }
 
 void AppListControllerImpl::RecordAppLaunched(
@@ -1783,6 +1804,7 @@ void AppListControllerImpl::Shutdown() {
   is_shutdown_ = true;
 
   Shell* shell = Shell::Get();
+  message_center::MessageCenter::Get()->RemoveObserver(this);
   AssistantController::Get()->RemoveObserver(this);
   AssistantUiController::Get()->GetModel()->RemoveObserver(this);
   shell->mru_window_tracker()->RemoveObserver(this);
@@ -1810,6 +1832,23 @@ gfx::Rect AppListControllerImpl::GetInitialAppListItemScreenBoundsForWindow(
       app_id ? *app_id : std::string());
 }
 
+void AppListControllerImpl::OnAppUpdate(const apps::AppUpdate& update) {
+  if (update.HasBadgeChanged() &&
+      notification_badging_pref_enabled_.value_or(false) &&
+      !quiet_mode_enabled_.value_or(false)) {
+    UpdateItemNotificationBadge(update.AppId(), update.HasBadge());
+  }
+}
+
+void AppListControllerImpl::OnAppRegistryCacheWillBeDestroyed(
+    apps::AppRegistryCache* cache) {
+  Observe(nullptr);
+}
+
+void AppListControllerImpl::OnQuietModeChanged(bool in_quiet_mode) {
+  UpdateAppBadging();
+}
+
 void AppListControllerImpl::UpdateTrackedAppWindow() {
   aura::Window* top_window = GetTopVisibleWindow();
   if (tracked_app_window_ == top_window)
@@ -1825,6 +1864,45 @@ void AppListControllerImpl::UpdateTrackedAppWindow() {
 void AppListControllerImpl::RecordAppListState() {
   recorded_app_list_view_state_ = GetAppListViewState();
   recorded_app_list_visibility_ = last_visible_;
+}
+
+void AppListControllerImpl::UpdateItemNotificationBadge(
+    const std::string& app_id,
+    apps::mojom::OptionalBool has_badge) {
+  AppListItem* item = model_->FindItem(app_id);
+  if (item)
+    item->UpdateBadge(has_badge == apps::mojom::OptionalBool::kTrue);
+}
+
+void AppListControllerImpl::UpdateAppBadging() {
+  bool new_badging_enabled = pref_change_registrar_
+                                 ? pref_change_registrar_->prefs()->GetBoolean(
+                                       prefs::kAppNotificationBadgingEnabled)
+                                 : false;
+  bool new_quiet_mode_enabled =
+      message_center::MessageCenter::Get()->IsQuietMode();
+
+  if (notification_badging_pref_enabled_.has_value() &&
+      notification_badging_pref_enabled_.value() == new_badging_enabled &&
+      quiet_mode_enabled_.has_value() &&
+      quiet_mode_enabled_.value() == new_quiet_mode_enabled) {
+    return;
+  }
+  notification_badging_pref_enabled_ = new_badging_enabled;
+  quiet_mode_enabled_ = new_quiet_mode_enabled;
+
+  if (cache_) {
+    cache_->ForEachApp([this](const apps::AppUpdate& update) {
+      // Set the app notification badge hidden when the pref is disabled.
+      apps::mojom::OptionalBool has_badge =
+          notification_badging_pref_enabled_.value() &&
+                  !quiet_mode_enabled_.value() &&
+                  (update.HasBadge() == apps::mojom::OptionalBool::kTrue)
+              ? apps::mojom::OptionalBool::kTrue
+              : apps::mojom::OptionalBool::kFalse;
+      UpdateItemNotificationBadge(update.AppId(), has_badge);
+    });
+  }
 }
 
 }  // namespace ash

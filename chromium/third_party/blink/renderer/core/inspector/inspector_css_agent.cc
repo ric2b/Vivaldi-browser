@@ -1192,6 +1192,8 @@ Response InspectorCSSAgent::getComputedStyleForNode(
   response = dom_agent_->AssertNode(node_id, node);
   if (!response.IsSuccess())
     return response;
+  if (!node->ownerDocument())
+    return Response::ServerError("Node does not have an owner document");
 
   auto* computed_style_info =
       MakeGarbageCollected<CSSComputedStyleDeclaration>(node, true);
@@ -2226,8 +2228,6 @@ void InspectorCSSAgent::DidAddDocument(Document* document) {
   document->GetStyleEngine().MarkAllElementsForStyleRecalc(
       StyleChangeReasonForTracing::Create(style_change_reason::kInspector));
 }
-
-void InspectorCSSAgent::DidRemoveDocument(Document* document) {}
 
 void InspectorCSSAgent::WillRemoveDOMNode(Node* node) {
   DCHECK(node);

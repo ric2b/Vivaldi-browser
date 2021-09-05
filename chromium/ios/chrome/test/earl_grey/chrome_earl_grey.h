@@ -12,6 +12,7 @@
 #include "base/compiler_specific.h"
 #import "components/content_settings/core/common/content_settings.h"
 #include "components/sync/base/model_type.h"
+#import "ios/testing/earl_grey/app_launch_configuration.h"
 #import "ios/testing/earl_grey/base_eg_test_helper_impl.h"
 #include "third_party/metrics_proto/user_demographics.pb.h"
 #include "url/gurl.h"
@@ -141,10 +142,6 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Waits for there to be |count| number of incognito tabs within a timeout, or a
 // GREYAssert is induced.
 - (void)waitForIncognitoTabCount:(NSUInteger)count;
-
-// Waits for there to be |count| number of browsers within a timeout,
-// or a GREYAssert is induced.
-- (void)waitForBrowserCount:(NSUInteger)count;
 
 // Loads |URL| as if it was opened from an external application.
 - (void)openURLFromExternalApp:(const GURL&)URL;
@@ -346,6 +343,26 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // and tablet.
 - (void)showTabSwitcher;
 
+#pragma mark - Window utilities (EG2)
+
+// Returns the number of windows, including background and disconnected or
+// archived windows.
+- (NSUInteger)windowCount WARN_UNUSED_RESULT;
+
+// Returns the number of foreground (visible on screen) windows.
+- (NSUInteger)foregroundWindowCount WARN_UNUSED_RESULT;
+
+// Waits for there to be |count| number of browsers within a timeout,
+// or a GREYAssert is induced.
+- (void)waitForForegroundWindowCount:(NSUInteger)count;
+
+// Closes all but one window, including all non-foreground windows. Then kills
+// and relaunches app with launch args specified in |appConfig|. No-op if only
+// one window presents.
+// TODO(crbug.com/1143708): Remove the relaunch when EG2 slowness is fixed.
+- (void)closeAllExtraWindowsAndForceRelaunchWithAppConfig:
+    (AppLaunchConfiguration)appConfig;
+
 #pragma mark - SignIn Utilities (EG2)
 
 // Signs the user out, clears the known accounts entirely and checks whether the
@@ -503,12 +520,6 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Returns YES if CreditCardScanner feature is enabled.
 - (BOOL)isCreditCardScannerEnabled WARN_UNUSED_RESULT;
 
-// Returns YES if AutofillEnableCompanyName feature is enabled.
-- (BOOL)isAutofillCompanyNameEnabled WARN_UNUSED_RESULT;
-
-// Returns YES if kChangeTabSwitcherPosition feature is enabled.
-- (BOOL)isChangeTabSwitcherPositionEnabled WARN_UNUSED_RESULT;
-
 // Returns YES if DemographicMetricsReporting feature is enabled.
 - (BOOL)isDemographicMetricsReportingEnabled WARN_UNUSED_RESULT;
 
@@ -522,6 +533,16 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 
 // Returns whether the mobile version of the websites are requested by default.
 - (BOOL)isMobileModeByDefault WARN_UNUSED_RESULT;
+
+// Returns whether the illustrated empty stated feature is enabled.
+- (BOOL)isIllustratedEmptyStatesEnabled;
+
+// Returns whether the native context menus feature is enabled or not.
+- (BOOL)isNativeContextMenusEnabled;
+
+// Returns whether the app is configured to, and running in an environment which
+// can, open multiple windows.
+- (BOOL)areMultipleWindowsSupported;
 
 #pragma mark - Popup Blocking
 
@@ -564,6 +585,38 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Resets the BrowsingDataPrefs, which defines if its selected or not when
 // clearing Browsing data.
 - (void)resetBrowsingDataPrefs;
+
+#pragma mark - Pasteboard Utilities (EG2)
+
+// Verifies that |text| was copied to the pasteboard.
+- (void)verifyStringCopied:(NSString*)text;
+
+#pragma mark - Context Menus Utilities (EG2)
+
+// Taps on the Copy Link context menu action and verifies that the |text| has
+// been copied to the pasteboard. |useNewString| determines which action string
+// to use.
+- (void)verifyCopyLinkActionWithText:(NSString*)text
+                        useNewString:(BOOL)useNewString;
+
+// Taps on the Open in New Tab context menu action and waits for the |URL| to be
+// present in the omnibox.
+- (void)verifyOpenInNewTabActionWithURL:(const std::string&)URL;
+
+// Taps on the Open in Incognito context menu action and waits for the |URL| to
+// be present in the omnibox. |useNewString| determines which action string
+// to use.
+- (void)verifyOpenInIncognitoActionWithURL:(const std::string&)URL
+                              useNewString:(BOOL)useNewString;
+
+// Taps on the Share context menu action and validates that the ActivityView
+// was brought up with |pageTitle| in its header.
+- (void)verifyShareActionWithPageTitle:(NSString*)pageTitle;
+
+#pragma mark - Unified Consent utilities
+
+// Enables or disables URL-keyed anonymized data collection.
+- (void)setURLKeyedAnonymizedDataCollectionEnabled:(BOOL)enabled;
 
 @end
 

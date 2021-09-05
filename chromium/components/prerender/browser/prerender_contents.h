@@ -120,10 +120,8 @@ class PrerenderContents : public content::NotificationObserver,
 
   static Factory* CreateFactory();
 
-  // Start rendering the contents in the prerendered state. If
-  // |is_control_group| is true, this will go through some of the mechanics of
-  // starting a prerender, without actually creating the RenderView. |bounds|
-  // indicates the rectangle that the prerendered page should be in.
+  // Starts rendering the contents in the prerendered state.
+  // |bounds| indicates the rectangle that the prerendered page should be in.
   // |session_storage_namespace| indicates the namespace that the prerendered
   // page should be part of.
   virtual void StartPrerendering(
@@ -141,14 +139,6 @@ class PrerenderContents : public content::NotificationObserver,
   const GURL& prerender_url() const { return prerender_url_; }
   bool has_finished_loading() const { return has_finished_loading_; }
   bool prerendering_has_started() const { return prerendering_has_started_; }
-
-  // Sets the parameter to the value of the associated RenderViewHost's child id
-  // and returns a boolean indicating the validity of that id.
-  virtual bool GetChildId(int* child_id) const;
-
-  // Sets the parameter to the value of the associated RenderViewHost's route id
-  // and returns a boolean indicating the validity of that id.
-  virtual bool GetRouteId(int* route_id) const;
 
   FinalStatus final_status() const { return final_status_; }
 
@@ -204,8 +194,10 @@ class PrerenderContents : public content::NotificationObserver,
 
   std::unique_ptr<base::DictionaryValue> GetAsValue() const;
 
-  // Marks prerender as used and releases any throttled resource requests.
-  void PrepareForUse();
+  // This function is not currently called in production since prerendered
+  // contents are never used (only prefetch is supported), but it may be used in
+  // the future: https://crbug.com/1126305
+  void MarkAsUsedForTesting();
 
   // Increments the number of bytes fetched over the network for this prerender.
   void AddNetworkBytes(int64_t bytes);
@@ -292,14 +284,14 @@ class PrerenderContents : public content::NotificationObserver,
   std::unique_ptr<PrerenderContentsDelegate> delegate_;
 
   // The URL being prerendered.
-  GURL prerender_url_;
+  const GURL prerender_url_;
 
   // The referrer.
-  content::Referrer referrer_;
+  const content::Referrer referrer_;
 
   // The origin of the page requesting the prerender. Empty when the prerender
   // is browser initiated.
-  base::Optional<url::Origin> initiator_origin_;
+  const base::Optional<url::Origin> initiator_origin_;
 
   // The browser context being used
   content::BrowserContext* browser_context_;
@@ -326,12 +318,8 @@ class PrerenderContents : public content::NotificationObserver,
 
   std::unique_ptr<WebContentsDelegateImpl> web_contents_delegate_;
 
-  // These are -1 before a RenderView is created.
-  int child_id_;
-  int route_id_;
-
   // Origin for this prerender.
-  Origin origin_;
+  const Origin origin_;
 
   // The bounds of the WebView from the launching page.
   gfx::Rect bounds_;

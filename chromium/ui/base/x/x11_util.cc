@@ -22,7 +22,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
-#include "base/debug/stack_trace.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted_memory.h"
@@ -65,6 +64,9 @@
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/switches.h"
 #include "ui/gfx/x/connection.h"
+#include "ui/gfx/x/screensaver.h"
+#include "ui/gfx/x/shm.h"
+#include "ui/gfx/x/sync.h"
 #include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/gfx/x/x11_error_tracker.h"
@@ -99,7 +101,9 @@ int DefaultX11ErrorHandler(XDisplay* d, XErrorEvent* e) {
 
   if (base::CurrentThread::Get()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(&x11::LogErrorEventDescription, *e));
+        FROM_HERE,
+        base::BindOnce(&x11::LogErrorEventDescription, e->serial, e->error_code,
+                       e->request_code, e->minor_code));
   } else {
     LOG(ERROR) << "X error received: "
                << "serial " << e->serial << ", "
@@ -164,6 +168,24 @@ bool GetWindowManagerName(std::string* wm_name) {
   gfx::X11ErrorTracker err_tracker;
   bool result = GetStringProperty(wm_window, "_NET_WM_NAME", wm_name);
   return !err_tracker.FoundNewError() && result;
+}
+
+// Returns whether the X11 Screen Saver Extension can be used to disable the
+// screen saver.
+bool IsX11ScreenSaverAvailable() {
+  // X Screen Saver isn't accessible in headless mode.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kHeadless))
+    return false;
+
+  auto version = x11::Connection::Get()
+                     ->screensaver()
+                     .QueryVersion({x11::ScreenSaver::major_version,
+                                    x11::ScreenSaver::minor_version})
+                     .Sync();
+
+  return version && (version->server_major_version > 1 ||
+                     (version->server_major_version == 1 &&
+                      version->server_minor_version >= 1));
 }
 
 }  // namespace
@@ -312,17 +334,8 @@ bool IsXInput2Available() {
 }
 
 bool QueryShmSupport() {
-  int major;
-  int minor;
-  x11::Bool pixmaps;
-  static bool supported =
-      XShmQueryVersion(gfx::GetXDisplay(), &major, &minor, &pixmaps);
+  static bool supported = x11::Connection::Get()->shm().QueryVersion({}).Sync();
   return supported;
-}
-
-int ShmEventBase() {
-  static int event_base = XShmGetEventBase(gfx::GetXDisplay());
-  return event_base;
 }
 
 int CoalescePendingMotionEvents(const x11::Event* x11_event,
@@ -438,25 +451,6 @@ void SetHideTitlebarWhenMaximizedProperty(x11::Window window,
                                           HideTitlebarWhenMaximized property) {
   SetProperty(window, gfx::GetAtom("_GTK_HIDE_TITLEBAR_WHEN_MAXIMIZED"),
               x11::Atom::CARDINAL, static_cast<uint32_t>(property));
-}
-
-void ClearX11DefaultRootWindow() {
-  XDisplay* display = gfx::GetXDisplay();
-  x11::Window root_window = GetX11RootWindow();
-  gfx::Rect root_bounds;
-  if (!GetOuterWindowBounds(root_window, &root_bounds)) {
-    LOG(ERROR) << "Failed to get the bounds of the X11 root window";
-    return;
-  }
-
-  XGCValues gc_values = {0};
-  gc_values.foreground = BlackPixel(display, DefaultScreen(display));
-  GC gc = XCreateGC(display, static_cast<uint32_t>(root_window), GCForeground,
-                    &gc_values);
-  XFillRectangle(display, static_cast<uint32_t>(root_window), gc,
-                 root_bounds.x(), root_bounds.y(), root_bounds.width(),
-                 root_bounds.height());
-  XFreeGC(display, gc);
 }
 
 bool IsWindowVisible(x11::Window window) {
@@ -688,14 +682,10 @@ void SetWindowClassHint(x11::Connection* connection,
                         x11::Window window,
                         const std::string& res_name,
                         const std::string& res_class) {
-  XClassHint class_hints;
-  // const_cast is safe because XSetClassHint does not modify the strings.
-  // Just to be safe, the res_name and res_class parameters are local copies,
-  // not const references.
-  class_hints.res_name = const_cast<char*>(res_name.c_str());
-  class_hints.res_class = const_cast<char*>(res_class.c_str());
-  XSetClassHint(connection->display(), static_cast<uint32_t>(window),
-                &class_hints);
+  auto str =
+      base::StringPrintf("%s%c%s", res_name.c_str(), '\0', res_class.c_str());
+  std::vector<char> data(str.data(), str.data() + str.size() + 1);
+  SetArrayProperty(window, x11::Atom::WM_CLASS, x11::Atom::STRING, data);
 }
 
 void SetWindowRole(x11::Window window, const std::string& role) {
@@ -1050,6 +1040,14 @@ bool IsX11WindowFullScreen(x11::Window window) {
   return window_rect.size() == gfx::Size(width, height);
 }
 
+void SuspendX11ScreenSaver(bool suspend) {
+  static const bool kScreenSaverAvailable = IsX11ScreenSaverAvailable();
+  if (!kScreenSaverAvailable)
+    return;
+
+  x11::Connection::Get()->screensaver().Suspend({suspend});
+}
+
 bool WmSupportsHint(x11::Atom atom) {
   if (!SupportsEWMH())
     return false;
@@ -1091,10 +1089,11 @@ bool IsSyncExtensionAvailable() {
 #if defined(OS_CHROMEOS) || defined(USE_OZONE)
   return false;
 #else
-  auto* display = gfx::GetXDisplay();
-  int unused;
-  static bool result = XSyncQueryExtension(display, &unused, &unused) &&
-                       XSyncInitialize(display, &unused, &unused);
+  static bool result =
+      x11::Connection::Get()
+          ->sync()
+          .Initialize({x11::Sync::major_version, x11::Sync::minor_version})
+          .Sync();
   return result;
 #endif
 }
@@ -1149,28 +1148,25 @@ x11::Future<void> SendClientMessage(x11::Window window,
   return SendEvent(event, target, event_mask);
 }
 
-XRefcountedMemory::XRefcountedMemory(unsigned char* x11_data, size_t length)
-    : x11_data_(length ? x11_data : nullptr), length_(length) {}
-
-const unsigned char* XRefcountedMemory::front() const {
-  return x11_data_.get();
-}
-
-size_t XRefcountedMemory::size() const {
-  return length_;
-}
-
-XRefcountedMemory::~XRefcountedMemory() = default;
-
-void XImageDeleter::operator()(XImage* image) const {
-  XDestroyImage(image);
-}
-
 void SetX11ErrorHandlers(XErrorHandler error_handler,
                          XIOErrorHandler io_error_handler) {
   XSetErrorHandler(error_handler ? error_handler : DefaultX11ErrorHandler);
   XSetIOErrorHandler(io_error_handler ? io_error_handler
                                       : DefaultX11IOErrorHandler);
+}
+
+bool IsVulkanSurfaceSupported() {
+  static const char* extensions[] = {
+      "DRI3",         // open source driver.
+      "ATIFGLRXDRI",  // AMD proprietary driver.
+      "NV-CONTROL",   // NVidia proprietary driver.
+  };
+  auto* connection = x11::Connection::Get();
+  for (const auto* extension : extensions) {
+    if (connection->QueryExtension({extension}).Sync())
+      return true;
+  }
+  return false;
 }
 
 // static
@@ -1308,6 +1304,20 @@ x11::ColorMap XVisualManager::XVisualData::GetColormap() {
                                  connection_->default_root(), info->visual_id});
   }
   return colormap_;
+}
+
+ScopedUnsetDisplay::ScopedUnsetDisplay() {
+  const char* display = getenv("DISPLAY");
+  if (display) {
+    display_.emplace(display);
+    unsetenv("DISPLAY");
+  }
+}
+
+ScopedUnsetDisplay::~ScopedUnsetDisplay() {
+  if (display_) {
+    setenv("DISPLAY", display_->c_str(), 1);
+  }
 }
 
 }  // namespace ui

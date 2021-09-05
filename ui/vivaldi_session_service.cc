@@ -375,9 +375,9 @@ void VivaldiSessionService::BuildCommandsForBrowser(Browser* browser,
     DCHECK(tab);
     if (ids) {
       int id = extensions::ExtensionTabUtil::GetTabId(tab);
-      for (unsigned i = 0; i < ids->size(); i++) {
-        if (ids->at(i) == id) {
-          BuildCommandsForTab(browser->session_id(), tab, i,
+      for (unsigned j = 0; j < ids->size(); j++) {
+        if (ids->at(j) == id) {
+          BuildCommandsForTab(browser->session_id(), tab, j,
                               tab_strip->IsTabPinned(i));
         }
       }

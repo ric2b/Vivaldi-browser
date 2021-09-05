@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
+#include "chrome/browser/ui/webui/chromeos/cellular_setup/cellular_setup_localized_strings_provider.h"
 #include "chrome/browser/ui/webui/chromeos/network_element_localized_strings_provider.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/browser/ui/webui/settings/chromeos/internet_handler.h"
@@ -83,6 +84,18 @@ const std::vector<SearchConcept>& GetEthernetConnectedSearchConcepts() {
        {IDS_OS_SETTINGS_TAG_PROXY_ALT1, IDS_OS_SETTINGS_TAG_PROXY_ALT2,
         IDS_OS_SETTINGS_TAG_PROXY_ALT3, IDS_OS_SETTINGS_TAG_PROXY_ALT4,
         SearchConcept::kAltTagEnd}},
+  });
+  return *tags;
+}
+
+const std::vector<SearchConcept>& GetEthernetNotConnectedSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_ETHERNET,
+       mojom::kNetworkSectionPath,
+       mojom::SearchResultIcon::kEthernet,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSection,
+       {.section = mojom::Section::kNetwork}},
   });
   return *tags;
 }
@@ -661,11 +674,15 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);
 
-  chromeos::network_element::AddLocalizedStrings(html_source);
-  chromeos::network_element::AddOncLocalizedStrings(html_source);
-  chromeos::network_element::AddDetailsLocalizedStrings(html_source);
-  chromeos::network_element::AddConfigLocalizedStrings(html_source);
-  chromeos::network_element::AddErrorLocalizedStrings(html_source);
+  network_element::AddLocalizedStrings(html_source);
+  network_element::AddOncLocalizedStrings(html_source);
+  network_element::AddDetailsLocalizedStrings(html_source);
+  network_element::AddConfigLocalizedStrings(html_source);
+  network_element::AddErrorLocalizedStrings(html_source);
+  if (base::FeatureList::IsEnabled(
+          chromeos::features::kUpdatedCellularActivationUi)) {
+    cellular_setup::AddLocalizedStrings(html_source);
+  }
 
   html_source->AddBoolean("showTechnologyBadge",
                           !ash::features::IsSeparateNetworkIconsEnabled());
@@ -720,6 +737,12 @@ mojom::SearchResultIcon InternetSection::GetSectionIcon() const {
 
 std::string InternetSection::GetSectionPath() const {
   return mojom::kNetworkSectionPath;
+}
+
+bool InternetSection::LogMetric(mojom::Setting setting,
+                                base::Value& value) const {
+  // Unimplemented.
+  return false;
 }
 
 void InternetSection::RegisterHierarchy(HierarchyGenerator* generator) const {
@@ -866,6 +889,10 @@ void InternetSection::OnDeviceList(
   updater.RemoveSearchTags(GetInstantTetheringOnSearchConcepts());
   updater.RemoveSearchTags(GetInstantTetheringOffSearchConcepts());
 
+  // Keep track of ethernet devices to handle an edge case where Ethernet device
+  // is present but no network is connected.
+  does_ethernet_device_exist_ = false;
+
   for (const auto& device : devices) {
     switch (device->type) {
       case NetworkType::kWiFi:
@@ -894,6 +921,10 @@ void InternetSection::OnDeviceList(
           updater.AddSearchTags(GetInstantTetheringOffSearchConcepts());
         break;
 
+      case NetworkType::kEthernet:
+        does_ethernet_device_exist_ = true;
+        break;
+
       default:
         // Note: Ethernet and VPN only show search tags when connected, and
         // categories such as Mobile/Wireless do not have search tags.
@@ -918,6 +949,7 @@ void InternetSection::OnNetworkList(
   SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
 
   updater.RemoveSearchTags(GetEthernetConnectedSearchConcepts());
+  updater.RemoveSearchTags(GetEthernetNotConnectedSearchConcepts());
   updater.RemoveSearchTags(GetWifiConnectedSearchConcepts());
   updater.RemoveSearchTags(GetWifiMeteredSearchConcepts());
   updater.RemoveSearchTags(GetCellularSearchConcepts());
@@ -984,6 +1016,12 @@ void InternetSection::OnNetworkList(
         // Note: Category types such as Mobile/Wireless do not have search tags.
         break;
     }
+  }
+
+  // Edge case where Ethernet device is present but no network is connected,
+  // i.e. on Chromeboxes. http://crbug.com/1096768
+  if (does_ethernet_device_exist_ && !connected_ethernet_guid_.has_value()) {
+    updater.AddSearchTags(GetEthernetNotConnectedSearchConcepts());
   }
 }
 

@@ -27,10 +27,10 @@ import org.chromium.base.NativeLibraryLoadedStatus;
 import org.chromium.base.NativeLibraryLoadedStatus.NativeLibraryLoadedStatusProvider;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.TraceEvent;
+import org.chromium.base.annotations.CheckDiscard;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.MainDex;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.base.annotations.RemovableInRelease;
 import org.chromium.base.compat.ApiHelperForM;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.UmaRecorderHolder;
@@ -235,7 +235,7 @@ public class LibraryLoader {
         return mUseModernLinker;
     }
 
-    @RemovableInRelease
+    @CheckDiscard("Can't use @RemovableInRelease because Release build with DCHECK_IS_ON needs it")
     public void enableJniChecks() {
         if (!BuildConfig.DCHECK_IS_ON) return;
 
@@ -633,7 +633,7 @@ public class LibraryLoader {
         UmaRecorderHolder.onLibraryLoaded();
 
         // From now on, keep tracing in sync with native.
-        TraceEvent.registerNativeEnabledObserver();
+        TraceEvent.onNativeTracingReady();
 
         // From this point on, native code is ready to use, but non-MainDex JNI may not yet have
         // been registered. Check isInitialized() to be sure that initialization is fully complete.

@@ -7,12 +7,10 @@
 #include <string.h>
 
 #include <algorithm>
-#include <map>
 #include <memory>
 #include <utility>
 
 #include "base/bind.h"
-#include "base/callback.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_path_watcher.h"
@@ -44,31 +42,38 @@ namespace arc {
 
 namespace {
 
+// The storage path inside ARC container. This will be the path that is used in
+// MediaScanner.scanFile request.
+constexpr base::FilePath::CharType kAndroidStorageDir[] =
+    FILE_PATH_LITERAL("/storage");
+
 // The Downloads path inside ARC container. This will be the path that
 // is used in MediaScanner.scanFile request.
 constexpr base::FilePath::CharType kAndroidDownloadDir[] =
     FILE_PATH_LITERAL("/storage/emulated/0/Download");
 
+// TODO(crbug.com/929031): Move this to arc_volume_mounter_bridge.h.
 // The MyFiles path inside ARC container. This will be the path that is used in
-// MediaScanner.scanFile request. MediaScanner scans MyFiles under
-// /storage/MyFiles-read instead of /storage/MyFiles because non-system apps has
-// no access to /storage/MyFiles.
+// MediaScanner.scanFile request. UUID for the MyFiles volume is taken from
+// components/arc/volume_mounter/arc_volume_mounter_bridge.cc.
 constexpr base::FilePath::CharType kAndroidMyFilesDir[] =
-    FILE_PATH_LITERAL("/storage/MyFiles-read");
+    FILE_PATH_LITERAL("/storage/0000000000000000000000000000CAFEF00D2019");
 
 // The path for Downloads under MyFiles inside ARC container.
 constexpr base::FilePath::CharType kAndroidMyFilesDownloadsDir[] =
-    FILE_PATH_LITERAL("/storage/MyFiles-read/Downloads/");
-
-// The removable media path inside ARC container. This will be the path that
-// is used in MediaScanner.scanFile request.
-constexpr base::FilePath::CharType kAndroidRemovableMediaDir[] =
-    FILE_PATH_LITERAL("/storage");
+    FILE_PATH_LITERAL(
+        "/storage/0000000000000000000000000000CAFEF00D2019/Downloads/");
 
 // How long to wait for new inotify events before building the updated timestamp
 // map.
 const base::TimeDelta kBuildTimestampMapDelay =
     base::TimeDelta::FromMilliseconds(1000);
+
+// Providing the similar guarantee as
+// /proc/sys/fs/inotify/max_queued_events
+// It probably does not make sense to store more than the max queued limit in
+// inotify, since the inotify system degrades when that happens anyway.
+const size_t kMaxTimestampMapSize = 16384;
 
 // Compares two TimestampMaps and returns the list of file paths added/removed
 // or whose timestamp have changed.
@@ -119,11 +124,15 @@ TimestampMap BuildTimestampMap(base::FilePath cros_dir,
                                   base::FileEnumerator::FILES);
   for (base::FilePath cros_path = enumerator.Next(); !cros_path.empty();
        cros_path = enumerator.Next()) {
+    if (timestamp_map.size() >= kMaxTimestampMapSize)
+      break;
     // Skip non-media files for efficiency.
     if (!HasAndroidSupportedMediaExtension(cros_path))
       continue;
-    base::FilePath android_path =
-        GetAndroidPath(cros_path, cros_dir, android_dir);
+
+    base::FilePath android_path(android_dir);
+    cros_dir.AppendRelativePath(cros_path, &android_path);
+
     const base::FileEnumerator::FileInfo& info = enumerator.GetInfo();
     timestamp_map[android_path] = info.GetLastModifiedTime();
   }
@@ -151,13 +160,19 @@ class ArcFileSystemWatcherServiceFactory
   // Factory name used by ArcBrowserContextKeyedServiceFactoryBase.
   static constexpr const char* kName = "ArcFileSystemWatcherServiceFactory";
 
+  ArcFileSystemWatcherServiceFactory()
+      : ArcBrowserContextKeyedServiceFactoryBase<
+            ArcFileSystemWatcherService,
+            ArcFileSystemWatcherServiceFactory>() {
+    DependsOn(ArcVolumeMounterBridge::GetFactory());
+  }
+
   static ArcFileSystemWatcherServiceFactory* GetInstance() {
     return base::Singleton<ArcFileSystemWatcherServiceFactory>::get();
   }
 
  private:
   friend base::DefaultSingletonTraits<ArcFileSystemWatcherServiceFactory>;
-  ArcFileSystemWatcherServiceFactory() = default;
   ~ArcFileSystemWatcherServiceFactory() override = default;
 };
 
@@ -169,8 +184,7 @@ class ArcFileSystemWatcherService::FileSystemWatcher {
  public:
   using Callback = base::Callback<void(const std::vector<std::string>& paths)>;
 
-  FileSystemWatcher(content::BrowserContext* context,
-                    const Callback& callback,
+  FileSystemWatcher(const Callback& callback,
                     const base::FilePath& cros_dir,
                     const base::FilePath& android_dir);
   ~FileSystemWatcher();
@@ -213,7 +227,6 @@ class ArcFileSystemWatcherService::FileSystemWatcher {
 };
 
 ArcFileSystemWatcherService::FileSystemWatcher::FileSystemWatcher(
-    content::BrowserContext* context,
     const Callback& callback,
     const base::FilePath& cros_dir,
     const base::FilePath& android_dir)
@@ -312,15 +325,16 @@ ArcFileSystemWatcherService::ArcFileSystemWatcherService(
           base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()})) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   arc_bridge_service_->file_system()->AddObserver(this);
+  ArcVolumeMounterBridge::GetForBrowserContext(context_)->Initialize(this);
 }
 
 ArcFileSystemWatcherService::~ArcFileSystemWatcherService() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  StopWatchingFileSystem();
+  StopWatchingFileSystem(base::DoNothing());
+  DCHECK(removable_media_watchers_.empty());
   DCHECK(!downloads_watcher_);
   DCHECK(!myfiles_watcher_);
-  DCHECK(!removable_media_watcher_);
 
   arc_bridge_service_->file_system()->RemoveObserver(this);
 }
@@ -332,12 +346,25 @@ void ArcFileSystemWatcherService::OnConnectionReady() {
 
 void ArcFileSystemWatcherService::OnConnectionClosed() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  StopWatchingFileSystem();
+  StopWatchingFileSystem(base::DoNothing());
 }
 
 void ArcFileSystemWatcherService::StartWatchingFileSystem() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  StopWatchingFileSystem();
+
+  // Triggered SendAllMountEvents as reply to make sure that callback is
+  // triggered after StopWatchingFileSystem() is triggered in the
+  // file_task_runner. Without this synchronization, the
+  // StopWatchingFileSystem() might race with
+  // ArcVolumeMounter::RequestAllMountPoints. If RequestAllMountPoints is
+  // triggered before StopWatchingFileSystem, then the watcher for existing
+  // removable media will be accidentally removed, even though the removable
+  // media is still attached. This can happen if there is an attached removable
+  // media during startup.
+  StopWatchingFileSystem(
+      base::BindOnce(&ArcFileSystemWatcherService::TriggerSendAllMountEvents,
+                     weak_ptr_factory_.GetWeakPtr()));
+
   Profile* profile = Profile::FromBrowserContext(context_);
 
   DCHECK(!downloads_watcher_);
@@ -345,42 +372,47 @@ void ArcFileSystemWatcherService::StartWatchingFileSystem() {
       DownloadPrefs(profile)
           .GetDefaultDownloadDirectoryForProfile()
           .StripTrailingSeparators(),
-      base::FilePath(kAndroidDownloadDir));
+      base::FilePath(kAndroidDownloadDir), base::DoNothing());
 
   DCHECK(!myfiles_watcher_);
   myfiles_watcher_ = CreateAndStartFileSystemWatcher(
       file_manager::util::GetMyFilesFolderForProfile(profile),
-      base::FilePath(kAndroidMyFilesDir));
-
-  DCHECK(!removable_media_watcher_);
-  removable_media_watcher_ = CreateAndStartFileSystemWatcher(
-      base::FilePath(kCrosRemovableMediaDir),
-      base::FilePath(kAndroidRemovableMediaDir));
+      base::FilePath(kAndroidMyFilesDir), base::DoNothing());
 }
 
-void ArcFileSystemWatcherService::StopWatchingFileSystem() {
+void ArcFileSystemWatcherService::StopWatchingFileSystem(
+    base::OnceClosure callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  for (auto& watcher : removable_media_watchers_) {
+    file_task_runner_->DeleteSoon(FROM_HERE, watcher.second.release());
+  }
+  removable_media_watchers_.clear();
   if (downloads_watcher_)
     file_task_runner_->DeleteSoon(FROM_HERE, downloads_watcher_.release());
-  if (myfiles_watcher_)
-    file_task_runner_->DeleteSoon(FROM_HERE, myfiles_watcher_.release());
-  if (removable_media_watcher_)
-    file_task_runner_->DeleteSoon(FROM_HERE,
-                                  removable_media_watcher_.release());
+  // Trigger the callback at the end of the StopWatchingFileSystem. This is
+  // equivalent with DeleteSoon with a callback.
+  file_task_runner_->PostTaskAndReply(
+      FROM_HERE,
+      base::BindOnce([](std::unique_ptr<FileSystemWatcher> watcher) {},
+                     base::Passed(&myfiles_watcher_)),
+      std::move(callback));
 }
 
 std::unique_ptr<ArcFileSystemWatcherService::FileSystemWatcher>
 ArcFileSystemWatcherService::CreateAndStartFileSystemWatcher(
     const base::FilePath& cros_path,
-    const base::FilePath& android_path) {
+    const base::FilePath& android_path,
+    base::OnceClosure callback) {
   auto watcher = std::make_unique<FileSystemWatcher>(
-      context_,
       base::BindRepeating(&ArcFileSystemWatcherService::OnFileSystemChanged,
                           weak_ptr_factory_.GetWeakPtr()),
       cros_path, android_path);
-  file_task_runner_->PostTask(FROM_HERE,
-                              base::BindOnce(&FileSystemWatcher::Start,
-                                             base::Unretained(watcher.get())));
+
+  file_task_runner_->PostTaskAndReply(
+      FROM_HERE,
+      base::BindOnce(&FileSystemWatcher::Start,
+                     base::Unretained(watcher.get())),
+      std::move(callback));
   return watcher;
 }
 
@@ -397,7 +429,7 @@ void ArcFileSystemWatcherService::OnFileSystemChanged(
   for (const std::string& path : paths) {
     if (base::StartsWith(path, kAndroidMyFilesDownloadsDir,
                          base::CompareCase::SENSITIVE)) {
-      // Exclude files under /storage/MyFiles/Downloads/ because they are also
+      // Exclude files under .../MyFiles/Downloads/ because they are also
       // indexed as files under /storage/emulated/0/Download/
       continue;
     }
@@ -405,6 +437,45 @@ void ArcFileSystemWatcherService::OnFileSystemChanged(
   }
 
   instance->RequestMediaScan(filtered_paths);
+}
+
+void ArcFileSystemWatcherService::StartWatchingRemovableMedia(
+    const std::string& fs_uuid,
+    const std::string& mount_path,
+    base::OnceClosure callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  // Make sure that there is no removable media entry. Otherwise, the
+  // map assignment will remove the entry after a new entry is
+  // created, possibly causing crash if there is 2 mount events without
+  // unmounting events in between.
+  if (removable_media_watchers_.count(fs_uuid)) {
+    return;
+  }
+
+  // Make sure the callback is triggered after the file system is attached in
+  // file_task_runner.
+  base::FilePath android_path =
+      base::FilePath(kAndroidStorageDir).Append(fs_uuid);
+  removable_media_watchers_[fs_uuid] = CreateAndStartFileSystemWatcher(
+      base::FilePath(mount_path), android_path, std::move(callback));
+}
+
+void ArcFileSystemWatcherService::StopWatchingRemovableMedia(
+    const std::string& fs_uuid) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (!removable_media_watchers_.count(fs_uuid)) {
+    LOG(ERROR) << "Unmounting non-existing volume with UUID: " << fs_uuid;
+    return;
+  }
+  file_task_runner_->DeleteSoon(FROM_HERE,
+                                removable_media_watchers_[fs_uuid].release());
+  removable_media_watchers_.erase(fs_uuid);
+}
+
+void ArcFileSystemWatcherService::TriggerSendAllMountEvents() const {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  ArcVolumeMounterBridge::GetForBrowserContext(context_)->SendAllMountEvents();
 }
 
 }  // namespace arc

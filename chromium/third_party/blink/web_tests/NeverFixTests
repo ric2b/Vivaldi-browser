@@ -428,6 +428,13 @@ external/wpt/css/css-text/letter-spacing/letter-spacing-104.html [ Skip ]
 external/wpt/css/css-text/letter-spacing/letter-spacing-105.html [ Skip ]
 external/wpt/css/css-text/letter-spacing/letter-spacing-106.html [ Skip ]
 
+# No browsers implemented the spec behavior, not web compatible, no consensus.
+# https://github.com/w3c/csswg-drafts/issues/1518
+external/wpt/css/css-text/letter-spacing/letter-spacing-bidi-003.xht [ Skip ]
+external/wpt/css/css-text/letter-spacing/letter-spacing-bidi-004.xht [ Skip ]
+external/wpt/css/css-text/letter-spacing/letter-spacing-bidi-005.xht [ Skip ]
+external/wpt/css/css-text/letter-spacing/letter-spacing-nesting-003.xht [ Skip ]
+
 # CSS Text features that are not planned to implement.
 external/wpt/css/css-text/parsing/word-boundary-detection-computed.html [ Skip ]
 external/wpt/css/css-text/parsing/word-boundary-detection-invalid.html [ Skip ]
@@ -459,15 +466,21 @@ external/wpt/css/css-text/line-breaking/line-breaking-atomic-006.html [ Skip ]
 external/wpt/css/css-text/line-breaking/line-breaking-replaced-002.html [ Skip ]
 external/wpt/css/css-text/line-breaking/line-breaking-replaced-003.html [ Skip ]
 
+# `tab-size` at non-block container (inline) not implemented.
+external/wpt/css/css-text/tab-size/tab-size-inline-001.html [ Skip ]
+external/wpt/css/css-text/tab-size/tab-size-inline-002.html [ Skip ]
+external/wpt/css/css-text/tab-size/tab-size-integer-004.html [ Skip ]
+
 # Undefined behavior without any implementations.
 external/wpt/css/css-text/white-space/seg-break-transformation-019.html [ Skip ]
 
-# No browsers implemented the spec behavior, not web compatible, no consensus.
-# https://github.com/w3c/csswg-drafts/issues/1518
-external/wpt/css/css-text/letter-spacing/letter-spacing-bidi-003.xht [ Skip ]
-external/wpt/css/css-text/letter-spacing/letter-spacing-bidi-004.xht [ Skip ]
-external/wpt/css/css-text/letter-spacing/letter-spacing-bidi-005.xht [ Skip ]
-external/wpt/css/css-text/letter-spacing/letter-spacing-nesting-003.xht [ Skip ]
+# UAX#9 L1 is not implemented yet.
+crbug.com/316409 external/wpt/css/css-text/white-space/eol-spaces-bidi-002.html [ Skip ]
+
+# Removing trailing ogham spaces not implemented.
+external/wpt/css/css-text/white-space/trailing-ogham-001.html [ Skip ]
+external/wpt/css/css-text/white-space/trailing-ogham-002.html [ Skip ]
+external/wpt/css/css-text/white-space/trailing-ogham-003.html [ Skip ]
 
 external/wpt/css/CSS2/linebox/inline-formatting-context-010b.xht [ Skip ]
 external/wpt/css/CSS2/normal-flow/inline-block-replaced-height-008.xht [ Skip ]
@@ -579,10 +592,6 @@ external/wpt/css/css-fonts/font-weight-lighter-001.xht [ Skip ]
 external/wpt/css/css-fonts/font-weight-normal-001.xht [ Skip ]
 external/wpt/css/css-fonts/test-synthetic-bold.xht [ Skip ]
 external/wpt/css/css-fonts/test-synthetic-italic.xht [ Skip ]
-external/wpt/css/css-text-decor/text-decoration-line-010.xht [ Skip ]
-external/wpt/css/css-text-decor/text-decoration-line-011.xht [ Skip ]
-external/wpt/css/css-text-decor/text-decoration-line-012.xht [ Skip ]
-external/wpt/css/css-text-decor/text-decoration-line-013.xht [ Skip ]
 external/wpt/css/css-text-decor/text-decoration-line-014.xht [ Skip ]
 external/wpt/css/css-ui/canvas-cursor-001.html [ Skip ]
 external/wpt/css/css-ui/canvas-cursor-002.html [ Skip ]
@@ -1361,12 +1370,12 @@ crbug.com/680331 external/wpt/css/css-writing-modes/wm-propagation-body-055.html
 crbug.com/680331 external/wpt/css/cssom-view/scrollIntoView-sideways-lr-writing-mode-and-rtl-direction.html [ Skip ]
 crbug.com/680331 external/wpt/css/cssom-view/scrollIntoView-sideways-rl-writing-mode-and-rtl-direction.html [ Skip ]
 
-# 'overflow: clip' not implemented.
-crbug.com/966283 external/wpt/css/css-overflow/clip-001.html [ Skip ]
-crbug.com/966283 external/wpt/css/css-overflow/dynamic-visible-to-clip-001.html [ Skip ]
-crbug.com/966283 external/wpt/css/css-overflow/overflow-body-propagation-007.html [ Skip ]
+# The expected results of this test are actually wrong, and the output of Blink
+# depends upon whether ng or non-ng is used. This should be fixed by adding the
+# ability for horizontal scrollbars to be dependent upon vertical scrollbars.
+crbug.com/966283 external/wpt/css/css-overflow/clip-003.html [ Skip ]
+# TODO(sky): I believe the ref and test shouldn't actually match. Fix.
 crbug.com/966283 external/wpt/css/css-overflow/overflow-body-propagation-008.html [ Skip ]
-crbug.com/966283 external/wpt/css/css-overflow/overflow-body-propagation-009.html [ Skip ]
 
 # Requires --use-fake-ui-for-media-stream to run.
 external/wpt/mediacapture-streams/MediaStream-default-feature-policy.https.html [ Skip ]
@@ -1406,6 +1415,8 @@ crbug.com/830901 fast/webgl/video-metadata/texImage-video-last-uploaded-metadata
 virtual/webgl-extra-video-texture-metadata/fast/webgl/video-metadata/texImage-video-last-uploaded-metadata.html [ Pass ]
 
 # Below are manual tests from web-platform-tests without automation.
+external/wpt/css/CSS2/tables/table-footer-group-004.xht [ Skip ]
+external/wpt/css/CSS2/tables/table-header-group-004.xht [ Skip ]
 external/wpt/html/canvas/element/manual/drawing-paths-to-the-canvas/canvas_focus_drawFocusIfNeeded_AAPI_001-manual.html [ Skip ]
 external/wpt/FileAPI/FileReader/test_notreadableerrors-manual.html [ Skip ]
 external/wpt/FileAPI/FileReader/test_securityerrors-manual.html [ Skip ]
@@ -1579,7 +1590,6 @@ external/wpt/entries-api/filesystementry-getParent-manual.html [ Skip ]
 external/wpt/entries-api/filesystemfileentry-attributes-manual.html [ Skip ]
 external/wpt/entries-api/filesystemfileentry-file-manual.html [ Skip ]
 external/wpt/entries-api/filesystemfileentry-getParent-manual.html [ Skip ]
-external/wpt/entries-api/idlharness-manual.html [ Skip ]
 external/wpt/geolocation-API/getCurrentPosition_permission-manual.html [ Skip ]
 external/wpt/geolocation-API/getCurrentPosition_permission_allow-manual.html [ Skip ]
 external/wpt/geolocation-API/getCurrentPosition_permission_deny-manual.html [ Skip ]
@@ -2036,9 +2046,13 @@ virtual/trust-tokens/http/tests/inspector-protocol/trust-tokens/* [ Pass ]
 virtual/trust-tokens/http/tests/loading/trust-tokens/* [ Pass ]
 virtual/trust-tokens/external/wpt/trust-tokens/end-to-end/* [ Pass ]
 
+# Mac does not ever have fractional device scale factor.
+[ Mac ] virtual/scalefactor150/* [ Skip ]
+
 # Run these tests with under virtual/scalefactor... only.
 crbug.com/567837 fast/hidpi/static/* [ Skip ]
-virtual/scalefactor150/fast/hidpi/static/* [ Pass ]
+[ Linux ] virtual/scalefactor150/fast/hidpi/static/* [ Pass ]
+[ Win ] virtual/scalefactor150/fast/hidpi/static/* [ Pass ]
 virtual/scalefactor200/fast/hidpi/static/* [ Pass ]
 virtual/scalefactor200withzoom/fast/hidpi/static/* [ Pass ]
 
@@ -2147,10 +2161,12 @@ virtual/passive-fingerprinting/http/tests/navigation/frozen-useragent.html [ Pas
 # This test run under virtual suites only.
 crbug.com/1018640 external/wpt/web-bundle/wbn-from-network/* [ Skip ]
 virtual/wbn-from-network/external/wpt/web-bundle/wbn-from-network/* [ Pass ]
-crbug.com/1082020 external/wpt/web-bundle/subresource-loading/* [ Skip ]
-virtual/subresource-web-bundles/external/wpt/web-bundle/subresource-loading/* [ Pass ]
-crbug.com/1082020 http/tests/loading/wbn/subresource-loading/* [ Skip ]
-virtual/subresource-web-bundles/http/tests/loading/wbn/subresource-loading/* [ Pass ]
+crbug.com/1082020 http/tests/loading/wbn/origin-trial/* [ Skip ]
+virtual/subresource-web-bundles-disabled/http/tests/loading/wbn/origin-trial/* [ Pass ]
+
+# This test requires sxg-subresource-disabled.
+http/tests/loading/sxg/sxg-subresource-origin-trial.https.html [ Skip ]
+virtual/sxg-subresource-disabled/http/tests/loading/sxg/sxg-subresource-origin-trial.https.html [ Pass ]
 
 # No good way to automate this test yet
 external/wpt/native-file-system/showSaveFilePicker-manual.https.html [ Skip ]
@@ -2179,3 +2195,23 @@ crbug.com/626703 [ Win ] external/wpt/html/webappapis/system-state-and-capabilit
 crbug.com/626703 [ Linux ] external/wpt/html/editing/dnd/events/historical-manual.html [ Skip ]
 crbug.com/626703 [ Mac ] external/wpt/html/editing/dnd/events/historical-manual.html [ Skip ]
 crbug.com/626703 [ Win ] external/wpt/html/editing/dnd/events/historical-manual.html [ Skip ]
+
+# Remove from virtual tests when FontAccess is turned on by default.
+external/wpt/font-access/font_access-blob.tentative.https.window.html [ Skip ]
+external/wpt/font-access/font_access-enumeration.tentative.https.window.html [ Skip ]
+virtual/font-access/external/wpt/font-access/font_access-blob.tentative.https.window.html [ Pass ]
+virtual/font-access/external/wpt/font-access/font_access-enumeration.tentative.https.window.html [ Pass ]
+
+# text-orientation:upright
+crbug.com/1005518 external/wpt/css/css-writing-modes/table-progression-vlr-003.html [ Skip ]
+crbug.com/1005518 external/wpt/css/css-writing-modes/table-progression-vlr-004.html [ Skip ]
+crbug.com/1005518 external/wpt/css/css-writing-modes/table-progression-vrl-003.html [ Skip ]
+crbug.com/1005518 external/wpt/css/css-writing-modes/table-progression-vrl-004.html [ Skip ]
+
+# css-pseudo-4 ::spelling-error and ::grammar-error not implemented
+crbug.com/1035708 external/wpt/css/css-pseudo/spelling-error-001.html [ Skip ]
+crbug.com/1035708 external/wpt/css/css-pseudo/grammar-error-001.html [ Skip ]
+crbug.com/1035708 external/wpt/css/css-pseudo/selection-overlay-and-grammar-001.html [ Skip ]
+crbug.com/1035708 external/wpt/css/css-pseudo/selection-overlay-and-spelling-001.html [ Skip ]
+crbug.com/626703 external/wpt/html/browsers/windows/restore-window-name-manual.https.html [ Skip ]
+crbug.com/626703 external/wpt/fullscreen/api/element-request-fullscreen-cross-origin-manual.sub.html [ Skip ]

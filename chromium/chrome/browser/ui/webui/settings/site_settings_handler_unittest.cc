@@ -42,6 +42,7 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/history/core/browser/history_service.h"
@@ -112,6 +113,10 @@ class FlashContentSettingsChangeWaiter : public content_settings::Observer {
       : profile_(profile) {
     HostContentSettingsMapFactory::GetForProfile(profile)->AddObserver(this);
   }
+  FlashContentSettingsChangeWaiter(const FlashContentSettingsChangeWaiter&) =
+      delete;
+  FlashContentSettingsChangeWaiter& operator=(
+      const FlashContentSettingsChangeWaiter&) = delete;
   ~FlashContentSettingsChangeWaiter() override {
     HostContentSettingsMapFactory::GetForProfile(profile_)->RemoveObserver(
         this);
@@ -134,8 +139,6 @@ class FlashContentSettingsChangeWaiter : public content_settings::Observer {
 
   Profile* profile_;
   base::RunLoop run_loop_;
-
-  DISALLOW_COPY_AND_ASSIGN(FlashContentSettingsChangeWaiter);
 };
 #endif
 
@@ -156,6 +159,9 @@ class ContentSettingSourceSetter {
         host_content_settings_map_(
             HostContentSettingsMapFactory::GetForProfile(profile)),
         content_type_(content_type) {}
+  ContentSettingSourceSetter(const ContentSettingSourceSetter&) = delete;
+  ContentSettingSourceSetter& operator=(const ContentSettingSourceSetter&) =
+      delete;
 
   void SetPolicyDefault(ContentSetting setting) {
     prefs_->SetManagedPref(GetPrefNameForDefaultPermissionSetting(),
@@ -177,8 +183,6 @@ class ContentSettingSourceSetter {
   sync_preferences::TestingPrefServiceSyncable* prefs_;
   HostContentSettingsMap* host_content_settings_map_;
   ContentSettingsType content_type_;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentSettingSourceSetter);
 };
 
 class SiteSettingsHandlerTest : public testing::Test {
@@ -1017,7 +1021,7 @@ TEST_F(SiteSettingsHandlerTest, IncognitoExceptions) {
   {
     base::ListValue set_args;
     set_args.AppendString(kOriginToBlock);  // Primary pattern.
-    set_args.AppendString(kOriginToBlock);  // Secondary pattern.
+    set_args.AppendString(std::string());   // Secondary pattern.
     set_args.AppendString(kNotifications);
     set_args.AppendString(
         content_settings::ContentSettingToString(CONTENT_SETTING_BLOCK));
@@ -1045,7 +1049,7 @@ TEST_F(SiteSettingsHandlerTest, IncognitoExceptions) {
   {
     base::ListValue set_args;
     set_args.AppendString(kOriginToBlock);  // Primary pattern.
-    set_args.AppendString(kOriginToBlock);  // Secondary pattern.
+    set_args.AppendString(std::string());   // Secondary pattern.
     set_args.AppendString(kNotifications);
     set_args.AppendString(
         content_settings::ContentSettingToString(CONTENT_SETTING_BLOCK));
@@ -1085,7 +1089,7 @@ TEST_F(SiteSettingsHandlerTest, ResetCategoryPermissionForEmbargoedOrigins) {
   {
     base::ListValue set_args;
     set_args.AppendString(kOriginToBlock);  // Primary pattern.
-    set_args.AppendString(kOriginToBlock);  // Secondary pattern.
+    set_args.AppendString(std::string());   // Secondary pattern.
     set_args.AppendString(kNotifications);
     set_args.AppendString(
         content_settings::ContentSettingToString(CONTENT_SETTING_BLOCK));
@@ -1127,7 +1131,7 @@ TEST_F(SiteSettingsHandlerTest, ResetCategoryPermissionForEmbargoedOrigins) {
     // Reset blocked origin.
     base::ListValue reset_args;
     reset_args.AppendString(kOriginToBlock);
-    reset_args.AppendString(kOriginToBlock);
+    reset_args.AppendString(std::string());
     reset_args.AppendString(kNotifications);
     reset_args.AppendBoolean(false);  // Incognito.
     handler()->HandleResetCategoryPermissionForPattern(&reset_args);
@@ -1145,7 +1149,7 @@ TEST_F(SiteSettingsHandlerTest, ResetCategoryPermissionForEmbargoedOrigins) {
     // Reset embargoed origin.
     base::ListValue reset_args;
     reset_args.AppendString(kOriginToEmbargo);
-    reset_args.AppendString(kOriginToEmbargo);
+    reset_args.AppendString(std::string());
     reset_args.AppendString(kNotifications);
     reset_args.AppendBoolean(false);  // Incognito.
     handler()->HandleResetCategoryPermissionForPattern(&reset_args);
@@ -1168,7 +1172,7 @@ TEST_F(SiteSettingsHandlerTest, Origins) {
     // setting Google.com to blocked.
     base::ListValue set_args;
     set_args.AppendString(google);  // Primary pattern.
-    set_args.AppendString(google);  // Secondary pattern.
+    set_args.AppendString(std::string());  // Secondary pattern.
     set_args.AppendString(kNotifications);
     set_args.AppendString(
         content_settings::ContentSettingToString(CONTENT_SETTING_BLOCK));
@@ -1187,14 +1191,14 @@ TEST_F(SiteSettingsHandlerTest, Origins) {
   get_exception_list_args.AppendString(kCallbackId);
   get_exception_list_args.AppendString(kNotifications);
   handler()->HandleGetExceptionList(&get_exception_list_args);
-  ValidateOrigin(google, google, google, CONTENT_SETTING_BLOCK,
+  ValidateOrigin(google, "", google, CONTENT_SETTING_BLOCK,
                  site_settings::SiteSettingSource::kPreference, 2U);
 
   {
     // Reset things back to how they were.
     base::ListValue reset_args;
     reset_args.AppendString(google);
-    reset_args.AppendString(google);
+    reset_args.AppendString(std::string());
     reset_args.AppendString(kNotifications);
     reset_args.AppendBoolean(false);  // Incognito.
     base::HistogramTester histograms;
@@ -1226,7 +1230,7 @@ TEST_F(SiteSettingsHandlerTest, NotificationPermissionRevokeUkm) {
   {
     base::ListValue set_notification_origin_args;
     set_notification_origin_args.AppendString(google);
-    set_notification_origin_args.AppendString(google);
+    set_notification_origin_args.AppendString("");
     set_notification_origin_args.AppendString(kNotifications);
     set_notification_origin_args.AppendString(
         content_settings::ContentSettingToString(CONTENT_SETTING_ALLOW));
@@ -1238,7 +1242,7 @@ TEST_F(SiteSettingsHandlerTest, NotificationPermissionRevokeUkm) {
   {
     base::ListValue set_notification_origin_args;
     set_notification_origin_args.AppendString(google);
-    set_notification_origin_args.AppendString(google);
+    set_notification_origin_args.AppendString("");
     set_notification_origin_args.AppendString(kNotifications);
     set_notification_origin_args.AppendString(
         content_settings::ContentSettingToString(CONTENT_SETTING_BLOCK));
@@ -1304,7 +1308,7 @@ TEST_F(SiteSettingsHandlerTest, MAYBE_DefaultSettingSource) {
 
   base::ListValue set_notification_pattern_args;
   set_notification_pattern_args.AppendString("[*.]google.com");
-  set_notification_pattern_args.AppendString("*");
+  set_notification_pattern_args.AppendString("");
   set_notification_pattern_args.AppendString(kNotifications);
   set_notification_pattern_args.AppendString(
       content_settings::ContentSettingToString(CONTENT_SETTING_ALLOW));
@@ -1318,7 +1322,7 @@ TEST_F(SiteSettingsHandlerTest, MAYBE_DefaultSettingSource) {
 
   base::ListValue set_notification_origin_args;
   set_notification_origin_args.AppendString(google);
-  set_notification_origin_args.AppendString(google);
+  set_notification_origin_args.AppendString("");
   set_notification_origin_args.AppendString(kNotifications);
   set_notification_origin_args.AppendString(
       content_settings::ContentSettingToString(CONTENT_SETTING_BLOCK));
@@ -1476,7 +1480,8 @@ TEST_F(SiteSettingsHandlerTest, ExceptionHelpers) {
       ContentSettingsPattern::FromString("[*.]google.com");
   std::unique_ptr<base::DictionaryValue> exception =
       site_settings::GetExceptionForPage(
-          pattern, pattern, pattern.ToString(), CONTENT_SETTING_BLOCK,
+          pattern, ContentSettingsPattern::Wildcard(), pattern.ToString(),
+          CONTENT_SETTING_BLOCK,
           site_settings::SiteSettingSourceToString(
               site_settings::SiteSettingSource::kPreference),
           false);
@@ -1610,7 +1615,10 @@ class SiteSettingsHandlerInfobarTest : public BrowserWithTestWindowTest {
   SiteSettingsHandlerInfobarTest()
       : kNotifications(site_settings::ContentSettingsTypeToGroupName(
             ContentSettingsType::NOTIFICATIONS)) {}
-
+  SiteSettingsHandlerInfobarTest(const SiteSettingsHandlerInfobarTest&) =
+      delete;
+  SiteSettingsHandlerInfobarTest& operator=(
+      const SiteSettingsHandlerInfobarTest&) = delete;
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
     handler_ = std::make_unique<SiteSettingsHandler>(profile(), app_registrar_);
@@ -1665,8 +1673,6 @@ class SiteSettingsHandlerInfobarTest : public BrowserWithTestWindowTest {
   std::unique_ptr<SiteSettingsHandler> handler_;
   std::unique_ptr<BrowserWindow> window2_;
   std::unique_ptr<Browser> browser2_;
-
-  DISALLOW_COPY_AND_ASSIGN(SiteSettingsHandlerInfobarTest);
 };
 
 TEST_F(SiteSettingsHandlerInfobarTest, SettingPermissionsTriggersInfobar) {
@@ -1825,7 +1831,7 @@ TEST_F(SiteSettingsHandlerTest, SessionOnlyException) {
   const std::string uma_base("WebsiteSettings.Menu.PermissionChanged");
   base::ListValue set_args;
   set_args.AppendString(google_with_port);  // Primary pattern.
-  set_args.AppendString(google_with_port);  // Secondary pattern.
+  set_args.AppendString(std::string());     // Secondary pattern.
   set_args.AppendString(kCookies);
   set_args.AppendString(
       content_settings::ContentSettingToString(CONTENT_SETTING_SESSION_ONLY));
@@ -2498,7 +2504,6 @@ TEST_F(SiteSettingsHandlerTest, CookieSettingDescription) {
       IDS_SETTINGS_SITE_SETTINGS_COOKIES_BLOCK_THIRD_PARTY_INCOGNITO);
 
   // Enforce expected default profile setting.
-  profile()->GetPrefs()->SetBoolean(prefs::kBlockThirdPartyCookies, false);
   profile()->GetPrefs()->SetInteger(
       prefs::kCookieControlsMode,
       static_cast<int>(content_settings::CookieControlsMode::kIncognitoOnly));
@@ -2526,7 +2531,9 @@ TEST_F(SiteSettingsHandlerTest, CookieSettingDescription) {
   const int kContentSettingListenerIndex = 2;
 
   // Check updates are working,
-  profile()->GetPrefs()->SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  profile()->GetPrefs()->SetInteger(
+      prefs::kCookieControlsMode,
+      static_cast<int>(content_settings::CookieControlsMode::kBlockThirdParty));
   expected_call_index += kPrefListenerIndex;
   ValidateCookieSettingUpdate(kBlockThirdParty, expected_call_index);
 
@@ -2536,10 +2543,6 @@ TEST_F(SiteSettingsHandlerTest, CookieSettingDescription) {
   ValidateCookieSettingUpdate(kBlocked(0), expected_call_index);
 
   // Check changes which do not affect the effective cookie setting.
-  profile()->GetPrefs()->SetBoolean(prefs::kBlockThirdPartyCookies, false);
-  expected_call_index += kPrefListenerIndex;
-  ValidateCookieSettingUpdate(kBlocked(0), expected_call_index);
-
   profile()->GetPrefs()->SetInteger(
       prefs::kCookieControlsMode,
       static_cast<int>(content_settings::CookieControlsMode::kOff));

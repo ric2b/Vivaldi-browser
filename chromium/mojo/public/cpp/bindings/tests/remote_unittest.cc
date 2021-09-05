@@ -1077,8 +1077,8 @@ TEST_P(RemoteTest, SharedRemoteSyncCallsFromBoundNonConstructionSequence) {
   int32_t value = 0;
   base::RunLoop loop;
   base::OnceClosure quit = loop.QuitClosure();
-  SharedRemote<mojom::SharedRemoteSyncTest> remote(
-      std::move(pending_remote), std::move(background_task_runner));
+  SharedRemote<mojom::SharedRemoteSyncTest> remote(std::move(pending_remote),
+                                                   background_task_runner);
   background_task_runner->PostTask(
       FROM_HERE, base::BindLambdaForTesting([remote, &value, &quit] {
         EXPECT_TRUE(remote->Fetch(&value));
@@ -1193,6 +1193,16 @@ class LargeMessageTestImpl : public mojom::LargeMessageTest {
     std::move(callback).Run(data.size());
   }
 
+  void ProcessLotsOfData(const std::vector<uint8_t>& data,
+                         ProcessLotsOfDataCallback callback) override {
+    std::move(callback).Run(data.size());
+  }
+
+  void GetLotsOfData(uint64_t data_size,
+                     GetLotsOfDataCallback callback) override {
+    std::move(callback).Run(std::vector<uint8_t>(data_size));
+  }
+
  private:
   Receiver<mojom::LargeMessageTest> receiver_;
 };
@@ -1221,6 +1231,22 @@ TEST_P(RemoteTest, SendVeryLargeMessages) {
   } else {
     EXPECT_TRUE(did_dump_without_crashing);
   }
+
+  did_dump_without_crashing = false;
+  data_size = 0;
+  ASSERT_TRUE(remote->ProcessLotsOfData(lots_of_data, &data_size));
+  EXPECT_EQ(kBigDataSize, data_size);
+
+  // Serialized or not, this message won't generate a crash report because it's
+  // explicitly marked with [UnlimitedSize].
+  EXPECT_FALSE(did_dump_without_crashing);
+
+  // [UnlimitedSize] also allows replies to be large.
+  did_dump_without_crashing = false;
+  lots_of_data.clear();
+  ASSERT_TRUE(remote->GetLotsOfData(kBigDataSize, &lots_of_data));
+  EXPECT_EQ(kBigDataSize, lots_of_data.size());
+  EXPECT_FALSE(did_dump_without_crashing);
 
   base::debug::SetDumpWithoutCrashingFunction(nullptr);
 }

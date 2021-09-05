@@ -765,10 +765,8 @@ void ChromeBrowserMainPartsWin::RegisterApplicationRestart(
       RESTART_NO_CRASH | RESTART_NO_HANG | RESTART_NO_PATCH);
   if (FAILED(hr)) {
     if (hr == E_INVALIDARG) {
-      if (!parsed_command_line.HasSwitch(switches::kBrowserTest)) {
-        LOG(WARNING) << "Command line too long for RegisterApplicationRestart: "
-                     << command_line_string;
-      }
+      LOG(WARNING) << "Command line too long for RegisterApplicationRestart: "
+                   << command_line_string;
     } else {
       NOTREACHED() << "RegisterApplicationRestart failed. hr: " << hr
                    << ", command_line: " << command_line_string;
@@ -791,7 +789,7 @@ int ChromeBrowserMainPartsWin::HandleIconsCommands(
       ShellExecute(NULL, NULL, L"appwiz.cpl", NULL, NULL, SW_SHOWNORMAL);
 
     // Exit as we are not launching the browser.
-    return service_manager::RESULT_CODE_NORMAL_EXIT;
+    return content::RESULT_CODE_NORMAL_EXIT;
   }
   // We don't hide icons so we shouldn't do anything special to show them
   return chrome::RESULT_CODE_UNSUPPORTED_PARAM;

@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">巻末注</translation>
 <translation id="1281252709823657822">ダイアログ</translation>
 <translation id="1306460908038601864">オフ</translation>
+<translation id="1311894908970423688">値は <ph name="VALUE_DATE_OR_TIME" /> とする必要があります。</translation>
 <translation id="1335095011850992622">クレジット</translation>
 <translation id="1342835525016946179">記事</translation>
 <translation id="1359897965706325498">バナー</translation>
+<translation id="145015347812617860"><ph name="COUNT" />個のアイテム</translation>
 <translation id="1480676835519562650">複数の選択が可能です。<ph name="COUNT" /> 件中 <ph name="SELECTED" /> 件が選択されています。</translation>
 <translation id="1589122976691792535">地域</translation>
 <translation id="1591562245178063882">今月</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033"><ph name="YEAR" />年第<ph name="WEEKNUMBER" />週</translation>
 <translation id="2277199496770840904">トラック <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">チェックボックス</translation>
+<translation id="2307576640803031502">リスト内の <ph name="COUNT" /> 件中 <ph name="INDEX" /> 件目のアイテム</translation>
 <translation id="2311842470354187719">改ページ</translation>
 <translation id="2335594187091864976">日時選択ツール</translation>
 <translation id="2393030564806080191">16 進数色コード</translation>
@@ -53,7 +56,7 @@
 <translation id="2507943997699731163">このフィールドを入力してください。</translation>
 <translation id="2508569020611168319">タブリスト</translation>
 <translation id="2530182415807757784">複数の選択が可能です。項目が選択されていません。</translation>
-<translation id="2561842179657104141">その他のメディア コントロールを表示</translation>
+<translation id="2561842179657104141">その他のメディア操作ボタンを表示</translation>
 <translation id="2572483411312390101">再生</translation>
 <translation id="2613802280814924224">有効な値を入力してください。有効な値として最も近いのは <ph name="VALID_VALUE" /> です。</translation>
 <translation id="2634240155926812724">緑チャネル</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">その他のオプション</translation>
 <translation id="576709008726043716">序論</translation>
 <translation id="57838592816432529">ミュート</translation>
+<translation id="5860033963881614850">オフ</translation>
 <translation id="588258955323874662">全画面表示</translation>
 <translation id="5888666972993069672">現在 <ph name="DEVICE_FRIENDLY_NAME" /> にキャストしています</translation>
 <translation id="591047860372322273">検索ボックス</translation>
+<translation id="5916664084637901428">オン</translation>
 <translation id="5939518447894949180">リセット</translation>
 <translation id="5966707198760109579">週</translation>
 <translation id="5987525920412732405">スピンボタン</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">削除</translation>
 <translation id="668171684555832681">その他...</translation>
 <translation id="6692633176391053278">ステッパー</translation>
+<translation id="6709093583001123835">値は <ph name="VALUE" /> とする必要があります。</translation>
 <translation id="6709570249143506788">低再生画質</translation>
 <translation id="6755330956360078551">ツールチップ</translation>
 <translation id="6790428901817661496">再生</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK_START_DATE" /> から始まる <ph name="WEEK" /></translation>
 <translation id="916607977885256133">ピクチャー イン ピクチャー</translation>
 <translation id="9168329111483466115">脚注</translation>
+<translation id="945780513535800434">一部オン</translation>
 <translation id="954003015749068518">ピクチャー イン ピクチャーを開始します</translation>
 <translation id="966787709310836684">メニュー</translation>
 </translationbundle>

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/scanning/lorgnette_scanner_manager.h"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -149,12 +150,23 @@ class LorgnetteScannerManagerTest : public testing::Test {
                    base::Unretained(this)));
   }
 
+  // Calls LorgnetteScannerManager::GetScannerCapabilities() and binds a
+  // callback to process the result.
+  void GetScannerCapabilities(const std::string& scanner_name) {
+    lorgnette_scanner_manager_->GetScannerCapabilities(
+        scanner_name,
+        base::Bind(&LorgnetteScannerManagerTest::GetScannerCapabilitiesCallback,
+                   base::Unretained(this)));
+  }
+
   // Calls LorgnetteScannerManager::Scan() and binds a callback to process the
   // result.
   void Scan(const std::string& scanner_name,
-            const LorgnetteManagerClient::ScanProperties& scan_properties) {
+            const lorgnette::ScanSettings& settings) {
     lorgnette_scanner_manager_->Scan(
-        scanner_name, scan_properties,
+        scanner_name, settings,
+        base::BindRepeating(&LorgnetteScannerManagerTest::PageCallback,
+                            base::Unretained(this)),
         base::Bind(&LorgnetteScannerManagerTest::ScanCallback,
                    base::Unretained(this)));
   }
@@ -176,7 +188,12 @@ class LorgnetteScannerManagerTest : public testing::Test {
     return scanner_names_;
   }
 
-  base::Optional<std::string> scan_data() const { return scan_data_; }
+  base::Optional<lorgnette::ScannerCapabilities> scanner_capabilities() const {
+    return scanner_capabilities_;
+  }
+
+  std::vector<std::string> scan_data() const { return scan_data_; }
+  bool scan_success() const { return scan_success_; }
 
  private:
   // Handles the result of calling LorgnetteScannerManager::GetScannerNames().
@@ -185,9 +202,21 @@ class LorgnetteScannerManagerTest : public testing::Test {
     run_loop_->Quit();
   }
 
-  // Handles the result of calling LorgnetteScannerManager::Scan().
-  void ScanCallback(base::Optional<std::string> scan_data) {
-    scan_data_ = scan_data;
+  void GetScannerCapabilitiesCallback(
+      const base::Optional<lorgnette::ScannerCapabilities>&
+          scanner_capabilities) {
+    scanner_capabilities_ = scanner_capabilities;
+    run_loop_->Quit();
+  }
+
+  // Handles receiving a page from LorgnetteScannerManager::Scan().
+  void PageCallback(std::string page_data, uint32_t /*page_number*/) {
+    scan_data_.push_back(page_data);
+  }
+
+  // Handles completion of LorgnetteScannerManager::Scan().
+  void ScanCallback(bool success) {
+    scan_success_ = success;
     run_loop_->Quit();
   }
 
@@ -200,7 +229,9 @@ class LorgnetteScannerManagerTest : public testing::Test {
   std::unique_ptr<LorgnetteScannerManager> lorgnette_scanner_manager_;
 
   std::vector<std::string> scanner_names_;
-  base::Optional<std::string> scan_data_;
+  base::Optional<lorgnette::ScannerCapabilities> scanner_capabilities_;
+  bool scan_success_ = false;
+  std::vector<std::string> scan_data_;
 };
 
 // Test that no scanner names are returned when no scanners have been detected.
@@ -304,12 +335,80 @@ TEST_F(LorgnetteScannerManagerTest, RemoveScanner) {
   EXPECT_TRUE(scanner_names().empty());
 }
 
+// Test that getting capabilities fails when GetScannerNames() has never been
+// called.
+TEST_F(LorgnetteScannerManagerTest, GetCapsNoScanner) {
+  GetScannerCapabilities(kUnknownScannerName);
+  WaitForResult();
+  EXPECT_FALSE(scanner_capabilities());
+}
+
+// Test that getting capabilities fails when the scanner name does not
+// correspond to a known scanner.
+TEST_F(LorgnetteScannerManagerTest, GetCapsUnknownScanner) {
+  fake_zeroconf_scanner_detector()->AddDetections({CreateZeroconfScanner()});
+  CompleteTasks();
+  GetScannerNames();
+  WaitForResult();
+  GetScannerCapabilities(kUnknownScannerName);
+  WaitForResult();
+  EXPECT_FALSE(scanner_capabilities());
+}
+
+// Test that getting capabilities fails when there is no usable device name.
+TEST_F(LorgnetteScannerManagerTest, GetCapsNoUsableDeviceName) {
+  auto scanner = CreateZeroconfScanner(/*usable=*/false);
+  fake_zeroconf_scanner_detector()->AddDetections({scanner});
+  CompleteTasks();
+  GetScannerNames();
+  WaitForResult();
+  GetScannerCapabilities(scanner.display_name);
+  WaitForResult();
+  EXPECT_FALSE(scanner_capabilities());
+}
+
+// Test that failing to get capabilities from lorgnette returns no capabilities.
+TEST_F(LorgnetteScannerManagerTest, GetCapsFail) {
+  auto scanner = CreateZeroconfScanner();
+  fake_zeroconf_scanner_detector()->AddDetections({scanner});
+  CompleteTasks();
+  GetScannerNames();
+  WaitForResult();
+  GetLorgnetteManagerClient()->SetScannerCapabilitiesResponse(base::nullopt);
+  GetScannerCapabilities(scanner.display_name);
+  WaitForResult();
+  EXPECT_FALSE(scanner_capabilities());
+}
+
+// Test that getting capabilities succeeds with a valid scanner name.
+TEST_F(LorgnetteScannerManagerTest, GetCaps) {
+  auto scanner = CreateZeroconfScanner();
+  fake_zeroconf_scanner_detector()->AddDetections({scanner});
+  CompleteTasks();
+  GetScannerNames();
+  WaitForResult();
+  lorgnette::ScannerCapabilities capabilities;
+  capabilities.add_resolutions(300);
+  capabilities.add_color_modes(lorgnette::MODE_COLOR);
+  GetLorgnetteManagerClient()->SetScannerCapabilitiesResponse(capabilities);
+  GetScannerCapabilities(scanner.display_name);
+  WaitForResult();
+  ASSERT_TRUE(scanner_capabilities());
+  const auto caps = scanner_capabilities().value();
+  ASSERT_EQ(caps.resolutions_size(), 1);
+  EXPECT_EQ(caps.resolutions()[0], 300u);
+  EXPECT_EQ(caps.sources_size(), 0);
+  ASSERT_EQ(caps.color_modes_size(), 1);
+  EXPECT_EQ(caps.color_modes()[0], lorgnette::MODE_COLOR);
+}
+
 // Test that scanning fails when GetScannerNames() has never been called.
 TEST_F(LorgnetteScannerManagerTest, NoScannersNames) {
-  chromeos::LorgnetteManagerClient::ScanProperties properties;
-  Scan(kUnknownScannerName, properties);
+  lorgnette::ScanSettings settings;
+  Scan(kUnknownScannerName, settings);
   WaitForResult();
-  EXPECT_FALSE(scan_data());
+  EXPECT_EQ(scan_data().size(), 0);
+  EXPECT_FALSE(scan_success());
 }
 
 // Test that scanning fails when the scanner name does not correspond to a known
@@ -319,10 +418,11 @@ TEST_F(LorgnetteScannerManagerTest, UnknownScannerName) {
   CompleteTasks();
   GetScannerNames();
   WaitForResult();
-  chromeos::LorgnetteManagerClient::ScanProperties properties;
-  Scan(kUnknownScannerName, properties);
+  lorgnette::ScanSettings settings;
+  Scan(kUnknownScannerName, settings);
   WaitForResult();
-  EXPECT_FALSE(scan_data());
+  EXPECT_EQ(scan_data().size(), 0);
+  EXPECT_FALSE(scan_success());
 }
 
 // Test that scanning fails when there is no usable device name.
@@ -332,25 +432,47 @@ TEST_F(LorgnetteScannerManagerTest, NoUsableDeviceName) {
   CompleteTasks();
   GetScannerNames();
   WaitForResult();
-  chromeos::LorgnetteManagerClient::ScanProperties properties;
-  Scan(scanner.display_name, properties);
+  lorgnette::ScanSettings settings;
+  Scan(scanner.display_name, settings);
   WaitForResult();
-  EXPECT_FALSE(scan_data());
+  EXPECT_EQ(scan_data().size(), 0);
+  EXPECT_FALSE(scan_success());
 }
 
 // Test that scanning succeeds with a valid scanner name.
-TEST_F(LorgnetteScannerManagerTest, Scan) {
+TEST_F(LorgnetteScannerManagerTest, ScanOnePage) {
   auto scanner = CreateZeroconfScanner();
   fake_zeroconf_scanner_detector()->AddDetections({scanner});
   CompleteTasks();
   GetScannerNames();
   WaitForResult();
-  GetLorgnetteManagerClient()->SetScanResponse("TestScanData");
-  chromeos::LorgnetteManagerClient::ScanProperties properties;
-  Scan(scanner.display_name, properties);
+  std::vector<std::string> pages = {"TestScanData"};
+  GetLorgnetteManagerClient()->SetScanResponse(pages);
+  lorgnette::ScanSettings settings;
+  Scan(scanner.display_name, settings);
   WaitForResult();
-  ASSERT_TRUE(scan_data());
-  EXPECT_EQ(scan_data().value(), "TestScanData");
+  ASSERT_EQ(scan_data().size(), 1);
+  EXPECT_EQ(scan_data()[0], "TestScanData");
+  EXPECT_TRUE(scan_success());
+}
+
+TEST_F(LorgnetteScannerManagerTest, ScanMultiplePages) {
+  auto scanner = CreateZeroconfScanner();
+  fake_zeroconf_scanner_detector()->AddDetections({scanner});
+  CompleteTasks();
+  GetScannerNames();
+  WaitForResult();
+  std::vector<std::string> pages = {"TestPageOne", "TestPageTwo",
+                                    "TestPageThree"};
+  GetLorgnetteManagerClient()->SetScanResponse(pages);
+  lorgnette::ScanSettings settings;
+  Scan(scanner.display_name, settings);
+  WaitForResult();
+  ASSERT_EQ(scan_data().size(), 3);
+  EXPECT_EQ(scan_data()[0], "TestPageOne");
+  EXPECT_EQ(scan_data()[1], "TestPageTwo");
+  EXPECT_EQ(scan_data()[2], "TestPageThree");
+  EXPECT_TRUE(scan_success());
 }
 
 }  // namespace chromeos

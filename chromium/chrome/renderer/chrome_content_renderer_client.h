@@ -62,7 +62,6 @@ class WebRtcLoggingAgentImpl;
 }  // namespace chrome
 
 namespace content {
-class BrowserPluginDelegate;
 struct WebPluginInfo;
 }  // namespace content
 
@@ -105,9 +104,6 @@ class ChromeContentRendererClient
       content::RenderFrame* render_frame,
       const base::FilePath& plugin_path) override;
   bool HasErrorPage(int http_status_code) override;
-  bool ShouldSuppressErrorPage(content::RenderFrame* render_frame,
-                               const GURL& url,
-                               int error_code) override;
   bool ShouldTrackUseCounter(const GURL& url) override;
   void PrepareErrorPage(content::RenderFrame* render_frame,
                         const blink::WebURLError& error,
@@ -159,11 +155,6 @@ class ChromeContentRendererClient
       override;
   bool IsKeySystemsUpdateNeeded() override;
   bool IsPluginAllowedToUseCameraDeviceAPI(const GURL& url) override;
-  content::BrowserPluginDelegate* CreateBrowserPluginDelegate(
-      content::RenderFrame* render_frame,
-      const content::WebPluginInfo& info,
-      const std::string& mime_type,
-      const GURL& original_url) override;
   void RunScriptsAtDocumentStart(content::RenderFrame* render_frame) override;
   void RunScriptsAtDocumentEnd(content::RenderFrame* render_frame) override;
   void RunScriptsAtDocumentIdle(content::RenderFrame* render_frame) override;
@@ -202,6 +193,12 @@ class ChromeContentRendererClient
   bool IsSafeRedirectTarget(const GURL& url) override;
   void DidSetUserAgent(const std::string& user_agent) override;
   bool RequiresWebComponentsV0(const GURL& url) override;
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  void MaybeProxyURLLoaderFactory(
+      content::RenderFrame* render_frame,
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver)
+      override;
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if BUILDFLAG(ENABLE_PLUGINS)
   static mojo::AssociatedRemote<chrome::mojom::PluginInfoHost>&

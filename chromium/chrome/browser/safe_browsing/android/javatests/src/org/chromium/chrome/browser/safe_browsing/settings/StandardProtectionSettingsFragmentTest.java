@@ -25,10 +25,10 @@ import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
+import org.chromium.components.policy.test.annotations.Policies;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
-import org.chromium.policy.test.annotations.Policies;
 
 /**
  * Tests for {@link StandardProtectionSettingsFragment}.
@@ -240,6 +240,29 @@ public class StandardProtectionSettingsFragmentTest {
                     mPasswordLeakDetectionPreference.isEnabled());
             Assert.assertTrue(ASSERT_MESSAGE_PREFIX + LEAK_DETECTION + CHECKED_STATE,
                     mPasswordLeakDetectionPreference.isChecked());
+        });
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"SafeBrowsing"})
+    @Policies.Add({ @Policies.Item(key = "SafeBrowsingExtendedReportingEnabled", string = "true") })
+    public void testExtendedReportingPolicyManaged() {
+        mBrowserTestRule.addAndSignInTestAccount();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            ChromeBrowserInitializer.getInstance().handleSynchronousStartup();
+            SafeBrowsingBridge.setSafeBrowsingState(SafeBrowsingState.STANDARD_PROTECTION);
+        });
+        launchSettingsActivity();
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertTrue(
+                    ASSERT_MESSAGE_PREFIX + EXTENDED_REPORTING + MANAGED_STATE + FROM_NATIVE,
+                    SafeBrowsingBridge.isSafeBrowsingExtendedReportingManaged());
+            Assert.assertFalse(ASSERT_MESSAGE_PREFIX + EXTENDED_REPORTING + ENABLED_STATE,
+                    mExtendedReportingPreference.isEnabled());
+            Assert.assertTrue(ASSERT_MESSAGE_PREFIX + EXTENDED_REPORTING + CHECKED_STATE,
+                    mExtendedReportingPreference.isChecked());
         });
     }
 

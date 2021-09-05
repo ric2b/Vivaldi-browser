@@ -19,6 +19,12 @@ class KaleidoscopeToolbarElement extends PolymerElement {
     return {
       // Controls whether the search field is shown.
       showSearch: {type: Boolean, value: false},
+
+      // Sets the tooltip text displayed on the menu button.
+      menuLabel: {type: String, value: ''},
+
+      // Sets the text displayed beside the menu button.
+      pageName: {type: String, value: ''},
     };
   }
 }

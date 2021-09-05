@@ -24,13 +24,14 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
-import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
 import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -43,8 +44,7 @@ import java.util.ArrayList;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class WebShareTest {
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     private static final String TEST_FILE = "/content/test/data/android/webshare.html";
     private static final String TEST_FILE_APK = "/content/test/data/android/webshare-apk.html";
@@ -133,16 +133,19 @@ public class WebShareTest {
     @Test
     @MediumTest
     @Feature({"WebShare"})
+    @Features.DisableFeatures(ChromeFeatureList.CHROME_SHARING_HUB)
     @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP_MR1)
-    public void testWebShareCancel() throws Exception {
-        // Set up ShareHelper to ignore the intent (without showing a picker). This simulates the
-        // user canceling the dialog.
+    public void testWebShareDoubleRequest() throws Exception {
+        // Set up ShareHelper to ignore the intent (without showing a picker),
+        // and request another share.
         ShareHelper.setFakeIntentReceiverForTesting(new FakeIntentReceiverPostLMR1(false));
 
         mActivityTestRule.loadUrl(mTestServer.getURL(TEST_FILE));
         // Click (instead of directly calling the JavaScript function) to simulate a user gesture.
         TouchCommon.singleClickView(mTab.getView());
-        Assert.assertEquals("Fail: AbortError: Share canceled", mUpdateWaiter.waitForUpdate());
+        Assert.assertEquals("Fail: InvalidStateError: Failed to execute 'share' on 'Navigator': "
+                        + "A earlier share had not yet completed.",
+                mUpdateWaiter.waitForUpdate());
     }
 
     /**
@@ -153,6 +156,7 @@ public class WebShareTest {
     @Test
     @MediumTest
     @Feature({"WebShare"})
+    @Features.DisableFeatures(ChromeFeatureList.CHROME_SHARING_HUB)
     @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP_MR1)
     public void testWebShareSuccess() throws Exception {
         // Set up ShareHelper to immediately succeed (without showing a picker).
@@ -178,6 +182,7 @@ public class WebShareTest {
     @Test
     @MediumTest
     @Feature({"WebShare"})
+    @Features.DisableFeatures(ChromeFeatureList.CHROME_SHARING_HUB)
     @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP_MR1)
     public void testWebShareOgg() throws Exception {
         // Set up ShareHelper to immediately succeed (without showing a picker).
@@ -203,6 +208,7 @@ public class WebShareTest {
     @Test
     @MediumTest
     @Feature({"WebShare"})
+    @Features.DisableFeatures(ChromeFeatureList.CHROME_SHARING_HUB)
     @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP_MR1)
     public void testWebShareBmp() throws Exception {
         // Set up ShareHelper to immediately succeed (without showing a picker).
@@ -292,6 +298,7 @@ public class WebShareTest {
     @Test
     @MediumTest
     @Feature({"WebShare"})
+    @Features.DisableFeatures(ChromeFeatureList.CHROME_SHARING_HUB)
     public void testWebShareCancelPreLMR1() throws Exception {
         ShareHelper.setFakeIntentReceiverForTesting(new FakeIntentReceiverPreLMR1(false));
 
@@ -313,6 +320,7 @@ public class WebShareTest {
     @Test
     @MediumTest
     @Feature({"WebShare"})
+    @Features.DisableFeatures(ChromeFeatureList.CHROME_SHARING_HUB)
     public void testWebShareSuccessPreLMR1() throws Exception {
         ShareHelper.setFakeIntentReceiverForTesting(new FakeIntentReceiverPreLMR1(true));
 
@@ -334,6 +342,7 @@ public class WebShareTest {
     @Test
     @MediumTest
     @Feature({"WebShare"})
+    @Features.DisableFeatures(ChromeFeatureList.CHROME_SHARING_HUB)
     public void testWebShareOggPreLMR1() throws Exception {
         ShareHelper.setFakeIntentReceiverForTesting(new FakeIntentReceiverPreLMR1(true));
 
@@ -356,6 +365,7 @@ public class WebShareTest {
     @Test
     @MediumTest
     @Feature({"WebShare"})
+    @Features.DisableFeatures(ChromeFeatureList.CHROME_SHARING_HUB)
     public void testWebShareCsvPreLMR1() throws Exception {
         ShareHelper.setFakeIntentReceiverForTesting(new FakeIntentReceiverPreLMR1(true));
 
@@ -448,10 +458,8 @@ public class WebShareTest {
             mReceivedIntent = intent;
 
             if (!mProceed) {
-                // Click again to start another share, which cancels the current share.
-                // This is necessary to work around https://crbug.com/636274 (callback
-                // is not canceled until next share is initiated).
-                // This also serves as a regression test for https://crbug.com/640324.
+                // Click again to start another share, which fails as a share is already in
+                // progress.
                 TouchCommon.singleClickView(mTab.getView());
                 return;
             }

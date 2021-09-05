@@ -231,7 +231,8 @@
         "chrome://hats/*",
         "chrome://mobilesetup/*",
         "chrome://oobe/*",
-        "chrome://password-change/*"
+        "chrome://password-change/*",
+        "chrome://lock-reauth/*"
       ]
     }
   ],
@@ -446,6 +447,9 @@
   "runtime.getBackgroundPage": {
     "disallow_for_service_workers": true
   },
+  "runtime.getPackageDirectoryEntry": {
+    "disallow_for_service_workers": true
+  },
   "runtime.getManifest": {
     "contexts": [
       "blessed_extension",
@@ -652,7 +656,8 @@
       "chrome://home/*",
       "chrome://mobilesetup/*",
       "chrome://oobe/*",
-      "chrome://password-change/*"
+      "chrome://password-change/*",
+      "chrome://lock-reauth/*"
     ]
   }],
   "webViewInternal": [{
@@ -673,7 +678,8 @@
       "chrome://home/*",
       "chrome://mobilesetup/*",
       "chrome://oobe/*",
-      "chrome://password-change/*"
+      "chrome://password-change/*",
+      "chrome://lock-reauth/*"
     ]
   }],
   "webViewRequest": [{

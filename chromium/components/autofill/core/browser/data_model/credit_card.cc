@@ -120,7 +120,8 @@ CreditCard::CreditCard(const std::string& guid, const std::string& origin)
       expiration_month_(0),
       expiration_year_(0),
       server_status_(OK),
-      card_issuer_(ISSUER_UNKNOWN) {}
+      card_issuer_(ISSUER_UNKNOWN),
+      instrument_id_(0) {}
 
 CreditCard::CreditCard(RecordType type, const std::string& server_id)
     : CreditCard() {
@@ -556,6 +557,7 @@ void CreditCard::operator=(const CreditCard& credit_card) {
   temp_card_last_name_ = credit_card.temp_card_last_name_;
   nickname_ = credit_card.nickname_;
   card_issuer_ = credit_card.card_issuer_;
+  instrument_id_ = credit_card.instrument_id_;
 
   set_guid(credit_card.guid());
   set_origin(credit_card.origin());
@@ -860,9 +862,7 @@ base::string16 CreditCard::NetworkAndLastFourDigits() const {
 
 base::string16 CreditCard::CardIdentifierStringForAutofillDisplay(
     base::string16 customized_nickname) const {
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillEnableSurfacingServerCardNickname) &&
-      (HasNonEmptyValidNickname() || !customized_nickname.empty())) {
+  if (HasNonEmptyValidNickname() || !customized_nickname.empty()) {
     return NicknameAndLastFourDigits(customized_nickname);
   }
   // Return a Google-specific string for Google-issued cards.
@@ -1055,7 +1055,8 @@ std::ostream& operator<<(std::ostream& os, const CreditCard& credit_card) {
             << " " << credit_card.record_type() << " "
             << credit_card.use_count() << " " << credit_card.use_date() << " "
             << credit_card.billing_address_id() << " " << credit_card.nickname()
-            << " " << credit_card.card_issuer();
+            << " " << credit_card.card_issuer() << " "
+            << credit_card.instrument_id();
 }
 
 void CreditCard::SetNameOnCardFromSeparateParts() {

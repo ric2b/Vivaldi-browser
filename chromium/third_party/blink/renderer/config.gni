@@ -4,6 +4,7 @@
 
 import("//build/config/compiler/compiler.gni")
 import("//build/config/ui.gni")
+import("//build/toolchain/gcc_toolchain.gni")
 import("//third_party/blink/public/public_features.gni")
 
 if (is_android) {
@@ -41,6 +42,14 @@ declare_args() {
   support_webgl2_compute_context = !is_android
 
   # If true, the new implementation (experimental) of Blink-V8 bindings
+  # (of IDL callback function) is used.
+  use_blink_v8_binding_new_idl_callback_function = false
+
+  # If true, the new implementation (experimental) of Blink-V8 bindings
+  # (of IDL callback interface) is used.
+  use_blink_v8_binding_new_idl_callback_interface = false
+
+  # If true, the new implementation (experimental) of Blink-V8 bindings
   # (of IDL dictionary) is used.
   use_blink_v8_binding_new_idl_dictionary = false
 
@@ -69,6 +78,10 @@ if (use_webaudio_pffft) {
   feature_defines_list += [ "WTF_USE_WEBAUDIO_PFFFT=1" ]
 }
 
+if (use_blink_v8_binding_new_idl_callback_function) {
+  feature_defines_list += [ "USE_BLINK_V8_BINDING_NEW_IDL_CALLBACK_FUNCTION" ]
+}
+
 if (use_blink_v8_binding_new_idl_dictionary) {
   feature_defines_list += [ "USE_BLINK_V8_BINDING_NEW_IDL_DICTIONARY" ]
 }
@@ -82,6 +95,9 @@ if (blink_symbol_level == 2) {
 } else if (blink_symbol_level == 1) {
   blink_symbols_config = [ "//build/config/compiler:minimal_symbols" ]
 } else if (blink_symbol_level == 0) {
+  assert(
+      !enable_resource_allowlist_generation,
+      "enable_resource_allowlist_generation=true requires blink_symbol_level >= 1")
   blink_symbols_config = [ "//build/config/compiler:no_symbols" ]
 } else {
   blink_symbols_config = [ "//build/config/compiler:default_symbols" ]

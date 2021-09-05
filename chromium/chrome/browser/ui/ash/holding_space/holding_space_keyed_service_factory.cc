@@ -37,22 +37,26 @@ KeyedService* HoldingSpaceKeyedServiceFactory::BuildServiceInstanceFor(
   if (!features::IsTemporaryHoldingSpaceEnabled())
     return nullptr;
 
-  user_manager::User* user = chromeos::ProfileHelper::Get()->GetUserByProfile(
-      Profile::FromBrowserContext(context));
+  Profile* profile = Profile::FromBrowserContext(context);
+  user_manager::User* user =
+      chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
   if (!user)
     return nullptr;
 
   if (user->GetType() == user_manager::USER_TYPE_KIOSK_APP)
     return nullptr;
 
-  auto* service = new HoldingSpaceKeyedService(context, user->GetAccountId());
-
-  return service;
+  return new HoldingSpaceKeyedService(profile, user->GetAccountId());
 }
 
 bool HoldingSpaceKeyedServiceFactory::ServiceIsCreatedWithBrowserContext()
     const {
   return true;
+}
+
+void HoldingSpaceKeyedServiceFactory::RegisterProfilePrefs(
+    user_prefs::PrefRegistrySyncable* registry) {
+  HoldingSpaceKeyedService::RegisterProfilePrefs(registry);
 }
 
 }  // namespace ash

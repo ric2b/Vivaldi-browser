@@ -192,6 +192,10 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
     block_end_annotation_space_ = space;
   }
 
+  void SetHasDescendantThatDependsOnPercentageBlockSize() {
+    has_descendant_that_depends_on_percentage_block_size_ = true;
+  }
+
   const NGConstraintSpace* ConstraintSpace() const { return space_; }
 
 #if DCHECK_IS_ON()
@@ -249,6 +253,10 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
   LayoutUnit annotation_overflow_;
   // See NGLayoutResult::BlockEndAnotationSpace().
   LayoutUnit block_end_annotation_space_;
+
+  // The block size consumed by all preceding fragmentainers. Used to position
+  // OOF nodes.
+  LayoutUnit fragmentainer_consumed_block_size_;
 
   NGAdjoiningObjectTypes adjoining_object_types_ = kAdjoiningNone;
   bool has_adjoining_object_descendants_ = false;

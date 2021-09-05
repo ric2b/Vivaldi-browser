@@ -500,14 +500,6 @@ class AdsPageLoadMetricsObserverTest
     OnCpuTimingUpdate(render_frame_host, total_time);
   }
 
-  void OnHidden() { web_contents()->WasHidden(); }
-
-  void OnShown() { web_contents()->WasShown(); }
-
-  void TriggerFirstUserActivation(RenderFrameHost* render_frame_host) {
-    tester_->SimulateFrameReceivedFirstUserActivation(render_frame_host);
-  }
-
   void AdvancePageDuration(base::TimeDelta delta) { clock_->Advance(delta); }
 
   // Returns the final RenderFrameHost after navigation commits.
@@ -733,10 +725,6 @@ class AdsPageLoadMetricsObserverTest
     histograms.ExpectUniqueSample(
         kCreativeOriginStatusWithThrottlingHistogramId,
         creative_origin_test.expected_origin_status, 1);
-  }
-
-  void TimingUpdate(const page_load_metrics::mojom::PageLoadTiming& timing) {
-    tester_->SimulateTimingUpdate(timing);
   }
 
   page_load_metrics::PageLoadMetricsObserverTester* tester() {
@@ -1463,7 +1451,7 @@ TEST_F(AdsPageLoadMetricsObserverTest, AdPageLoadUKM) {
   timing.parse_timing->parse_start = base::TimeDelta::FromMilliseconds(10);
   timing.response_start = base::TimeDelta::FromSeconds(0);
   PopulateRequiredTimingFields(&timing);
-  TimingUpdate(timing);
+  tester()->SimulateTimingUpdate(timing);
   ResourceDataUpdate(
       main_rfh(), ResourceCached::kNotCached, 10 /* resource_size_in_kbyte */,
       "application/javascript" /* mime_type */, false /* is_ad_resource */);
@@ -1617,7 +1605,7 @@ TEST_F(AdsPageLoadMetricsObserverTest, TestCpuTimingMetricsWindowedActivated) {
   OnCpuTimingUpdate(ad_frame, base::TimeDelta::FromMilliseconds(1000));
 
   // Set the page activation and advance time by twelve more seconds.
-  TriggerFirstUserActivation(ad_frame);
+  tester()->SimulateFrameReceivedFirstUserActivation(ad_frame);
   AdvancePageDuration(base::TimeDelta::FromSeconds(12));
 
   // Perform some updates on ad and main frames. Usage 13%/16%.
@@ -1663,13 +1651,13 @@ TEST_F(AdsPageLoadMetricsObserverTest, TestCpuTimingMetricsNoActivation) {
   OnCpuTimingUpdate(non_ad_frame, base::TimeDelta::FromMilliseconds(500));
 
   // Hide the page, and ensure we keep recording information.
-  OnHidden();
+  web_contents()->WasHidden();
 
   // Do some more work on the ad frame.
   OnCpuTimingUpdate(ad_frame, base::TimeDelta::FromMilliseconds(1000));
 
   // Show the page, nothing should change.
-  OnShown();
+  web_contents()->WasShown();
 
   // Do some more work on the main frame.
   OnCpuTimingUpdate(main_frame, base::TimeDelta::FromMilliseconds(500));
@@ -1715,7 +1703,7 @@ TEST_F(AdsPageLoadMetricsObserverTest, TestCpuTimingMetricsOnActivation) {
 
   // Set the frame as activated after 2.5 seconds
   AdvancePageDuration(base::TimeDelta::FromMilliseconds(2500));
-  TriggerFirstUserActivation(ad_frame);
+  tester()->SimulateFrameReceivedFirstUserActivation(ad_frame);
 
   // Do some more work on the main frame.
   OnCpuTimingUpdate(main_frame, base::TimeDelta::FromMilliseconds(500));
@@ -2083,6 +2071,102 @@ TEST_F(AdsPageLoadMetricsObserverTest, HeavyAdNetworkUsage_InterventionFired) {
       SuffixedHistogram("HeavyAds.NetworkBytesAtFrameUnload"), 1);
 }
 
+// Test that when the page is hidden and the app enters the background, that we
+// record histograms, but continue to monitor for CPU heavy ad interventions.
+TEST_F(AdsPageLoadMetricsObserverTest, HeavyAdCpuInterventionInBackground) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kHeavyAdIntervention);
+  OverrideVisibilityTrackerWithMockClock();
+
+  RenderFrameHost* main_frame = NavigateMainFrame(kNonAdUrl);
+  RenderFrameHost* ad_frame = CreateAndNavigateSubFrame(kAdUrl, main_frame);
+
+  // Add some data to the ad frame so it get reported.
+  ResourceDataUpdate(ad_frame, ResourceCached::kNotCached, 1);
+
+  // Use just under the peak threshold amount of CPU.
+  OnCpuTimingUpdate(
+      ad_frame,
+      base::TimeDelta::FromMilliseconds(
+          heavy_ad_thresholds::kMaxPeakWindowedPercent * 30000 / 100 - 1));
+
+  // Verify we did not trigger the intervention.
+  EXPECT_FALSE(HasInterventionReportsAfterFlush(ad_frame));
+
+  // Verify no reporting happened prior to backgrounding.
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("Bytes.FullPage.Total2"), 0);
+
+  // Background the page.
+  tester()->SimulateAppEnterBackground();
+
+  // Verify reporting happened.
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("Bytes.FullPage.Total2"), 1);
+
+  // Use enough CPU to trigger the intervention.
+  ErrorPageWaiter waiter(web_contents());
+  AdvancePageDuration(base::TimeDelta::FromSeconds(10));
+  OnCpuTimingUpdate(ad_frame, base::TimeDelta::FromMilliseconds(1));
+
+  // Wait for an error page and then check there's an intervention on the frame.
+  waiter.WaitForError();
+  EXPECT_TRUE(HasInterventionReportsAfterFlush(ad_frame));
+
+  // Navigate away to trigger histograms. Check they didn't fire again.
+  NavigateFrame(kNonAdUrl, main_frame);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("Bytes.FullPage.Total2"), 1);
+}
+
+// Test that when the page is hidden and the app enters the background, that we
+// record histograms, but continue to monitor for network heavy ad
+// interventions.
+TEST_F(AdsPageLoadMetricsObserverTest,
+       HeavyAdNetworkInterventionInBackgrounded) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kHeavyAdIntervention);
+
+  RenderFrameHost* main_frame = NavigateMainFrame(kNonAdUrl);
+  RenderFrameHost* ad_frame = CreateAndNavigateSubFrame(kAdUrl, main_frame);
+
+  // Load just under the threshold amount of bytes.
+  ResourceDataUpdate(ad_frame, ResourceCached::kNotCached,
+                     (heavy_ad_thresholds::kMaxNetworkBytes / 1024) - 1);
+
+  // Verify we did not trigger the intervention.
+  EXPECT_FALSE(HasInterventionReportsAfterFlush(ad_frame));
+
+  // Verify that prior to an intervention is triggered we do not log
+  // NetworkBytesAtFrameUnload.
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("HeavyAds.NetworkBytesAtFrameUnload"), 0);
+
+  // Verify no reporting happened prior to backgrounding.
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("Cpu.FullPage.TotalUsage2"), 0);
+
+  // Background the page.
+  tester()->SimulateAppEnterBackground();
+
+  // Verify reporting happened.
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("Cpu.FullPage.TotalUsage2"), 1);
+
+  // Load enough bytes to trigger the intervention.
+  ErrorPageWaiter waiter(web_contents());
+  ResourceDataUpdate(ad_frame, ResourceCached::kNotCached, 2);
+
+  // Wait for an error page and then check there's an intervention on the frame.
+  waiter.WaitForError();
+  EXPECT_TRUE(HasInterventionReportsAfterFlush(ad_frame));
+
+  // Navigate away to trigger histograms. Check they didn't fire again.
+  NavigateFrame(kNonAdUrl, main_frame);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("Cpu.FullPage.TotalUsage2"), 1);
+}
+
 TEST_F(AdsPageLoadMetricsObserverTest,
        HeavyAdNetworkUsageWithNoise_InterventionFired) {
   base::test::ScopedFeatureList feature_list;
@@ -2335,7 +2419,7 @@ TEST_F(AdsPageLoadMetricsObserverTest,
   RenderFrameHost* ad_frame = CreateAndNavigateSubFrame(kAdUrl, main_frame);
 
   // Give the frame a user activation before the threshold would be hit.
-  TriggerFirstUserActivation(ad_frame);
+  tester()->SimulateFrameReceivedFirstUserActivation(ad_frame);
 
   // Add enough data to trigger the intervention.
   ResourceDataUpdate(ad_frame, ResourceCached::kNotCached,
@@ -2349,6 +2433,69 @@ TEST_F(AdsPageLoadMetricsObserverTest,
   histogram_tester().ExpectUniqueSample(
       SuffixedHistogram("HeavyAds.ComputedType2"),
       FrameData::HeavyAdStatus::kNone, 1);
+}
+
+// Tests that each configurable unload policy allows the intervention to trigger
+// on the correct frames.
+TEST_F(AdsPageLoadMetricsObserverTest, HeavyAdPolicyProvided) {
+  struct {
+    // |policy| maps to a FrameData::HeavyAdUnloadPolicy.
+    std::string policy;
+    bool exceed_network;
+    bool exceed_cpu;
+    bool intervention_expected;
+  } kTestCases[] = {
+      {"0" /* policy */, false /* exceed_network */, false /* exceed_cpu */,
+       false /* intervention_expected */},
+      {"0" /* policy */, true /* exceed_network */, false /* exceed_cpu */,
+       true /* intervention_expected */},
+      {"0" /* policy */, false /* exceed_network */, true /* exceed_cpu */,
+       false /* intervention_expected */},
+      {"0" /* policy */, true /* exceed_network */, true /* exceed_cpu */,
+       true /* intervention_expected */},
+      {"1" /* policy */, false /* exceed_network */, false /* exceed_cpu */,
+       false /* intervention_expected */},
+      {"1" /* policy */, true /* exceed_network */, false /* exceed_cpu */,
+       false /* intervention_expected */},
+      {"1" /* policy */, false /* exceed_network */, true /* exceed_cpu */,
+       true /* intervention_expected */},
+      {"1" /* policy */, true /* exceed_network */, true /* exceed_cpu */,
+       true /* intervention_expected */},
+      {"2" /* policy */, false /* exceed_network */, false /* exceed_cpu */,
+       false /* intervention_expected */},
+      {"2" /* policy */, true /* exceed_network */, false /* exceed_cpu */,
+       true /* intervention_expected */},
+      {"2" /* policy */, false /* exceed_network */, true /* exceed_cpu */,
+       true /* intervention_expected */},
+  };
+
+  for (const auto& test_case : kTestCases) {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndEnableFeatureWithParameters(
+        features::kHeavyAdIntervention, {{"kUnloadPolicy", test_case.policy}});
+    RenderFrameHost* main_frame = NavigateMainFrame(kNonAdUrl);
+    RenderFrameHost* ad_frame = CreateAndNavigateSubFrame(kAdUrl, main_frame);
+
+    ErrorPageWaiter waiter(web_contents());
+    if (test_case.exceed_network) {
+      ResourceDataUpdate(ad_frame, ResourceCached::kNotCached,
+                         (heavy_ad_thresholds::kMaxNetworkBytes / 1024) + 1);
+    }
+    if (test_case.exceed_cpu) {
+      OnCpuTimingUpdate(ad_frame, base::TimeDelta::FromMilliseconds(
+                                      heavy_ad_thresholds::kMaxCpuTime + 1));
+    }
+
+    // We should either see an error page if the intervention happened, or not
+    // see any reports.
+    if (test_case.intervention_expected) {
+      waiter.WaitForError();
+    } else {
+      EXPECT_FALSE(HasInterventionReportsAfterFlush(ad_frame));
+    }
+
+    blocklist()->ClearBlockList(base::Time::Min(), base::Time::Max());
+  }
 }
 
 TEST_F(AdsPageLoadMetricsObserverTest,
@@ -2627,25 +2774,6 @@ TEST_F(AdsPageLoadMetricsObserverTest,
   EXPECT_EQ(rfh_tester->GetHeavyAdIssueCount(
                 RenderFrameHostTester::HeavyAdIssueType::kAll),
             1);
-}
-
-TEST_F(AdsPageLoadMetricsObserverTest, HeavyAdReportingDisabled_NoReportSent) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures({features::kHeavyAdIntervention},
-                                {features::kHeavyAdInterventionWarning});
-
-  RenderFrameHost* main_frame = NavigateMainFrame(kNonAdUrl);
-  RenderFrameHost* ad_frame = CreateAndNavigateSubFrame(kAdUrl, main_frame);
-
-  ErrorPageWaiter waiter(web_contents());
-
-  // Load enough bytes to trigger the intervention.
-  ResourceDataUpdate(ad_frame, ResourceCached::kNotCached,
-                     (heavy_ad_thresholds::kMaxNetworkBytes / 1024) + 1);
-
-  EXPECT_FALSE(HasInterventionReportsAfterFlush(ad_frame));
-
-  waiter.WaitForError();
 }
 
 TEST_F(AdsPageLoadMetricsObserverTest, NoFirstContentfulPaint_NotRecorded) {

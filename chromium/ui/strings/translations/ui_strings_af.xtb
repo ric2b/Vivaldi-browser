@@ -44,7 +44,6 @@
 <translation id="19085484004813472">Dit is 'n nuwe kenmerk</translation>
 <translation id="2006524834898217237">Maak seker dat hierdie toestel aan die internet gekoppel is.</translation>
 <translation id="208586643495776849">Probeer asseblief weer</translation>
-<translation id="2090963878406559571">Om 'n nommer van <ph name="ORIGIN" /> af na jou Android-foon toe te stuur, moet jy vir albei toestelle <ph name="TROUBLESHOOT_LINK" /> in instellings.</translation>
 <translation id="2141853158323869627">{DAYS,plural, =1{1 d.}other{# d.}}</translation>
 <translation id="2148716181193084225">Vandag</translation>
 <translation id="2161656808144014275">Teks</translation>
@@ -135,8 +134,8 @@
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5266161281976477809">Openbaarmakingdriehoek</translation>
 <translation id="5278860589123563674">Kon nie stuur nie</translation>
+<translation id="5283099933536931082"><ph name="APP_ITEM_TITLE" /> vereis jou aandag.</translation>
 <translation id="528468243742722775">Einde</translation>
-<translation id="5327567770033251652">skakel sinkronisering aan</translation>
 <translation id="5329858601952122676">Vee uit</translation>
 <translation id="5395308026110844773"><ph name="DRAGGED_APP_NAME" /> bo-oor <ph name="IN_PLACE_APP" />; laat los om vouer te skep.</translation>
 <translation id="5463830097259460683">Emosiekone en simbole</translation>
@@ -146,6 +145,7 @@
 <translation id="5574202486608032840"><ph name="IDS_SHORT_PRODUCT_OS_NAME" />-stelsel</translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5613020302032141669">Linkerpyltjie</translation>
+<translation id="5652575806481723716"><ph name="FOCUSED_APP_NAME" /> vereis jou aandag.</translation>
 <translation id="5675363643668471212">Rakitem</translation>
 <translation id="5754277640426581776">{MINUTES,plural, =1{1 min.}other{# min.}}</translation>
 <translation id="5763338081255973061">{DAYS,plural, =0{Aktief vandag}=1{1 dag gelede aktief}other{# dae gelede aktief}}</translation>
@@ -183,10 +183,8 @@
 <translation id="6578407462441924264">Naamloos</translation>
 <translation id="6612467943526193239">Druk Esc om kalibrering te verlaat.</translation>
 <translation id="6620110761915583480">Stoor lêer</translation>
-<translation id="6656912866303152668">Maak seker dat sinkronisering in Chrome op <ph name="TARGET_DEVICE_NAME" /> aangeskakel is, en probeer dan weer stuur.</translation>
 <translation id="6699343763173986273">Media se volgende snit</translation>
 <translation id="6710213216561001401">Vorige</translation>
-<translation id="6779314412797872738">Om 'n nommer van hier af na jou Android-foon toe te stuur, moet jy vir albei toestelle in instellings <ph name="TROUBLESHOOT_LINK" />.</translation>
 <translation id="6786750046913594791">Maak vouer toe</translation>
 <translation id="6808150112686056157">Mediastop</translation>
 <translation id="6845383723252244143">Kies vouer</translation>

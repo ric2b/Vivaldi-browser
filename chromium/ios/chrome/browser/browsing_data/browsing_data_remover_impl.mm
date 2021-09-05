@@ -280,10 +280,8 @@ void BrowsingDataRemoverImpl::RemoveImpl(base::Time delete_begin,
     if (session_service_) {
       NSString* state_path = base::SysUTF8ToNSString(
           browser_state_->GetStatePath().AsUTF8Unsafe());
-      [session_service_
-          deleteLastSessionFileInDirectory:state_path
-                                completion:
-                                    CreatePendingTaskCompletionClosure()];
+      [session_service_ deleteAllSessionFilesInBrowserStateDirectory:state_path
+          completion:CreatePendingTaskCompletionClosure()];
     }
 
     // Remove the screenshots taken by the system when backgrounding the
@@ -295,7 +293,11 @@ void BrowsingDataRemoverImpl::RemoveImpl(base::Time delete_begin,
       web::WebThread::IO, base::TaskShutdownBehavior::BLOCK_SHUTDOWN};
 
   if (IsRemoveDataMaskSet(mask, BrowsingDataRemoveMask::REMOVE_COOKIES)) {
-    base::RecordAction(base::UserMetricsAction("ClearBrowsingData_Cookies"));
+    if (!browser_state_->IsOffTheRecord()) {
+      // ClearBrowsingData_Cookies should not be reported when cookies are
+      // cleared as part of an incognito browser shutdown.
+      base::RecordAction(base::UserMetricsAction("ClearBrowsingData_Cookies"));
+    }
     net::CookieDeletionInfo::TimeRange deletion_time_range =
         net::CookieDeletionInfo::TimeRange(delete_begin, delete_end);
     base::PostTask(

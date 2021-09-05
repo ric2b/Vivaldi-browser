@@ -341,6 +341,12 @@ const char kFakeDriveFsLauncherChrootPath[] =
 const char kFakeDriveFsLauncherSocketPath[] =
     "fake-drivefs-launcher-socket-path";
 
+// Specifies number of recommended (fake) ARC apps during user onboarding.
+// App descriptions are generated locally instead of being fetched from server.
+// Limited to ChromeOS-on-linux and test images only.
+const char kFakeArcRecommendedAppsForTesting[] =
+    "fake-arc-recommended-apps-for-testing";
+
 // Fingerprint sensor location indicates the physical sensor's location. The
 // value is a string with possible values: "power-button-top-left",
 // "keyboard-bottom-left", keyboard-bottom-right", "keyboard-top-right".
@@ -401,6 +407,11 @@ const char kHasChromeOSKeyboard[] = "has-chromeos-keyboard";
 // Defines user homedir. This defaults to primary user homedir.
 const char kHomedir[] = "homedir";
 
+// If set, the "ignore_dev_conf" field in StartArcVmRequest message will
+// consequently be set such that all development configuration directives in
+// /usr/local/vms/etc/arcvm_dev.conf will be ignored during ARCVM start.
+const char kIgnoreArcVmDevConf[] = "ignore-arcvm-dev-conf";
+
 // If true, profile selection in UserManager will always return active user's
 // profile.
 // TODO(nkostlyev): http://crbug.com/364604 - Get rid of this switch after we
@@ -425,6 +436,15 @@ const char kLacrosChromeAdditionalArgs[] = "lacros-chrome-additional-args";
 // from the indicated path rather than from component updater. Note that the
 // path should be to a directory that contains a binary named 'chrome'.
 const char kLacrosChromePath[] = "lacros-chrome-path";
+
+// If set, ash-chrome will drop a Unix domain socket to wait for a process to
+// connect to it, and the connection will be used to request file descriptors
+// from ash-chrome, and when the process forks to start a lacros-chrome, the
+// obtained file descriptor will be used by lacros-chrome to set up the mojo
+// connection with ash-chrome. There are mainly two use cases:
+// 1. Test launcher to run browser tests in testing environment.
+// 2. A terminal to start lacros-chrome with a debugger.
+const char kLacrosMojoSocketForTesting[] = "lacros-mojo-socket-for-testing";
 
 // Enables Chrome-as-a-login-manager behavior.
 const char kLoginManager[] = "login-manager";

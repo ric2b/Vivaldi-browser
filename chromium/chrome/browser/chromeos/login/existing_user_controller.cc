@@ -489,6 +489,10 @@ ExistingUserController::ExistingUserController()
           kAccountsPrefDeviceLocalAccountAutoLoginDelay,
           base::Bind(&ExistingUserController::ConfigureAutoLogin,
                      base::Unretained(this)));
+  family_link_allowed_subscription_ = cros_settings_->AddSettingsObserver(
+      kAccountsPrefFamilyLinkAccountsAllowed,
+      base::Bind(&ExistingUserController::DeviceSettingsChanged,
+                 base::Unretained(this)));
 
   observed_user_manager_.Add(user_manager::UserManager::Get());
 }
@@ -848,13 +852,17 @@ void ExistingUserController::SetDisplayAndGivenName(
   given_name_ = base::UTF8ToUTF16(given_name);
 }
 
-bool ExistingUserController::IsUserAllowlisted(const AccountId& account_id) {
+bool ExistingUserController::IsUserAllowlisted(
+    const AccountId& account_id,
+    const base::Optional<user_manager::UserType>& user_type) {
   bool wildcard_match = false;
-  if (login_performer_.get())
-    return login_performer_->IsUserAllowlisted(account_id, &wildcard_match);
+  if (login_performer_.get()) {
+    return login_performer_->IsUserAllowlisted(account_id, &wildcard_match,
+                                               user_type);
+  }
 
   return cros_settings_->IsUserAllowlisted(account_id.GetUserEmail(),
-                                           &wildcard_match);
+                                           &wildcard_match, user_type);
 }
 
 void ExistingUserController::LocalStateChanged(
@@ -1352,11 +1360,11 @@ void ExistingUserController::ForceOnlineLoginForAccountId(
 void ExistingUserController::AllowlistCheckFailed(const std::string& email) {
   PerformLoginFinishedActions(true /* start auto login timer */);
 
-  GetLoginDisplay()->ShowWhitelistCheckFailedError();
+  GetLoginDisplay()->ShowAllowlistCheckFailedError();
 
   for (auto& auth_status_consumer : auth_status_consumers_) {
     auth_status_consumer.OnAuthFailure(
-        AuthFailure(AuthFailure::WHITELIST_CHECK_FAILED));
+        AuthFailure(AuthFailure::ALLOWLIST_CHECK_FAILED));
   }
 
   ClearActiveDirectoryState();

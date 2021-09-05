@@ -42,6 +42,7 @@ class WebContents;
 }  // namespace content
 
 namespace network {
+struct ResourceRequest;
 namespace mojom {
 class NetworkContext;
 }
@@ -49,6 +50,10 @@ class NetworkContext;
 
 namespace update_client {
 class UpdateClient;
+}
+
+namespace url {
+class Origin;
 }
 
 namespace extensions {
@@ -78,6 +83,8 @@ class UserScriptListener;
 class ExtensionsBrowserClient {
  public:
   ExtensionsBrowserClient();
+  ExtensionsBrowserClient(const ExtensionsBrowserClient&) = delete;
+  ExtensionsBrowserClient& operator=(const ExtensionsBrowserClient&) = delete;
   virtual ~ExtensionsBrowserClient();
 
   // Returns the single instance of |this|.
@@ -365,8 +372,6 @@ class ExtensionsBrowserClient {
 
  private:
   std::vector<std::unique_ptr<ExtensionsBrowserAPIProvider>> providers_;
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionsBrowserClient);
 };
 
 }  // namespace extensions

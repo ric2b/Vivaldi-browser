@@ -10,25 +10,32 @@ import android.util.SparseArray;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.collection.ArraySet;
 
 import org.chromium.base.Log;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.WarmupManager;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteResult.GroupDetails;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion.MatchClassification;
+import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion.NavsuggestTile;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler.VoiceResult;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.omnibox.SuggestionAnswer;
 import org.chromium.components.query_tiles.QueryTile;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.url.GURL;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Bridge to the native AutocompleteControllerAndroid.
@@ -166,10 +173,23 @@ public class AutocompleteController {
         assert mListener != null : "Ensure a listener is set prior to calling.";
         if (profile == null || TextUtils.isEmpty(url)) return;
 
-        if (!NewTabPage.isNTPUrl(url)) {
-            // Proactively start up a renderer, to reduce the time to display search results,
-            // especially if a Service Worker is used.
-            WarmupManager.getInstance().createSpareRenderProcessHost(profile);
+        // Proactively start up a renderer, to reduce the time to display search results,
+        // especially if a Service Worker is used. This is done in a PostTask with a
+        // experiment-configured delay so that the CPU usage associated with starting a new renderer
+        // process does not impact the Omnibox initialization. Note that there's a small chance the
+        // renderer will be started after the next navigation if the delay is too long, but the
+        // spare renderer will probably get used anyways by a later navigation.
+        if (!profile.isOffTheRecord() && !NewTabPage.isNTPUrl(url)
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.OMNIBOX_SPARE_RENDERER)) {
+            PostTask.postDelayedTask(UiThreadTaskTraits.BEST_EFFORT,
+                    ()
+                            -> {
+                        ThreadUtils.assertOnUiThread();
+                        WarmupManager.getInstance().createSpareRenderProcessHost(profile);
+                    },
+                    ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
+                            ChromeFeatureList.OMNIBOX_SPARE_RENDERER,
+                            "omnibox_spare_renderer_delay_ms", 0));
         }
         mNativeAutocompleteControllerAndroid =
                 AutocompleteControllerJni.get().init(AutocompleteController.this, profile);
@@ -327,14 +347,15 @@ public class AutocompleteController {
     }
 
     @CalledByNative
-    private static OmniboxSuggestion buildOmniboxSuggestion(int nativeType, boolean isSearchType,
-            int relevance, int transition, String contents, int[] contentClassificationOffsets,
-            int[] contentClassificationStyles, String description,
-            int[] descriptionClassificationOffsets, int[] descriptionClassificationStyles,
-            SuggestionAnswer answer, String fillIntoEdit, GURL url, GURL imageUrl,
-            String imageDominantColor, boolean isStarred, boolean isDeletable,
-            String postContentType, byte[] postData, int groupId, List<QueryTile> tiles,
-            byte[] clipboardImageData, boolean hasTabMatch) {
+    private static OmniboxSuggestion buildOmniboxSuggestion(int nativeType, int[] nativeSubtypes,
+            boolean isSearchType, int relevance, int transition, String contents,
+            int[] contentClassificationOffsets, int[] contentClassificationStyles,
+            String description, int[] descriptionClassificationOffsets,
+            int[] descriptionClassificationStyles, SuggestionAnswer answer, String fillIntoEdit,
+            GURL url, GURL imageUrl, String imageDominantColor, boolean isStarred,
+            boolean isDeletable, String postContentType, byte[] postData, int groupId,
+            List<QueryTile> tiles, byte[] clipboardImageData, boolean hasTabMatch,
+            List<NavsuggestTile> navsuggestTiles) {
         assert contentClassificationOffsets.length == contentClassificationStyles.length;
         List<MatchClassification> contentClassifications = new ArrayList<>();
         for (int i = 0; i < contentClassificationOffsets.length; i++) {
@@ -349,10 +370,27 @@ public class AutocompleteController {
                     descriptionClassificationOffsets[i], descriptionClassificationStyles[i]));
         }
 
-        return new OmniboxSuggestion(nativeType, isSearchType, relevance, transition, contents,
-                contentClassifications, description, descriptionClassifications, answer,
+        Set<Integer> subtypes = new ArraySet(nativeSubtypes.length);
+        for (int i = 0; i < nativeSubtypes.length; i++) {
+            subtypes.add(nativeSubtypes[i]);
+        }
+
+        return new OmniboxSuggestion(nativeType, subtypes, isSearchType, relevance, transition,
+                contents, contentClassifications, description, descriptionClassifications, answer,
                 fillIntoEdit, url, imageUrl, imageDominantColor, isStarred, isDeletable,
-                postContentType, postData, groupId, tiles, clipboardImageData, hasTabMatch);
+                postContentType, postData, groupId, tiles, clipboardImageData, hasTabMatch,
+                navsuggestTiles);
+    }
+
+    @CalledByNative
+    private static List<NavsuggestTile> buildOmniboxNavsuggestTileList(int capacity) {
+        return new ArrayList<>(capacity);
+    }
+
+    @CalledByNative
+    private static void addOmniboxNavsuggestTile(
+            List<NavsuggestTile> tiles, String title, GURL url) {
+        tiles.add(new NavsuggestTile(title, url));
     }
 
     /**
@@ -426,6 +464,20 @@ public class AutocompleteController {
                 mNativeAutocompleteControllerAndroid, AutocompleteController.this, url);
     }
 
+    /**
+     * Group native suggestions in specified range by Search vs URL.
+     *
+     * TODO(crbug.com/1138587): move this to AutocompleteResult when the class is ready to interface
+     * with native code.
+     *
+     * @param firstIndex Index of the first suggestion for grouping.
+     * @param lastIndex Index of the last suggestion for grouping.
+     */
+    public void groupSuggestionsBySearchVsURL(int firstIndex, int lastIndex) {
+        AutocompleteControllerJni.get().groupSuggestionsBySearchVsURL(
+                mNativeAutocompleteControllerAndroid, firstIndex, lastIndex);
+    }
+
     @NativeMethods
     interface Natives {
         long init(AutocompleteController caller, Profile profile);
@@ -454,6 +506,8 @@ public class AutocompleteController {
                 String newQueryText, String[] newQueryParams);
         Tab findMatchingTabWithUrl(
                 long nativeAutocompleteControllerAndroid, AutocompleteController caller, GURL url);
+        void groupSuggestionsBySearchVsURL(
+                long nativeAutocompleteControllerAndroid, int firstIndex, int lastIndex);
         /**
          * Given a search query, this will attempt to see if the query appears to be portion of a
          * properly formed URL.  If it appears to be a URL, this will return the fully qualified

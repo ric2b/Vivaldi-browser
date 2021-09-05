@@ -197,10 +197,9 @@ ScriptPromise GPUBuffer::MapAsyncImpl(ScriptState* script_state,
   GetProcs().bufferMapAsync(GetHandle(), mode, map_offset, map_size,
                             callback->UnboundCallback(),
                             callback->AsUserdata());
-  // WebGPU guarantees callbacks complete in finite time. Flush now so that
-  // commands reach the GPU process.
-  device_->GetInterface()->FlushCommands();
-
+  // WebGPU guarantees that promises are resolved in finite time so we
+  // need to ensure commands are flushed.
+  EnsureFlush();
   return promise;
 }
 
@@ -292,6 +291,16 @@ void GPUBuffer::OnMapAsyncCallback(ScriptPromiseResolver* resolver,
       resolver->Reject(MakeGarbageCollected<DOMException>(
           DOMExceptionCode::kOperationError, "Device is lost"));
       break;
+    case WGPUBufferMapAsyncStatus_DestroyedBeforeCallback:
+      resolver->Reject(MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kOperationError,
+          "Buffer is destroyed before the mapping is resolved"));
+      break;
+    case WGPUBufferMapAsyncStatus_UnmappedBeforeCallback:
+      resolver->Reject(MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kOperationError,
+          "Buffer is unmapped before the mapping is resolved"));
+      break;
     default:
       NOTREACHED();
   }
@@ -303,10 +312,7 @@ DOMArrayBuffer* GPUBuffer::CreateArrayBufferForMappedData(void* data,
   DCHECK_LE(data_length, kLargestMappableSize);
 
   ArrayBufferContents contents(data, data_length,
-                               [](void* data, size_t length, void* info) {
-                                 // DataDeleter does nothing because Dawn wire
-                                 // owns the memory.
-                               });
+                               v8::BackingStore::EmptyDeleter);
 
   DOMArrayBuffer* array_buffer = DOMArrayBuffer::Create(contents);
   mapped_array_buffers_.push_back(array_buffer);

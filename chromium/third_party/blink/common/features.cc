@@ -54,8 +54,10 @@ const base::Feature kFreezePurgeMemoryAllPagesFrozen{
 const base::Feature kFreezeUserAgent{"FreezeUserAgent",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kMeasureMemoryExperiment{"MeasureMemoryExperiment",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
+// Enables support for FTP URLs. When disabled FTP URLs will behave the same as
+// any other URL scheme that's unknown to the UA. See https://crbug.com/333943
+const base::Feature kFtpProtocol{"FtpProtocol",
+                                 base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enable Display Locking JavaScript APIs.
 const base::Feature kDisplayLocking{"DisplayLocking",
@@ -70,6 +72,9 @@ const base::Feature kForceSynchronousHTMLParsing{
 // Enables top-level await in modules.
 const base::Feature kTopLevelAwait{"TopLevelAwait",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable EditingNG by default. This feature is for a kill switch.
+const base::Feature kEditingNG{"EditingNG", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enable LayoutNG.
 const base::Feature kLayoutNG{"LayoutNG", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -138,12 +143,11 @@ const base::Feature kPreviewsResourceLoadingHintsSpecificResourceTypes{
 // Perform a memory purge after a renderer is backgrounded. Formerly labelled as
 // the "PurgeAndSuspend" experiment.
 //
-// TODO(adityakeerthi): Disabled by default on Mac and Android for historical
+// TODO(https://crbug.com/926186): Disabled by default on Android for historical
 // reasons. Consider enabling by default if experiment results are positive.
-// https://crbug.com/926186
 const base::Feature kPurgeRendererMemoryWhenBackgrounded {
   "PurgeRendererMemoryWhenBackgrounded",
-#if defined(OS_MAC) || defined(OS_ANDROID)
+#if defined(OS_ANDROID)
       base::FEATURE_DISABLED_BY_DEFAULT
 #else
       base::FEATURE_ENABLED_BY_DEFAULT
@@ -194,6 +198,11 @@ const base::Feature kRTCOfferExtmapAllowMixed{
 const base::Feature kV8OptimizeWorkersForPerformance{
     "V8OptimizeWorkersForPerformance", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Controls whether the implementation of the performance.measureMemory
+// web API uses PerformanceManager or not.
+const base::Feature kWebMeasureMemoryViaPerformanceManager{
+    "WebMeasureMemoryViaPerformanceManager", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables negotiation of experimental multiplex codec in SDP.
 const base::Feature kWebRtcMultiplexCodec{"WebRTC-MultiplexCodec",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
@@ -222,7 +231,7 @@ const base::Feature kIntensiveWakeUpThrottling{
 
 // When enabled, timers with timeout=0 are not throttled.
 const base::Feature kOptOutZeroTimeoutTimersFromThrottling{
-    "OptOutZeroTimeoutTimersFromThrottling", base::FEATURE_DISABLED_BY_DEFAULT};
+    "OptOutZeroTimeoutTimersFromThrottling", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // When enabled, no throttling is applied to a page when it uses WebRTC.
 //
@@ -279,10 +288,6 @@ const base::Feature kStorageAccessAPI{"StorageAccessAPI",
 const base::Feature kTextFragmentAnchor{"TextFragmentAnchor",
                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Writable files and native file system access. https://crbug.com/853326
-const base::Feature kNativeFileSystemAPI{"NativeFileSystemAPI",
-                                         base::FEATURE_ENABLED_BY_DEFAULT};
-
 // File handling integration. https://crbug.com/829689
 const base::Feature kFileHandlingAPI{"FileHandlingAPI",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
@@ -311,8 +316,8 @@ const char kMixedContentAutoupgradeModeAllPassive[] = "all-passive";
 // Decodes jpeg 4:2:0 formatted images to YUV instead of RGBX and stores in this
 // format in the image decode cache. See crbug.com/919627 for details on the
 // feature.
-const base::Feature kDecodeJpeg420ImagesToYUV{
-    "DecodeJpeg420ImagesToYUV", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kDecodeJpeg420ImagesToYUV{"DecodeJpeg420ImagesToYUV",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Decodes lossy WebP images to YUV instead of RGBX and stores in this format
 // in the image decode cache. See crbug.com/900264 for details on the feature.
@@ -468,7 +473,7 @@ const base::Feature kSubresourceRedirect{"SubresourceRedirect",
 
 // When 'enabled', all cross-origin iframes will get a compositing layer.
 const base::Feature kCompositeCrossOriginIframes{
-    "CompositeCrossOriginIframes", base::FEATURE_DISABLED_BY_DEFAULT};
+    "CompositeCrossOriginIframes", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // When enabled, enforces new interoperable semantics for 3D transforms.
 // See crbug.com/1008483.
@@ -521,11 +526,9 @@ const base::Feature kLowLatencyWebGLSwapChain{"LowLatencyWebGLSwapChain",
 const base::Feature kDawn2dCanvas{"Dawn2dCanvas",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kCSSReducedFontLoadingInvalidations{
-    "CSSReducedFontLoadingInvalidations", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kCSSReducedFontLoadingLayoutInvalidations{
     "CSSReducedFontLoadingLayoutInvalidations",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // When enabled, frees up CachedMetadata after consumption by script resources
 // and modules. Needed for the experiment in http://crbug.com/1045052.
@@ -537,9 +540,6 @@ const base::Feature kDiscardCodeCacheAfterFirstUse{
 const base::Feature kSuppressContentTypeForBeaconMadeWithArrayBufferView{
     "SuppressContentTypeForBeaconMadeWithArrayBufferView",
     base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kBlockFlowHandlesWebkitLineClamp{
-    "BlockFlowHandlesWebkitLineClamp", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kBlockHTMLParserOnStyleSheets{
     "BlockHTMLParserOnStyleSheets", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -559,7 +559,8 @@ const base::Feature kFontPreloadingDelaysRendering{
 const base::FeatureParam<int> kFontPreloadingDelaysRenderingParam{
     &kFontPreloadingDelaysRendering, "delay-in-ms", 50};
 
-const base::Feature kFlexNG{"FlexNG", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kFlexAspectRatio{"FlexAspectRatio",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kKeepScriptResourceAlive{"KeepScriptResourceAlive",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
@@ -577,6 +578,41 @@ const base::FeatureParam<DelayAsyncScriptDelayType>
         &kDelayAsyncScriptExecution, "delay_type",
         DelayAsyncScriptDelayType::kFinishedParsing,
         &delay_async_script_execution_delay_types};
+
+// Feature and parameters for delaying low priority requests behind "important"
+// (either high or medium priority requests). There are two parameters
+// highlighted below.
+const base::Feature kDelayCompetingLowPriorityRequests{
+    "DelayCompetingLowPriorityRequests", base::FEATURE_DISABLED_BY_DEFAULT};
+// The delay type: We don't want to delay low priority requests behind
+// "important" requests forever. Rather, it makes sense to have this behavior up
+// *until* some relevant loading milestone, which this parameter specifies.
+const base::FeatureParam<DelayCompetingLowPriorityRequestsDelayType>::Option
+    delay_competing_low_priority_requests_delay_types[] = {
+        {DelayCompetingLowPriorityRequestsDelayType::kFirstPaint,
+         "first_paint"},
+        {DelayCompetingLowPriorityRequestsDelayType::kFirstContentfulPaint,
+         "first_contentful_paint"},
+        {DelayCompetingLowPriorityRequestsDelayType::kAlways, "always"},
+        {DelayCompetingLowPriorityRequestsDelayType::kUseOptimizationGuide,
+         "use_optimization_guide"}};
+const base::FeatureParam<DelayCompetingLowPriorityRequestsDelayType>
+    kDelayCompetingLowPriorityRequestsDelayParam{
+        &kDelayCompetingLowPriorityRequests, "until",
+        DelayCompetingLowPriorityRequestsDelayType::kFirstContentfulPaint,
+        &delay_competing_low_priority_requests_delay_types};
+// The priority threshold: indicates which ResourceLoadPriority should be
+// considered "important", such that low priority requests are delayed behind
+// in-flight "important" requests.
+const base::FeatureParam<DelayCompetingLowPriorityRequestsThreshold>::Option
+    delay_competing_low_priority_requests_thresholds[] = {
+        {DelayCompetingLowPriorityRequestsThreshold::kMedium, "medium"},
+        {DelayCompetingLowPriorityRequestsThreshold::kHigh, "high"}};
+const base::FeatureParam<DelayCompetingLowPriorityRequestsThreshold>
+    kDelayCompetingLowPriorityRequestsThresholdParam{
+        &kDelayCompetingLowPriorityRequests, "priority_threshold",
+        DelayCompetingLowPriorityRequestsThreshold::kHigh,
+        &delay_competing_low_priority_requests_thresholds};
 
 // The AppCache feature is a kill-switch for the entire AppCache feature,
 // both backend and API.  If disabled, then it will turn off the backend and
@@ -596,8 +632,7 @@ const base::Feature kAVIF{"AVIF", base::FEATURE_ENABLED_BY_DEFAULT};
 // immediately before reaching the LCP time limit (~2500ms), so that web fonts
 // do not become a source of bad LCP.
 const base::Feature kAlignFontDisplayAutoTimeoutWithLCPGoal{
-    "AlignFontDisplayAutoTimeoutWithLCPGoal",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    "AlignFontDisplayAutoTimeoutWithLCPGoal", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // The amount of time allowed for 'display: auto' web fonts to load without
 // intervention, counted from navigation start.
@@ -613,15 +648,17 @@ const base::FeatureParam<AlignFontDisplayAutoTimeoutWithLCPGoalMode>::Option
 const base::FeatureParam<AlignFontDisplayAutoTimeoutWithLCPGoalMode>
     kAlignFontDisplayAutoTimeoutWithLCPGoalModeParam{
         &kAlignFontDisplayAutoTimeoutWithLCPGoal, "intervention-mode",
-        AlignFontDisplayAutoTimeoutWithLCPGoalMode::kToFailurePeriod,
+        AlignFontDisplayAutoTimeoutWithLCPGoalMode::kToSwapPeriod,
         &align_font_display_auto_timeout_with_lcp_goal_modes};
 
 // Enable throttling of fetch() requests from service workers in the
-// installing state.
+// installing state.  The limit of 3 was chosen to match the limit
+// in background main frames.  In addition, trials showed that this
+// did not cause excessive install delays or timeouts.
 const base::Feature kThrottleInstallingServiceWorker{
     "ThrottleInstallingServiceWorker", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::FeatureParam<int> kInstallingServiceWorkerOutstandingThrottledLimit{
-    &kThrottleInstallingServiceWorker, "limit", 5};
+    &kThrottleInstallingServiceWorker, "limit", 3};
 
 const base::Feature kInputPredictorTypeChoice{
     "InputPredictorTypeChoice", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -681,7 +718,7 @@ const base::Feature kCompressParkableStrings{"CompressParkableStrings",
 // Whether ParkableStrings can be written out to disk.
 // Depends on compression above.
 const base::Feature kParkableStringsToDisk{"ParkableStringsToDisk",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 bool IsParkableStringsToDiskEnabled() {
   return base::FeatureList::IsEnabled(kParkableStringsToDisk) &&
@@ -704,10 +741,11 @@ const base::Feature kReducedReferrerGranularity{
 const base::Feature kContentCaptureUserActivatedDelay = {
     "ContentCaptureUserActivatedDelay", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enable ReadableStream, WritableStream and TransformStream objects to be
-// transferred with postMessage().
-const base::Feature kTransferableStreams{"TransferableStreams",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
+// Dispatches a fake fetch event to a service worker to check the offline
+// capability of the site before promoting installation.
+// See https://crbug.com/965802 for more details.
+const base::Feature kCheckOfflineCapability{"CheckOfflineCapability",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 // The "BackForwardCacheABExperimentControl" feature indicates the state of the
 // same-site BackForwardCache experiment. This information is used when sending
@@ -719,5 +757,13 @@ const base::Feature kBackForwardCacheABExperimentControl{
 const char kBackForwardCacheABExperimentGroup[] =
     "experiment_group_for_http_header";
 
+// Whether we should composite a PLSA (paint layer scrollable area) even if it
+// means losing lcd text.
+const base::Feature kPreferCompositingToLCDText = {
+    "PreferCompositingToLCDText", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kLogUnexpectedIPCPostedToBackForwardCachedDocuments{
+    "LogUnexpectedIPCPostedToBackForwardCachedDocuments",
+    base::FEATURE_ENABLED_BY_DEFAULT};
 }  // namespace features
 }  // namespace blink

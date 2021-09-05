@@ -183,9 +183,6 @@
       <message name="IDS_CANCEL" desc="Label for a cancel button. Used in multiple contexts. [CHAR-LIMIT=20]">
         Cancel
       </message>
-      <message name="IDS_NOT_NOW" desc="Label for a not now button. Used in multiple contexts. [CHAR-LIMIT=20]">
-        Not now
-      </message>
       <message name="IDS_SAVE" desc="Label for a button to save a change. Used in multiple contexts. [CHAR-LIMIT=20]">
         Save
       </message>
@@ -303,8 +300,17 @@
       <message name="IDS_MENU_ITEM_MOVE_TO_TOP" desc="Option in item menu. User can click the 'Move to top' option to move the item up to the top of its list. [CHAR-LIMIT=24]">
         Move to top
       </message>
-      <message name="IDS_OPEN_SETTINGS" desc="Generic label for a button to show settings screen. [CHAR-LIMIT=20]">
-        Open settings
+      <message name="IDS_ALL" desc="Generic label for a button to show all items or options, for example a button to view all bookmarks. [CHAR-LIMIT=20]">
+        All
+      </message>
+      <message name="IDS_JUST_ONCE" desc="Generic label for a user to select an option for just once">
+        Just once
+      </message>
+      <message name="IDS_DONT_ASK_AGAIN" desc="Generic label for a user to select to not be asked again">
+        Don’t ask again
+      </message>
+      <message name="IDS_ALWAYS" desc="Generic label for a user to select an always option">
+        Always
       </message>
 
       <message name="IDS_ACCESSIBILITY_TOOLBAR_BTN_MENU" desc="Content description for the settings menu button.">
@@ -441,6 +447,47 @@
       <message name="IDS_PAGE_INFO_PERMISSIONS_TITLE" desc="Label used in the Page Info dialog above the permissions list.">
         Permissions
       </message>
+      <message name="IDS_PAGE_INFO_PERMISSIONS_RESET" desc="The label for the button allowing users to reset the permissions for a website.">
+        Reset permissions
+      </message>
+      <message name="IDS_PAGE_INFO_PERMISSIONS_RESET_CONFIRMATION" desc="The confirmation text asking if the user is sure about resetting the permissions for a site.">
+        Are you sure you want to reset all permissions for this website?
+      </message>
+      <message name="IDS_PAGE_INFO_PERMISSIONS_OS_WARNING" desc="Text to show an OS-level permission warning.">
+        <ph name="PERMISSION">%1$s<ex>Location</ex></ph> - <ph name="WARNING_MESSAGE">%2$s<ex>Turned off for this device</ex></ph>
+      </message>
+      <message name="IDS_PAGE_INFO_PERMISSIONS_SUMMARY_1_ALLOWED" desc="Summary page info permissions string for one allowed permission.">
+        <ph name="PERMISSION_1">%1$s<ex>Location</ex></ph> allowed
+      </message>
+      <message name="IDS_PAGE_INFO_PERMISSIONS_SUMMARY_1_BLOCKED" desc="Summary page info permissions string for for one blocked permission.">
+        <ph name="PERMISSION_1">%1$s<ex>Location</ex></ph> blocked
+      </message>
+      <message name="IDS_PAGE_INFO_PERMISSIONS_SUMMARY_2_MIXED" desc="Summary page info permissions string for 2 permissions, with a mix of allowed/blocked.
+      For the languages in which allowed/blocked have to agree with the gender of the permission, a translation of the string 'PERMISSION_1 and PERMISSION_2' should be used instead.
+      Refer to b/168814348 for more details.">
+        <ph name="PERMISSION_1">%1$s<ex>Location</ex></ph> allowed, <ph name="PERMISSION_2">%2$s<ex>Sound</ex></ph> blocked
+      </message>
+      <message name="IDS_PAGE_INFO_PERMISSIONS_SUMMARY_2_ALLOWED" desc="Summary page info permissions string for 2 permissions, all allowed.">
+        <ph name="PERMISSION_1">%1$s<ex>Location</ex></ph> and <ph name="PERMISSION_2">%2$s<ex>Sound</ex></ph> allowed
+      </message>
+      <message name="IDS_PAGE_INFO_PERMISSIONS_SUMMARY_2_BLOCKED" desc="Summary page info permissions string for 2 permissions, all blocked.">
+        <ph name="PERMISSION_1">%1$s<ex>Location</ex></ph> and <ph name="PERMISSION_2">%2$s<ex>Sound</ex></ph> blocked
+      </message>
+      <message name="IDS_PAGE_INFO_PERMISSIONS_SUMMARY_MORE_MIXED" desc="Summary page info permissions string for more than 2 permissions, with a mix of allowed/blocked.">
+        {PERMISSIONS_SUMMARY_MIXED, plural,
+        =1 {<ph name="PERMISSION_1">%1$s<ex>Location</ex></ph>, <ph name="PERMISSION_2">%2$s<ex>Sound</ex></ph>, and <ph name="NUM_MORE">%3$s<ex>1</ex></ph> more}
+        other {<ph name="PERMISSION_1">%1$s<ex>Location</ex></ph>, <ph name="PERMISSION_2">%2$s<ex>Sound</ex></ph>, and <ph name="NUM_MORE">%3$s<ex>2</ex></ph> more}}
+      </message>
+      <message name="IDS_PAGE_INFO_PERMISSIONS_SUMMARY_MORE_ALLOWED" desc="Summary page info permissions string for more than 2 permissions, all allowed.">
+        {PERMISSIONS_SUMMARY_ALLOWED, plural,
+        =1 {<ph name="PERMISSION_1">%1$s<ex>Location</ex></ph>, <ph name="PERMISSION_2">%2$s<ex>Sound</ex></ph>, and <ph name="NUM_MORE">%3$s<ex>1</ex></ph> more allowed}
+        other {<ph name="PERMISSION_1">%1$s<ex>Location</ex></ph>, <ph name="PERMISSION_2">%2$s<ex>Sound</ex></ph>, and <ph name="NUM_MORE">%3$s<ex>2</ex></ph> more allowed}}
+      </message>
+      <message name="IDS_PAGE_INFO_PERMISSIONS_SUMMARY_MORE_BLOCKED" desc="Summary page info permissions string for more than 2 permissions, all blocked.">
+        {PERMISSIONS_SUMMARY_BLOCKED, plural,
+        =1 {<ph name="PERMISSION_1">%1$s<ex>Location</ex></ph>, <ph name="PERMISSION_2">%2$s<ex>Sound</ex></ph>, and <ph name="NUM_MORE">%3$s<ex>1</ex></ph> more blocked}
+        other {<ph name="PERMISSION_1">%1$s<ex>Location</ex></ph>, <ph name="PERMISSION_2">%2$s<ex>Sound</ex></ph>, and <ph name="NUM_MORE">%3$s<ex>2</ex></ph> more blocked}}
+      </message>
       <message name="IDS_PAGE_INFO_INSTANT_APP_BUTTON" desc="Text in the button that opens an Android Instant app that is associated with the website's URL.">
         Open Instant App
       </message>
@@ -461,6 +508,12 @@
       </message>
       <message name="IDS_PAGE_INFO_COOKIES_CLEAR" desc="Text on the button to clear cookies for a site.">
         Clear cookies
+      </message>
+      <message name="IDS_PAGE_INFO_COOKIES_CLEAR_CONFIRMATION" desc="Description of the confirmation dialog when the user clicked 'Clear cookies'.">
+        Are you sure you want to clear cookies and other site data for this website?
+      </message>
+      <message name="IDS_PAGE_INFO_COOKIES_CLEAR_CONFIRMATION_BUTTON" desc="Button in the confirmation dialog when the user clicked 'Clear cookies'.">
+        Clear
       </message>
       <message name="IDS_PAGE_INFO_COOKIES_DESCRIPTION" desc="Description in the Page Info UI explaining cookies.">
         Cookies and other site data are used to remember you, for example to sign you in or to personalize ads. To manage cookies for all sites, see <ph name="BEGIN_LINK">&lt;link&gt;</ph>Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
@@ -591,7 +644,7 @@
         Options available near bottom of the screen
       </message>
 
-    <!-- Warning on sharing info with external apps in incognito mode -->
+      <!-- Warning on sharing info with external apps in incognito mode -->
       <message name="IDS_EXTERNAL_APP_LEAVE_INCOGNITO_WARNING" desc="Alert dialog text warning the user (who is currently in incognito mode) that the site they are currently using is going to share data with an external application." formatter_data="android_java">
         This site is about to share information with an app outside of incognito mode.
       </message>
@@ -603,6 +656,93 @@
       </message>
       <message name="IDS_EXTERNAL_APP_LEAVE_INCOGNITO_LEAVE" desc="Label for the dialog button to leave incognito mode. [CHAR-LIMIT=20]" formatter_data="android_java">
         Leave
+      </message>
+
+      <!-- Contacts Picker strings -->
+      <message name="IDS_CONTACTS_PICKER_SEARCH" desc="The hint text for the search box for contacts.">
+        Search your contacts
+      </message>
+      <message name="IDS_CONTACTS_PICKER_SELECT_CONTACTS" desc="The label at the top of the dialog that allows users to select contacts from their device and share the details with a web page.">
+        Select contacts
+      </message>
+      <message name="IDS_CONTACTS_PICKER_SELECT_CONTACT" desc="The label at the top of the dialog that allows users to select a single contact from their device and share the details with a web page.">
+        Select a contact
+      </message>
+      <message name="IDS_CONTACTS_PICKER_ALL_CONTACTS" desc="The label associated with the select all checkbox, indicating that all the contacts will be selected.">
+        All contacts
+      </message>
+      <message name="IDS_CONTACTS_PICKER_NO_CONTACTS_FOUND" desc="The label shown when no contacts are found (e.g. none exist on the device).">
+        No contacts found
+      </message>
+      <message name="IDS_TOP_VIEW_NAMES_FILTER_LABEL" desc="The label shown for the names filter toggle button (allowing the user to exclude names).">
+        Names
+      </message>
+      <message name="IDS_TOP_VIEW_ADDRESS_FILTER_LABEL" desc="The label shown for the address filter toggle button (allowing the user to exclude names).">
+        Addresses
+      </message>
+      <message name="IDS_TOP_VIEW_EMAIL_FILTER_LABEL" desc="The label shown for the email filter toggle button (allowing the user to exclude emails).">
+        Email addresses
+      </message>
+      <message name="IDS_TOP_VIEW_TELEPHONE_FILTER_LABEL" desc="The label shown for the telephone filter toggle button (allowing the user to exclude telephones).">
+        Phone numbers
+      </message>
+      <message name="IDS_TOP_VIEW_ICON_FILTER_LABEL" desc="The label shown for the icon filter toggle button (allowing the user to exclude icons).">
+        Profile photos
+      </message>
+      <message name="IDS_CONTACTS_PICKER_MORE_DETAILS" desc="Label describing that the user has one or more telephone/emails (used for either).">
+        {DETAIL_COUNT, plural,
+          =1 {(+ 1 more)}
+          other {(+ # more)}}
+      </message>
+      <message name="IDS_DISCLAIMER_SHARING_CONTACT_DETAILS" desc="Label describing what will happen with the contact details that are being shared.">
+        The contacts you select will be shared with <ph name="BEGIN_BOLD">&lt;b&gt;</ph><ph name="SITE">%1$s<ex>https://www.google.com</ex></ph><ph name="END_BOLD">&lt;/b&gt;</ph>.
+      </message>
+
+      <!-- Photo picker -->
+      <message name="IDS_PHOTO_PICKER_SELECT_IMAGES" desc="The label in the title bar of the Photo Picker dialog, suggesting that the user can make multiple selections.">
+        Select images
+      </message>
+      <message name="IDS_PHOTO_PICKER_SELECT_IMAGE" desc="The label in the title bar of the Photo Picker dialog, suggesting that the user can make a single selection.">
+        Select an image
+      </message>
+      <message name="IDS_PHOTO_PICKER_CAMERA" desc="The label for the Camera action in the Photo Picker (opening the camera system intent).">
+        Camera
+      </message>
+      <message name="IDS_PHOTO_PICKER_BROWSE" desc="The label for the Browse action in the Photo Picker (browsing for photos).">
+        Browse
+      </message>
+      <message name="IDS_PHOTO_PICKER_VIDEO_DURATION" desc="The label showing the duration time and current position of the video, as in: 0:01 / 0:10.">
+        <ph name="POSITION">%1$s<ex>0:01</ex></ph> / <ph name="DURATION">%2$s<ex>0:10</ex></ph>
+      </message>
+      <message name="IDS_DECODER_DESCRIPTION" desc="The title for the image decoder utility service.">
+        Image decoder
+      </message>
+      <message name="IDS_FAST_FORWARD_HINT" desc="The hint string shown when a user drags the tumb in the video seeker (reminding them of an easier way to skip ahead/go back).">
+        Double tap video left or right to skip 10s
+      </message>
+      <message name="IDS_ACCESSIBILITY_PLAY_VIDEO" desc="The accessibility string for the play video button.">
+        Play video
+      </message>
+      <message name="IDS_ACCESSIBILITY_PAUSE_VIDEO" desc="The accessibility string for the pause video button.">
+        Pause video
+      </message>
+      <message name="IDS_ACCESSIBILITY_MUTE_VIDEO" desc="The accessibility string for the mute video button.">
+        Mute video
+      </message>
+      <message name="IDS_ACCESSIBILITY_UNMUTE_VIDEO" desc="The accessibility string for the unmute video button.">
+        Unmute video
+      </message>
+      <message name="IDS_ACCESSIBILITY_FULL_SCREEN" desc="The accessibility string for the full screen video button.">
+        Full screen
+      </message>
+      <message name="IDS_ACCESSIBILITY_EXIT_FULL_SCREEN" desc="The accessibility string for the exiting of full screen video button.">
+        Exit full screen
+      </message>
+      <message name="IDS_ACCESSIBILITY_VIDEO_PLAYER" desc="The accessibility string for the video player.">
+        Video player
+      </message>
+      <message name="IDS_ACCESSIBILITY_PLAYBACK_TIME" desc="The accessibility string for how much time has elapsed while viewing the video and how long the video is in total.">
+        Elapsed time <ph name="ELAPSED_TIME">%1$s<ex>0:01</ex></ph> of <ph name="TOTAL_TIME">%2$s<ex>0:45</ex></ph>.
       </message>
 
       <!-- Fullscreen -->

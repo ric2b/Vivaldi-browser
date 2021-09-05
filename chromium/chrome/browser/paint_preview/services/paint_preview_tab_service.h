@@ -78,6 +78,14 @@ class PaintPreviewTabService : public PaintPreviewBaseService {
   // occurred.
   void AuditArtifacts(const std::vector<int>& active_tab_ids);
 
+  // Override for GetCapturedPaintPreviewProto. Defaults expiry horizon to 72
+  // hrs if not specified.
+  void GetCapturedPaintPreviewProto(
+      const DirectoryKey& key,
+      base::Optional<base::TimeDelta> expiry_horizon,
+      PaintPreviewBaseService::OnReadProtoCallback on_read_proto_callback)
+      override;
+
 #if defined(OS_ANDROID)
   // JNI wrapped versions of the above methods
   void CaptureTabAndroid(
@@ -105,6 +113,7 @@ class PaintPreviewTabService : public PaintPreviewBaseService {
   void CaptureTabInternal(int tab_id,
                           const DirectoryKey& key,
                           int frame_tree_node_id,
+                          content::GlobalFrameRoutingId frame_routing_id,
                           FinishedCallback callback,
                           const base::Optional<base::FilePath>& file_path);
 

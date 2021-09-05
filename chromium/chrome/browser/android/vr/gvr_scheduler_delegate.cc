@@ -14,11 +14,11 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
 #include "chrome/browser/android/vr/gl_browser_interface.h"
-#include "chrome/browser/android/vr/mailbox_to_surface_bridge.h"
 #include "chrome/browser/android/vr/metrics_util_android.h"
 #include "chrome/browser/android/vr/scoped_gpu_trace.h"
 #include "chrome/browser/vr/scheduler_browser_renderer_interface.h"
 #include "chrome/browser/vr/scheduler_ui_interface.h"
+#include "components/webxr/mailbox_to_surface_bridge_impl.h"
 #include "content/public/common/content_features.h"
 #include "device/vr/android/gvr/gvr_delegate.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
@@ -29,6 +29,18 @@
 #include "ui/gl/gl_image_ahardwarebuffer.h"
 
 namespace {
+
+// Default downscale factor for computing the recommended WebXR
+// render_width/render_height from the 1:1 pixel mapped size. Using a rather
+// aggressive downscale due to the high overhead of copying pixels
+// twice before handing off to GVR. For comparison, the polyfill
+// uses approximately 0.55 on a Pixel XL.
+static constexpr float kRecommendedResolutionScale = 0.7;
+
+// The scale factor for WebXR on devices that don't have shared buffer
+// support. (Android N and earlier.)
+static constexpr float kNoSharedBufferResolutionScale = 0.5;
+
 constexpr int kWebVrInitialFrameTimeoutSeconds = 5;
 constexpr int kWebVrSpinnerTimeoutSeconds = 2;
 
@@ -200,6 +212,15 @@ void GvrSchedulerDelegate::ConnectPresentingService(
   session->submit_frame_sink = std::move(submit_frame_sink);
   session->display_info = std::move(display_info);
 
+  // This scalar will be applied in the renderer to the recommended render
+  // target sizes. For WebVR it will always be applied, for WebXR it can be
+  // overridden.
+  if (base::AndroidHardwareBufferCompat::IsSupportAvailable()) {
+    session->default_framebuffer_scale = kRecommendedResolutionScale;
+  } else {
+    session->default_framebuffer_scale = kNoSharedBufferResolutionScale;
+  }
+
   if (CanSendWebXrVSync())
     ScheduleWebXrFrameTimeout();
 
@@ -282,7 +303,7 @@ void GvrSchedulerDelegate::CreateSurfaceBridge(
     gl::SurfaceTexture* surface_texture) {
   DCHECK(!mailbox_bridge_);
   DCHECK(!webxr_.mailbox_bridge_ready());
-  mailbox_bridge_ = std::make_unique<MailboxToSurfaceBridge>();
+  mailbox_bridge_ = std::make_unique<webxr::MailboxToSurfaceBridgeImpl>();
   if (surface_texture)
     mailbox_bridge_->CreateSurface(surface_texture);
   mailbox_bridge_->CreateAndBindContextProvider(
@@ -811,7 +832,7 @@ void GvrSchedulerDelegate::WebVrSendRenderNotification(bool was_rendered) {
     std::unique_ptr<gl::GLFence> gl_fence = gl::GLFence::CreateForGpuFence();
     std::unique_ptr<gfx::GpuFence> gpu_fence = gl_fence->GetGpuFence();
     submit_client_->OnSubmitFrameGpuFence(
-        gfx::CloneHandleForIPC(gpu_fence->GetGpuFenceHandle()));
+        gpu_fence->GetGpuFenceHandle().Clone());
   } else {
     // Renderer is waiting for the previous frame to render, unblock it now.
     submit_client_->OnSubmitFrameRendered();

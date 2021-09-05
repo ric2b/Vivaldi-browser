@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
+#include "base/strings/string_util.h"
 #include "base/task/post_task.h"
 #include "chrome/browser/availability/availability_prober.h"
 #include "chrome/browser/prerender/isolated/isolated_prerender_params.h"
@@ -142,7 +143,9 @@ class TLSProber {
                       mojo::ScopedDataPipeConsumerHandle receive_stream,
                       mojo::ScopedDataPipeProducerHandle send_stream,
                       const base::Optional<net::SSLInfo>& ssl_info) {
-    std::move(callback_).Run(result == net::OK);
+    std::move(callback_).Run(
+        result == net::OK ? IsolatedPrerenderProbeResult::kTLSProbeSuccess
+                          : IsolatedPrerenderProbeResult::kTLSProbeFailure);
     delete this;
   }
 
@@ -155,7 +158,7 @@ class TLSProber {
   }
 
   void HandleFailure() {
-    std::move(callback_).Run(false);
+    std::move(callback_).Run(IsolatedPrerenderProbeResult::kTLSProbeFailure);
     delete this;
   }
 
@@ -176,7 +179,9 @@ void HTTPProbeHelper(
     std::unique_ptr<AvailabilityProber> prober,
     IsolatedPrerenderOriginProber::OnProbeResultCallback callback,
     bool success) {
-  std::move(callback).Run(success);
+  std::move(callback).Run(success
+                              ? IsolatedPrerenderProbeResult::kTLSProbeSuccess
+                              : IsolatedPrerenderProbeResult::kTLSProbeFailure);
 }
 
 class CanaryCheckDelegate : public AvailabilityProber::Delegate {
@@ -189,8 +194,18 @@ class CanaryCheckDelegate : public AvailabilityProber::Delegate {
   bool IsResponseSuccess(net::Error net_error,
                          const network::mojom::URLResponseHead* head,
                          std::unique_ptr<std::string> body) override {
-    return net_error == net::OK && head && head->headers &&
-           head->headers->response_code() == 200 && body && *body == "OK";
+    if (net_error != net::OK)
+      return false;
+    if (!head)
+      return false;
+    if (!head->headers)
+      return false;
+    if (head->headers->response_code() != 200)
+      return false;
+    if (!body)
+      return false;
+    // Strip any whitespace, especially trailing newlines.
+    return "OK" == base::TrimWhitespaceASCII(*body, base::TRIM_ALL);
   }
 };
 
@@ -286,7 +301,7 @@ IsolatedPrerenderOriginProber::IsolatedPrerenderOriginProber(Profile* profile)
       content::BrowserContext::GetDefaultStoragePartition(profile_)
           ->GetURLLoaderFactoryForBrowserProcess(),
       profile_->GetPrefs(),
-      AvailabilityProber::ClientName::kIsolatedPrerenderTLSCanaryCheck,
+      AvailabilityProber::ClientName::kIsolatedPrerenderDNSCanaryCheck,
       IsolatedPrerenderDNSCanaryCheckURL(),
       AvailabilityProber::HttpMethod::kGet, net::HttpRequestHeaders(),
       retry_policy, timeout_policy, traffic_annotation,
@@ -312,7 +327,7 @@ void IsolatedPrerenderOriginProber::OnTLSCanaryCheckComplete(bool success) {
   StartCanaryCheck(dns_canary_check_->AsWeakPtr());
 }
 
-bool IsolatedPrerenderOriginProber::ShouldProbeOrigins() {
+bool IsolatedPrerenderOriginProber::ShouldProbeOrigins() const {
   if (!IsolatedPrerenderProbingEnabled()) {
     return false;
   }
@@ -339,13 +354,11 @@ void IsolatedPrerenderOriginProber::
 }
 
 bool IsolatedPrerenderOriginProber::IsTLSCanaryCheckCompleteForTesting() const {
-  return tls_canary_check_ &&
-         tls_canary_check_->LastProbeWasSuccessful().has_value();
+  return tls_canary_check_->LastProbeWasSuccessful().has_value();
 }
 
-bool IsolatedPrerenderOriginProber::IsDNSCanaryCheckCompleteForTesting() const {
-  return dns_canary_check_ &&
-         dns_canary_check_->LastProbeWasSuccessful().has_value();
+bool IsolatedPrerenderOriginProber::IsDNSCanaryCheckActiveForTesting() const {
+  return dns_canary_check_->is_active();
 }
 
 void IsolatedPrerenderOriginProber::Probe(const GURL& url,
@@ -433,7 +446,7 @@ void IsolatedPrerenderOriginProber::HTTPProbe(const GURL& url,
 
   // Transfer ownership of the prober to the callback so that the class instance
   // is automatically destroyed when the probe is complete.
-  OnProbeResultCallback owning_callback =
+  auto owning_callback =
       base::BindOnce(&HTTPProbeHelper, std::move(prober), std::move(callback));
   prober_ptr->SetOnCompleteCallback(base::BindOnce(std::move(owning_callback)));
 
@@ -451,12 +464,12 @@ void IsolatedPrerenderOriginProber::OnDNSResolved(
 
   // A TLS connection needs the resolved addresses, so it also fails here.
   if (!successful) {
-    std::move(callback).Run(false);
+    std::move(callback).Run(IsolatedPrerenderProbeResult::kDNSProbeFailure);
     return;
   }
 
   if (!also_do_tls_connect) {
-    std::move(callback).Run(true);
+    std::move(callback).Run(IsolatedPrerenderProbeResult::kDNSProbeSuccess);
     return;
   }
 

@@ -403,9 +403,6 @@ bool NeuralStylusPalmDetectionFilter::
                        kOzoneNNPalmSwitchName));
 }
 
-const std::vector<int> NeuralStylusPalmDetectionFilter::kRequiredAbsMtCodes = {
-    ABS_MT_POSITION_X, ABS_MT_POSITION_Y, ABS_MT_TOUCH_MAJOR};
-
 bool NeuralStylusPalmDetectionFilter::
     CompatibleWithNeuralStylusPalmDetectionFilter(
         const EventDeviceInfo& devinfo,
@@ -425,8 +422,11 @@ bool NeuralStylusPalmDetectionFilter::
     }
     return true;
   };
-  if (!std::all_of(kRequiredAbsMtCodes.begin(), kRequiredAbsMtCodes.end(),
-                   code_check)) {
+
+  static constexpr int kRequiredAbsMtCodes[] = {
+      ABS_MT_POSITION_X, ABS_MT_POSITION_Y, ABS_MT_TOUCH_MAJOR};
+  if (!std::all_of(std::begin(kRequiredAbsMtCodes),
+                   std::end(kRequiredAbsMtCodes), code_check)) {
     return false;
   }
 

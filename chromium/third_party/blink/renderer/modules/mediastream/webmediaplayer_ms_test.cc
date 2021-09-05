@@ -62,7 +62,6 @@ class MockSurfaceLayerBridge : public WebSurfaceLayerBridge {
   MOCK_CONST_METHOD0(GetCcLayer, cc::Layer*());
   MOCK_CONST_METHOD0(GetFrameSinkId, const viz::FrameSinkId&());
   MOCK_CONST_METHOD0(GetSurfaceId, const viz::SurfaceId&());
-  MOCK_CONST_METHOD0(GetLocalSurfaceIdAllocationTime, base::TimeTicks());
   MOCK_METHOD1(SetContentsOpaque, void(bool));
   MOCK_METHOD0(CreateSurfaceLayer, void());
   MOCK_METHOD0(ClearSurfaceId, void());
@@ -185,6 +184,10 @@ class FakeWebMediaPlayerDelegate
 
   void DidAudioOutputSinkChange(int delegate_id,
                                 const std::string& hashed_device_id) override {
+    EXPECT_EQ(delegate_id_, delegate_id);
+  }
+
+  void DidDisableAudioOutputSinkChanges(int delegate_id) override {
     EXPECT_EQ(delegate_id_, delegate_id);
   }
 
@@ -429,7 +432,7 @@ class MockWebVideoFrameSubmitter : public WebVideoFrameSubmitter {
   // WebVideoFrameSubmitter implementation.
   MOCK_METHOD0(StopUsingProvider, void());
   MOCK_METHOD0(DidReceiveFrame, void());
-  MOCK_METHOD2(EnableSubmission, void(viz::SurfaceId, base::TimeTicks));
+  MOCK_METHOD1(EnableSubmission, void(viz::SurfaceId));
   MOCK_METHOD0(StartRendering, void());
   MOCK_METHOD0(StopRendering, void());
   MOCK_METHOD1(MockInitialize, void(cc::VideoFrameProvider*));

@@ -6,7 +6,10 @@ package org.chromium.weblayer_private.interfaces;
 
 import org.chromium.weblayer_private.interfaces.ICookieManager;
 import org.chromium.weblayer_private.interfaces.IDownloadCallbackClient;
+import org.chromium.weblayer_private.interfaces.IUserIdentityCallbackClient;
 import org.chromium.weblayer_private.interfaces.IObjectWrapper;
+import org.chromium.weblayer_private.interfaces.IPrerenderController;
+import org.chromium.weblayer_private.interfaces.IProfileClient;
 
 interface IProfile {
   void destroy() = 0;
@@ -40,4 +43,11 @@ interface IProfile {
   // Added in Version 86.
   void getCachedFaviconForPageUri(in String uri,
                                   in IObjectWrapper resultCallback) = 12;
+
+  // Added in Version 87.
+  void setUserIdentityCallbackClient(IUserIdentityCallbackClient client) = 13;
+  IPrerenderController getPrerenderController() = 15;
+  boolean isIncognito() = 16;
+  void setClient(in IProfileClient client) = 17;
+  void destroyAndDeleteDataFromDiskSoon(in IObjectWrapper completeCallback) = 18;
 }

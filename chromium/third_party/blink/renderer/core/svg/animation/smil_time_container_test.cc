@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_length.h"
 #include "third_party/blink/renderer/core/svg/svg_document_extensions.h"
 #include "third_party/blink/renderer/core/svg/svg_length.h"
 #include "third_party/blink/renderer/core/svg/svg_length_context.h"
@@ -136,7 +137,8 @@ class SMILTimeContainerAnimationPolicyOnceTest : public PageTestBase {
 
  private:
   static void OverrideSettings(Settings& settings) {
-    settings.SetImageAnimationPolicy(kImageAnimationPolicyAnimateOnce);
+    settings.SetImageAnimationPolicy(
+        web_pref::kImageAnimationPolicyAnimateOnce);
   }
 
   base::TimeTicks current_time_;

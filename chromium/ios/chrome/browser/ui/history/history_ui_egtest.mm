@@ -15,7 +15,6 @@
 #import "ios/chrome/browser/ui/table_view/feature_flags.h"
 #import "ios/chrome/browser/ui/table_view/table_view_constants.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
-#import "ios/chrome/browser/ui/util/multi_window_support.h"
 #include "ios/chrome/common/string_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -33,11 +32,10 @@
 #endif
 
 using chrome_test_util::ButtonWithAccessibilityLabelId;
-using chrome_test_util::ContextMenuCopyButton;
 using chrome_test_util::HistoryEntry;
 using chrome_test_util::NavigationBarDoneButton;
-using chrome_test_util::OpenLinkInNewTabButton;
 using chrome_test_util::OpenLinkInNewWindowButton;
+using chrome_test_util::DeleteButton;
 
 namespace {
 char kURL1[] = "/firstURL";
@@ -68,11 +66,6 @@ id<GREYMatcher> SearchIconButton() {
 // Matcher for the cancel button.
 id<GREYMatcher> CancelButton() {
   return grey_accessibilityID(kHistoryToolbarCancelButtonIdentifier);
-}
-// Matcher for the Open in New Incognito Tab option in the context menu.
-id<GREYMatcher> OpenInNewIncognitoTabButton() {
-  return ButtonWithAccessibilityLabelId(
-      IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWINCOGNITOTAB);
 }
 // Matcher for the empty TableView background
 id<GREYMatcher> EmptyTableViewBackground() {
@@ -144,6 +137,9 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
 }
 
 - (void)tearDown {
+  // No-op if only one window presents.
+  [ChromeEarlGrey closeAllExtraWindowsAndForceRelaunchWithAppConfig:
+                      [self appConfigurationForTestCase]];
   NSError* error = nil;
   // Dismiss search bar by pressing cancel, if present. Passing error prevents
   // failure if the element is not found.
@@ -396,24 +392,19 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
 
   // Select "Open in New Tab" and confirm that new tab is opened with selected
   // URL.
-  [[EarlGrey selectElementWithMatcher:OpenLinkInNewTabButton()]
-      performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
-                                          _URL1.GetContent())]
-      assertWithMatcher:grey_notNil()];
-  [ChromeEarlGrey waitForMainTabCount:2];
+  [ChromeEarlGrey verifyOpenInNewTabActionWithURL:_URL1.GetContent()];
 }
 
 // Tests display and selection of 'Open in New Window' in a context menu on a
 // history entry.
 - (void)testContextMenuOpenInNewWindow {
-  if (!IsMultipleScenesSupported())
-    return;
+  if (![ChromeEarlGrey areMultipleWindowsSupported])
+    EARL_GREY_TEST_DISABLED(@"Multiple windows can't be opened.");
 
   [self loadTestURLs];
   [self openHistoryPanel];
 
-  [ChromeEarlGrey waitForBrowserCount:1];
+  [ChromeEarlGrey waitForForegroundWindowCount:1];
 
   // Long press on the history element.
   [[EarlGrey
@@ -424,13 +415,13 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   // selected URL in the new window.
   [[EarlGrey selectElementWithMatcher:OpenLinkInNewWindowButton()]
       performAction:grey_tap()];
+  [ChromeEarlGrey waitForForegroundWindowCount:2];
   [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
                                           _URL1.GetContent())]
       assertWithMatcher:grey_notNil()];
-  [ChromeEarlGrey waitForBrowserCount:2];
 
-  [ChromeEarlGrey closeCurrentTab];
-  [ChromeEarlGrey waitForBrowserCount:1];
+  [ChromeEarlGrey closeAllExtraWindowsAndForceRelaunchWithAppConfig:
+                      [self appConfigurationForTestCase]];
 }
 
 // Tests display and selection of 'Open in New Incognito Tab' in a context menu
@@ -446,30 +437,15 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
 
   // Select "Open in New Incognito Tab" and confirm that new tab is opened in
   // incognito with the selected URL.
-  [[EarlGrey selectElementWithMatcher:OpenInNewIncognitoTabButton()]
-      performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
-                                          _URL1.GetContent())]
-      assertWithMatcher:grey_notNil()];
-  [ChromeEarlGrey waitForMainTabCount:1];
-  [ChromeEarlGrey waitForIncognitoTabCount:1];
+  [ChromeEarlGrey
+      verifyOpenInIncognitoActionWithURL:_URL1.GetContent()
+                            useNewString:[ChromeEarlGrey
+                                             isNativeContextMenusEnabled]];
 }
 
 // Tests display and selection of 'Copy URL' in a context menu on a history
 // entry.
-// TODO(crbug.com/1067812): Test won't pass on devices.
-#if TARGET_IPHONE_SIMULATOR
-#define MAYBE_testContextMenuCopy testContextMenuCopy
-#else
-#define MAYBE_testContextMenuCopy DISABLED_testContextMenuCopy
-#endif
-- (void)MAYBE_testContextMenuCopy {
-  ProceduralBlock clearPasteboard = ^{
-    [[UIPasteboard generalPasteboard] setURLs:nil];
-  };
-  [self setTearDownHandler:clearPasteboard];
-  clearPasteboard();
-
+- (void)testContextMenuCopy {
   [self loadTestURLs];
   [self openHistoryPanel];
 
@@ -479,15 +455,66 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
       performAction:grey_longPress()];
 
   // Tap "Copy URL" and wait for the URL to be copied to the pasteboard.
-  [[EarlGrey selectElementWithMatcher:ContextMenuCopyButton()]
-      performAction:grey_tap()];
-  bool success = base::test::ios::WaitUntilConditionOrTimeout(
-      base::test::ios::kWaitForUIElementTimeout, ^{
-        return _URL1 ==
-               net::GURLWithNSURL([UIPasteboard generalPasteboard].URL);
-      });
-  GREYAssertTrue(success, @"Pasteboard URL was not set to %s",
-                 _URL1.spec().c_str());
+  [ChromeEarlGrey
+      verifyCopyLinkActionWithText:[NSString stringWithUTF8String:_URL1.spec()
+                                                                      .c_str()]
+                      useNewString:[ChromeEarlGrey
+                                       isNativeContextMenusEnabled]];
+}
+
+// Tests display and selection of "Share" in the context menu for a history
+// entry.
+- (void)testContextMenuShare {
+  if (![ChromeEarlGrey isNativeContextMenusEnabled]) {
+    EARL_GREY_TEST_SKIPPED(
+        @"Test disabled when Native Context Menus feature flag is off.");
+  }
+
+  [self loadTestURLs];
+  [self openHistoryPanel];
+
+  // Long press on the history element.
+  [[EarlGrey
+      selectElementWithMatcher:HistoryEntry(_URL1.GetOrigin().spec(), kTitle1)]
+      performAction:grey_longPress()];
+
+  [ChromeEarlGrey
+      verifyShareActionWithPageTitle:[NSString stringWithUTF8String:kTitle1]];
+}
+
+// Tests the Delete context menu action for a History entry.
+- (void)testContextMenuDelete {
+  if (![ChromeEarlGrey isNativeContextMenusEnabled]) {
+    EARL_GREY_TEST_SKIPPED(
+        @"Test disabled when Native Context Menus feature flag is off.");
+  }
+
+  [self loadTestURLs];
+  [self openHistoryPanel];
+
+  // Long press on the history element.
+  [[EarlGrey
+      selectElementWithMatcher:HistoryEntry(_URL1.GetOrigin().spec(), kTitle1)]
+      performAction:grey_longPress()];
+
+  [[EarlGrey selectElementWithMatcher:DeleteButton()] performAction:grey_tap()];
+
+  // Assert that the deleted entry is gone and the other two remain.
+  [[EarlGrey
+      selectElementWithMatcher:HistoryEntry(_URL1.GetOrigin().spec(), kTitle1)]
+      assertWithMatcher:grey_nil()];
+
+  // Wait for the animations to be done, then validate.
+  [ChromeEarlGrey
+      waitForSufficientlyVisibleElementWithMatcher:HistoryEntry(
+                                                       _URL2.GetOrigin().spec(),
+                                                       kTitle2)];
+  [[EarlGrey
+      selectElementWithMatcher:HistoryEntry(_URL2.GetOrigin().spec(), kTitle2)]
+      assertWithMatcher:grey_notNil()];
+  [[EarlGrey selectElementWithMatcher:HistoryEntry(_URL3.GetOrigin().spec(),
+                                                   _URL3.GetContent())]
+      assertWithMatcher:grey_notNil()];
 }
 
 // Tests that the VC can be dismissed by swiping down.
@@ -583,7 +610,7 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
 
   [ChromeEarlGreyUI openAndClearBrowsingDataFromHistory];
 
-  if (base::FeatureList::IsEnabled(kIllustratedEmptyStates)) {
+  if ([ChromeEarlGrey isIllustratedEmptyStatesEnabled]) {
     // Toolbar should only contain CBD button and the background should contain
     // the Illustrated empty view
     [[EarlGrey selectElementWithMatcher:chrome_test_util::

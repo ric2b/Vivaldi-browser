@@ -63,6 +63,16 @@ struct SameSizeAsHarfBuzzRunGlyphData {
 
 ASSERT_SIZE(HarfBuzzRunGlyphData, SameSizeAsHarfBuzzRunGlyphData);
 
+struct SameSizeAsShapeResult : public RefCounted<SameSizeAsShapeResult> {
+  float floats[5];
+  Vector<int> vector;
+  void* pointers[2];
+  unsigned integers[2];
+  unsigned bitfields : 32;
+};
+
+ASSERT_SIZE(ShapeResult, SameSizeAsShapeResult);
+
 unsigned ShapeResult::RunInfo::NextSafeToBreakOffset(unsigned offset) const {
   DCHECK_LE(offset, num_characters_);
   if (!Rtl()) {
@@ -370,7 +380,8 @@ ShapeResult::ShapeResult(scoped_refptr<const SimpleFontData> font_data,
       num_characters_(num_characters),
       num_glyphs_(0),
       direction_(static_cast<unsigned>(direction)),
-      has_vertical_offsets_(0) {}
+      has_vertical_offsets_(false),
+      is_applied_spacing_(false) {}
 
 ShapeResult::ShapeResult(const Font* font,
                          unsigned start_index,
@@ -386,7 +397,8 @@ ShapeResult::ShapeResult(const ShapeResult& other)
       num_characters_(other.num_characters_),
       num_glyphs_(other.num_glyphs_),
       direction_(other.direction_),
-      has_vertical_offsets_(other.has_vertical_offsets_) {
+      has_vertical_offsets_(other.has_vertical_offsets_),
+      is_applied_spacing_(other.is_applied_spacing_) {
   runs_.ReserveCapacity(other.runs_.size());
   for (const auto& run : other.runs_)
     runs_.push_back(run->Create(*run.get()));
@@ -400,12 +412,6 @@ size_t ShapeResult::ByteSize() const {
     self_byte_size += runs_[i]->ByteSize();
   }
   return self_byte_size;
-}
-
-scoped_refptr<ShapeResult> ShapeResult::MutableUnique() const {
-  if (HasOneRef())
-    return const_cast<ShapeResult*>(this);
-  return ShapeResult::Create(*this);
 }
 
 unsigned ShapeResult::NextSafeToBreakOffset(unsigned index) const {
@@ -744,6 +750,8 @@ unsigned ShapeResult::CountGraphemesInCluster(base::span<const UChar> str,
   uint16_t length = end_index - start_index;
   TextBreakIterator* cursor_pos_iterator =
       CursorMovementIterator(str.subspan(start_index, length));
+  if (!cursor_pos_iterator)
+    return 0;
 
   int cursor_pos = cursor_pos_iterator->current();
   int num_graphemes = -1;
@@ -892,6 +900,7 @@ void ShapeResult::ApplySpacingImpl(
 
 void ShapeResult::ApplySpacing(ShapeResultSpacing<String>& spacing,
                                int text_start_offset) {
+  is_applied_spacing_ = true;
   ApplySpacingImpl(spacing, text_start_offset);
 }
 

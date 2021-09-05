@@ -803,7 +803,7 @@ QuicTestPacketMaker::MakePriorityPacket(uint64_t packet_number,
 
     return BuildPacket();
   }
-  if (priority != quic::QuicStream::kDefaultUrgency) {
+  if (priority != quic::QuicStream::DefaultUrgency()) {
     std::string priority_data = GenerateHttp3PriorityData(priority, id);
     AddQuicStreamFrame(2, false, priority_data);
   }
@@ -841,7 +841,7 @@ QuicTestPacketMaker::MakeAckAndPriorityPacket(
 
     return BuildPacket();
   }
-  if (priority != quic::QuicStream::kDefaultUrgency) {
+  if (priority != quic::QuicStream::DefaultUrgency()) {
     std::string priority_data = GenerateHttp3PriorityData(priority, id);
     AddQuicStreamFrame(2, false, priority_data);
   }
@@ -1205,7 +1205,7 @@ void QuicTestPacketMaker::AddQuicPathChallengeFrame() {
 
 void QuicTestPacketMaker::AddQuicStopSendingFrame(
     quic::QuicStreamId stream_id,
-    quic::QuicApplicationErrorCode error_code) {
+    quic::QuicRstStreamErrorCode error_code) {
   auto* stop_sending_frame =
       new quic::QuicStopSendingFrame(1, stream_id, error_code);
   frames_.push_back(quic::QuicFrame(stop_sending_frame));
@@ -1384,7 +1384,8 @@ quic::QuicStreamId QuicTestPacketMaker::GetHeadersStreamId() const {
 
 std::string QuicTestPacketMaker::GenerateHttp3SettingsData() {
   quic::SettingsFrame settings;
-  settings.values[quic::SETTINGS_MAX_HEADER_LIST_SIZE] = kQuicMaxHeaderListSize;
+  settings.values[quic::SETTINGS_MAX_FIELD_SECTION_SIZE] =
+      kQuicMaxHeaderListSize;
   settings.values[quic::SETTINGS_QPACK_MAX_TABLE_CAPACITY] =
       quic::kDefaultQpackMaxDynamicTableCapacity;
   settings.values[quic::SETTINGS_QPACK_BLOCKED_STREAMS] =

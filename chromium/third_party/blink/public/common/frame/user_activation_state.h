@@ -110,22 +110,28 @@ class BLINK_COMMON_EXPORT UserActivationState {
   // successfully consumed.
   bool ConsumeIfActive();
 
-  // Transfers user activation state from |other| into |this|:
-  // - The sticky bit in |this| gets set if the bit in |other| is set.
-  // - The transient expiry time in |this| becomes the max of the expiry times
-  //   in |this| and |other|.
-  // - The state in |other| is cleared.
-  void TransferFrom(UserActivationState& other);
+  // Records UMA stats related to consumption.  Must be called:
+  // - before |ConsumeIfActive()| to record correct stats, and
+  // - only once during consumption propagation to suppress over-counting.
+  void RecordPreconsumptionUma() const;
 
  private:
   void ActivateTransientState();
   void DeactivateTransientState();
 
+  bool IsActiveInternal() const;
+
+  mojom::UserActivationNotificationType EffectiveNotificationType() const;
+
   bool has_been_active_ = false;
   base::TimeTicks transient_state_expiry_time_;
 
+  // Tracks the expiry of |kInteraction| notification for UMA data.
+  base::TimeTicks transient_state_expiry_time_for_interaction_;
+
   // Tracks the type of notification for UMA data.
-  mojom::UserActivationNotificationType notification_type_;
+  mojom::UserActivationNotificationType first_notification_type_;
+  mojom::UserActivationNotificationType last_notification_type_;
 };
 
 }  // namespace blink

@@ -5,7 +5,8 @@
 // Include test fixture.
 GEN_INCLUDE([
   '../chromevox/testing/chromevox_next_e2e_test_base.js',
-  'testing/assert_additions.js', '../chromevox/testing/snippets.js'
+  'testing/assert_additions.js', '../chromevox/testing/snippets.js',
+  'rect_util.js'
 ]);
 
 /**
@@ -72,6 +73,30 @@ TEST_F(
           root = root.firstChild;
         }
       });
+    });
+
+TEST_F(
+    'AccessibilityExtensionAutomationUtilE2ETest', 'GetFirstAncestorWithRole',
+    function() {
+      this.runWithLoadedTree(
+          `
+    <div aria-label="x">
+      <div aria-label="y">
+        <p>
+          <button>Hello world</div>
+        </p>
+      </div>
+    </div>`,
+          function(root) {
+            const buttonNode = root.firstChild.firstChild.firstChild;
+            const containerNode = AutomationUtil.getFirstAncestorWithRole(
+                buttonNode, RoleType.GENERIC_CONTAINER);
+            assertEquals(containerNode.name, 'y');
+
+            const parentContainerNode = AutomationUtil.getFirstAncestorWithRole(
+                containerNode, RoleType.GENERIC_CONTAINER);
+            assertEquals(parentContainerNode.name, 'x');
+          });
     });
 
 TEST_F(
@@ -162,22 +187,21 @@ TEST_F(
 
 TEST_F('AccessibilityExtensionAutomationUtilE2ETest', 'HitTest', function() {
   this.runWithLoadedTree(headingDoc, function(r) {
-    // Gets the center point of a rect.
-    function getCP(node) {
-      const loc = node.location;
-      return {x: loc.left + loc.width / 2, y: loc.top + loc.height / 2};
-    }
     const [h1, h2, a] = r.findAll({role: 'inlineTextBox'});
 
-    assertEquals(h1, AutomationUtil.hitTest(r, getCP(h1)));
-    assertEquals(h1, AutomationUtil.hitTest(r, getCP(h1.parent)));
+    assertEquals(h1, AutomationUtil.hitTest(r, RectUtil.center(h1.location)));
     assertEquals(
-        h1.parent.parent, AutomationUtil.hitTest(r, getCP(h1.parent.parent)));
+        h1, AutomationUtil.hitTest(r, RectUtil.center(h1.parent.location)));
+    assertEquals(
+        h1.parent.parent,
+        AutomationUtil.hitTest(r, RectUtil.center(h1.parent.parent.location)));
 
-    assertEquals(a, AutomationUtil.hitTest(r, getCP(a)));
-    assertEquals(a, AutomationUtil.hitTest(r, getCP(a.parent)));
+    assertEquals(a, AutomationUtil.hitTest(r, RectUtil.center(a.location)));
     assertEquals(
-        a.parent.parent, AutomationUtil.hitTest(r, getCP(a.parent.parent)));
+        a, AutomationUtil.hitTest(r, RectUtil.center(a.parent.location)));
+    assertEquals(
+        a.parent.parent,
+        AutomationUtil.hitTest(r, RectUtil.center(a.parent.parent.location)));
   });
 });
 

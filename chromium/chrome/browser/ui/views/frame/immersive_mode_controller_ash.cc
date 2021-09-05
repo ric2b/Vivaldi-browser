@@ -123,14 +123,14 @@ void ImmersiveModeControllerAsh::OnFindBarVisibleBoundsChanged(
 }
 
 bool ImmersiveModeControllerAsh::ShouldStayImmersiveAfterExitingFullscreen() {
-  return !browser_view_->IsTabStripSupported() &&
+  return !browser_view_->CanSupportTabStrip() &&
          ash::TabletMode::Get()->InTabletMode();
 }
 
 void ImmersiveModeControllerAsh::OnWidgetActivationChanged(
     views::Widget* widget,
     bool active) {
-  if (browser_view_->IsTabStripSupported())
+  if (browser_view_->CanSupportTabStrip())
     return;
 
   if (!ash::TabletMode::Get()->InTabletMode())
@@ -185,7 +185,7 @@ void ImmersiveModeControllerAsh::SetVisibleFraction(double visible_fraction) {
   // means some gesture may not be recognized well during the animation, but
   // that's fine since a complicated gesture wouldn't be involved during the
   // animation duration. See: https://crbug.com/901544.
-  if (browser_view_->IsTabStripSupported()) {
+  if (browser_view_->CanSupportTabStrip()) {
     if (visible_fraction == 1.0) {
       browser_view_->contents_web_view()->holder()->SetHitTestTopInset(
           browser_view_->top_container()->height());
@@ -234,7 +234,7 @@ void ImmersiveModeControllerAsh::OnWindowPropertyChanged(aura::Window* window,
                                                          intptr_t old) {
   // Track locked fullscreen changes.
   if (key == ash::kWindowPinTypeKey) {
-    browser_view_->FullscreenStateChanged();
+    browser_view_->FullscreenStateChanging();
     return;
   }
 
@@ -251,7 +251,7 @@ void ImmersiveModeControllerAsh::OnWindowPropertyChanged(aura::Window* window,
         old_state == ui::SHOW_STATE_FULLSCREEN) {
       // If the browser view initiated this state change,
       // BrowserView::ProcessFullscreen will no-op, so this call is harmless.
-      browser_view_->FullscreenStateChanged();
+      browser_view_->FullscreenStateChanging();
     }
   }
 }

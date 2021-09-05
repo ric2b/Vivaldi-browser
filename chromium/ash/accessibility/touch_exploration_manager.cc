@@ -17,10 +17,12 @@
 #include "ash/shell.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
+#include "base/metrics/histogram_functions.h"
 #include "chromeos/audio/chromeos_sounds.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "extensions/common/constants.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/wm/public/activation_client.h"
@@ -99,7 +101,7 @@ void TouchExplorationManager::SetOutputLevel(int volume) {
 }
 
 void TouchExplorationManager::SilenceSpokenFeedback() {
-  if (GetA11yController()->spoken_feedback_enabled())
+  if (GetA11yController()->spoken_feedback().enabled())
     GetA11yController()->SilenceSpokenFeedback();
 }
 
@@ -128,6 +130,8 @@ void TouchExplorationManager::PlayEnterScreenEarcon() {
 void TouchExplorationManager::HandleAccessibilityGesture(
     ax::mojom::Gesture gesture,
     gfx::PointF location) {
+  base::UmaHistogramEnumeration("Accessibility.ChromeVox.PerformGestureType",
+                                gesture);
   GetA11yController()->HandleAccessibilityGesture(gesture, location);
 }
 
@@ -164,7 +168,7 @@ void TouchExplorationManager::PlayTouchTypeEarcon() {
 void TouchExplorationManager::ToggleSpokenFeedback() {
   if (GetA11yController()->ShouldToggleSpokenFeedbackViaTouch()) {
     GetA11yController()->SetSpokenFeedbackEnabled(
-        !GetA11yController()->spoken_feedback_enabled(),
+        !GetA11yController()->spoken_feedback().enabled(),
         A11Y_NOTIFICATION_SHOW);
   }
 }
@@ -211,7 +215,7 @@ void TouchExplorationManager::UpdateTouchExplorationState() {
           aura::client::kAccessibilityTouchExplorationPassThrough);
 
   const bool spoken_feedback_enabled =
-      GetA11yController()->spoken_feedback_enabled();
+      GetA11yController()->spoken_feedback().enabled();
 
   if (!touch_accessibility_enabler_) {
     // Always enable gesture to toggle spoken feedback.

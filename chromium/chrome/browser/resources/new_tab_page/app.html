@@ -70,14 +70,23 @@
 
   ntp-fakebox,
   ntp-realbox {
-    flex-shrink: 0;
     margin-bottom: 32px;
   }
 
   ntp-fakebox,
   ntp-realbox,
   ntp-module-wrapper {
+    flex-shrink: 0;
     width: var(--ntp-search-box-width);
+  }
+
+  :host([modules-enabled_]) ntp-middle-slot-promo {
+    width: var(--ntp-search-box-width);
+  }
+
+  :host(:not([modules-enabled_])) ntp-middle-slot-promo {
+    bottom: 16px;
+    position: fixed;
   }
 
   ntp-realbox {
@@ -94,17 +103,15 @@
     --tile-hover-color: rgba(255, 255, 255, .1);
   }
 
-  #promo {
-    bottom: 16px;
-    height: 32px;
-    left: 0;
-    position: fixed;
-    right: 0;
-    width: 100%;
+  ntp-middle-slot-promo:not([hidden]) + ntp-module-wrapper,
+  ntp-module-wrapper + ntp-module-wrapper {
+    margin-top: 16px;
   }
 
-  ntp-module-wrapper + ntp-module-wrapper {
-    margin-top: 24px;
+  :host(:not([promo-and-modules-loaded_])) ntp-middle-slot-promo,
+  :host(:not([promo-and-modules-loaded_])) ntp-module-wrapper,
+  :host(:not([modules-visible_])) ntp-module-wrapper {
+    display: none;
   }
 
   #customizeButtonSpacer {
@@ -280,11 +287,14 @@
   </ntp-most-visited>
   <dom-if if="[[lazyRender_]]" on-dom-change="onLazyRendered_">
     <template>
-      <ntp-iframe id="promo" hidden$="[[!promoLoaded_]]"
-          src="chrome-untrusted://new-tab-page/promo">
-      </ntp-iframe>
-      <template is="dom-repeat" items="[[moduleDescriptors_]]" id="modules">
-        <ntp-module-wrapper descriptor="[[item]]"></ntp-module-wrapper>
+      <ntp-middle-slot-promo
+          on-ntp-middle-slot-promo-loaded="onMiddleSlotPromoLoaded_">
+      </ntp-middle-slot-promo>
+      <template is="dom-repeat" items="[[moduleDescriptors_]]" id="modules"
+          on-dom-change="onModulesLoaded_">
+        <ntp-module-wrapper descriptor="[[item]]"
+            on-dismiss-module="onDismissModule_">
+        </ntp-module-wrapper>
       </template>
       <a id="backgroundImageAttribution"
           href="[[backgroundImageAttributionUrl_]]"
@@ -333,6 +343,18 @@
         theme="[[theme_]]"
         background-selection="{{backgroundSelection_}}">
     </ntp-customize-dialog>
+  </template>
+</dom-if>
+<dom-if if="[[lazyRender_]]" restamp>
+  <template>
+    <cr-toast id="dismissModuleToast" duration="10000">
+      <div id="dismissModuleToastMessage">[[dismissModuleToastMessage_]]</div>
+      <cr-button id="undoDismissModuleButton"
+          aria-label="$i18n{undoDescription}"
+          on-click="onUndoDismissModuleButtonClick_">
+        $i18n{undo}
+      </cr-button>
+    </cr-toast>
   </template>
 </dom-if>
 <div id="oneGoogleBarOverlayBackdrop"></div>

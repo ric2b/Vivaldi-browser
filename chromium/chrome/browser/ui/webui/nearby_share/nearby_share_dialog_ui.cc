@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "chrome/browser/nearby_sharing/contacts/nearby_share_contact_manager.h"
 #include "chrome/browser/nearby_sharing/nearby_per_session_discovery_manager.h"
 #include "chrome/browser/nearby_sharing/nearby_share_settings.h"
 #include "chrome/browser/nearby_sharing/nearby_sharing_service.h"
@@ -50,27 +51,61 @@ NearbyShareDialogUI::NearbyShareDialogUI(content::WebUI* web_ui)
   html_source->AddResourcePath("nearby_share_target_types.mojom-lite.js",
                                IDR_NEARBY_SHARE_TARGET_TYPES_MOJO_JS);
 
-  RegisterNearbySharedMojoResources(html_source);
+  RegisterNearbySharedResources(html_source);
   RegisterNearbySharedStrings(html_source);
   html_source->UseStringsJs();
+
+  web_ui->RegisterMessageCallback(
+      "close", base::BindRepeating(&NearbyShareDialogUI::HandleClose,
+                                   base::Unretained(this)));
 
   content::WebUIDataSource::Add(profile, html_source);
 }
 
 NearbyShareDialogUI::~NearbyShareDialogUI() = default;
 
+void NearbyShareDialogUI::AddObserver(NearbyShareDialogUI::Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void NearbyShareDialogUI::RemoveObserver(
+    NearbyShareDialogUI::Observer* observer) {
+  observers_.RemoveObserver(observer);
+}
+
+void NearbyShareDialogUI::SetAttachments(
+    std::vector<std::unique_ptr<Attachment>> attachments) {
+  attachments_ = std::move(attachments);
+}
+
 void NearbyShareDialogUI::BindInterface(
     mojo::PendingReceiver<mojom::DiscoveryManager> manager) {
   mojo::MakeSelfOwnedReceiver(
-      std::make_unique<NearbyPerSessionDiscoveryManager>(nearby_service_),
+      std::make_unique<NearbyPerSessionDiscoveryManager>(
+          nearby_service_, std::move(attachments_)),
       std::move(manager));
 }
+
 void NearbyShareDialogUI::BindInterface(
     mojo::PendingReceiver<mojom::NearbyShareSettings> receiver) {
   NearbySharingService* nearby_sharing_service =
       NearbySharingServiceFactory::GetForBrowserContext(
           Profile::FromWebUI(web_ui()));
   nearby_sharing_service->GetSettings()->Bind(std::move(receiver));
+}
+
+void NearbyShareDialogUI::BindInterface(
+    mojo::PendingReceiver<nearby_share::mojom::ContactManager> receiver) {
+  NearbySharingService* nearby_sharing_service =
+      NearbySharingServiceFactory::GetForBrowserContext(
+          Profile::FromWebUI(web_ui()));
+  nearby_sharing_service->GetContactManager()->Bind(std::move(receiver));
+}
+
+void NearbyShareDialogUI::HandleClose(const base::ListValue* args) {
+  for (auto& observer : observers_) {
+    observer.OnClose();
+  }
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(NearbyShareDialogUI)

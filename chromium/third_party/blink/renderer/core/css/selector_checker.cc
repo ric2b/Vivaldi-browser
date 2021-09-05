@@ -86,6 +86,11 @@ static bool MatchesSpatialNavigationFocusPseudoClass(const Element& element) {
          IsFrameFocused(element);
 }
 
+static bool MatchesHasDatalistPseudoClass(const Element& element) {
+  auto* html_input_element = DynamicTo<HTMLInputElement>(element);
+  return html_input_element && html_input_element->list();
+}
+
 static bool MatchesListBoxPseudoClass(const Element& element) {
   auto* html_select_element = DynamicTo<HTMLSelectElement>(element);
   return html_select_element && !html_select_element->UsesMenuList();
@@ -1091,10 +1096,13 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
     }
     case CSSSelector::kPseudoTarget:
       return element == element.GetDocument().CssTarget();
+    case CSSSelector::kPseudoIs:
+    case CSSSelector::kPseudoWhere:
     case CSSSelector::kPseudoAny: {
       SelectorCheckingContext sub_context(context);
       sub_context.is_sub_selector = true;
-      DCHECK(selector.SelectorList());
+      if (!selector.SelectorList())
+        break;
       for (sub_context.selector = selector.SelectorList()->First();
            sub_context.selector; sub_context.selector = CSSSelectorList::Next(
                                      *sub_context.selector)) {
@@ -1296,6 +1304,9 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
     case CSSSelector::kPseudoSpatialNavigationInterest:
       DCHECK(is_ua_rule_);
       return MatchesSpatialNavigationInterestPseudoClass(element);
+    case CSSSelector::kPseudoHasDatalist:
+      DCHECK(is_ua_rule_);
+      return MatchesHasDatalistPseudoClass(element);
     case CSSSelector::kPseudoIsHtml:
       DCHECK(is_ua_rule_);
       return IsA<HTMLDocument>(element.GetDocument());
@@ -1334,8 +1345,6 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
     case CSSSelector::kPseudoCornerPresent:
       return false;
     case CSSSelector::kPseudoUnknown:
-    case CSSSelector::kPseudoIs:
-    case CSSSelector::kPseudoWhere:
     default:
       NOTREACHED();
       break;
@@ -1404,7 +1413,8 @@ bool SelectorChecker::CheckPseudoElement(const SelectorCheckingContext& context,
     case CSSSelector::kPseudoPlaceholder:
       if (ShadowRoot* root = element.ContainingShadowRoot()) {
         return root->IsUserAgent() &&
-               element.ShadowPseudoId() == "-webkit-input-placeholder";
+               element.ShadowPseudoId() ==
+                   shadow_element_names::kPseudoInputPlaceholder;
       }
       return false;
     case CSSSelector::kPseudoWebKitCustomElement: {
@@ -1414,7 +1424,8 @@ bool SelectorChecker::CheckPseudoElement(const SelectorCheckingContext& context,
         if (element.ShadowPseudoId() != selector.Value())
           return false;
         if (!is_ua_rule_ &&
-            selector.Value() == shadow_element_names::WebKitDetailsMarker()) {
+            selector.Value() ==
+                shadow_element_names::kPseudoWebKitDetailsMarker) {
           UseCounter::Count(element.GetDocument(),
                             WebFeature::kCSSSelectorPseudoWebKitDetailsMarker);
         }

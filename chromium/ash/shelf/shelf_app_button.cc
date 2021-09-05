@@ -13,6 +13,8 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_button_delegate.h"
 #include "ash/shelf/shelf_view.h"
+#include "ash/style/default_color_constants.h"
+#include "ash/style/default_colors.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
@@ -53,10 +55,6 @@ constexpr int kNotificationIndicatorRadiusDip = 6;
 constexpr int kNotificationIndicatorPadding = 1;
 
 constexpr SkColor kDefaultIndicatorColor = SK_ColorWHITE;
-
-// Slightly different colors and alpha in the new UI.
-constexpr SkColor kIndicatorColorActive = kDefaultIndicatorColor;
-constexpr SkColor kIndicatorColorRunning = SkColorSetA(SK_ColorWHITE, 0x7F);
 
 // The time threshold before an item can be dragged.
 constexpr int kDragTimeThresholdMs = 300;
@@ -227,7 +225,7 @@ class ShelfAppButton::AppStatusIndicatorView
  public:
   AppStatusIndicatorView() : show_attention_(false), active_(false) {
     // Make sure the events reach the parent view for handling.
-    set_can_process_events_within_subtree(false);
+    SetCanProcessEventsWithinSubtree(false);
   }
 
   ~AppStatusIndicatorView() override {
@@ -249,7 +247,8 @@ class ShelfAppButton::AppStatusIndicatorView
     gfx::PointF center = gfx::RectF(GetLocalBounds()).CenterPoint();
     cc::PaintFlags flags;
     // Active and running indicators look a little different in the new UI.
-    flags.setColor(active_ ? kIndicatorColorActive : kIndicatorColorRunning);
+    flags.setColor(DeprecatedGetAppStateIndicatorColor(
+        active_, kIndicatorColorActive, kInicatorColorRunning));
     flags.setAntiAlias(true);
     flags.setStrokeCap(cc::PaintFlags::Cap::kRound_Cap);
     flags.setStrokeJoin(cc::PaintFlags::Join::kRound_Join);
@@ -370,7 +369,7 @@ ShelfAppButton::ShelfAppButton(ShelfView* shelf_view,
   icon_view_->SetHorizontalAlignment(views::ImageView::Alignment::kCenter);
   icon_view_->SetVerticalAlignment(views::ImageView::Alignment::kLeading);
   // Do not make this interactive, so that events are sent to ShelfView.
-  icon_view_->set_can_process_events_within_subtree(false);
+  icon_view_->SetCanProcessEventsWithinSubtree(false);
 
   indicator_->SetPaintToLayer();
   indicator_->layer()->SetFillsBoundsOpaquely(false);
@@ -862,14 +861,17 @@ std::unique_ptr<views::InkDropRipple> ShelfAppButton::CreateInkDropRipple()
   const int ripple_size = shelf_view_->GetShelfItemRippleSize();
 
   return std::make_unique<views::SquareInkDropRipple>(
-      gfx::Size(ripple_size, ripple_size), ink_drop_large_corner_radius(),
-      small_ripple_area.size(), ink_drop_small_corner_radius(),
+      gfx::Size(ripple_size, ripple_size), GetInkDropLargeCornerRadius(),
+      small_ripple_area.size(), GetInkDropSmallCornerRadius(),
       small_ripple_area.CenterPoint(), GetInkDropBaseColor(),
-      ink_drop_visible_opacity());
+      GetInkDropVisibleOpacity());
 }
 
 bool ShelfAppButton::HandleAccessibleAction(
     const ui::AXActionData& action_data) {
+  if (notification_indicator_ && notification_indicator_->GetVisible())
+    shelf_view_->AnnounceShelfItemNotificationBadge(this);
+
   if (action_data.action == ax::mojom::Action::kScrollToMakeVisible)
     shelf_button_delegate()->HandleAccessibleActionScrollToMakeVisible(this);
 

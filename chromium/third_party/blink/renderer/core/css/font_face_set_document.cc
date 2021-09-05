@@ -136,7 +136,7 @@ ScriptPromise FontFaceSetDocument::ready(ScriptState* script_state) {
 const HeapLinkedHashSet<Member<FontFace>>&
 FontFaceSetDocument::CSSConnectedFontFaceList() const {
   Document* document = this->GetDocument();
-  document->UpdateActiveStyle();
+  document->GetStyleEngine().UpdateActiveStyle();
   return GetFontSelector()->GetFontFaceCache()->CssConnectedFontFaces();
 }
 
@@ -166,15 +166,9 @@ bool FontFaceSetDocument::ResolveFontStyle(const String& font_string,
 
   // Interpret fontString in the same way as the 'font' attribute of
   // CanvasRenderingContext2D.
-  auto* parsed_style =
-      MakeGarbageCollected<MutableCSSPropertyValueSet>(kHTMLStandardMode);
-  CSSParser::ParseValue(parsed_style, CSSPropertyID::kFont, font_string, true,
-                        GetExecutionContext()->GetSecureContextMode());
-  if (parsed_style->IsEmpty())
-    return false;
-
-  String font_value = parsed_style->GetPropertyValue(CSSPropertyID::kFont);
-  if (css_parsing_utils::IsCSSWideKeyword(font_value))
+  auto* parsed_style = CSSParser::ParseFont(
+      font_string, GetExecutionContext()->GetSecureContextMode());
+  if (!parsed_style)
     return false;
 
   if (!GetDocument()->documentElement()) {
@@ -227,6 +221,12 @@ FontFaceSetDocument* FontFaceSetDocument::From(Document& document) {
 }
 
 void FontFaceSetDocument::DidLayout(Document& document) {
+  if (!document.LoadEventFinished()) {
+    // https://www.w3.org/TR/2014/WD-css-font-loading-3-20140522/#font-face-set-ready
+    // doesn't say when document.fonts.ready should actually fire, but the
+    // existing tests depend on it firing after onload.
+    return;
+  }
   if (FontFaceSetDocument* fonts =
           Supplement<Document>::From<FontFaceSetDocument>(document))
     fonts->DidLayout();

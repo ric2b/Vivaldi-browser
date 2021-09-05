@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">查看框架的源码(&amp;V)</translation>
 <translation id="1165039591588034296">错误</translation>
 <translation id="1175364870820465910">打印(&amp;P)...</translation>
-<translation id="1177863135347784049">自定义</translation>
 <translation id="1181037720776840403">删除</translation>
 <translation id="1187722533808055681">闲置状态唤醒</translation>
 <translation id="119944043368869598">全部清除</translation>
 <translation id="1221825588892235038">仅限选定内容</translation>
 <translation id="1244303850296295656">扩展程序错误</translation>
+<translation id="125220115284141797">默认</translation>
 <translation id="1274977772557788323">Adobe Flash Player 存储设置</translation>
 <translation id="1297175357211070620">目标打印机</translation>
 <translation id="1303101771013849280">以前导出的书签（HTML文件）</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">新建窗口(&amp;N)</translation>
 <translation id="1725149567830788547">显示控件(&amp;C)</translation>
 <translation id="1729533290416704613">它还能够控制您通过多功能框进行搜索时系统显示的页面。</translation>
+<translation id="174123615272205933">自定义</translation>
 <translation id="1744108098763830590">背景页(&amp;B)</translation>
 <translation id="176587472219019965">新建窗口(&amp;N)</translation>
 <translation id="1769104665586091481">在新窗口中打开链接(&amp;W)</translation>
+<translation id="1779468444204342338">最小值</translation>
 <translation id="1815083418640426271">粘贴为纯文本</translation>
 <translation id="1828901632669367785">使用系统对话框打印...</translation>
 <translation id="1850508293116537636">顺时针旋转(&amp;C)</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">发送前先询问（推荐）</translation>
 <translation id="241082044617551207">未知插件</translation>
 <translation id="2423578206845792524">图片另存为(&amp;V)...</translation>
-<translation id="2436707352762155834">最小值</translation>
 <translation id="2439110203301358333">您计算机上的其他程序添加了一个扩展程序，该扩展程序可能会改变 Vivaldi 的工作方式。</translation>
 <translation id="2445081178310039857">必须指定扩展程序根目录。</translation>
 <translation id="2470702053775288986">已停用不支持的扩展程序</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">预渲染：<ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">麦克风</translation>
 <translation id="3241680850019875542">选择要打包的扩展程序的根目录。要更新某个扩展程序，还需选择要再次使用的私有密钥文件。</translation>
+<translation id="3266179261140759675">禁止已关闭的网站收发数据</translation>
 <translation id="3280237271814976245">另存为(&amp;A)...</translation>
 <translation id="3285322247471302225">新建标签(&amp;T)</translation>
 <translation id="3288047731229977326">以开发者模式运行的扩展程序可能会损害您的计算机。如果您不是开发者，那么，为安全起见，应停用以开发者模式运行的扩展程序。</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">允许</translation>
 <translation id="5057110919553308744">当您点击此扩展程序时</translation>
 <translation id="5063480226653192405">使用情况</translation>
-<translation id="5068918910148307423">禁止最近关闭的网站完成数据收发操作</translation>
 <translation id="5116628073786783676">音频另存为(&amp;V)...</translation>
 <translation id="5143374789336132547">“<ph name="EXTENSION_NAME" />”扩展程序更改了您点击“主页”按钮后系统显示的页面。</translation>
 <translation id="5154108062446123722"><ph name="PRINTING_DESTINATION" />高级设置</translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">“<ph name="EXTENSION_NAME" />”扩展程序更改了您通过多功能框进行搜索时系统显示的页面。</translation>
 <translation id="5360150013186312835">在工具栏中显示</translation>
 <translation id="5362741141255528695">选择私有密钥文件。</translation>
+<translation id="536638840841140142">无</translation>
 <translation id="5370819323174483825">重新加载(&amp;R)</translation>
 <translation id="5398572795982417028">页面引用超出范围，上限为 <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">继续下载</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">接收器：<ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">需由管理员安装</translation>
 <translation id="7685049629764448582">JavaScript 内存</translation>
-<translation id="7701040980221191251">无</translation>
 <translation id="7701869757853594372">用户句柄</translation>
 <translation id="7704305437604973648">任务</translation>
 <translation id="7710568461918838723">投影(&amp;C)...</translation>

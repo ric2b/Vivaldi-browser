@@ -482,6 +482,9 @@ class ComputedStyle : public ComputedStyleBase,
   bool HasBackgroundImage() const {
     return BackgroundInternal().AnyLayerHasImage();
   }
+  bool HasUrlBackgroundImage() const {
+    return BackgroundInternal().AnyLayerHasUrlImage();
+  }
   bool HasFixedAttachmentBackgroundImage() const {
     return BackgroundInternal().AnyLayerHasFixedAttachmentImage();
   }
@@ -823,19 +826,19 @@ class ComputedStyle : public ComputedStyleBase,
   }
 
   // scrollbar-gutter
-  inline bool ScrollbarGutterIsAuto() const {
+  inline bool IsScrollbarGutterAuto() const {
     return ScrollbarGutter() == kScrollbarGutterAuto;
   }
-  inline bool ScrollbarGutterIsStable() const {
+  inline bool IsScrollbarGutterStable() const {
     return ScrollbarGutter() & kScrollbarGutterStable;
   }
-  inline bool ScrollbarGutterIsAlways() const {
+  inline bool IsScrollbarGutterAlways() const {
     return ScrollbarGutter() & kScrollbarGutterAlways;
   }
-  inline bool ScrollbarGutterIsBoth() const {
+  inline bool IsScrollbarGutterBoth() const {
     return ScrollbarGutter() & kScrollbarGutterBoth;
   }
-  inline bool ScrollbarGutterIsForce() const {
+  inline bool IsScrollbarGutterForce() const {
     return ScrollbarGutter() & kScrollbarGutterForce;
   }
 
@@ -1153,7 +1156,6 @@ class ComputedStyle : public ComputedStyleBase,
   bool NonInheritedEqual(const ComputedStyle&) const;
   inline bool IndependentInheritedEqual(const ComputedStyle&) const;
   inline bool NonIndependentInheritedEqual(const ComputedStyle&) const;
-  bool LoadingCustomFontsEqual(const ComputedStyle&) const;
   bool InheritedDataShared(const ComputedStyle&) const;
 
   bool HasChildDependentFlags() const { return ChildHasExplicitInheritance(); }
@@ -1210,7 +1212,7 @@ class ComputedStyle : public ComputedStyleBase,
                                    bool is_inherited_property) const;
 
   // Animations.
-  CSSAnimationData& AccessAnimations();
+  CORE_EXPORT CSSAnimationData& AccessAnimations();
   const CSSAnimationData* Animations() const {
     return AnimationsInternal().get();
   }
@@ -1219,7 +1221,7 @@ class ComputedStyle : public ComputedStyleBase,
   const CSSTransitionData* Transitions() const {
     return TransitionsInternal().get();
   }
-  CSSTransitionData& AccessTransitions();
+  CORE_EXPORT CSSTransitionData& AccessTransitions();
 
   // Callback selectors.
   void AddCallbackSelector(const String& selector);
@@ -2061,6 +2063,7 @@ class ComputedStyle : public ComputedStyleBase,
   bool IsDisplayBlockContainer() const {
     return IsDisplayBlockContainer(Display());
   }
+  bool IsDisplayTableBox() const { return IsDisplayTableBox(Display()); }
   bool IsDisplayFlexibleOrGridBox() const {
     return IsDisplayFlexibleBox(Display()) || IsDisplayGridBox(Display());
   }
@@ -2076,6 +2079,12 @@ class ComputedStyle : public ComputedStyleBase,
     return IsDisplayFlexibleOrGridBox() || IsDisplayMathType() ||
            IsDisplayLayoutCustomBox() ||
            (Display() == EDisplay::kContents && IsInBlockifyingDisplay());
+  }
+
+  // Return true if an element with this computed style requires LayoutNG
+  // (i.e. has no legacy layout implementation).
+  bool DisplayTypeRequiresLayoutNG() const {
+    return IsDisplayMathType() || IsDisplayLayoutCustomBox();
   }
 
   // Isolation utility functions.
@@ -2130,13 +2139,14 @@ class ComputedStyle : public ComputedStyleBase,
   }
 
   // Text decoration utility functions.
+  bool TextDecorationVisualOverflowEqual(const ComputedStyle& o) const;
   void ApplyTextDecorations(const Color& parent_text_decoration_color,
                             bool override_existing_colors);
   void ClearAppliedTextDecorations();
   void RestoreParentTextDecorations(const ComputedStyle& parent_style);
   CORE_EXPORT const Vector<AppliedTextDecoration>& AppliedTextDecorations()
       const;
-  TextDecoration TextDecorationsInEffect() const;
+  CORE_EXPORT TextDecoration TextDecorationsInEffect() const;
 
   // Overflow utility functions.
 
@@ -2147,11 +2157,23 @@ class ComputedStyle : public ComputedStyleBase,
     return IsHorizontalWritingMode() ? OverflowY() : OverflowX();
   }
 
-  // It's sufficient to just check one direction, since it's illegal to have
-  // visible on only one overflow value.
-  bool IsOverflowVisible() const {
-    DCHECK(OverflowX() != EOverflow::kVisible || OverflowX() == OverflowY());
-    return OverflowX() == EOverflow::kVisible;
+  // Returns true if 'overflow' is 'visible' along both axes. When 'clip' is
+  // used the other axis may be 'visible'. In other words, if one axis is
+  // 'visible' the other axis is not necessarily 'visible.'
+  bool IsOverflowVisibleAlongBothAxes() const {
+    // Overflip clip and overflow visible may be used along different axis.
+    return OverflowX() == EOverflow::kVisible &&
+           OverflowY() == EOverflow::kVisible;
+  }
+
+  // An overflow value of visible or clip is not a scroll container, all other
+  // values result in a scroll container. Also note that if visible or clip is
+  // set on one axis, then the other axis must also be visible or clip. For
+  // example, "overflow-x: clip; overflow-y: visible" is allowed, but
+  // "overflow-x: clip; overflow-y: hidden" is not.
+  bool IsScrollContainer() const {
+    return OverflowX() != EOverflow::kVisible &&
+           OverflowX() != EOverflow::kClip;
   }
 
   bool IsDisplayTableRowOrColumnType() const {
@@ -2346,9 +2368,11 @@ class ComputedStyle : public ComputedStyleBase,
   // approach is different from the spec to maintain backwards compatibility.
   // TODO(chrishtr): replace this with |HasGroupingProperty()|.
   CORE_EXPORT bool HasGroupingPropertyForUsedTransformStyle3D() const {
-    if (RuntimeEnabledFeatures::TransformInteropEnabled())
-      return HasGroupingProperty(BoxReflect()) || !IsOverflowVisible();
-    return !IsOverflowVisible() || HasFilterInducingProperty() ||
+    if (RuntimeEnabledFeatures::TransformInteropEnabled()) {
+      return HasGroupingProperty(BoxReflect()) ||
+             !IsOverflowVisibleAlongBothAxes();
+    }
+    return !IsOverflowVisibleAlongBothAxes() || HasFilterInducingProperty() ||
            HasNonInitialOpacity();
   }
 
@@ -2565,17 +2589,17 @@ class ComputedStyle : public ComputedStyleBase,
   // Load the images of CSS properties that were deferred by LazyLoad.
   void LoadDeferredImages(Document&) const;
 
-  enum WebColorScheme ComputedColorScheme() const {
-    return DarkColorScheme() ? WebColorScheme::kDark : WebColorScheme::kLight;
+  enum ColorScheme ComputedColorScheme() const {
+    return DarkColorScheme() ? ColorScheme::kDark : ColorScheme::kLight;
   }
 
-  enum WebColorScheme UsedColorScheme() const {
+  enum ColorScheme UsedColorScheme() const {
     return RuntimeEnabledFeatures::CSSColorSchemeUARenderingEnabled()
                ? ComputedColorScheme()
-               : WebColorScheme::kLight;
+               : ColorScheme::kLight;
   }
 
-  enum WebColorScheme UsedColorSchemeForInitialColors() const {
+  enum ColorScheme UsedColorSchemeForInitialColors() const {
     return ComputedColorScheme();
   }
 
@@ -2592,10 +2616,9 @@ class ComputedStyle : public ComputedStyleBase,
            !ListStyleImage()->ErrorOccurred();
   }
 
-  base::Optional<LogicalSize> LogicalAspectRatio() const {
-    if (!AspectRatio())
-      return base::nullopt;
-    IntSize ratio = *AspectRatio();
+  LogicalSize LogicalAspectRatio() const {
+    DCHECK_NE(AspectRatio().GetType(), EAspectRatioType::kAuto);
+    FloatSize ratio = AspectRatio().GetRatio();
     if (!IsHorizontalWritingMode())
       ratio = ratio.TransposedSize();
     return LogicalSize(LayoutUnit(ratio.Width()), LayoutUnit(ratio.Height()));
@@ -2650,6 +2673,10 @@ class ComputedStyle : public ComputedStyleBase,
            display == EDisplay::kTableCaption;
   }
 
+  static bool IsDisplayTableBox(EDisplay display) {
+    return display == EDisplay::kTable || display == EDisplay::kInlineTable;
+  }
+
   static bool IsDisplayFlexibleBox(EDisplay display) {
     return display == EDisplay::kFlex || display == EDisplay::kInlineFlex;
   }
@@ -2659,7 +2686,7 @@ class ComputedStyle : public ComputedStyleBase,
   }
 
   static bool IsDisplayMathBox(EDisplay display) {
-    return display == EDisplay::kMath || display == EDisplay::kInlineMath;
+    return display == EDisplay::kMath || display == EDisplay::kBlockMath;
   }
 
   static bool IsDisplayLayoutCustomBox(EDisplay display) {
@@ -2672,8 +2699,7 @@ class ComputedStyle : public ComputedStyleBase,
            display == EDisplay::kWebkitInlineBox ||
            display == EDisplay::kInlineFlex ||
            display == EDisplay::kInlineTable ||
-           display == EDisplay::kInlineGrid ||
-           display == EDisplay::kInlineMath ||
+           display == EDisplay::kInlineGrid || display == EDisplay::kMath ||
            display == EDisplay::kInlineLayoutCustom;
   }
 
@@ -2929,6 +2955,12 @@ class ComputedStyle : public ComputedStyleBase,
   FRIEND_TEST_ALL_PREFIXES(ComputedStyleTest, InitialVariableNames);
   FRIEND_TEST_ALL_PREFIXES(ComputedStyleTest,
                            InitialAndInheritedAndNonInheritedVariableNames);
+  FRIEND_TEST_ALL_PREFIXES(StyleCascadeTest, ForcedVisitedBackgroundColor);
+  FRIEND_TEST_ALL_PREFIXES(
+      ComputedStyleTest,
+      TextDecorationEqualDoesNotRequireRecomputeInkOverflow);
+  FRIEND_TEST_ALL_PREFIXES(ComputedStyleTest,
+                           TextDecorationNotEqualRequiresRecomputeInkOverflow);
 };
 
 inline bool ComputedStyle::HasAnyPseudoElementStyles() const {

@@ -37,7 +37,7 @@
 #include "ui/views/controls/link.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/style/platform_style.h"
-#include "ui/views/test/test_ax_event_observer.h"
+#include "ui/views/test/ax_event_counter.h"
 #include "ui/views/test/view_metadata_test_utils.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/widget_utils.h"
@@ -73,7 +73,7 @@ class TestContextMenuController : public ContextMenuController {
 class TestButton : public Button, public ButtonListener {
  public:
   explicit TestButton(bool has_ink_drop_action_on_click) : Button(this) {
-    set_has_ink_drop_action_on_click(has_ink_drop_action_on_click);
+    SetHasInkDropActionOnClick(has_ink_drop_action_on_click);
   }
 
   ~TestButton() override = default;
@@ -107,7 +107,6 @@ class TestButton : public Button, public ButtonListener {
   bool canceled() { return canceled_; }
   int ink_drop_layer_add_count() { return ink_drop_layer_add_count_; }
   int ink_drop_layer_remove_count() { return ink_drop_layer_remove_count_; }
-  ButtonListener* listener() const { return listener_; }
 
   void set_custom_key_click_action(KeyClickAction custom_key_click_action) {
     custom_key_click_action_ = custom_key_click_action;
@@ -526,7 +525,7 @@ TEST_F(ButtonTest, HideInkDropWhenShowingContextMenu) {
   TestInkDrop* ink_drop = CreateButtonWithInkDrop(false);
   TestContextMenuController context_menu_controller;
   button()->set_context_menu_controller(&context_menu_controller);
-  button()->set_hide_ink_drop_when_showing_context_menu(true);
+  button()->SetHideInkDropWhenShowingContextMenu(true);
 
   ink_drop->SetHovered(true);
   ink_drop->AnimateToState(InkDropState::ACTION_PENDING);
@@ -541,7 +540,7 @@ TEST_F(ButtonTest, DontHideInkDropWhenShowingContextMenu) {
   TestInkDrop* ink_drop = CreateButtonWithInkDrop(false);
   TestContextMenuController context_menu_controller;
   button()->set_context_menu_controller(&context_menu_controller);
-  button()->set_hide_ink_drop_when_showing_context_menu(false);
+  button()->SetHideInkDropWhenShowingContextMenu(false);
 
   ink_drop->SetHovered(true);
   ink_drop->AnimateToState(InkDropState::ACTION_PENDING);
@@ -753,15 +752,12 @@ TEST_F(ButtonTest, InkDropStaysHiddenWhileDragging) {
   SetDraggedView(nullptr);
 }
 
-// Ensure ButtonListener is dynamically settable.
-TEST_F(ButtonTest, SetListener) {
-  gfx::Point center(10, 10);
-  ButtonListener* old_listener = button()->listener();
-  auto listener = std::make_unique<TestButtonListener>();
+// Ensure PressedCallback is dynamically settable.
+TEST_F(ButtonTest, SetCallback) {
+  TestButtonListener listener;
+  button()->set_callback(Button::PressedCallback(&listener, button()));
 
-  button()->set_listener(listener.get());
-  EXPECT_EQ(listener.get(), button()->listener());
-
+  const gfx::Point center(10, 10);
   button()->OnMousePressed(ui::MouseEvent(
       ui::ET_MOUSE_PRESSED, center, center, ui::EventTimeForNow(),
       ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
@@ -769,10 +765,8 @@ TEST_F(ButtonTest, SetListener) {
   button()->OnMouseReleased(ui::MouseEvent(
       ui::ET_MOUSE_RELEASED, center, center, ui::EventTimeForNow(),
       ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
-  EXPECT_TRUE(listener->pressed());
-  EXPECT_EQ(button(), listener->sender());
-
-  button()->set_listener(old_listener);
+  EXPECT_TRUE(listener.pressed());
+  EXPECT_EQ(button(), listener.sender());
 }
 
 // VisibilityTestButton tests to see if an ink drop or a layer has been added to
@@ -962,10 +956,10 @@ TEST_F(ButtonTest, SetStateNotifiesObserver) {
 // Verifies setting the tooltip text will call NotifyAccessibilityEvent.
 TEST_F(ButtonTest, SetTooltipTextNotifiesAccessibilityEvent) {
   base::string16 test_tooltip_text = base::ASCIIToUTF16("Test Tooltip Text");
-  test::TestAXEventObserver observer;
-  EXPECT_EQ(0, observer.text_changed_event_count());
+  test::AXEventCounter counter(views::AXEventManager::Get());
+  EXPECT_EQ(0, counter.GetCount(ax::mojom::Event::kTextChanged));
   button()->SetTooltipText(test_tooltip_text);
-  EXPECT_EQ(1, observer.text_changed_event_count());
+  EXPECT_EQ(1, counter.GetCount(ax::mojom::Event::kTextChanged));
   EXPECT_EQ(test_tooltip_text, button()->GetTooltipText(gfx::Point()));
   ui::AXNodeData data;
   button()->GetAccessibleNodeData(&data);

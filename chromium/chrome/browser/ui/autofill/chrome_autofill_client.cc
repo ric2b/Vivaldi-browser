@@ -15,6 +15,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autofill/address_normalizer_factory.h"
 #include "chrome/browser/autofill/autocomplete_history_manager_factory.h"
+#include "chrome/browser/autofill/autofill_offer_manager_factory.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/risk_util.h"
 #include "chrome/browser/autofill/strike_database_factory.h"
@@ -178,9 +179,12 @@ ukm::SourceId ChromeAutofillClient::GetUkmSourceId() {
 }
 
 AddressNormalizer* ChromeAutofillClient::GetAddressNormalizer() {
-  if (base::FeatureList::IsEnabled(features::kAutofillAddressNormalizer))
-    return AddressNormalizerFactory::GetInstance();
-  return nullptr;
+  return AddressNormalizerFactory::GetInstance();
+}
+
+AutofillOfferManager* ChromeAutofillClient::GetAutofillOfferManager() {
+  return AutofillOfferManagerFactory::GetForBrowserContext(
+      web_contents()->GetBrowserContext());
 }
 
 const GURL& ChromeAutofillClient::GetLastCommittedURL() {
@@ -201,14 +205,14 @@ ChromeAutofillClient::GetSecurityLevelForUmaHistograms() {
   return helper->GetSecurityLevel();
 }
 
-std::string ChromeAutofillClient::GetPageLanguage() const {
+const translate::LanguageState* ChromeAutofillClient::GetLanguageState() {
   // TODO(crbug.com/912597): iOS vs other platforms extracts language from
   // the top level frame vs whatever frame directly holds the form.
   auto* translate_manager =
       ChromeTranslateClient::GetManagerFromWebContents(web_contents());
   if (translate_manager)
-    return translate_manager->GetLanguageState().original_language();
-  return std::string();
+    return translate_manager->GetLanguageState();
+  return nullptr;
 }
 
 std::string ChromeAutofillClient::GetVariationConfigCountryCode() const {

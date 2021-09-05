@@ -117,6 +117,9 @@ Output = class {
 
     /** @private {!Object} */
     this.initialSpeechProps_ = {};
+
+    /** @private {boolean} */
+    this.drawFocusRing_ = true;
   }
 
   /**
@@ -365,6 +368,15 @@ Output = class {
   }
 
   /**
+   * Don't draw a focus ring based on this output.
+   * @return {!Output}
+   */
+  withoutFocusRing() {
+    this.drawFocusRing_ = false;
+    return this;
+  }
+
+  /**
    * Supply initial speech properties that will be applied to all output.
    * @param {!Object} speechProps
    * @return {!Output}
@@ -561,7 +573,7 @@ Output = class {
     }
 
     // Display.
-    if (this.speechCategory_ != TtsCategory.LIVE) {
+    if (this.speechCategory_ != TtsCategory.LIVE && this.drawFocusRing_) {
       ChromeVoxState.instance.setFocusBounds(this.locations_);
     }
   }
@@ -1067,8 +1079,8 @@ Output = class {
             this.node_(
                 related, related, Output.EventType.NAVIGATE, buff, ruleStr);
           }
-        } else if (token == 'nameOrTextContent') {
-          if (node.name) {
+        } else if (token == 'nameOrTextContent' || token == 'textContent') {
+          if (node.name && token == 'nameOrTextContent') {
             ruleStr.writeToken(token);
             this.format_({
               node,
@@ -1777,6 +1789,25 @@ Output = class {
     if (node.errorMessage) {
       ret.push({outputFormat: '$node(errorMessage)'});
     }
+
+    // Provide a hint for sort direction.
+    let sortDirectionNode = node;
+    while (sortDirectionNode && sortDirectionNode != sortDirectionNode.root) {
+      if (!sortDirectionNode.sortDirection) {
+        sortDirectionNode = sortDirectionNode.parent;
+        continue;
+      }
+      if (sortDirectionNode.sortDirection ===
+          chrome.automation.SortDirectionType.ASCENDING) {
+        ret.push({msgId: 'sort_ascending'});
+      } else if (
+          sortDirectionNode.sortDirection ===
+          chrome.automation.SortDirectionType.DESCENDING) {
+        ret.push({msgId: 'sort_descending'});
+      }
+      break;
+    }
+
     return ret;
   }
 
@@ -2072,7 +2103,7 @@ Output = class {
    */
   toString() {
     return this.speechBuffer_.reduce(function(prev, cur) {
-      if (prev === null) {
+      if (prev === null || prev == '') {
         return cur.toString();
       }
       prev += ' ' + cur.toString();
@@ -2150,6 +2181,7 @@ Output.ROLE_INFO_ = {
   alertDialog: {msgId: 'role_alertdialog', outputContextFirst: true},
   article: {msgId: 'role_article', inherits: 'abstractItem'},
   application: {msgId: 'role_application', inherits: 'abstractContainer'},
+  audio: {msgId: 'tag_audio', inherits: 'abstractContainer'},
   banner: {msgId: 'role_banner', inherits: 'abstractContainer'},
   button: {msgId: 'role_button', earconId: 'BUTTON', inherits: 'button'},
   buttonDropDown: {msgId: 'role_button', earconId: 'BUTTON'},
@@ -2302,6 +2334,7 @@ Output.ROLE_INFO_ = {
   toggleButton: {msgId: 'role_toggle_button', inherits: 'checkBox'},
   tree: {msgId: 'role_tree'},
   treeItem: {msgId: 'role_treeitem'},
+  video: {msgId: 'tag_video', inherits: 'abstractContainer'},
   window: {ignoreAncestry: true}
 };
 
@@ -2416,7 +2449,7 @@ Output.RULES = {
           $state`
     },
     alertDialog: {
-      enter: `$earcon(ALERT_MODAL) $name $state $description`,
+      enter: `$earcon(ALERT_MODAL) $name $state $description $textContent`,
       speak: `$earcon(ALERT_MODAL) $name $nameOrTextContent $description $state
           $role`
     },
@@ -2447,7 +2480,7 @@ Output.RULES = {
           $state $restriction $role $description`,
     },
     date: {enter: `$nameFromNode $role $state $restriction $description`},
-    dialog: {enter: `$nameFromNode $role $description`},
+    dialog: {enter: `$nameFromNode $role $description $textContent`},
     genericContainer: {
       enter: `$nameFromNode $description $state`,
       speak: `$nameOrTextContent $description $state`

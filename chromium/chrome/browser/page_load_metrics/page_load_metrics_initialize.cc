@@ -11,7 +11,8 @@
 #include "build/build_config.h"
 #include "chrome/browser/page_load_metrics/observers/aborts_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/ad_metrics/ads_page_load_metrics_observer.h"
-#include "chrome/browser/page_load_metrics/observers/amp_page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/observers/core/amp_page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/observers/core/ukm_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/data_saver_site_breakdown_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/data_use_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/document_write_page_load_metrics_observer.h"
@@ -38,7 +39,7 @@
 #include "chrome/browser/page_load_metrics/observers/signed_exchange_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/tab_restore_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/third_party_metrics_observer.h"
-#include "chrome/browser/page_load_metrics/observers/ukm_page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/observers/translate_page_load_metrics_observer.h"
 #include "chrome/browser/prerender/chrome_prerender_contents_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
@@ -165,6 +166,10 @@ void PageLoadMetricsEmbedder::RegisterEmbedderObservers(
       SecurityStatePageLoadMetricsObserver::MaybeCreateForProfile(
           web_contents()->GetBrowserContext()));
   tracker->AddObserver(std::make_unique<DataUseMetricsObserver>());
+  std::unique_ptr<TranslatePageLoadMetricsObserver> translate_observer =
+      TranslatePageLoadMetricsObserver::CreateIfNeeded();
+  if (translate_observer != nullptr)
+    tracker->AddObserver(std::move(translate_observer));
 }
 
 bool PageLoadMetricsEmbedder::IsPrerendering() const {

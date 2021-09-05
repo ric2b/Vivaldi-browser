@@ -161,6 +161,9 @@ BASE_EXPORT bool CopyDirectoryExcl(const FilePath& from_path,
 // false otherwise.
 BASE_EXPORT bool PathExists(const FilePath& path);
 
+// Returns true if the given path is readable by the user, false otherwise.
+BASE_EXPORT bool PathIsReadable(const FilePath& path);
+
 // Returns true if the given path is writable by the user, false otherwise.
 BASE_EXPORT bool PathIsWritable(const FilePath& path);
 
@@ -275,14 +278,14 @@ BASE_EXPORT bool SetPosixFilePermissions(const FilePath& path, int mode);
 BASE_EXPORT bool ExecutableExistsInPath(Environment* env,
                                         const FilePath::StringType& executable);
 
-#if defined(OS_LINUX) || defined(OS_AIX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
 // Determine if files under a given |path| can be mapped and then mprotect'd
 // PROT_EXEC. This depends on the mount options used for |path|, which vary
 // among different Linux distributions and possibly local configuration. It also
 // depends on details of kernel--ChromeOS uses the noexec option for /dev/shm
 // but its kernel allows mprotect with PROT_EXEC anyway.
 BASE_EXPORT bool IsPathExecutable(const FilePath& path);
-#endif  // OS_LINUX || OS_AIX
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
 
 #endif  // OS_POSIX
 
@@ -589,7 +592,7 @@ BASE_EXPORT bool VerifyPathControlledByAdmin(const base::FilePath& path);
 // the directory |path|, in the number of FilePath::CharType, or -1 on failure.
 BASE_EXPORT int GetMaximumPathComponentLength(const base::FilePath& path);
 
-#if defined(OS_LINUX) || defined(OS_AIX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
 // Broad categories of file systems as returned by statfs() on Linux.
 enum FileSystemType {
   FILE_SYSTEM_UNKNOWN,  // statfs failed.

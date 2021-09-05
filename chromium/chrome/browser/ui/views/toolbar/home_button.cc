@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/toolbar/home_button.h"
 
+#include "base/bind.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -21,7 +22,6 @@
 #include "ui/base/models/menu_model.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/styled_label.h"
-#include "ui/views/controls/styled_label_listener.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/widget/widget.h"
 
@@ -29,8 +29,7 @@
 
 namespace {
 
-class HomePageUndoBubble : public views::BubbleDialogDelegateView,
-                           public views::StyledLabelListener {
+class HomePageUndoBubble : public views::BubbleDialogDelegateView {
  public:
   HomePageUndoBubble(const HomePageUndoBubble&) = delete;
   HomePageUndoBubble& operator=(const HomePageUndoBubble&) = delete;
@@ -50,10 +49,8 @@ class HomePageUndoBubble : public views::BubbleDialogDelegateView,
   void Init() override;
   void WindowClosing() override;
 
-  // views::StyledLabelListener:
-  void StyledLabelLinkClicked(views::StyledLabel* label,
-                              const gfx::Range& range,
-                              int event_flags) override;
+  // Called when the "undo" link is clicked.
+  void UndoClicked();
 
   static HomePageUndoBubble* home_page_undo_bubble_;
 
@@ -106,23 +103,23 @@ void HomePageUndoBubble::Init() {
       l10n_util::GetStringUTF16(IDS_ONE_CLICK_BUBBLE_UNDO);
   std::vector<base::string16> message = {
       l10n_util::GetStringUTF16(IDS_TOOLBAR_INFORM_SET_HOME_PAGE), undo_string};
-  views::StyledLabel* label = new views::StyledLabel(
-      base::JoinString(message, base::StringPiece16(base::ASCIIToUTF16(" "))),
-      this);
+  views::StyledLabel* label =
+      AddChildView(std::make_unique<views::StyledLabel>());
+  label->SetText(
+      base::JoinString(message, base::StringPiece16(base::ASCIIToUTF16(" "))));
 
   gfx::Range undo_range(label->GetText().length() - undo_string.length(),
                         label->GetText().length());
-  label->AddStyleRange(undo_range,
-                       views::StyledLabel::RangeStyleInfo::CreateForLink());
+  label->AddStyleRange(
+      undo_range,
+      views::StyledLabel::RangeStyleInfo::CreateForLink(base::BindRepeating(
+          &HomePageUndoBubble::UndoClicked, base::Unretained(this))));
 
   // Ensure StyledLabel has a cached size to return in GetPreferredSize().
   label->SizeToFit(0);
-  AddChildView(label);
 }
 
-void HomePageUndoBubble::StyledLabelLinkClicked(views::StyledLabel* label,
-                                                const gfx::Range& range,
-                                                int event_flags) {
+void HomePageUndoBubble::UndoClicked() {
   PrefService* prefs = user_prefs::UserPrefs::Get(browser_->profile());
   prefs->SetBoolean(prefs::kHomePageIsNewTabPage, undo_value_is_ntp_);
   prefs->SetString(prefs::kHomePage, undo_url_.spec());
@@ -147,8 +144,8 @@ void HomePageUndoBubble::WindowClosing() {
 
 HomeButton::HomeButton(views::ButtonListener* listener, Browser* browser)
     : ToolbarButton(listener), browser_(browser) {
-  set_triggerable_event_flags(ui::EF_LEFT_MOUSE_BUTTON |
-                              ui::EF_MIDDLE_MOUSE_BUTTON);
+  SetTriggerableEventFlags(ui::EF_LEFT_MOUSE_BUTTON |
+                           ui::EF_MIDDLE_MOUSE_BUTTON);
   SetTooltipText(l10n_util::GetStringUTF16(IDS_TOOLTIP_HOME));
   SetAccessibleName(l10n_util::GetStringUTF16(IDS_ACCNAME_HOME));
   SetID(VIEW_ID_HOME_BUTTON);

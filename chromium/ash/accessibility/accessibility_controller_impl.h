@@ -186,22 +186,9 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   Feature& virtual_keyboard() const;
   Feature& cursor_color() const;
 
-  // The following functions read and write to their associated preference.
-  // These values are then used to determine whether the accelerator
-  // confirmation dialog for the respective preference has been accepted before.
-  void SetHighContrastAcceleratorDialogAccepted();
-  bool HasHighContrastAcceleratorDialogBeenAccepted() const;
-  void SetScreenMagnifierAcceleratorDialogAccepted();
-  bool HasScreenMagnifierAcceleratorDialogBeenAccepted() const;
-  void SetDockedMagnifierAcceleratorDialogAccepted();
-  bool HasDockedMagnifierAcceleratorDialogBeenAccepted() const;
-  void SetDictationAcceleratorDialogAccepted();
-  bool HasDictationAcceleratorDialogBeenAccepted() const;
   void SetDisplayRotationAcceleratorDialogBeenAccepted();
   bool HasDisplayRotationAcceleratorDialogBeenAccepted() const;
 
-  void SetAutoclickEnabled(bool enabled);
-  bool autoclick_enabled() const { return autoclick().enabled(); }
   bool IsAutoclickSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForAutoclick();
 
@@ -220,72 +207,47 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   // virtual keyboard position).
   void UpdateAutoclickMenuBoundsIfNeeded();
 
-  void SetCaretHighlightEnabled(bool enabled);
-  bool caret_highlight_enabled() const { return caret_highlight().enabled(); }
   bool IsCaretHighlightSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForCaretHighlight();
 
-  void SetCursorHighlightEnabled(bool enabled);
-  bool cursor_highlight_enabled() const { return cursor_highlight().enabled(); }
   bool IsCursorHighlightSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForCursorHighlight();
 
-  void SetDictationEnabled(bool enabled);
-  bool dictation_enabled() const { return dictation().enabled(); }
   bool IsDictationSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForDictation();
 
-  void SetFocusHighlightEnabled(bool enabled);
-  bool focus_highlight_enabled() const { return focus_highlight().enabled(); }
   bool IsFocusHighlightSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForFocusHighlight();
 
-  void SetFullscreenMagnifierEnabled(bool enabled);
-  bool IsFullscreenMagnifierEnabledForTesting();
   bool IsFullScreenMagnifierSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForFullScreenMagnifier();
 
-  void SetDockedMagnifierEnabledForTesting(bool enabled);
-  bool IsDockedMagnifierEnabledForTesting();
   bool IsDockedMagnifierSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForDockedMagnifier();
 
-  void SetHighContrastEnabled(bool enabled);
-  bool high_contrast_enabled() const { return high_contrast().enabled(); }
   bool IsHighContrastSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForHighContrast();
 
-  void SetLargeCursorEnabled(bool enabled);
-  bool large_cursor_enabled() const { return large_cursor().enabled(); }
   bool IsLargeCursorSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForLargeCursor();
 
-  void SetMonoAudioEnabled(bool enabled);
-  bool mono_audio_enabled() const { return mono_audio().enabled(); }
   bool IsMonoAudioSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForMonoAudio();
 
   void SetSpokenFeedbackEnabled(bool enabled,
                                 AccessibilityNotificationVisibility notify);
-  bool spoken_feedback_enabled() const { return spoken_feedback().enabled(); }
   bool IsSpokenFeedbackSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForSpokenFeedback();
 
-  void SetSelectToSpeakEnabled(bool enabled);
-  bool select_to_speak_enabled() const { return select_to_speak().enabled(); }
   bool IsSelectToSpeakSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForSelectToSpeak();
 
   void RequestSelectToSpeakStateChange();
   SelectToSpeakState GetSelectToSpeakState() const;
 
-  void SetStickyKeysEnabled(bool enabled);
-  bool sticky_keys_enabled() const { return sticky_keys().enabled(); }
   bool IsStickyKeysSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForStickyKeys();
 
-  void SetSwitchAccessEnabled(bool enabled);
-  bool switch_access_enabled() const { return switch_access().enabled(); }
   // Switch access may be disabled in prefs but still running when the disable
   // dialog is displaying.
   bool IsSwitchAccessRunning() const;
@@ -294,13 +256,8 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   void SetAccessibilityEventRewriter(
       AccessibilityEventRewriter* accessibility_event_rewriter);
 
-  void SetVirtualKeyboardEnabled(bool enabled);
-  bool virtual_keyboard_enabled() const { return virtual_keyboard().enabled(); }
   bool IsVirtualKeyboardSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForVirtualKeyboard();
-
-  void SetCursorColorEnabled(bool enabled);
-  bool cursor_color_enabled() const { return cursor_color().enabled(); }
 
   void SetTabletModeShelfNavigationButtonsEnabled(bool enabled);
   bool tablet_mode_shelf_navigation_buttons_enabled() const {
@@ -396,9 +353,11 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
                             std::vector<std::string> actions_to_show) override;
   void SetDictationActive(bool is_active) override;
   void ToggleDictationFromSource(DictationToggleSource source) override;
-  void OnAutoclickScrollableBoundsFound(gfx::Rect& bounds_in_screen) override;
+  void HandleAutoclickScrollableBoundsFound(
+      gfx::Rect& bounds_in_screen) override;
   base::string16 GetBatteryDescription() const override;
   void SetVirtualKeyboardVisible(bool is_visible) override;
+  void PerformAcceleratorAction(AcceleratorAction accelerator_action) override;
   void NotifyAccessibilityStatusChanged() override;
   bool IsAccessibilityFeatureVisibleInTrayMenu(
       const std::string& path) override;

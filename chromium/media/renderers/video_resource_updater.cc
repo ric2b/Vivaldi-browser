@@ -28,7 +28,7 @@
 #include "components/viz/client/shared_bitmap_reporter.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
-#include "components/viz/common/quads/render_pass.h"
+#include "components/viz/common/quads/compositor_render_pass.h"
 #include "components/viz/common/quads/stream_video_draw_quad.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
 #include "components/viz/common/quads/video_hole_draw_quad.h"
@@ -37,7 +37,6 @@
 #include "components/viz/common/resources/resource_sizes.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/context_support.h"
-#include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
@@ -46,6 +45,7 @@
 #include "media/video/half_float_maker.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
+#include "third_party/khronos/GLES3/gl3.h"
 #include "third_party/libyuv/include/libyuv.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -528,7 +528,7 @@ void VideoResourceUpdater::ReleaseFrameResources() {
   frame_resources_.clear();
 }
 
-void VideoResourceUpdater::AppendQuads(viz::RenderPass* render_pass,
+void VideoResourceUpdater::AppendQuads(viz::CompositorRenderPass* render_pass,
                                        scoped_refptr<VideoFrame> frame,
                                        gfx::Transform transform,
                                        gfx::Rect quad_rect,
@@ -609,6 +609,8 @@ void VideoResourceUpdater::AppendQuads(viz::RenderPass* render_pass,
           frame_resources_.size() > 3 ? frame_resources_[3].id : 0,
           frame->ColorSpace(), frame_resource_offset_,
           frame_resource_multiplier_, frame_bits_per_channel_);
+      if (frame->hdr_metadata().has_value())
+        yuv_video_quad->hdr_metadata = frame->hdr_metadata().value();
       if (frame->metadata()->protected_video) {
         if (frame->metadata()->hw_protected) {
           yuv_video_quad->protected_video_type =
@@ -790,9 +792,7 @@ void VideoResourceUpdater::CopyHardwarePlane(
   DCHECK_EQ(hardware_resource->texture_target(),
             static_cast<GLenum>(GL_TEXTURE_2D));
 
-  auto* gl = raster_context_provider_ ? raster_context_provider_->ContextGL()
-                                      : context_provider_->ContextGL();
-
+  auto* gl = ContextGL();
   gl->WaitSyncTokenCHROMIUM(mailbox_holder.sync_token.GetConstData());
 
   // This is only used on Android where all video mailboxes already use shared
@@ -1069,10 +1069,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
             video_frame.get(), upload_pixels_.get(), bytes_per_row);
 
         // Copy pixels into texture.
-        auto* gl = raster_context_provider_
-                       ? raster_context_provider_->ContextGL()
-                       : context_provider_->ContextGL();
-
+        auto* gl = ContextGL();
         const gfx::Size& plane_size = hardware_resource->resource_size();
         {
           HardwarePlaneResource::ScopedTexture scope(gl, hardware_resource);
@@ -1099,9 +1096,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
       HardwarePlaneResource* hardware_resource = plane_resource->AsHardware();
       external_resources.type = VideoFrameResourceType::RGBA;
       gpu::SyncToken sync_token;
-      auto* gl = raster_context_provider_
-                     ? raster_context_provider_->ContextGL()
-                     : context_provider_->ContextGL();
+      auto* gl = ContextGL();
       GenerateCompositorSyncToken(gl, &sync_token);
       transferable_resource = viz::TransferableResource::MakeGL(
           hardware_resource->mailbox(), GL_LINEAR,
@@ -1138,6 +1133,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
     external_resources.offset = 0;
   }
 
+  auto* gl = ContextGL();
   // We need to transfer data from |video_frame| to the plane resources.
   for (size_t i = 0; i < plane_resources.size(); ++i) {
     HardwarePlaneResource* plane_resource = plane_resources[i]->AsHardware();
@@ -1163,10 +1159,12 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
     const size_t bytes_per_row =
         viz::ResourceSizes::CheckedWidthInBytes<size_t>(
             resource_size_pixels.width(), plane_resource_format);
+
     // Use 4-byte row alignment (OpenGL default) for upload performance.
     // Assuming that GL_UNPACK_ALIGNMENT has not changed from default.
-    const size_t upload_image_stride =
-        cc::MathUtil::CheckedRoundUp<size_t>(bytes_per_row, 4u);
+    constexpr size_t kDefaultUnpackAlignment = 4;
+    const size_t upload_image_stride = cc::MathUtil::CheckedRoundUp<size_t>(
+        bytes_per_row, kDefaultUnpackAlignment);
 
     const size_t resource_bit_depth =
         static_cast<size_t>(viz::BitsPerPixel(plane_resource_format));
@@ -1174,20 +1172,35 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
     // Data downshifting is needed if the resource bit depth is not enough.
     const bool needs_bit_downshifting = bits_per_channel > resource_bit_depth;
 
-    // A copy to adjust strides is needed if those are different and both source
-    // and destination have the same bit depth.
-    const bool needs_stride_adaptation =
-        (bits_per_channel == resource_bit_depth) &&
-        (upload_image_stride != static_cast<size_t>(video_stride_bytes));
-
     // We need to convert the incoming data if we're transferring to half float,
     // if the need a bit downshift or if the strides need to be reconciled.
-    const bool needs_conversion = plane_resource_format == viz::LUMINANCE_F16 ||
-                                  needs_bit_downshifting ||
-                                  needs_stride_adaptation;
+    const bool needs_conversion =
+        plane_resource_format == viz::LUMINANCE_F16 || needs_bit_downshifting;
+
+    constexpr size_t kDefaultUnpackRowLength = 0;
+    GLuint unpack_row_length = kDefaultUnpackRowLength;
+    GLuint unpack_alignment = kDefaultUnpackAlignment;
 
     const uint8_t* pixels;
+
     if (!needs_conversion) {
+      // Stride adaptation is needed if source and destination strides are
+      // different but they have the same bit depth.
+      const bool needs_stride_adaptation =
+          (bits_per_channel == resource_bit_depth) &&
+          (upload_image_stride != static_cast<size_t>(video_stride_bytes));
+      if (needs_stride_adaptation) {
+        const int bytes_per_element =
+            VideoFrame::BytesPerElement(video_frame->format(), i);
+        // Stride is aligned to VideoFrameLayout::kFrameAddressAlignment (32)
+        // which should be divisible by pixel size for YUV formats (1, 2 or 4).
+        DCHECK_EQ(video_stride_bytes % bytes_per_element, 0);
+        // Unpack row length is in pixels not bytes.
+        unpack_row_length = video_stride_bytes / bytes_per_element;
+        // Use a non-standard alignment only if necessary.
+        if (video_stride_bytes % kDefaultUnpackAlignment != 0)
+          unpack_alignment = bytes_per_element;
+      }
       pixels = video_frame->data(i);
     } else {
       // Avoid malloc for each frame/plane if possible.
@@ -1218,14 +1231,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
             video_stride_bytes / 2, upload_pixels_.get(), upload_image_stride,
             scale, bytes_per_row, resource_size_pixels.height());
       } else {
-        // Make a copy to reconcile stride, size and format being equal.
-        DCHECK(needs_stride_adaptation);
-        DCHECK(plane_resource_format == viz::LUMINANCE_8 ||
-               plane_resource_format == viz::RED_8);
-        libyuv::CopyPlane(video_frame->data(i), video_stride_bytes,
-                          upload_pixels_.get(), upload_image_stride,
-                          resource_size_pixels.width(),
-                          resource_size_pixels.height());
+        NOTREACHED();
       }
 
       pixels = upload_pixels_.get();
@@ -1233,17 +1239,21 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
 
     // Copy pixels into texture. TexSubImage2D() is applicable because
     // |yuv_resource_format| is LUMINANCE_F16, R16_EXT, LUMINANCE_8 or RED_8.
-    auto* gl = raster_context_provider_ ? raster_context_provider_->ContextGL()
-                                        : context_provider_->ContextGL();
     DCHECK(GLSupportsFormat(plane_resource_format));
     {
       HardwarePlaneResource::ScopedTexture scope(gl, plane_resource);
+
       gl->BindTexture(plane_resource->texture_target(), scope.texture_id());
+
+      gl->PixelStorei(GL_UNPACK_ROW_LENGTH, unpack_row_length);
+      gl->PixelStorei(GL_UNPACK_ALIGNMENT, unpack_alignment);
       gl->TexSubImage2D(plane_resource->texture_target(), 0, 0, 0,
                         resource_size_pixels.width(),
                         resource_size_pixels.height(),
                         GLDataFormat(plane_resource_format),
                         GLDataType(plane_resource_format), pixels);
+      gl->PixelStorei(GL_UNPACK_ROW_LENGTH, kDefaultUnpackRowLength);
+      gl->PixelStorei(GL_UNPACK_ALIGNMENT, kDefaultUnpackAlignment);
     }
 
     plane_resource->SetUniqueId(video_frame->unique_id(), i);
@@ -1251,8 +1261,6 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
 
   // Set the sync token otherwise resource is assumed to be synchronized.
   gpu::SyncToken sync_token;
-  auto* gl = raster_context_provider_ ? raster_context_provider_->ContextGL()
-                                      : context_provider_->ContextGL();
   GenerateCompositorSyncToken(gl, &sync_token);
 
   for (size_t i = 0; i < plane_resources.size(); ++i) {
@@ -1273,6 +1281,13 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
   return external_resources;
 }
 
+gpu::gles2::GLES2Interface* VideoResourceUpdater::ContextGL() {
+  auto* gl = raster_context_provider_ ? raster_context_provider_->ContextGL()
+                                      : context_provider_->ContextGL();
+  DCHECK(gl);
+  return gl;
+}
+
 void VideoResourceUpdater::ReturnTexture(scoped_refptr<VideoFrame> video_frame,
                                          const gpu::SyncToken& sync_token,
                                          bool lost_resource) {
@@ -1281,10 +1296,8 @@ void VideoResourceUpdater::ReturnTexture(scoped_refptr<VideoFrame> video_frame,
     return;
 
   // The video frame will insert a wait on the previous release sync token.
-  auto* gl = raster_context_provider_ ? raster_context_provider_->ContextGL()
-                                      : context_provider_->ContextGL();
-  SyncTokenClientImpl client(gl, nullptr /* gpu::SharedImageInterface* */,
-                             sync_token);
+  SyncTokenClientImpl client(
+      ContextGL(), nullptr /* gpu::SharedImageInterface* */, sync_token);
   video_frame->UpdateReleaseSyncToken(&client);
 }
 
@@ -1314,9 +1327,7 @@ void VideoResourceUpdater::RecycleResource(uint32_t plane_resource_id,
     return;
 
   if ((raster_context_provider_ || context_provider_) && sync_token.HasData()) {
-    auto* gl = raster_context_provider_ ? raster_context_provider_->ContextGL()
-                                        : context_provider_->ContextGL();
-    gl->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
+    ContextGL()->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
   }
 
   if (lost_resource) {

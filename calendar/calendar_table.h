@@ -45,6 +45,7 @@ class CalendarTable {
   bool DeleteCalendar(CalendarID calendar_id);
   bool DoesCalendarIdExist(CalendarID calendar_id);
   bool MigrateCalendarToVersion3();
+  bool MigrateCalendarToVersion10();
 
  protected:
   virtual sql::Database& GetDB() = 0;
@@ -59,7 +60,7 @@ class CalendarTable {
 #define CALENDAR_ROW_FIELDS                                        \
   " id, account_id, name, description,  ctag, orderindex, color, " \
   " hidden, active, iconindex, last_checked , "                    \
-  " timezone, created, last_modified "
+  " timezone, supported_component_set, created, last_modified "
 
 }  // namespace calendar
 

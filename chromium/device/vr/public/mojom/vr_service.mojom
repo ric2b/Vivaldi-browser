@@ -5,6 +5,7 @@
 module device.mojom;
 
 import "device/gamepad/public/mojom/gamepad.mojom";
+import "mojo/public/mojom/base/big_buffer.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "gpu/ipc/common/mailbox_holder.mojom";
 import "gpu/ipc/common/sync_token.mojom";
@@ -22,13 +23,13 @@ import "ui/gfx/mojom/transform.mojom";
 
 // TODO(https://crbug.com/966099): Use EnableIf to only define values on
 // platforms that have implementations.
-// XRDeviceId is used in metrics, so don't reorder.
+// XRDeviceId is used in metrics, so don't reorder or reuse.
 enum XRDeviceId {
   WEB_TEST_DEVICE_ID = 0, // Fake device used by web_tests.
   FAKE_DEVICE_ID = 1, // Fake device used in unit tests.
   ORIENTATION_DEVICE_ID = 2,
   GVR_DEVICE_ID = 3,
-  [EnableIf=enable_openvr] OPENVR_DEVICE_ID = 4,
+  // OPENVR_DEVICE_ID = 4,
   [EnableIf=enable_oculus_vr] OCULUS_DEVICE_ID = 5,
   [EnableIf=enable_windows_mr] WINDOWS_MIXED_REALITY_ID = 6,
   ARCORE_DEVICE_ID = 7,
@@ -62,6 +63,7 @@ enum XRSessionFeature {
   ANCHORS = 9,
   CAMERA_ACCESS = 10, // Experimental feature.
   PLANE_DETECTION = 11, // Experimental feature.
+  DEPTH = 12, // Experimental feature.
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -127,6 +129,10 @@ struct XRSession {
   // Indicates whether the device backing this session sends input events solely
   // via eventing (as opposed to polling).
   bool uses_input_eventing;
+
+  // The default scale that should be applied to the native framebuffer size
+  // unless overridden by the developer.
+  float default_framebuffer_scale = 1.0;
 };
 
 // This structure contains the infomation and interfaces needed to create a two
@@ -296,13 +302,11 @@ struct VRStageParameters {
 };
 
 struct VRDisplayInfo {
-  XRDeviceId id;
   VRStageParameters? stage_parameters;
   // Parameters required to distort a scene for viewing in a VR headset. Only
   // required for devices which have the can_present capability.
   VREyeParameters? left_eye;
   VREyeParameters? right_eye;
-  float webxr_default_framebuffer_scale = 1.0;
 };
 
 // Frame transport method from the Renderer's point of view.
@@ -535,6 +539,36 @@ struct XRLightEstimationData {
   XRReflectionProbe? reflection_probe;
 };
 
+// Structure that signifies that the depth data is still valid, no additional
+// information is provided. See |XRDepthData| for more details.
+struct XRDepthDataStillValid {};
+
+// Structure that signifies that the Depth data was updated. Provides
+// information about current depth data. See |XRDepthData| for more details.
+struct XRDepthDataUpdated {
+  // Timestamp of the returned data, in unspecified base.
+  mojo_base.mojom.TimeDelta time_delta;
+  // Array of 16-bit numbers representing depth in millimeters from the camera
+  // plane.
+  mojo_base.mojom.BigBuffer pixel_data;
+  // Transform that needs to be applied when indexing into pixel_data when using
+  // normalized view coordinates (with origin at bottom left corner of the
+  // screen).
+  gfx.mojom.Transform norm_texture_from_norm_view;
+  // Size of the pixel array. Valid iff pixel_data is not null.
+  gfx.mojom.Size size;
+};
+
+// Depth data may be the same as the one returned in the previous frame - it is
+// represented as a union of (empty) XRDepthDataStillValid structure that
+// conveys no additional information except that the previously returned depth
+// data is still valid, and the XRDepthDataUpdated structure that signifies that
+// the depth data was updated & carries all information about it.
+union XRDepthData {
+  XRDepthDataStillValid data_still_valid;
+  XRDepthDataUpdated updated_depth_data;
+};
+
 // The data needed for each animation frame of an XRSession.
 struct XRFrameData {
   // General XRSession value
@@ -547,9 +581,17 @@ struct XRFrameData {
   // The buffer_holder is used for sending imagery data back and forth across
   // the process boundary.
   gpu.mojom.MailboxHolder? buffer_holder;
+
   // The camera_image_buffer_holder is used to send a copy of the camera image
-  // across the process boundary for immersive-ar sessions.
+  // across the process boundary for immersive-ar sessions. This assumes that
+  // there exists a single camera.
   gpu.mojom.MailboxHolder? camera_image_buffer_holder;
+
+  // Depth data (if the device supports it and the environment integration is
+  // enabled). This assumes that depth information is provided from a single
+  // sensor. If for any reason the latest depth data could not be obtained, it
+  // will be set to null.
+  XRDepthData? depth_data;
 
   // Indicates that there has been a significant discontinuity in the mojo space
   // coordinate system, and that poses from this point forward with the same
@@ -660,10 +702,11 @@ union RequestSessionResult {
 // process is compatible with the active VR headset.
 enum XrCompatibleResult {
   // Compatibility results where the GPU process was not restarted.
-  kAlreadyCompatible,
-  kNotCompatible,
+  kAlreadyCompatible,         // GPU process is already on a compatible GPU.
+  kNoDeviceAvailable,         // No WebXR device is available.
+  kWebXrFeaturePolicyBlocked, // WebXR is blocked by feature policy.
 
-  // Compatibility results where the GPU was restarted. Context lost and
+  // Compatibility results where the GPU process was restarted. Context lost and
   // restored for existing WebGL contexts must be handled before using for XR.
   kCompatibleAfterRestart,    // XR compatible, GPU process was restarted.
   kNotCompatibleAfterRestart, // Not XR compatible, GPU process was restarted.

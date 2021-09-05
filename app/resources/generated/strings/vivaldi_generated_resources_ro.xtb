@@ -9,11 +9,11 @@
 <translation id="1163931534039071049">&amp;Vizualizează sursa cadrului</translation>
 <translation id="1165039591588034296">Eroare</translation>
 <translation id="1175364870820465910">Ti&amp;părește...</translation>
-<translation id="1177863135347784049">Personalizat</translation>
 <translation id="1181037720776840403">Elimină</translation>
 <translation id="119944043368869598">Șterge tot</translation>
 <translation id="1221825588892235038">Numai selecția</translation>
 <translation id="1244303850296295656">Eroare de extensie</translation>
+<translation id="125220115284141797">Implicit</translation>
 <translation id="1274977772557788323">Setări privind stocarea Adobe Flash Player</translation>
 <translation id="1297175357211070620">Destinație</translation>
 <translation id="1303101771013849280">Fișier HTML cu semne de carte</translation>
@@ -35,8 +35,10 @@
 <translation id="1708338024780164500">(Inactive)</translation>
 <translation id="1723824996674794290">Fereastră &amp;nouă</translation>
 <translation id="1729533290416704613">De asemenea controlează ce pagină să fie afișată la căutare din Omnibox.</translation>
+<translation id="174123615272205933">Personalizat</translation>
 <translation id="1744108098763830590">pagina de fundal</translation>
 <translation id="176587472219019965">Fereastră &amp;nouă</translation>
+<translation id="1779468444204342338">Minim</translation>
 <translation id="1828901632669367785">Tipărește folosind dialogul de sistem...</translation>
 <translation id="1886996562706621347">Permiteți site-urilor web să solicite să devină gestionarele implicite pentru protocoale (recomandat)</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
@@ -65,7 +67,6 @@
 <translation id="2379281330731083556">Tipărește folosind caseta de dialog a sistemului... <ph name="SHORTCUT_KEY" /></translation>
 <translation id="2381756643783702095">Întreabă înainte de a trimite (recomandat)</translation>
 <translation id="241082044617551207">Plugin necunoscut</translation>
-<translation id="2436707352762155834">Minim</translation>
 <translation id="2439110203301358333">Un alt program de pe calculator a adăugat o extensie care poate schimba modul în care funcționează Vivaldi.</translation>
 <translation id="2445081178310039857">Este necesar directorul rădăcină pentru extensie.</translation>
 <translation id="2470702053775288986">Extensiile incompatibile au fost dezactivate</translation>
@@ -182,7 +183,6 @@
 <translation id="5036662165765606524">Nu permite niciunui site web să descarce automat mai multe fișiere</translation>
 <translation id="5039804452771397117">Permite</translation>
 <translation id="5063480226653192405">Utilizare</translation>
-<translation id="5068918910148307423">Nu permite site-urilor web închise recent să finalizeze trimiterea sau primirea datelor</translation>
 <translation id="5143374789336132547">Extensia „<ph name="EXTENSION_NAME" />” a modificat pagina care este afișată la clic pe butonul Pagina inițială.</translation>
 <translation id="5154108062446123722">Setări avansate pentru <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5233231016133573565">ID proces</translation>
@@ -194,6 +194,7 @@
 <translation id="5317780077021120954">Salvează</translation>
 <translation id="5355926466126177564">Extensia „<ph name="EXTENSION_NAME" />” a modificat pagina care este afișată la căutarea din Omnibox.</translation>
 <translation id="5362741141255528695">Selectează fișierul cu cheia privată.</translation>
+<translation id="536638840841140142">Fără</translation>
 <translation id="5370819323174483825">&amp;Reîncarcă</translation>
 <translation id="5398572795982417028">Referința paginii este în afara limitelor, limita este <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5431318178759467895">Color</translation>
@@ -283,7 +284,6 @@
 <translation id="7658239707568436148">Anulează</translation>
 <translation id="7661259717474717992">Permite site-urilor web să salveze și să citească datele asociate cookie-urilor</translation>
 <translation id="7663719505383602579">Receptor: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7701040980221191251">Fără</translation>
 <translation id="7704305437604973648">Activitate</translation>
 <translation id="7710568461918838723">&amp;Cast...</translation>
 <translation id="7751260505918304024">Arată-le pe toate</translation>

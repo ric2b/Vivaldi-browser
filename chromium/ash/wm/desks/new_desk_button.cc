@@ -45,10 +45,10 @@ NewDeskButton::NewDeskButton(views::ButtonListener* listener)
 
   AshColorProvider::Get()->DecoratePillButton(
       this, AshColorProvider::ButtonType::kPillButtonWithIcon,
-      AshColorProvider::AshColorMode::kDark, kDesksNewDeskButtonIcon);
+      kDesksNewDeskButtonIcon);
 
   SetInkDropMode(InkDropMode::ON);
-  set_has_ink_drop_action_on_click(true);
+  SetHasInkDropActionOnClick(true);
   SetFocusPainter(nullptr);
 
   auto border = std::make_unique<WmHighlightItemBorder>(kCornerRadius);
@@ -74,14 +74,13 @@ void NewDeskButton::UpdateButtonState() {
   SetEnabled(enabled);
 
   background_color_ = AshColorProvider::Get()->GetControlsLayerColor(
-      AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive,
-      AshColorProvider::AshColorMode::kDark);
+      AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive);
   if (!enabled)
     background_color_ = AshColorProvider::GetDisabledColor(background_color_);
 
-  set_ink_drop_visible_opacity(AshColorProvider::Get()
-                                   ->GetRippleAttributes(background_color_)
-                                   .inkdrop_opacity);
+  SetInkDropVisibleOpacity(AshColorProvider::Get()
+                               ->GetRippleAttributes(background_color_)
+                               .inkdrop_opacity);
   SchedulePaint();
 }
 

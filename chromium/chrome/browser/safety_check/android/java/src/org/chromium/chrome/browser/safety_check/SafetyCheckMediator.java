@@ -102,7 +102,11 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
             SafetyCheckInteractions.PASSWORDS_MANAGE, SafetyCheckInteractions.SAFE_BROWSING_MANAGE,
             SafetyCheckInteractions.EXTENSIONS_REVIEW,
             SafetyCheckInteractions.CHROME_CLEANER_REBOOT,
-            SafetyCheckInteractions.CHROME_CLEANER_REVIEW, SafetyCheckInteractions.MAX_VALUE})
+            SafetyCheckInteractions.CHROME_CLEANER_REVIEW,
+            SafetyCheckInteractions.PASSWORDS_MANAGE_THROUGH_CARET_NAVIGATION,
+            SafetyCheckInteractions.SAFE_BROWSING_MANAGE_THROUGH_CARET_NAVIGATION,
+            SafetyCheckInteractions.EXTENSIONS_REVIEW_THROUGH_CARET_NAVIGATION,
+            SafetyCheckInteractions.MAX_VALUE})
     @Retention(RetentionPolicy.SOURCE)
     public @interface SafetyCheckInteractions {
         int STARTED = 0;
@@ -112,8 +116,11 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
         int EXTENSIONS_REVIEW = 4;
         int CHROME_CLEANER_REBOOT = 5;
         int CHROME_CLEANER_REVIEW = 6;
+        int PASSWORDS_MANAGE_THROUGH_CARET_NAVIGATION = 7;
+        int SAFE_BROWSING_MANAGE_THROUGH_CARET_NAVIGATION = 8;
+        int EXTENSIONS_REVIEW_THROUGH_CARET_NAVIGATION = 9;
         // New elements go above.
-        int MAX_VALUE = CHROME_CLEANER_REVIEW;
+        int MAX_VALUE = EXTENSIONS_REVIEW_THROUGH_CARET_NAVIGATION;
     }
 
     private final SharedPreferencesManager mPreferenceManager;
@@ -126,7 +133,8 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
         mRunnableUpdates = () -> {
             if (mModel != null) {
                 RecordHistogram.recordEnumeratedHistogram("Settings.SafetyCheck.UpdatesResult",
-                        SafetyCheckProperties.updatesStateToNative(status), UpdateStatus.MAX_VALUE);
+                        SafetyCheckProperties.updatesStateToNative(status),
+                        UpdateStatus.MAX_VALUE + 1);
                 mModel.set(SafetyCheckProperties.UPDATES_STATE, status);
             }
         };
@@ -181,7 +189,7 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
                     RecordUserAction.record("Settings.SafetyCheck.ManageSafeBrowsing");
                     RecordHistogram.recordEnumeratedHistogram(SAFETY_CHECK_INTERACTIONS,
                             SafetyCheckInteractions.SAFE_BROWSING_MANAGE,
-                            SafetyCheckInteractions.MAX_VALUE);
+                            SafetyCheckInteractions.MAX_VALUE + 1);
                     String safeBrowsingSettingsClassName;
                     if (ChromeFeatureList.isEnabled(
                                 ChromeFeatureList.SAFE_BROWSING_SECURITY_SECTION_UI)) {
@@ -244,6 +252,9 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
         if (!mSafetyCheckBridge.userSignedIn()) {
             mLoadStage = PasswordCheckLoadStage.IDLE;
             mModel.set(SafetyCheckProperties.PASSWORDS_STATE, PasswordsState.SIGNED_OUT);
+            // Record the value in UMA.
+            RecordHistogram.recordEnumeratedHistogram("Settings.SafetyCheck.PasswordsResult",
+                    PasswordsStatus.SIGNED_OUT, PasswordsStatus.MAX_VALUE + 1);
             updatePasswordElementClickDestination();
         }
         PasswordCheckFactory.getOrCreate().addObserver(this, true);
@@ -259,6 +270,9 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
         cancelCallbacks();
         // Record the start action in UMA.
         RecordUserAction.record("Settings.SafetyCheck.Start");
+        // Record the start interaction in the histogram.
+        RecordHistogram.recordEnumeratedHistogram(SAFETY_CHECK_INTERACTIONS,
+                SafetyCheckInteractions.STARTED, SafetyCheckInteractions.MAX_VALUE + 1);
         // Record the start time for tracking 1 second checking delay in the UI.
         mCheckStartTime = SystemClock.elapsedRealtime();
         // Record the absolute start time for showing when the last Safety check was performed.
@@ -294,7 +308,7 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
         mRunnableSafeBrowsing = () -> {
             if (mModel != null) {
                 RecordHistogram.recordEnumeratedHistogram("Settings.SafetyCheck.SafeBrowsingResult",
-                        status, SafeBrowsingStatus.MAX_VALUE);
+                        status, SafeBrowsingStatus.MAX_VALUE + 1);
                 mModel.set(SafetyCheckProperties.SAFE_BROWSING_STATE,
                         SafetyCheckProperties.safeBrowsingStateFromNative(status));
             }
@@ -345,7 +359,7 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
                     RecordHistogram.recordEnumeratedHistogram(
                             "Settings.SafetyCheck.PasswordsResult",
                             SafetyCheckProperties.passwordsStateToNative(state),
-                            PasswordsStatus.MAX_VALUE);
+                            PasswordsStatus.MAX_VALUE + 1);
                     mModel.set(SafetyCheckProperties.PASSWORDS_STATE, state);
                     updatePasswordElementClickDestination();
                 }
@@ -424,6 +438,9 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
         if (compromised != 0) {
             mModel.set(SafetyCheckProperties.COMPROMISED_PASSWORDS, compromised);
             mModel.set(SafetyCheckProperties.PASSWORDS_STATE, PasswordsState.COMPROMISED_EXIST);
+            // Record the value in UMA.
+            RecordHistogram.recordEnumeratedHistogram("Settings.SafetyCheck.PasswordsResult",
+                    PasswordsStatus.COMPROMISED_EXIST, PasswordsStatus.MAX_VALUE + 1);
         } else if (mLoadStage == PasswordCheckLoadStage.INITIAL_WAIT_FOR_LOAD
                 && !mShowSafePasswordState) {
             // Cannot show the safe state at the initial load if last run is older than 10 mins.
@@ -431,9 +448,15 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
         } else if (PasswordCheckFactory.getOrCreate().getSavedPasswordsCount() == 0) {
             // Can show safe state: display no passwords.
             mModel.set(SafetyCheckProperties.PASSWORDS_STATE, PasswordsState.NO_PASSWORDS);
+            // Record the value in UMA.
+            RecordHistogram.recordEnumeratedHistogram("Settings.SafetyCheck.PasswordsResult",
+                    PasswordsStatus.NO_PASSWORDS, PasswordsStatus.MAX_VALUE + 1);
         } else {
             // Can show safe state: display no compromises.
             mModel.set(SafetyCheckProperties.PASSWORDS_STATE, PasswordsState.SAFE);
+            // Record the value in UMA.
+            RecordHistogram.recordEnumeratedHistogram("Settings.SafetyCheck.PasswordsResult",
+                    PasswordsStatus.SAFE, PasswordsStatus.MAX_VALUE + 1);
         }
         // Nothing is blocked on this any longer.
         mLoadStage = PasswordCheckLoadStage.IDLE;
@@ -465,7 +488,7 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
                 RecordUserAction.record("Settings.SafetyCheck.ManagePasswords");
                 RecordHistogram.recordEnumeratedHistogram(SAFETY_CHECK_INTERACTIONS,
                         SafetyCheckInteractions.PASSWORDS_MANAGE,
-                        SafetyCheckInteractions.MAX_VALUE);
+                        SafetyCheckInteractions.MAX_VALUE + 1);
                 // Open the Password Check UI.
                 PasswordCheckFactory.getOrCreate().showUi(
                         p.getContext(), PasswordCheckReferrer.SAFETY_CHECK);

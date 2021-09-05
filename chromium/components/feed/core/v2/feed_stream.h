@@ -129,8 +129,10 @@ class FeedStream : public FeedStreamApi,
   bool IsArticlesListVisible() override;
   std::string GetClientInstanceId() override;
   void ExecuteRefreshTask() override;
-  void FetchImage(const GURL& url,
-                  base::OnceCallback<void(NetworkResponse)> callback) override;
+  ImageFetchId FetchImage(
+      const GURL& url,
+      base::OnceCallback<void(NetworkResponse)> callback) override;
+  void CancelImageFetch(ImageFetchId id) override;
   void LoadMore(SurfaceId surface_id,
                 base::OnceCallback<void(bool)> callback) override;
   void ExecuteOperations(
@@ -165,6 +167,8 @@ class FeedStream : public FeedStreamApi,
   void ReportContextMenuOpened() override;
   void ReportStreamScrolled(int distance_dp) override;
   void ReportStreamScrollStart() override;
+  void ReportTurnOnAction() override;
+  void ReportTurnOffAction() override;
 
   // offline_pages::TaskQueue::Delegate.
   void OnTaskQueueIsIdle() override;
@@ -265,6 +269,9 @@ class FeedStream : public FeedStreamApi,
   }
   void SetIdleCallbackForTesting(base::RepeatingClosure idle_callback);
 
+  bool CanUploadActions() const;
+  void SetLastStreamLoadHadNoticeCard(bool value);
+
  private:
   class OfflineSuggestionsProvider;
 
@@ -295,6 +302,15 @@ class FeedStream : public FeedStreamApi,
   void ClearAll();
 
   bool IsFeedEnabledByEnterprisePolicy();
+
+  bool HasReachedConditionsToUploadActionsWithNoticeCard();
+  void DeclareHasReachedConditionsToUploadActionsWithNoticeCard();
+
+  void UpdateShownSlicesUploadCondition(int index);
+
+  bool CanLogViews() const;
+
+  void UpdateCanUploadActionsWithNoticeCard();
 
   // Unowned.
 
@@ -331,6 +347,9 @@ class FeedStream : public FeedStreamApi,
   Metadata metadata_;
   int unload_on_detach_sequence_number_ = 0;
   bool is_activity_logging_enabled_ = false;
+  // Whether the feed stream can upload actions with the notice card in the
+  // feed.
+  bool can_upload_actions_with_notice_card_ = false;
 
   // To allow tests to wait on task queue idle.
   base::RepeatingClosure idle_callback_;

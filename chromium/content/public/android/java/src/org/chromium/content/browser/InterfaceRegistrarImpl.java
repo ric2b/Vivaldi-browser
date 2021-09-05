@@ -4,11 +4,11 @@
 
 package org.chromium.content.browser;
 
-import android.content.Context;
-
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.blink.mojom.AndroidFontLookup;
 import org.chromium.content.browser.androidoverlay.AndroidOverlayProviderImpl;
+import org.chromium.content.browser.font.AndroidFontLookupImpl;
 import org.chromium.content_public.browser.InterfaceRegistrar;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.content_public.browser.WebContents;
@@ -18,21 +18,20 @@ import org.chromium.services.service_manager.InterfaceRegistry;
 
 @JNINamespace("content")
 class InterfaceRegistrarImpl {
-
     private static boolean sHasRegisteredRegistrars;
 
     @CalledByNative
-    static void createInterfaceRegistryForContext(int nativeHandle) {
-        ensureContentRegistrarsAreRegistered();
+    static void createInterfaceRegistry(int nativeHandle) {
+        ensureSingletonRegistrarsAreRegistered();
 
         InterfaceRegistry registry = InterfaceRegistry.create(
                 CoreImpl.getInstance().acquireNativeHandle(nativeHandle).toMessagePipeHandle());
-        InterfaceRegistrar.Registry.applyContextRegistrars(registry);
+        InterfaceRegistrar.Registry.applySingletonRegistrars(registry);
     }
 
     @CalledByNative
     static void createInterfaceRegistryForWebContents(int nativeHandle, WebContents webContents) {
-        ensureContentRegistrarsAreRegistered();
+        ensureSingletonRegistrarsAreRegistered();
 
         InterfaceRegistry registry = InterfaceRegistry.create(
                 CoreImpl.getInstance().acquireNativeHandle(nativeHandle).toMessagePipeHandle());
@@ -42,26 +41,26 @@ class InterfaceRegistrarImpl {
     @CalledByNative
     static void createInterfaceRegistryForRenderFrameHost(
             int nativeHandle, RenderFrameHost renderFrameHost) {
-        ensureContentRegistrarsAreRegistered();
+        ensureSingletonRegistrarsAreRegistered();
 
         InterfaceRegistry registry = InterfaceRegistry.create(
                 CoreImpl.getInstance().acquireNativeHandle(nativeHandle).toMessagePipeHandle());
         InterfaceRegistrar.Registry.applyRenderFrameHostRegistrars(registry, renderFrameHost);
     }
 
-    private static void ensureContentRegistrarsAreRegistered() {
+    private static void ensureSingletonRegistrarsAreRegistered() {
         if (sHasRegisteredRegistrars) return;
         sHasRegisteredRegistrars = true;
-        InterfaceRegistrar.Registry.addContextRegistrar(new ContentContextInterfaceRegistrar());
+        InterfaceRegistrar.Registry.addSingletonRegistrar(new SingletonInterfaceRegistrar());
     }
 
-    private static class ContentContextInterfaceRegistrar implements InterfaceRegistrar<Context> {
+    private static class SingletonInterfaceRegistrar implements InterfaceRegistrar<Void> {
         @Override
-        public void registerInterfaces(
-                InterfaceRegistry registry, final Context applicationContext) {
-            registry.addInterface(AndroidOverlayProvider.MANAGER,
-                    new AndroidOverlayProviderImpl.Factory(applicationContext));
+        public void registerInterfaces(InterfaceRegistry registry, Void v) {
+            registry.addInterface(
+                    AndroidOverlayProvider.MANAGER, new AndroidOverlayProviderImpl.Factory());
             // TODO(avayvod): Register the PresentationService implementation here.
+            registry.addInterface(AndroidFontLookup.MANAGER, new AndroidFontLookupImpl.Factory());
         }
     }
 }

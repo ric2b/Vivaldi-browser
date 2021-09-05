@@ -30,6 +30,7 @@
 #include "chrome/test/chromedriver/chrome/status.h"
 #include "chrome/test/chromedriver/constants/version.h"
 #include "chrome/test/chromedriver/net/url_request_context_getter.h"
+#include "chrome/test/chromedriver/server/http_server.h"
 #include "chrome/test/chromedriver/session.h"
 #include "chrome/test/chromedriver/session_thread_map.h"
 #include "chrome/test/chromedriver/util.h"
@@ -65,6 +66,13 @@ bool w3cMode(const std::string& session_id,
   return kW3CDefault;
 }
 
+net::HttpServerResponseInfo createWebSocketRejectResponse(
+    net::HttpStatusCode code,
+    const std::string& msg) {
+  net::HttpServerResponseInfo response(code);
+  response.AddHeader("X-WebSocket-Reject-Reason", msg);
+  return response;
+}
 }  // namespace
 
 // WrapperURLLoaderFactory subclasses mojom::URLLoaderFactory as non-mojo, cross
@@ -139,16 +147,20 @@ HttpHandler::HttpHandler(const std::string& url_base)
 HttpHandler::HttpHandler(
     const base::RepeatingClosure& quit_func,
     const scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
+    const scoped_refptr<base::SingleThreadTaskRunner> cmd_task_runner,
     const std::string& url_base,
     int adb_port)
-    : quit_func_(quit_func), url_base_(url_base), received_shutdown_(false) {
+    : quit_func_(quit_func),
+      io_task_runner_(io_task_runner),
+      url_base_(url_base),
+      received_shutdown_(false) {
 #if defined(OS_MAC)
   base::mac::ScopedNSAutoreleasePool autorelease_pool;
 #endif
-  context_getter_ = new URLRequestContextGetter(io_task_runner);
+  context_getter_ = new URLRequestContextGetter(io_task_runner_);
   socket_factory_ = CreateSyncWebSocketFactory(context_getter_.get());
-  adb_.reset(new AdbImpl(io_task_runner, adb_port));
-  device_manager_.reset(new DeviceManager(adb_.get()));
+  adb_ = std::make_unique<AdbImpl>(io_task_runner_, adb_port);
+  device_manager_ = std::make_unique<DeviceManager>(adb_.get());
   url_loader_factory_owner_ =
       std::make_unique<network::TransitionalURLLoaderFactoryOwner>(
           context_getter_.get());
@@ -163,12 +175,14 @@ HttpHandler::HttpHandler(
           kPost, internal::kNewSessionPathPattern,
           base::BindRepeating(
               &ExecuteCreateSession, &session_thread_map_,
-              WrapToCommand("InitSession",
-                            base::BindRepeating(
-                                &ExecuteInitSession,
-                                InitSessionParams(
-                                    wrapper_url_loader_factory_.get(),
-                                    socket_factory_, device_manager_.get()))))),
+              WrapToCommand(
+                  "InitSession",
+                  base::BindRepeating(
+                      &ExecuteInitSession,
+                      InitSessionParams(wrapper_url_loader_factory_.get(),
+                                        socket_factory_, device_manager_.get(),
+                                        cmd_task_runner,
+                                        &session_connection_map_))))),
       CommandMapping(kDelete, "session/:sessionId",
                      base::BindRepeating(
                          &ExecuteSessionCommand, &session_thread_map_, "Quit",
@@ -297,6 +311,12 @@ HttpHandler::HttpHandler(
           kGet, "session/:sessionId/element/:id/enabled",
           WrapToCommand("IsElementEnabled",
                         base::BindRepeating(&ExecuteIsElementEnabled))),
+      CommandMapping(kGet, "session/:sessionId/element/:id/computedlabel",
+                     WrapToCommand("GetComputedLabel",
+                                   base::Bind(&ExecuteGetComputedLabel))),
+      CommandMapping(kGet, "session/:sessionId/element/:id/computedrole",
+                     WrapToCommand("GetComputedRole",
+                                   base::Bind(&ExecuteGetComputedRole))),
       CommandMapping(kPost, "session/:sessionId/element/:id/click",
                      WrapToCommand("ClickElement",
                                    base::BindRepeating(&ExecuteClickElement))),
@@ -975,6 +995,10 @@ void HttpHandler::Handle(const net::HttpServerRequestInfo& request,
     received_shutdown_ = true;
 }
 
+base::WeakPtr<HttpHandler> HttpHandler::WeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+
 Command HttpHandler::WrapToCommand(const char* name,
                                    const SessionCommand& session_command,
                                    bool w3c_standard_command) {
@@ -1053,8 +1077,11 @@ void HttpHandler::HandleCommand(
                     nullptr, session_id, true);
     return;
   }
-
-  iter->command.Run(params, session_id,
+  // Pass host instead for potential WebSocketUrl if it's a new session
+  iter->command.Run(params,
+                    internal::IsNewSession(*iter)
+                        ? request.GetHeaderValue("host")
+                        : session_id,
                     base::BindRepeating(&HttpHandler::PrepareResponse,
                                         weak_ptr_factory_.GetWeakPtr(),
                                         trimmed_path, send_response_func));
@@ -1279,6 +1306,67 @@ HttpHandler::PrepareStandardResponse(
   return response;
 }
 
+void HttpHandler::OnWebSocketRequest(HttpServer* http_server,
+                                     int connection_id,
+                                     const net::HttpServerRequestInfo& info) {
+  std::string path = info.path;
+
+  std::vector<std::string> path_parts = base::SplitString(
+      path, "/", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+
+  if (path_parts.size() != 2 || path_parts[0] != "session") {
+    std::string err_msg = "bad request received path " + path;
+    VLOG(0) << "HttpHandler WebSocketRequest error " << err_msg;
+    SendWebSocketRejectResponse(http_server, connection_id,
+                                net::HTTP_BAD_REQUEST, err_msg);
+    return;
+  }
+
+  std::string session_id = path_parts[1];
+  auto it = session_connection_map_.find(session_id);
+  if (it == session_connection_map_.end()) {
+    std::string err_msg = "bad request invalid session id " + session_id;
+    VLOG(0) << "HttpHandler WebSocketRequest error " << err_msg;
+    SendWebSocketRejectResponse(http_server, connection_id,
+                                net::HTTP_BAD_REQUEST, err_msg);
+    return;
+  } else if (it->second != -1) {
+    std::string err_msg = "bad request only one connection for session id " +
+                          session_id + " is allowed";
+    VLOG(0) << "HttpHandler WebSocketRequest error " << err_msg;
+    SendWebSocketRejectResponse(http_server, connection_id,
+                                net::HTTP_BAD_REQUEST, err_msg);
+    return;
+  } else {
+    session_connection_map_[session_id] = connection_id;
+    connection_session_map_[connection_id] = session_id;
+    io_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&HttpServer::AcceptWebSocket,
+                       base::Unretained(http_server), connection_id, info));
+  }
+}
+
+void HttpHandler::OnClose(HttpServer* http_server, int connection_id) {
+  auto it = connection_session_map_.find(connection_id);
+  if (it == connection_session_map_.end()) {
+    return;
+  }
+  session_connection_map_[it->second] = -1;
+  connection_session_map_.erase(it);
+}
+
+void HttpHandler::SendWebSocketRejectResponse(HttpServer* http_server,
+                                              int connection_id,
+                                              net::HttpStatusCode code,
+                                              const std::string& msg) {
+  io_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&HttpServer::SendResponse, base::Unretained(http_server),
+                     connection_id,
+                     createWebSocketRejectResponse(net::HTTP_BAD_REQUEST, msg),
+                     TRAFFIC_ANNOTATION_FOR_TESTS));
+}
 
 namespace internal {
 
@@ -1339,6 +1427,11 @@ bool MatchesCommand(const std::string& method,
   }
   out_params->MergeDictionary(&params);
   return true;
+}
+
+bool IsNewSession(const CommandMapping& command) {
+  return command.method == kPost &&
+         command.path_pattern == kNewSessionPathPattern;
 }
 
 }  // namespace internal

@@ -173,7 +173,7 @@ void FocusRing::OnViewBlurred(View* view) {
 
 FocusRing::FocusRing() {
   // Don't allow the view to process events.
-  set_can_process_events_within_subtree(false);
+  SetCanProcessEventsWithinSubtree(false);
 }
 
 void FocusRing::RefreshLayer() {
@@ -230,8 +230,7 @@ SkPath GetHighlightPath(const View* view) {
   return path;
 }
 
-BEGIN_METADATA(FocusRing)
-METADATA_PARENT_CLASS(View)
-END_METADATA()
+BEGIN_METADATA(FocusRing, View)
+END_METADATA
 
 }  // namespace views

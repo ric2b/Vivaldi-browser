@@ -42,6 +42,9 @@ namespace mojom {
 class WindowFeatures;
 class WebUsbService;
 }  // namespace mojom
+namespace web_pref {
+struct WebPreferences;
+}  // namespace web_pref
 class URLLoaderThrottle;
 }  // namespace blink
 
@@ -64,6 +67,10 @@ class RealTimeUrlLookupServiceBase;
 class SafeBrowsingService;
 class UrlCheckerDelegate;
 }  // namespace safe_browsing
+
+namespace sandbox {
+class SeatbeltExecClient;
+}  // namespace sandbox
 
 namespace ui {
 class NativeTheme;
@@ -99,7 +106,8 @@ blink::UserAgentMetadata GetUserAgentMetadata();
 blink::UserAgentBrandList GenerateBrandVersionList(
     int seed,
     base::Optional<std::string> brand,
-    std::string major_version);
+    std::string major_version,
+    base::Optional<std::string> maybe_greasey_brand);
 
 class ChromeContentBrowserClient : public content::ContentBrowserClient {
  public:
@@ -181,6 +189,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   bool CanCommitURL(content::RenderProcessHost* process_host,
                     const GURL& url) override;
   void OverrideNavigationParams(
+      content::WebContents* web_contents,
       content::SiteInstance* site_instance,
       ui::PageTransition* transition,
       bool* is_renderer_initiated,
@@ -281,8 +290,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
 #if defined(OS_CHROMEOS)
   void OnTrustAnchorUsed(content::BrowserContext* browser_context) override;
 #endif
-  void OnSCTReportReady(content::BrowserContext* browser_context,
-                        const std::string& cache_key) override;
   scoped_refptr<network::SharedURLLoaderFactory>
   GetSystemSharedURLLoaderFactory() override;
   network::mojom::NetworkContext* GetSystemNetworkContext() override;
@@ -336,10 +343,10 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
 #endif
   content::TtsPlatform* GetTtsPlatform() override;
   void OverrideWebkitPrefs(content::RenderViewHost* rvh,
-                           content::WebPreferences* prefs) override;
+                           blink::web_pref::WebPreferences* prefs) override;
   bool OverrideWebPreferencesAfterNavigation(
       content::WebContents* web_contents,
-      content::WebPreferences* prefs) override;
+      blink::web_pref::WebPreferences* prefs) override;
   void BrowserURLHandlerCreated(content::BrowserURLHandler* handler) override;
   base::FilePath GetDefaultDownloadDirectory() override;
   std::string GetDefaultDownloadName() override;
@@ -460,6 +467,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void RegisterNonNetworkNavigationURLLoaderFactories(
       int frame_tree_node_id,
       base::UkmSourceId ukm_source_id,
+      NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
       NonNetworkURLLoaderFactoryMap* factories) override;
   void RegisterNonNetworkWorkerMainResourceURLLoaderFactories(
       content::BrowserContext* browser_context,
@@ -470,6 +478,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void RegisterNonNetworkSubresourceURLLoaderFactories(
       int render_process_id,
       int render_frame_id,
+      NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
       NonNetworkURLLoaderFactoryMap* factories) override;
   bool WillCreateURLLoaderFactory(
       content::BrowserContext* browser_context,
@@ -478,6 +487,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       URLLoaderFactoryType type,
       const url::Origin& request_initiator,
       base::Optional<int64_t> navigation_id,
+      base::UkmSourceId ukm_source_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
@@ -619,6 +629,11 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       bool user_gesture,
       content::NavigationDownloadPolicy* download_policy) override;
 
+  std::string GetInterestCohortForJsApi(
+      content::BrowserContext* browser_context,
+      const url::Origin& requesting_origin,
+      const net::SiteForCookies& site_for_cookies) override;
+
   bool IsBluetoothScanningBlocked(content::BrowserContext* browser_context,
                                   const url::Origin& requesting_origin,
                                   const url::Origin& embedding_origin) override;
@@ -668,9 +683,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       const std::string& data,
       IsClipboardPasteAllowedCallback callback) override;
 
-  void LogUkmEventForCrossOriginFetchFromContentScript3(
-      const std::string& isolated_world_host) override;
-
 #if BUILDFLAG(ENABLE_PLUGINS)
   bool ShouldAllowPluginCreation(
       const url::Origin& embedder_origin,
@@ -683,14 +695,19 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
 
   bool IsOriginTrialRequiredForAppCache(
       content::BrowserContext* browser_context) override;
-  void BindBrowserControlInterface(
-      mojo::GenericPendingReceiver receiver) override;
+  void BindBrowserControlInterface(mojo::ScopedMessagePipeHandle pipe) override;
   bool ShouldInheritCrossOriginEmbedderPolicyImplicitly(
       const GURL& url) override;
-  network::mojom::PrivateNetworkRequestPolicy GetPrivateNetworkRequestPolicy(
+  bool ShouldAllowInsecurePrivateNetworkRequests(
       content::BrowserContext* browser_context,
       const GURL& url) override;
   ukm::UkmService* GetUkmService() override;
+
+#if defined(OS_MAC)
+  bool SetupEmbedderSandboxParameters(
+      sandbox::policy::SandboxType sandbox_type,
+      sandbox::SeatbeltExecClient* client) override;
+#endif  // defined(OS_MAC)
 
  protected:
   static bool HandleWebUI(GURL* url, content::BrowserContext* browser_context);

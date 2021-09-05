@@ -802,6 +802,8 @@ component("net") {
       "nqe/observation_buffer.cc",
       "nqe/observation_buffer.h",
       "nqe/peer_to_peer_connections_count_observer.h",
+      "nqe/pref_names.cc",
+      "nqe/pref_names.h",
       "nqe/rtt_throughput_estimates_observer.h",
       "nqe/socket_watcher.cc",
       "nqe/socket_watcher.h",
@@ -896,6 +898,7 @@ component("net") {
       "quic/platform/impl/quic_socket_address_impl.cc",
       "quic/platform/impl/quic_socket_address_impl.h",
       "quic/platform/impl/quic_stack_trace_impl.h",
+      "quic/platform/impl/quic_testvalue_impl.h",
       "quic/properties_based_quic_server_info.cc",
       "quic/properties_based_quic_server_info.h",
       "quic/quic_address_mismatch.cc",
@@ -1126,10 +1129,6 @@ component("net") {
       "url_request/url_request_job.h",
       "url_request/url_request_job_factory.cc",
       "url_request/url_request_job_factory.h",
-      "url_request/url_request_job_factory_impl.cc",
-      "url_request/url_request_job_factory_impl.h",
-      "url_request/url_request_job_manager.cc",
-      "url_request/url_request_job_manager.h",
       "url_request/url_request_netlog_params.cc",
       "url_request/url_request_netlog_params.h",
       "url_request/url_request_redirect_job.cc",
@@ -1292,8 +1291,8 @@ component("net") {
       sources += [
         "base/mac/url_conversions.h",
         "base/mac/url_conversions.mm",
-        "base/network_change_notifier_mac.cc",
         "base/network_change_notifier_mac.h",
+        "base/network_change_notifier_mac.mm",
         "base/network_config_watcher_mac.cc",
         "base/network_config_watcher_mac.h",
         "base/platform_mime_util_mac.mm",
@@ -1514,6 +1513,7 @@ component("net") {
     libs = [ "resolv" ]
     frameworks = [
       "CFNetwork.framework",
+      "CoreTelephony.framework",
       "MobileCoreServices.framework",
       "Security.framework",
       "SystemConfiguration.framework",
@@ -1769,6 +1769,7 @@ source_set("net_public_deps") {
     "//crypto:platform",
     "//net/third_party/quiche:net_quic_proto",
     "//net/third_party/quiche:net_quic_test_tools_proto",
+    "//net/third_party/quiche:quiche_public_deps",
     "//net/traffic_annotation",
     "//third_party/boringssl",
     "//url",
@@ -1972,6 +1973,7 @@ bundle_data("test_support_bundle_data") {
     "data/ssl/certificates/duplicate_cn_2.pem",
     "data/ssl/certificates/eku-test-root.pem",
     "data/ssl/certificates/empty_subject_cert.der",
+    "data/ssl/certificates/ev-multi-oid.pem",
     "data/ssl/certificates/ev_test.pem",
     "data/ssl/certificates/ev_test_state_only.pem",
     "data/ssl/certificates/expired_cert.pem",
@@ -2000,7 +2002,6 @@ bundle_data("test_support_bundle_data") {
     "data/ssl/certificates/key_usage_rsa_no_extension.pem",
     "data/ssl/certificates/large_key.pem",
     "data/ssl/certificates/localhost_cert.pem",
-    "data/ssl/certificates/login.trustwave.com.pem",
     "data/ssl/certificates/may_2018.pem",
     "data/ssl/certificates/mit.davidben.der",
     "data/ssl/certificates/multi-root-A-by-B.pem",
@@ -4448,7 +4449,7 @@ test("net_unittests") {
     "url_request/url_request_context_unittest.cc",
     "url_request/url_request_filter_unittest.cc",
     "url_request/url_request_http_job_unittest.cc",
-    "url_request/url_request_job_factory_impl_unittest.cc",
+    "url_request/url_request_job_factory_unittest.cc",
     "url_request/url_request_job_unittest.cc",
     "url_request/url_request_quic_unittest.cc",
     "url_request/url_request_throttler_simulation_unittest.cc",
@@ -4824,8 +4825,6 @@ test("net_unittests") {
     ]
     android_manifest = "//net/android/unittest_support/AndroidManifest.xml"
 
-    # Cronet still supports kitkat.
-    min_sdk_version = 19
     sources += [
       "base/address_tracker_linux_unittest.cc",
       "base/network_interfaces_linux_unittest.cc",

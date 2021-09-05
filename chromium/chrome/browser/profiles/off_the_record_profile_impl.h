@@ -13,7 +13,6 @@
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_io_data_handle.h"
-#include "chrome/browser/ui/browser_list.h"
 #include "components/domain_reliability/clear_mode.h"
 #include "content/public/browser/content_browser_client.h"
 
@@ -46,14 +45,10 @@ class OffTheRecordProfileImpl : public Profile {
 
   // Profile implementation.
   std::string GetProfileUserName() const override;
-  // TODO(https://crbug.com/1033903): Remove the default value.
-  Profile* GetOffTheRecordProfile(
-      const OTRProfileID& otr_profile_id = OTRProfileID::PrimaryID()) override;
+  Profile* GetOffTheRecordProfile(const OTRProfileID& otr_profile_id) override;
   std::vector<Profile*> GetAllOffTheRecordProfiles() override;
   void DestroyOffTheRecordProfile(Profile* otr_profile) override;
-  // TODO(https://crbug.com/1033903): Remove the default value.
-  bool HasOffTheRecordProfile(
-      const OTRProfileID& otr_profile_id = OTRProfileID::PrimaryID()) override;
+  bool HasOffTheRecordProfile(const OTRProfileID& otr_profile_id) override;
   bool HasAnyOffTheRecordProfile() override;
   Profile* GetOriginalProfile() override;
   const Profile* GetOriginalProfile() const override;
@@ -130,9 +125,9 @@ class OffTheRecordProfileImpl : public Profile {
       std::vector<network::mojom::CorsOriginPatternPtr> block_patterns,
       base::OnceClosure closure) override;
   content::SharedCorsOriginAccessList* GetSharedCorsOriginAccessList() override;
-  bool ShouldEnableOutOfBlinkCors() override;
   content::NativeFileSystemPermissionContext*
   GetNativeFileSystemPermissionContext() override;
+  void RecordMainFrameNavigation() override;
 
  private:
 #if !defined(OS_ANDROID)
@@ -169,6 +164,9 @@ class OffTheRecordProfileImpl : public Profile {
   std::unique_ptr<ProfileKey> key_;
 
   base::FilePath last_selected_directory_;
+
+  // Number of main frame navigations done by this profile.
+  unsigned int main_frame_navigations_ = 0;
 };
 
 #endif  // CHROME_BROWSER_PROFILES_OFF_THE_RECORD_PROFILE_IMPL_H_

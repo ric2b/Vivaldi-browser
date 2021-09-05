@@ -184,7 +184,7 @@ bool VivaldiSyncUIHelper::SetEncryptionPassword(const std::string& password) {
     profile_->GetPrefs()->SetInteger(
         vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword,
         static_cast<int>(
-            vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::AYE));
+            vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::kYes));
     return true;
   }
 
@@ -199,7 +199,7 @@ bool VivaldiSyncUIHelper::SetEncryptionPassword(const std::string& password) {
   profile_->GetPrefs()->SetInteger(
       vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword,
       static_cast<int>(
-          vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::NAY));
+          vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::kNo));
   sync_manager_->GetUserSettings()->SetEncryptionPassphrase(login_password);
   return true;
 }
@@ -225,12 +225,12 @@ void VivaldiSyncUIHelper::OnStateChanged(syncer::SyncService* sync) {
     profile_->GetPrefs()->SetInteger(
         vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword,
         static_cast<int>(
-            vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::NAY));
+            vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::kNo));
   } else {
     profile_->GetPrefs()->SetInteger(
         vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword,
         static_cast<int>(
-            vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::AYE));
+            vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::kYes));
   }
 }
 

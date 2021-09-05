@@ -22,28 +22,28 @@
 
 using content::WebContents;
 
+namespace vivaldi {
+
 namespace {
+
+// For thumbanils in theory we can use RenderWidgetHostView::CopyFromSurface,
+// instead of our IPC capture, but it works for some reason only on Mac.
+constexpr bool use_CopyFromSurface = false;
 
 // Time intervals used by the logic that times out content loading.
 constexpr base::TimeDelta kMaxWaitForPageLoad =
     base::TimeDelta::FromSeconds(30);
 
-}  // namespace
-
-namespace vivaldi {
-
-namespace {
+// As the capture involves IPC to the renderer process, we must be prepared that
+// it becomes unresponsive.
+constexpr base::TimeDelta kMaxWaitForCaptureResult =
+    base::TimeDelta::FromSeconds(15);
 
 scoped_refptr<base::RefCountedMemory> ConvertToPNGOnWorkerThread(
-    ::vivaldi::CapturePage::Result captured) {
-  SkBitmap bitmap;
-  if (!captured.MovePixelsToBitmap(&bitmap))
-    return nullptr;
-  std::vector<unsigned char> data;
-  std::string mime_type;
-  bool encoded = ::vivaldi::skia_utils::EncodeBitmap(
-      bitmap, ::vivaldi::skia_utils::ImageFormat::kPNG, 100, data, mime_type);
-  if (!encoded)
+    SkBitmap bitmap) {
+  std::vector<unsigned char> data = ::vivaldi::skia_utils::EncodeBitmap(
+      std::move(bitmap), ::vivaldi::skia_utils::ImageFormat::kPNG, 100);
+  if (data.empty())
     return nullptr;
   return base::RefCountedBytes::TakeVector(&data);
 }
@@ -110,12 +110,12 @@ void ThumbnailCaptureContents::Start(
   // Start load timeout.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
-      base::BindRepeating(&ThumbnailCaptureContents::OnPageLoadTimeout,
-                          weak_ptr_factory_.GetWeakPtr()),
+      base::BindOnce(&ThumbnailCaptureContents::OnPageLoadTimeout,
+                     weak_ptr_factory_.GetWeakPtr()),
       kMaxWaitForPageLoad);
 }
 
-void ThumbnailCaptureContents::RespondAndDelete(CapturePage::Result captured) {
+void ThumbnailCaptureContents::RespondAndDelete(SkBitmap bitmap) {
   CaptureCallback callback = std::move(callback_);
   delete this;
 
@@ -123,7 +123,7 @@ void ThumbnailCaptureContents::RespondAndDelete(CapturePage::Result captured) {
       FROM_HERE,
       {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-      base::BindOnce(&ConvertToPNGOnWorkerThread, std::move(captured)),
+      base::BindOnce(&ConvertToPNGOnWorkerThread, std::move(bitmap)),
       std::move(callback));
 }
 
@@ -196,7 +196,7 @@ bool ThumbnailCaptureContents::PreHandleGestureEvent(
 bool ThumbnailCaptureContents::CanDragEnter(
     WebContents* source,
     const content::DropData& data,
-    blink::WebDragOperationsMask operations_allowed) {
+    blink::DragOperationsMask operations_allowed) {
   DCHECK_EQ(offscreen_tab_web_contents_.get(), source);
   // Halt all drag attempts onto the page since there should be no direct user
   // interaction with it.
@@ -290,6 +290,39 @@ void ThumbnailCaptureContents::TryCapture(bool last_try) {
     return;
   }
 
+  if (use_CopyFromSurface) {
+    content::RenderWidgetHostView* const view =
+        offscreen_tab_web_contents_->GetRenderWidgetHostView();
+    if (view) {
+      view->CopyFromSurface(
+          gfx::Rect(),  // Copy entire surface area.
+          gfx::Size(),  // Result contains device-level detail.
+          base::BindOnce(&ThumbnailCaptureContents::OnCopyImageReady,
+                         weak_ptr_factory_.GetWeakPtr()));
+    } else {
+      LOG(WARNING) << "Offscreen WebContent without RenderWidgetHostView";
+      CaptureViaIpc();
+    }
+  } else {
+    CaptureViaIpc();
+  }
+
+  // Start capture timeout.
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&ThumbnailCaptureContents::OnCaptureTimeout,
+                     weak_ptr_factory_.GetWeakPtr()),
+      kMaxWaitForCaptureResult);
+  capture_started_ = true;
+}
+
+void ThumbnailCaptureContents::OnCaptureTimeout() {
+  LOG(ERROR) << "Timeout while waiting for a capture result, aborting, url="
+             << start_url_;
+  RespondAndDelete();
+}
+
+void ThumbnailCaptureContents::CaptureViaIpc() {
   // We only try capturing once for offscreen contents. We leave params.rect
   // empty to capture the full visible area.
   CapturePage::CaptureParams params;
@@ -298,11 +331,28 @@ void ThumbnailCaptureContents::TryCapture(bool last_try) {
   params.target_size = target_size_;
 
   CapturePage::Capture(offscreen_tab_web_contents_.get(), params,
-                       base::Bind(&ThumbnailCaptureContents::RespondAndDelete,
+                       base::Bind(&ThumbnailCaptureContents::OnIpcCaptureDone,
                                   weak_ptr_factory_.GetWeakPtr()));
-
-  capture_started_ = true;
 }
+
+void ThumbnailCaptureContents::OnCopyImageReady(const SkBitmap& bitmap) {
+  if (bitmap.getPixels() && !bitmap.empty()) {
+    RespondAndDelete(bitmap);
+    return;
+  }
+
+  LOG(ERROR) << "CopyFromSurface failed, use IPC fallback, url= " << start_url_;
+  CaptureViaIpc();
+}
+
+void ThumbnailCaptureContents::OnIpcCaptureDone(
+    ::vivaldi::CapturePage::Result captured) {
+  SkBitmap bitmap;
+  if (!captured.MovePixelsToBitmap(&bitmap)) {
+    bitmap = SkBitmap();
+  }
+  RespondAndDelete(std::move(bitmap));
+ }
 
 void ThumbnailCaptureContents::RenderProcessGone(
     base::TerminationStatus status) {

@@ -22,6 +22,7 @@
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
@@ -33,7 +34,6 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/user_event_service_factory.h"
-#include "chrome/browser/ui/browser_list.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -90,6 +90,8 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/safe_browsing/android/password_reuse_controller_android.h"
+#else
+#include "chrome/browser/ui/browser_list.h"
 #endif
 
 using base::RecordAction;
@@ -120,7 +122,7 @@ const int kPasswordEventAttributionUserGestureLimit = 2;
 // allowlist for users opted into extended reporting, from non-incognito window.
 const float kProbabilityForSendingReportsFromSafeURLs = 0.01;
 
-#if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
+#if defined(PASSWORD_REUSE_WARNING_ENABLED)
 // If user specifically mark a site as legitimate, we will keep this decision
 // for 2 days.
 const int kOverrideVerdictCacheDurationSec = 2 * 24 * 60 * 60;
@@ -239,7 +241,7 @@ ChromePasswordProtectionService::ChromePasswordProtectionService(
       cache_manager_(VerdictCacheManagerFactory::GetForProfile(profile)) {
   pref_change_registrar_->Init(profile_->GetPrefs());
 
-#if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
+#if defined(PASSWORD_REUSE_WARNING_ENABLED)
   scoped_refptr<password_manager::PasswordStore> password_store =
       GetProfilePasswordStore();
   // Password store can be null in tests.
@@ -320,7 +322,7 @@ ChromePasswordProtectionService::GetPasswordProtectionService(
   return nullptr;
 }
 
-#if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
+#if defined(PASSWORD_REUSE_WARNING_ENABLED)
 // static
 bool ChromePasswordProtectionService::ShouldShowPasswordReusePageInfoBubble(
     content::WebContents* web_contents,
@@ -357,6 +359,8 @@ bool ChromePasswordProtectionService::ShouldShowPasswordReusePageInfoBubble(
 safe_browsing::LoginReputationClientRequest::UrlDisplayExperiment
 ChromePasswordProtectionService::GetUrlDisplayExperiment() const {
   safe_browsing::LoginReputationClientRequest::UrlDisplayExperiment experiment;
+  experiment.set_simplified_url_display_enabled(
+      base::FeatureList::IsEnabled(safe_browsing::kSimplifiedUrlDisplay));
   // Delayed warnings parameters:
   experiment.set_delayed_warnings_enabled(
       base::FeatureList::IsEnabled(safe_browsing::kDelayedWarnings));
@@ -1265,7 +1269,7 @@ void ChromePasswordProtectionService::ReportPasswordChanged() {
 }
 #endif
 
-#if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
+#if defined(PASSWORD_REUSE_WARNING_ENABLED)
 bool ChromePasswordProtectionService::HasUnhandledEnterprisePasswordReuse(
     content::WebContents* web_contents) const {
   return web_contents_with_unhandled_enterprise_reuses_.find(web_contents) !=
@@ -1727,14 +1731,14 @@ void ChromePasswordProtectionService::PersistPhishedSavedPasswordCredential(
         matching_reused_credentials) {
   if (!profile_)
     return;
-  scoped_refptr<password_manager::PasswordStore> password_store =
-      GetProfilePasswordStore();
 
-  // Password store can be null in tests.
-  if (!password_store) {
-    return;
-  }
   for (const auto& credential : matching_reused_credentials) {
+    password_manager::PasswordStore* password_store =
+        GetStoreForReusedCredential(credential);
+    // Password store can be null in tests.
+    if (!password_store) {
+      continue;
+    }
     password_store->AddCompromisedCredentials(
         {credential.signon_realm, credential.username, base::Time::Now(),
          password_manager::CompromiseType::kPhished});
@@ -1746,14 +1750,14 @@ void ChromePasswordProtectionService::RemovePhishedSavedPasswordCredential(
         matching_reused_credentials) {
   if (!profile_)
     return;
-  scoped_refptr<password_manager::PasswordStore> password_store =
-      GetProfilePasswordStore();
 
-  // Password store can be null in tests.
-  if (!password_store) {
-    return;
-  }
   for (const auto& credential : matching_reused_credentials) {
+    password_manager::PasswordStore* password_store =
+        GetStoreForReusedCredential(credential);
+    // Password store can be null in tests.
+    if (!password_store) {
+      continue;
+    }
     password_store->RemoveCompromisedCredentials(
         credential.signon_realm, credential.username,
         password_manager::RemoveCompromisedCredentialsReason::
@@ -1767,6 +1771,15 @@ ChromePasswordProtectionService::GetProfilePasswordStore() const {
   // itself when it shouldn't access the PasswordStore.
   return PasswordStoreFactory::GetForProfile(profile_,
                                              ServiceAccessType::EXPLICIT_ACCESS)
+      .get();
+}
+
+password_manager::PasswordStore*
+ChromePasswordProtectionService::GetAccountPasswordStore() const {
+  // Always use EXPLICIT_ACCESS as the password manager checks IsIncognito
+  // itself when it shouldn't access the PasswordStore.
+  return AccountPasswordStoreFactory::GetForProfile(
+             profile_, ServiceAccessType::EXPLICIT_ACCESS)
       .get();
 }
 
@@ -1828,5 +1841,16 @@ gfx::Size ChromePasswordProtectionService::GetCurrentContentAreaSize() const {
       ->GetContentsSize();
 }
 #endif  // FULL_SAFE_BROWSING
+
+password_manager::PasswordStore*
+ChromePasswordProtectionService::GetStoreForReusedCredential(
+    const password_manager::MatchingReusedCredential& reused_credential) {
+  if (!profile_)
+    return nullptr;
+  return reused_credential.in_store ==
+                 autofill::PasswordForm::Store::kAccountStore
+             ? GetAccountPasswordStore()
+             : GetProfilePasswordStore();
+}
 
 }  // namespace safe_browsing

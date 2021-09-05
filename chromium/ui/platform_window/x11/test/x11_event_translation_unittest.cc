@@ -23,6 +23,7 @@
 #include "ui/events/types/event_type.h"
 #include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/event.h"
+#include "ui/gfx/x/keysyms/keysyms.h"
 #include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_types.h"
 #include "ui/gfx/x/xproto.h"
@@ -32,6 +33,14 @@
 #endif
 
 namespace ui {
+
+namespace {
+
+int XkbBuildCoreState(int key_button_mask, int group) {
+  return ((group & 0x3) << 13) | (key_button_mask & 0xff);
+}
+
+}  // namespace
 
 // Ensure DomKey extraction happens lazily in Ozone X11, while in non-Ozone
 // path it is set right away in XEvent => ui::Event translation. This prevents
@@ -66,7 +75,7 @@ TEST(XEventTranslationTest, KeyEventXEventPropertiesSet) {
   scoped_xev.InitKeyEvent(ET_KEY_PRESSED, VKEY_A, EF_NONE);
 
   x11::Event* xev = scoped_xev;
-  XDisplay* xdisplay = gfx::GetXDisplay();
+  auto* connection = x11::Connection::Get();
   // Set keyboard group in XKeyEvent
   uint32_t state = XkbBuildCoreState(
       static_cast<uint32_t>(xev->As<x11::KeyEvent>()->state), 2u);
@@ -86,7 +95,9 @@ TEST(XEventTranslationTest, KeyEventXEventPropertiesSet) {
   auto hw_keycode_it = properties->find(ui::kPropertyKeyboardHwKeyCode);
   EXPECT_NE(hw_keycode_it, properties->end());
   EXPECT_EQ(1u, hw_keycode_it->second.size());
-  EXPECT_EQ(XKeysymToKeycode(xdisplay, XK_a), hw_keycode_it->second[0]);
+  EXPECT_EQ(static_cast<uint8_t>(
+                connection->KeysymToKeycode(static_cast<x11::KeySym>(XK_a))),
+            hw_keycode_it->second[0]);
 
   auto kbd_group_it = properties->find(ui::kPropertyKeyboardGroup);
   EXPECT_NE(kbd_group_it, properties->end());
@@ -164,12 +175,10 @@ TEST(XEventTranslationTest, ChangedMouseButtonFlags) {
   EXPECT_EQ(0, mouseev2->changed_button_flags());
 
   // Taking in a EnterNotify XEvent
-  xcb_generic_event_t ge;
-  memset(&ge, 0, sizeof(ge));
-  auto* enter = reinterpret_cast<xcb_enter_notify_event_t*>(&ge);
-  enter->response_type = x11::CrossingEvent::EnterNotify;
-  enter->detail = NotifyVirtual;
-  x11::Event enter_event(&ge, x11::Connection::Get());
+  x11::Event enter_event(x11::CrossingEvent{
+      .opcode = x11::CrossingEvent::EnterNotify,
+      .detail = x11::NotifyDetail::Virtual,
+  });
 
   auto mouseev3 = ui::BuildMouseEventFromXEvent(enter_event);
   EXPECT_TRUE(mouseev3);

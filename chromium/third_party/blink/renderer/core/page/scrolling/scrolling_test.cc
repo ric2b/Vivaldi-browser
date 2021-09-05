@@ -45,8 +45,8 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
-#include "third_party/blink/renderer/core/frame/web_frame_widget_base.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
+#include "third_party/blink/renderer/core/frame/web_view_frame_widget.h"
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
 #include "third_party/blink/renderer/core/html/html_object_element.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
@@ -78,8 +78,8 @@ class ScrollingTest : public testing::Test, public PaintTestConfigurations {
  public:
   ScrollingTest() : base_url_("http://www.test.com/") {
     helper_.Initialize(nullptr, nullptr, nullptr, &ConfigureSettings);
-    GetWebView()->MainFrameWidgetBase()->Resize(IntSize(320, 240));
-    GetWebView()->MainFrameWidgetBase()->UpdateAllLifecyclePhases(
+    GetWebView()->MainFrameViewWidget()->Resize(IntSize(320, 240));
+    GetWebView()->MainFrameViewWidget()->UpdateAllLifecyclePhases(
         DocumentUpdateReason::kTest);
   }
 
@@ -97,7 +97,7 @@ class ScrollingTest : public testing::Test, public PaintTestConfigurations {
   }
 
   void ForceFullCompositingUpdate() {
-    GetWebView()->MainFrameWidgetBase()->UpdateAllLifecyclePhases(
+    GetWebView()->MainFrameViewWidget()->UpdateAllLifecyclePhases(
         DocumentUpdateReason::kTest);
   }
 
@@ -115,6 +115,15 @@ class ScrollingTest : public testing::Test, public PaintTestConfigurations {
     return helper_.GetWebWidgetClient();
   }
 
+  PaintLayerScrollableArea* ScrollableAreaByDOMElementId(
+      const char* id_value) const {
+    return GetFrame()
+        ->GetDocument()
+        ->getElementById(id_value)
+        ->GetLayoutBoxForScrolling()
+        ->GetScrollableArea();
+  }
+
   void LoadAhem() { helper_.LoadAhem(); }
 
   const cc::ScrollNode* ScrollNodeForScrollableArea(
@@ -129,8 +138,7 @@ class ScrollingTest : public testing::Test, public PaintTestConfigurations {
   }
 
   const cc::ScrollNode* ScrollNodeByDOMElementId(const char* dom_id) const {
-    return ScrollNodeForScrollableArea(
-        GetFrame()->GetDocument()->getElementById(dom_id)->GetScrollableArea());
+    return ScrollNodeForScrollableArea(ScrollableAreaByDOMElementId(dom_id));
   }
 
   gfx::ScrollOffset CurrentScrollOffset(cc::ElementId element_id) const {
@@ -175,10 +183,7 @@ class ScrollingTest : public testing::Test, public PaintTestConfigurations {
 
   const cc::Layer* ScrollingContentsLayerByDOMElementId(
       const char* element_id) const {
-    const auto* scrollable_area = GetFrame()
-                                      ->GetDocument()
-                                      ->getElementById(element_id)
-                                      ->GetScrollableArea();
+    const auto* scrollable_area = ScrollableAreaByDOMElementId(element_id);
     return ScrollingContentsCcLayerByScrollElementId(
         RootCcLayer(), scrollable_area->GetScrollElementId());
   }
@@ -197,7 +202,7 @@ class ScrollingTest : public testing::Test, public PaintTestConfigurations {
 INSTANTIATE_PAINT_TEST_SUITE_P(ScrollingTest);
 
 TEST_P(ScrollingTest, fastScrollingByDefault) {
-  GetWebView()->MainFrameWidgetBase()->Resize(WebSize(800, 600));
+  GetWebView()->MainFrameViewWidget()->Resize(WebSize(800, 600));
   LoadHTML("<div id='spacer' style='height: 1000px'></div>");
   ForceFullCompositingUpdate();
 
@@ -231,6 +236,8 @@ TEST_P(ScrollingTest, fastScrollingByDefault) {
 }
 
 TEST_P(ScrollingTest, fastFractionalScrollingDiv) {
+  ScopedFractionalScrollOffsetsForTest fractional_scroll_offsets(true);
+
   RegisterMockedHttpURLLoad("fractional-scroll-div.html");
   NavigateTo(base_url_ + "fractional-scroll-div.html");
   ForceFullCompositingUpdate();
@@ -991,8 +998,10 @@ TEST_P(ScrollingTest, overflowScrolling) {
   EXPECT_TRUE(scroll_node->user_scrollable_horizontal);
   EXPECT_TRUE(scroll_node->user_scrollable_vertical);
 
-  EXPECT_TRUE(ScrollbarLayerForScrollNode(scroll_node, cc::HORIZONTAL));
-  EXPECT_TRUE(ScrollbarLayerForScrollNode(scroll_node, cc::VERTICAL));
+  EXPECT_TRUE(ScrollbarLayerForScrollNode(
+      scroll_node, cc::ScrollbarOrientation::HORIZONTAL));
+  EXPECT_TRUE(ScrollbarLayerForScrollNode(scroll_node,
+                                          cc::ScrollbarOrientation::VERTICAL));
 }
 
 TEST_P(ScrollingTest, overflowHidden) {
@@ -1038,8 +1047,10 @@ TEST_P(ScrollingTest, iframeScrolling) {
   const auto* scroll_node =
       ScrollNodeForScrollableArea(inner_frame_view->LayoutViewport());
   ASSERT_TRUE(scroll_node);
-  EXPECT_TRUE(ScrollbarLayerForScrollNode(scroll_node, cc::HORIZONTAL));
-  EXPECT_TRUE(ScrollbarLayerForScrollNode(scroll_node, cc::VERTICAL));
+  EXPECT_TRUE(ScrollbarLayerForScrollNode(
+      scroll_node, cc::ScrollbarOrientation::HORIZONTAL));
+  EXPECT_TRUE(ScrollbarLayerForScrollNode(scroll_node,
+                                          cc::ScrollbarOrientation::VERTICAL));
 }
 
 TEST_P(ScrollingTest, rtlIframe) {
@@ -1104,8 +1115,8 @@ TEST_P(ScrollingTest, setupScrollbarLayerShouldSetScrollLayerOpaque)
       ScrollNodeForScrollableArea(frame_view->LayoutViewport());
   ASSERT_TRUE(scroll_node);
 
-  const auto* horizontal_scrollbar_layer =
-      ScrollbarLayerForScrollNode(scroll_node, cc::HORIZONTAL);
+  const auto* horizontal_scrollbar_layer = ScrollbarLayerForScrollNode(
+      scroll_node, cc::ScrollbarOrientation::HORIZONTAL);
   ASSERT_TRUE(horizontal_scrollbar_layer);
   // TODO(crbug.com/1029620): CAP needs more accurate contents_opaque.
   if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
@@ -1115,7 +1126,8 @@ TEST_P(ScrollingTest, setupScrollbarLayerShouldSetScrollLayerOpaque)
               horizontal_scrollbar_layer->contents_opaque());
   }
 
-  EXPECT_FALSE(ScrollbarLayerForScrollNode(scroll_node, cc::VERTICAL));
+  EXPECT_FALSE(ScrollbarLayerForScrollNode(scroll_node,
+                                           cc::ScrollbarOrientation::VERTICAL));
 }
 
 TEST_P(ScrollingTest, NestedIFramesMainThreadScrollingRegion) {
@@ -1362,10 +1374,7 @@ TEST_P(ScrollingTest, ScrollOffsetClobberedBeforeCompositingUpdate) {
       )HTML");
   ForceFullCompositingUpdate();
 
-  auto* scrollable_area = GetFrame()
-                              ->GetDocument()
-                              ->getElementById("container")
-                              ->GetScrollableArea();
+  auto* scrollable_area = ScrollableAreaByDOMElementId("container");
   ASSERT_EQ(0, scrollable_area->GetScrollOffset().Height());
   const auto* scroll_node = ScrollNodeForScrollableArea(scrollable_area);
 
@@ -1447,9 +1456,9 @@ TEST_P(ScrollingTest, UpdateUMAMetricUpdated) {
 
   // After an initial compositing update, we should have one scrolling update
   // recorded as PreFCP.
-  GetWebView()->MainFrameWidgetBase()->RecordStartOfFrameMetrics();
+  GetWebView()->MainFrameViewWidget()->RecordStartOfFrameMetrics();
   ForceFullCompositingUpdate();
-  GetWebView()->MainFrameWidgetBase()->RecordEndOfFrameMetrics(
+  GetWebView()->MainFrameViewWidget()->RecordEndOfFrameMetrics(
       base::TimeTicks(), 0);
   histogram_tester.ExpectTotalCount("Blink.ScrollingCoordinator.UpdateTime", 1);
   histogram_tester.ExpectTotalCount(
@@ -1460,9 +1469,9 @@ TEST_P(ScrollingTest, UpdateUMAMetricUpdated) {
       "Blink.ScrollingCoordinator.UpdateTime.AggregatedPreFCP", 0);
 
   // An update with no scrolling changes should not cause a scrolling update.
-  GetWebView()->MainFrameWidgetBase()->RecordStartOfFrameMetrics();
+  GetWebView()->MainFrameViewWidget()->RecordStartOfFrameMetrics();
   ForceFullCompositingUpdate();
-  GetWebView()->MainFrameWidgetBase()->RecordEndOfFrameMetrics(
+  GetWebView()->MainFrameViewWidget()->RecordEndOfFrameMetrics(
       base::TimeTicks(), 0);
   histogram_tester.ExpectTotalCount("Blink.ScrollingCoordinator.UpdateTime", 1);
   histogram_tester.ExpectTotalCount(
@@ -1479,9 +1488,9 @@ TEST_P(ScrollingTest, UpdateUMAMetricUpdated) {
   auto* background = GetFrame()->GetDocument()->getElementById("bg");
   background->removeAttribute(html_names::kStyleAttr);
   background->setInnerHTML("Some Text");
-  GetWebView()->MainFrameWidgetBase()->RecordStartOfFrameMetrics();
+  GetWebView()->MainFrameViewWidget()->RecordStartOfFrameMetrics();
   ForceFullCompositingUpdate();
-  GetWebView()->MainFrameWidgetBase()->RecordEndOfFrameMetrics(
+  GetWebView()->MainFrameViewWidget()->RecordEndOfFrameMetrics(
       base::TimeTicks(), 0);
   histogram_tester.ExpectTotalCount("Blink.ScrollingCoordinator.UpdateTime", 2);
   histogram_tester.ExpectTotalCount(
@@ -1494,9 +1503,9 @@ TEST_P(ScrollingTest, UpdateUMAMetricUpdated) {
   // Removing a scrollable area should cause a scrolling update.
   auto* scroller = GetFrame()->GetDocument()->getElementById("scroller");
   scroller->removeAttribute(html_names::kStyleAttr);
-  GetWebView()->MainFrameWidgetBase()->RecordStartOfFrameMetrics();
+  GetWebView()->MainFrameViewWidget()->RecordStartOfFrameMetrics();
   ForceFullCompositingUpdate();
-  GetWebView()->MainFrameWidgetBase()->RecordEndOfFrameMetrics(
+  GetWebView()->MainFrameViewWidget()->RecordEndOfFrameMetrics(
       base::TimeTicks(), 0);
   histogram_tester.ExpectTotalCount("Blink.ScrollingCoordinator.UpdateTime", 3);
   histogram_tester.ExpectTotalCount(
@@ -1629,9 +1638,9 @@ TEST_P(ScrollingTest, TouchActionUpdatesOutsideInterestRect) {
 
   ForceFullCompositingUpdate();
 
-  auto* scroller = GetFrame()->GetDocument()->getElementById("scroller");
-  scroller->GetScrollableArea()->SetScrollOffset(
-      ScrollOffset(0, 5100), mojom::blink::ScrollType::kProgrammatic);
+  ScrollableAreaByDOMElementId("scroller")
+      ->SetScrollOffset(ScrollOffset(0, 5100),
+                        mojom::blink::ScrollType::kProgrammatic);
 
   ForceFullCompositingUpdate();
 
@@ -1677,8 +1686,8 @@ class UnifiedScrollingSimTest : public SimTest, public PaintTestConfigurations {
   void SetUp() override {
     SimTest::SetUp();
     WebView().GetSettings()->SetPreferCompositingToLCDTextEnabled(false);
-    WebView().MainFrameWidgetBase()->Resize(IntSize(1000, 1000));
-    WebView().MainFrameWidgetBase()->UpdateAllLifecyclePhases(
+    WebView().MainFrameViewWidget()->Resize(IntSize(1000, 1000));
+    WebView().MainFrameViewWidget()->UpdateAllLifecyclePhases(
         DocumentUpdateReason::kTest);
   }
 
@@ -1701,6 +1710,15 @@ class UnifiedScrollingSimTest : public SimTest, public PaintTestConfigurations {
     return property_trees->scroll_tree.Node(
         property_trees->element_id_to_scroll_node_index.at(
             scrollable_area->GetScrollElementId()));
+  }
+
+  PaintLayerScrollableArea* ScrollableAreaByDOMElementId(const char* id_value) {
+    auto* box = MainFrame()
+                    .GetFrame()
+                    ->GetDocument()
+                    ->getElementById(id_value)
+                    ->GetLayoutBoxForScrolling();
+    return box ? box->GetScrollableArea() : nullptr;
   }
 
  protected:
@@ -1743,7 +1761,8 @@ TEST_P(UnifiedScrollingSimTest, ScrollNodeForNonCompositedScroller) {
 
   Element* noncomposited_element =
       MainFrame().GetFrame()->GetDocument()->getElementById("noncomposited");
-  auto* scrollable_area = noncomposited_element->GetScrollableArea();
+  auto* scrollable_area =
+      noncomposited_element->GetLayoutBoxForScrolling()->GetScrollableArea();
   ASSERT_EQ(
       cc::MainThreadScrollingReason::kCantPaintScrollingBackgroundAndLCDText,
       scrollable_area->GetNonCompositedMainThreadScrollingReasons());
@@ -1802,7 +1821,8 @@ TEST_P(UnifiedScrollingSimTest,
 
   Element* composited_element =
       MainFrame().GetFrame()->GetDocument()->getElementById("composited");
-  auto* scrollable_area = composited_element->GetScrollableArea();
+  auto* scrollable_area =
+      composited_element->GetLayoutBoxForScrolling()->GetScrollableArea();
   EXPECT_EQ(0u, scrollable_area->GetNonCompositedMainThreadScrollingReasons());
 
   const auto* scroll_node = ScrollNodeForScrollableArea(scrollable_area);
@@ -1898,6 +1918,7 @@ TEST_P(UnifiedScrollingSimTest, ScrollNodeForEmbeddedScrollers) {
   // Ensure we have a compositor scroll node for the noncomposited subscroller.
   auto* child_scrollable_area = iframe->contentDocument()
                                     ->getElementById("scroller")
+                                    ->GetLayoutBoxForScrolling()
                                     ->GetScrollableArea();
   const auto* child_scroll_node =
       ScrollNodeForScrollableArea(child_scrollable_area);
@@ -1982,6 +2003,7 @@ TEST_P(UnifiedScrollingSimTest, ScrollNodeForNestedEmbeddedScrollers) {
   // nested in the second iframe.
   auto* child_scrollable_area = child_iframe_2->contentDocument()
                                     ->getElementById("scroller")
+                                    ->GetLayoutBoxForScrolling()
                                     ->GetScrollableArea();
   const auto* child_scroll_node =
       ScrollNodeForScrollableArea(child_scrollable_area);
@@ -2041,11 +2063,7 @@ TEST_P(UnifiedScrollingSimTest, ScrollNodeForInvisibleNonCompositedScroller) {
   Compositor().BeginFrame();
 
   // Ensure the opacity 0 noncomposited scrollable area generates a scroll node
-  auto* invisible_scrollable_area = MainFrame()
-                                        .GetFrame()
-                                        ->GetDocument()
-                                        ->getElementById("invisible")
-                                        ->GetScrollableArea();
+  auto* invisible_scrollable_area = ScrollableAreaByDOMElementId("invisible");
   ASSERT_EQ(
       cc::MainThreadScrollingReason::kCantPaintScrollingBackgroundAndLCDText,
       invisible_scrollable_area->GetNonCompositedMainThreadScrollingReasons());
@@ -2064,11 +2082,7 @@ TEST_P(UnifiedScrollingSimTest, ScrollNodeForInvisibleNonCompositedScroller) {
 
   // Ensure there's no scrollable area (and therefore no scroll node) for a
   // display none scroller.
-  EXPECT_EQ(nullptr, MainFrame()
-                         .GetFrame()
-                         ->GetDocument()
-                         ->getElementById("displaynone")
-                         ->GetScrollableArea());
+  EXPECT_EQ(nullptr, ScrollableAreaByDOMElementId("displaynone"));
 }
 
 // Tests that the compositor gets a scroll node for scrollable input boxes,
@@ -2088,9 +2102,7 @@ TEST_P(UnifiedScrollingSimTest, ScrollNodeForInputBox) {
   )HTML");
   Compositor().BeginFrame();
 
-  Element* input_element =
-      MainFrame().GetFrame()->GetDocument()->getElementById("textinput");
-  auto* scrollable_area = input_element->GetScrollableArea();
+  auto* scrollable_area = ScrollableAreaByDOMElementId("textinput");
   ASSERT_EQ(0u, scrollable_area->GetNonCompositedMainThreadScrollingReasons());
 
   const auto* scroll_node = ScrollNodeForScrollableArea(scrollable_area);
@@ -2111,8 +2123,8 @@ class ScrollingSimTest : public SimTest,
   void SetUp() override {
     SimTest::SetUp();
     WebView().GetSettings()->SetPreferCompositingToLCDTextEnabled(true);
-    WebView().MainFrameWidgetBase()->Resize(IntSize(1000, 1000));
-    WebView().MainFrameWidgetBase()->UpdateAllLifecyclePhases(
+    WebView().MainFrameViewWidget()->Resize(IntSize(1000, 1000));
+    WebView().MainFrameViewWidget()->UpdateAllLifecyclePhases(
         DocumentUpdateReason::kTest);
   }
 

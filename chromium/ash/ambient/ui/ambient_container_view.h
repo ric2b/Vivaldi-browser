@@ -15,9 +15,7 @@ namespace ash {
 
 class AmbientAssistantContainerView;
 class AmbientViewDelegate;
-class GlanceableInfoView;
 class PhotoView;
-class MediaStringView;
 
 // Container view to display all Ambient Mode related views, i.e. photo frame,
 // weather info.
@@ -30,11 +28,9 @@ class ASH_EXPORT AmbientContainerView : public views::View {
   const char* GetClassName() const override;
   gfx::Size CalculatePreferredSize() const override;
   void Layout() override;
-  void AddedToWidget() override;
 
  private:
   friend class AmbientAshTestBase;
-  class HostWidgetEventObserver;
 
   void Init();
 
@@ -42,23 +38,13 @@ class ASH_EXPORT AmbientContainerView : public views::View {
   // TODO(meilinw): Use LayoutManagers to lay out children instead of overriding
   // Layout(). See b/163170162.
   void LayoutPhotoView();
-  void LayoutGlanceableInfoView();
   void LayoutAssistantView();
-  void LayoutMediaStringView();
-
-  // Invoked on specific types of events.
-  void HandleEvent();
 
   AmbientViewDelegate* delegate_ = nullptr;
 
   // Owned by view hierarchy.
   PhotoView* photo_view_ = nullptr;
   AmbientAssistantContainerView* ambient_assistant_container_view_ = nullptr;
-  GlanceableInfoView* glanceable_info_view_ = nullptr;
-  MediaStringView* media_string_view_ = nullptr;
-
-  // Observes events from its host widget.
-  std::unique_ptr<HostWidgetEventObserver> event_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(AmbientContainerView);
 };

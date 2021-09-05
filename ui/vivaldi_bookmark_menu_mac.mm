@@ -169,10 +169,14 @@ WindowOpenDisposition WindowOpenDispositionFromNSEvent(NSEvent* event,
                                                        PrefService* prefs) {
   int event_flags = ui::EventFlagsFromNSEventWithModifiers(event,
                                                        [event modifierFlags]);
-  WindowOpenDisposition default_disposition = prefs->GetBoolean(
-      vivaldiprefs::kBookmarksOpenInNewTab) ?
-    WindowOpenDisposition::NEW_FOREGROUND_TAB :
+  WindowOpenDisposition default_disposition =
     WindowOpenDisposition::CURRENT_TAB;
+  if (prefs->GetBoolean(vivaldiprefs::kBookmarksOpenInNewTab)) {
+    default_disposition =
+      prefs->GetBoolean(vivaldiprefs::kTabsOpenNewInBackground) ?
+          WindowOpenDisposition::NEW_BACKGROUND_TAB :
+          WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  }
   return ui::DispositionFromEventFlags(event_flags, default_disposition);
 }
 

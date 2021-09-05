@@ -13,6 +13,8 @@ const default_stage_parameters = {
   bounds: null
 };
 
+const default_framebuffer_scale = 0.7;
+
 function getMatrixFromTransform(transform) {
   const x = transform.orientation[0];
   const y = transform.orientation[1];
@@ -217,8 +219,13 @@ class MockVRService {
   // Only handles asynchronous calls to makeXrCompatible. Synchronous calls are
   // not supported in Javascript.
   makeXrCompatible() {
+    if (this.runtimes_.length == 0) {
+      return Promise.resolve({
+        xrCompatibleResult: device.mojom.XrCompatibleResult.kNoDeviceAvailable
+      });
+    }
     return Promise.resolve({
-      xr_compatible_result: device.mojom.XrCompatibleResult.kAlreadyCompatible
+      xrCompatibleResult: device.mojom.XrCompatibleResult.kAlreadyCompatible
     });
   }
 }
@@ -410,6 +417,8 @@ class MockRuntime {
     if (fakeDeviceInit.world) {
       this.world_ = fakeDeviceInit.world;
     }
+
+    this.defaultFramebufferScale_ = default_framebuffer_scale;
 
     // This appropriately handles if the coordinates are null
     this.setBoundsGeometry(fakeDeviceInit.boundsCoordinates);
@@ -620,8 +629,7 @@ class MockRuntime {
         }),
         renderWidth: 20,
         renderHeight: 20
-      },
-      webxrDefaultFramebufferScale: 0.7,
+      }
     };
   }
 
@@ -1008,6 +1016,7 @@ class MockRuntime {
             clientReceiver: clientReceiver,
             displayInfo: this.displayInfo_,
             enabledFeatures: enabled_features,
+            defaultFramebufferScale: this.defaultFramebufferScale_,
           }
         });
       } else {

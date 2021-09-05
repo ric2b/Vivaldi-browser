@@ -36,7 +36,6 @@
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/user_creation_screen_handler.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/login/auth/user_context.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "components/user_manager/user.h"
@@ -136,7 +135,7 @@ void LoginDisplayHostMojo::ShowPasswordChangedDialog(
   ShowDialog();
 }
 
-void LoginDisplayHostMojo::ShowWhitelistCheckFailedError() {
+void LoginDisplayHostMojo::ShowAllowlistCheckFailedError() {
   DCHECK(GetOobeUI());
   GetOobeUI()->signin_screen_handler()->ShowAllowlistCheckFailedError();
   ShowDialog();
@@ -207,15 +206,10 @@ void LoginDisplayHostMojo::StartWizard(OobeScreenId first_screen) {
   // screens to show.
   ObserveOobeUI();
 
-  if (features::IsOobeScreensPriorityEnabled()) {
-    if (wizard_controller_->is_initialized())
-      wizard_controller_->AdvanceToScreen(first_screen);
-    else
-      wizard_controller_->Init(first_screen);
-  } else {
-    wizard_controller_ = std::make_unique<WizardController>();
+  if (wizard_controller_->is_initialized())
+    wizard_controller_->AdvanceToScreen(first_screen);
+  else
     wizard_controller_->Init(first_screen);
-  }
 }
 
 WizardController* LoginDisplayHostMojo::GetWizardController() {

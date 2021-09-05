@@ -12,17 +12,16 @@ import android.text.style.StyleSpan;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.Nullable;
-import androidx.annotation.StringRes;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.MatchClassificationStyle;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion.MatchClassification;
+import org.chromium.chrome.browser.omnibox.suggestions.SuggestionHost;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionProcessor;
+import org.chromium.chrome.browser.omnibox.suggestions.SuggestionViewDelegate;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewProperties.Action;
-import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionHost;
-import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewDelegate;
 import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.url.GURL;
@@ -125,16 +124,17 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
             PropertyModel model, OmniboxSuggestion suggestion, int position) {
         @DrawableRes
         int icon = 0;
-        @StringRes
-        int iconString = 0;
+        String iconString = null;
         Runnable action = null;
         if (suggestion.hasTabMatch()) {
             icon = R.drawable.switch_to_tab;
-            iconString = R.string.accessibility_omnibox_switch_to_tab;
+            iconString =
+                    mContext.getResources().getString(R.string.accessibility_omnibox_switch_to_tab);
             action = () -> mSuggestionHost.onSwitchToTab(suggestion, position);
         } else {
             icon = R.drawable.btn_suggestion_refine;
-            iconString = R.string.accessibility_omnibox_btn_refine;
+            iconString = mContext.getResources().getString(
+                    R.string.accessibility_omnibox_btn_refine, suggestion.getFillIntoEdit());
             action = () -> mSuggestionHost.onRefineSuggestion(suggestion);
         }
         setCustomActions(model,

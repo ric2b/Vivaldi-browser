@@ -118,7 +118,7 @@ const std::set<std::string>& IdentityTokenCacheValue::granted_scopes() const {
 
 IdentityTokenCache::AccessTokensKey::AccessTokensKey(
     const ExtensionTokenKey& key)
-    : extension_id(key.extension_id), account_id(key.account_id) {}
+    : extension_id(key.extension_id), account_id(key.account_info.account_id) {}
 
 IdentityTokenCache::AccessTokensKey::AccessTokensKey(
     const std::string& extension_id,
@@ -190,6 +190,20 @@ void IdentityTokenCache::EraseAccessToken(const std::string& extension_id,
       }
     }
   }
+}
+
+void IdentityTokenCache::EraseAllTokensForExtension(
+    const std::string& extension_id) {
+  base::EraseIf(access_tokens_cache_,
+                [&extension_id](const auto& key_value_pair) {
+                  const AccessTokensKey& key = key_value_pair.first;
+                  return key.extension_id == extension_id;
+                });
+  base::EraseIf(intermediate_value_cache_,
+                [&extension_id](const auto& key_value_pair) {
+                  const ExtensionTokenKey& key = key_value_pair.first;
+                  return key.extension_id == extension_id;
+                });
 }
 
 void IdentityTokenCache::EraseAllTokens() {

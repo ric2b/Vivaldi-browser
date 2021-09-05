@@ -205,6 +205,17 @@ ASH_PUBLIC_EXPORT extern const char kXkbAutoRepeatInterval[];
 ASH_PUBLIC_EXPORT extern const char kNaturalScroll[];
 ASH_PUBLIC_EXPORT extern const char kMouseReverseScroll[];
 
+ASH_PUBLIC_EXPORT extern const char kMultipasteNudges[];
+
+ASH_PUBLIC_EXPORT extern const char kDarkModeEnabled[];
+ASH_PUBLIC_EXPORT extern const char kColorModeThemed[];
+
+ASH_PUBLIC_EXPORT extern const char kAppNotificationBadgingEnabled[];
+
+ASH_PUBLIC_EXPORT extern const char kReverseGestureNotificationCount[];
+
+ASH_PUBLIC_EXPORT extern const char kGlobalMediaControlsPinned[];
+
 }  // namespace prefs
 
 }  // namespace ash

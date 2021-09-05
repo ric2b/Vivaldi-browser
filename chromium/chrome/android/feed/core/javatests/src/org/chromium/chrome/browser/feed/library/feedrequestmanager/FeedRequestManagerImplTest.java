@@ -6,7 +6,10 @@ package org.chromium.chrome.browser.feed.library.feedrequestmanager;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.mockito.Mockito.anyBoolean;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.MockitoAnnotations.initMocks;
@@ -21,6 +24,7 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.CodedOutputStream;
 import com.google.protobuf.ExtensionRegistryLite;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -31,6 +35,9 @@ import org.robolectric.Robolectric;
 import org.robolectric.annotation.Config;
 import org.robolectric.util.ReflectionHelpers;
 
+import org.chromium.base.metrics.test.ShadowRecordHistogram;
+import org.chromium.base.test.util.JniMocker;
+import org.chromium.base.test.util.MetricsUtils;
 import org.chromium.chrome.browser.feed.library.api.host.config.ApplicationInfo;
 import org.chromium.chrome.browser.feed.library.api.host.config.Configuration;
 import org.chromium.chrome.browser.feed.library.api.host.config.Configuration.ConfigKey;
@@ -57,6 +64,10 @@ import org.chromium.chrome.browser.feed.library.testing.host.stream.FakeTooltipS
 import org.chromium.chrome.browser.feed.library.testing.network.FakeNetworkClient;
 import org.chromium.chrome.browser.feed.library.testing.protocoladapter.FakeProtocolAdapter;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.signin.IdentityServicesProvider;
+import org.chromium.chrome.browser.signin.IdentityServicesProviderJni;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.feed.core.proto.libraries.api.internal.StreamDataProto.StreamToken;
 import org.chromium.components.feed.core.proto.wire.ActionTypeProto.ActionType;
@@ -72,6 +83,7 @@ import org.chromium.components.feed.core.proto.wire.FeedActionQueryDataProto.Fee
 import org.chromium.components.feed.core.proto.wire.FeedActionQueryDataProto.FeedActionQueryDataItem;
 import org.chromium.components.feed.core.proto.wire.FeedQueryProto.FeedQuery;
 import org.chromium.components.feed.core.proto.wire.FeedRequestProto.FeedRequest;
+import org.chromium.components.feed.core.proto.wire.FeedResponseProto.FeedResponse;
 import org.chromium.components.feed.core.proto.wire.RequestProto.Request;
 import org.chromium.components.feed.core.proto.wire.RequestProto.Request.RequestVersion;
 import org.chromium.components.feed.core.proto.wire.ResponseProto.Response;
@@ -79,6 +91,10 @@ import org.chromium.components.feed.core.proto.wire.SemanticPropertiesProto.Sema
 import org.chromium.components.feed.core.proto.wire.VersionProto.Version;
 import org.chromium.components.feed.core.proto.wire.VersionProto.Version.Architecture;
 import org.chromium.components.feed.core.proto.wire.VersionProto.Version.BuildType;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.signin.identitymanager.IdentityManager;
+import org.chromium.components.user_prefs.UserPrefs;
+import org.chromium.components.user_prefs.UserPrefsJni;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 import java.io.IOException;
@@ -94,7 +110,7 @@ import java.util.Set;
 
 /** Test of the {@link FeedRequestManagerImpl} class. */
 @RunWith(LocalRobolectricTestRunner.class)
-@Config(manifest = Config.NONE)
+@Config(manifest = Config.NONE, shadows = {ShadowRecordHistogram.class})
 @Features.EnableFeatures(ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS)
 @Features.
 DisableFeatures({ChromeFeatureList.REPORT_FEED_USER_ACTIONS, ChromeFeatureList.INTEREST_FEED_V2})
@@ -112,10 +128,25 @@ public class FeedRequestManagerImplTest {
     private final TimingUtils mTimingUtils = new TimingUtils();
     private final Configuration mConfiguration = new Configuration.Builder().build();
 
+    @Rule
+    public JniMocker mocker = new JniMocker();
+
     @Mock
     private SchedulerApi mScheduler;
     @Mock
     private ApplicationInfo mApplicationInfo;
+    @Mock
+    private IdentityServicesProvider.Natives mIdentityServicesProviderJniMock;
+    @Mock
+    private Profile mProfileMock;
+    @Mock
+    private IdentityManager mIdentifiyManagerMock;
+    @Mock
+    private UserPrefs.Natives mUserPrefsJniMock;
+    @Mock
+    private Profile mProfile;
+    @Mock
+    private PrefService mPrefService;
 
     private Context mContext;
     private ExtensionRegistryLite mRegistry;
@@ -131,6 +162,9 @@ public class FeedRequestManagerImplTest {
     private RequiredConsumer<Result<Model>> mConsumer;
     private Result<Model> mConsumedResult = Result.failure();
     private HttpResponse mFailingResponse;
+
+    @Rule
+    public JniMocker jniMocker = new JniMocker();
 
     @Rule
     public TestRule mFeaturesProcessorRule = new Features.JUnitProcessor();
@@ -166,10 +200,24 @@ public class FeedRequestManagerImplTest {
         when(mApplicationInfo.getArchitecture()).thenReturn(ApplicationInfo.Architecture.ARM);
         when(mApplicationInfo.getBuildType()).thenReturn(ApplicationInfo.BuildType.DEV);
         when(mApplicationInfo.getVersionString()).thenReturn(APP_VERSION_STRING);
+
+        Profile.setLastUsedProfileForTesting(mProfileMock);
+        jniMocker.mock(IdentityServicesProviderJni.TEST_HOOKS, mIdentityServicesProviderJniMock);
+        when(mIdentityServicesProviderJniMock.getIdentityManager(mProfileMock))
+                .thenReturn(mIdentifiyManagerMock);
+
+        jniMocker.mock(UserPrefsJni.TEST_HOOKS, mUserPrefsJniMock);
+        when(mUserPrefsJniMock.get(mProfileMock)).thenReturn(mPrefService);
+
         mRequestManager = new FeedRequestManagerImpl(mConfiguration, mFakeNetworkClient,
                 mFakeProtocolAdapter, feedExtensionRegistry, mScheduler, mFakeTaskQueue,
                 mTimingUtils, mFakeThreadUtils, mFakeActionReader, mContext, mApplicationInfo,
                 mFakeMainThreadRunner, mFakeBasicLoggingApi, mFakeTooltipSupportedApi);
+    }
+
+    @After
+    public void tearDown() {
+        Profile.setLastUsedProfileForTesting(null);
     }
 
     @Test
@@ -195,6 +243,116 @@ public class FeedRequestManagerImplTest {
                                         .build())
                         .build();
         assertThat(request).isEqualTo(expectedRequest);
+    }
+
+    @Test
+    public void testTriggerRefresh_setNoticeCardPrefAndRecordBothHistograms() throws Exception {
+        MetricsUtils.HistogramDelta obsoleteNoticeCardNotFulfilledDelta =
+                new MetricsUtils.HistogramDelta(
+                        "ContentSuggestions.Feed.NoticeCardFulfilled", 0 /*false*/);
+        MetricsUtils.HistogramDelta obsoleteNoticeCardFulfilledDelta =
+                new MetricsUtils.HistogramDelta(
+                        "ContentSuggestions.Feed.NoticeCardFulfilled", 1 /*true*/);
+        MetricsUtils.HistogramDelta noticeCardNotFulfilledDelta = new MetricsUtils.HistogramDelta(
+                "ContentSuggestions.Feed.NoticeCardFulfilled2", 0 /*false*/);
+        MetricsUtils.HistogramDelta noticeCardFulfilledDelta = new MetricsUtils.HistogramDelta(
+                "ContentSuggestions.Feed.NoticeCardFulfilled2", 1 /*true*/);
+
+        // Skip the read of the int that determines the length of the encoded proto. This is to
+        // avoid having to encode the length which is a feature we don't want to test here.
+        Configuration configuration =
+                new Configuration.Builder()
+                        .put(ConfigKey.FEED_SERVER_RESPONSE_LENGTH_PREFIXED, false)
+                        .build();
+
+        mRequestManager = new FeedRequestManagerImpl(configuration, mFakeNetworkClient,
+                mFakeProtocolAdapter, new FeedExtensionRegistry(ArrayList::new), mScheduler,
+                mFakeTaskQueue, mTimingUtils, mFakeThreadUtils, mFakeActionReader, mContext,
+                mApplicationInfo, mFakeMainThreadRunner, mFakeBasicLoggingApi,
+                mFakeTooltipSupportedApi);
+
+        // Trigger a refresh that has a notice card.
+        Response response =
+                Response.newBuilder()
+                        .setExtension(FeedResponse.feedResponse,
+                                FeedResponse.newBuilder()
+                                        .addServerCapabilities(
+                                                Capability.REPORT_FEED_USER_ACTIONS_NOTICE_CARD)
+                                        .build())
+                        .build();
+        mFakeNetworkClient.addResponse(new HttpResponse(200, response.toByteArray()));
+        mRequestManager.triggerRefresh(RequestReason.HOST_REQUESTED, input -> {});
+        verify(mPrefService, times(1)).setBoolean(Pref.LAST_FETCH_HAD_NOTICE_CARD, true);
+        assertThat(noticeCardNotFulfilledDelta.getDelta()).isEqualTo(0);
+        assertThat(noticeCardFulfilledDelta.getDelta()).isEqualTo(1);
+
+        // Trigger a refresh that doesn't have a notice card.
+        mFakeNetworkClient.addResponse(
+                new HttpResponse(200, Response.getDefaultInstance().toByteArray()));
+        mRequestManager.triggerRefresh(RequestReason.HOST_REQUESTED, input -> {});
+        assertThat(obsoleteNoticeCardNotFulfilledDelta.getDelta()).isEqualTo(1);
+        assertThat(obsoleteNoticeCardFulfilledDelta.getDelta()).isEqualTo(1);
+        assertThat(noticeCardNotFulfilledDelta.getDelta()).isEqualTo(1);
+        assertThat(noticeCardFulfilledDelta.getDelta()).isEqualTo(1);
+    }
+
+    @Test
+    public void testLoadMore_dontSetNoticeCardPrefAndOnlyRecordObsoleteHistogram()
+            throws Exception {
+        MetricsUtils.HistogramDelta obsoleteNoticeCardNotFulfilledDelta =
+                new MetricsUtils.HistogramDelta(
+                        "ContentSuggestions.Feed.NoticeCardFulfilled", 0 /*false*/);
+        MetricsUtils.HistogramDelta obsoleteNoticeCardFulfilledDelta =
+                new MetricsUtils.HistogramDelta(
+                        "ContentSuggestions.Feed.NoticeCardFulfilled", 1 /*true*/);
+        MetricsUtils.HistogramDelta noticeCardNotFulfilledDelta = new MetricsUtils.HistogramDelta(
+                "ContentSuggestions.Feed.NoticeCardFulfilled2", 0 /*false*/);
+        MetricsUtils.HistogramDelta noticeCardFulfilledDelta = new MetricsUtils.HistogramDelta(
+                "ContentSuggestions.Feed.NoticeCardFulfilled2", 1 /*true*/);
+
+        // Skip the read of the int that determines the length of the encoded proto. This is to
+        // avoid having to encode the length which is a feature we don't want to test here.
+        Configuration configuration =
+                new Configuration.Builder()
+                        .put(ConfigKey.FEED_SERVER_RESPONSE_LENGTH_PREFIXED, false)
+                        .build();
+
+        mRequestManager = new FeedRequestManagerImpl(configuration, mFakeNetworkClient,
+                mFakeProtocolAdapter, new FeedExtensionRegistry(ArrayList::new), mScheduler,
+                mFakeTaskQueue, mTimingUtils, mFakeThreadUtils, mFakeActionReader, mContext,
+                mApplicationInfo, mFakeMainThreadRunner, mFakeBasicLoggingApi,
+                mFakeTooltipSupportedApi);
+
+        mFakeThreadUtils.enforceMainThread(false);
+
+        // Trigger a load more with a notice card in the query response.
+        Response response =
+                Response.newBuilder()
+                        .setExtension(FeedResponse.feedResponse,
+                                FeedResponse.newBuilder()
+                                        .addServerCapabilities(
+                                                Capability.REPORT_FEED_USER_ACTIONS_NOTICE_CARD)
+                                        .build())
+                        .build();
+        mFakeNetworkClient.addResponse(new HttpResponse(200, response.toByteArray()));
+        StreamToken token =
+                StreamToken.newBuilder()
+                        .setNextPageToken(ByteString.copyFrom("abc", Charset.defaultCharset()))
+                        .build();
+        mRequestManager.loadMore(token, ConsistencyToken.getDefaultInstance(), input -> {});
+
+        // Trigger a load more without a notice card in the query response.
+        mFakeNetworkClient.addResponse(
+                new HttpResponse(200, Response.getDefaultInstance().toByteArray()));
+        mRequestManager.loadMore(token, ConsistencyToken.getDefaultInstance(), input -> {});
+
+        // Verify that only the obsolete histograms were recorded.
+        assertThat(noticeCardNotFulfilledDelta.getDelta()).isEqualTo(0);
+        assertThat(noticeCardFulfilledDelta.getDelta()).isEqualTo(0);
+        assertThat(obsoleteNoticeCardNotFulfilledDelta.getDelta()).isEqualTo(1);
+        assertThat(obsoleteNoticeCardFulfilledDelta.getDelta()).isEqualTo(1);
+        // Verify that no attempts were made to update the notice card presence pref.
+        verify(mPrefService, never()).setBoolean(eq(Pref.LAST_FETCH_HAD_NOTICE_CARD), anyBoolean());
     }
 
     @Test

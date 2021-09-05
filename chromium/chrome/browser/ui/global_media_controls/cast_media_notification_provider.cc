@@ -4,10 +4,11 @@
 
 #include "chrome/browser/ui/global_media_controls/cast_media_notification_provider.h"
 
-#include "chrome/browser/media/router/media_router.h"
-#include "chrome/browser/media/router/media_router_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/media_router/providers/cast/cast_media_source.h"
+#include "components/media_message_center/media_notification_controller.h"
+#include "components/media_router/browser/media_router.h"
+#include "components/media_router/browser/media_router_factory.h"
+#include "components/media_router/common/providers/cast/cast_media_source.h"
 
 namespace {
 
@@ -86,6 +87,7 @@ void CastMediaNotificationProvider::OnRoutesUpdated(
       router_->GetMediaController(
           route.media_route_id(), std::move(controller_receiver),
           it_pair.first->second.GetObserverPendingRemote());
+      notification_controller_->ShowNotification(route.media_route_id());
     } else {
       item_it->second.OnRouteUpdated(route);
     }

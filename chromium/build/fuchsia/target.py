@@ -2,17 +2,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import boot_data
 import common
 import json
 import logging
 import os
 import remote_cmd
 import runner_logs
-import shutil
 import subprocess
-import sys
-import tempfile
 import time
 
 
@@ -64,12 +60,25 @@ class FuchsiaTargetException(Exception):
 class Target(object):
   """Base class representing a Fuchsia deployment target."""
 
-  def __init__(self, output_dir, target_cpu):
-    self._output_dir = output_dir
+  def __init__(self, out_dir, target_cpu):
+    self._out_dir = out_dir
     self._started = False
     self._dry_run = False
     self._target_cpu = target_cpu
     self._command_runner = None
+
+  @staticmethod
+  def RegisterArgs(arg_parser):
+    common_args = arg_parser.add_argument_group(
+        'target', 'Arguments that apply to all targets.')
+    common_args.add_argument(
+        '--out-dir',
+        type=os.path.realpath,
+        help=('Path to the directory in which build files are located. '
+              'Defaults to current directory.'))
+    common_args.add_argument('--system-log-file',
+                             help='File to write system logs to. Specify '
+                             '- to log to stdout.')
 
   # Functions used by the Python context manager for teardown.
   def __enter__(self):
@@ -236,16 +245,6 @@ class Target(object):
 
   def _GetSshConfigPath(self, path):
     raise NotImplementedError
-
-  # TODO: remove this once all instances of architecture names have been
-  # converted to the new naming pattern.
-  def _GetTargetSdkLegacyArch(self):
-    """Returns the Fuchsia SDK architecture name for the target CPU."""
-    if self._target_cpu == 'arm64':
-      return 'aarch64'
-    elif self._target_cpu == 'x64':
-      return 'x86_64'
-    raise Exception('Unknown target_cpu %s:' % self._target_cpu)
 
   def GetAmberRepo(self):
     """Returns an AmberRepo instance which serves packages for this Target.

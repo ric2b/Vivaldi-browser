@@ -19,6 +19,7 @@
 #include "base/i18n/case_conversion.h"
 #include "base/i18n/timezone.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/ranges/algorithm.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -111,9 +112,9 @@ bool FindByGUID(const C& container, const StringType& guid) {
 
 template <typename C, typename T>
 bool FindByContents(const C& container, const T& needle) {
-  return std::any_of(
-      std::begin(container), std::end(container),
-      [&needle](const auto& element) { return element->Compare(needle) == 0; });
+  return base::ranges::any_of(container, [&needle](const auto& element) {
+    return element->Compare(needle) == 0;
+  });
 }
 
 bool IsSyncEnabledFor(const syncer::SyncService* sync_service,
@@ -124,7 +125,7 @@ bool IsSyncEnabledFor(const syncer::SyncService* sync_service,
 
 // Receives the loaded profiles from the web data service and stores them in
 // |*dest|. The pending handle is the address of the pending handle
-// corresponding to this request type. This function is used to save both
+// corresponding to this request type. This function is used to save bShouldoth
 // server and local profiles and credit cards.
 template <typename ValueType>
 void ReceiveLoadedDbValues(WebDataServiceBase::Handle h,
@@ -403,7 +404,8 @@ void PersonalDataManager::OnWebDataServiceRequestDone(
   DCHECK(pending_profiles_query_ || pending_server_profiles_query_ ||
          pending_creditcards_query_ || pending_server_creditcards_query_ ||
          pending_server_creditcard_cloud_token_data_query_ ||
-         pending_customer_data_query_ || pending_upi_ids_query_);
+         pending_customer_data_query_ || pending_upi_ids_query_ ||
+         pending_offer_data_query_);
 
   if (!result) {
     // Error from the web database.
@@ -421,6 +423,8 @@ void PersonalDataManager::OnWebDataServiceRequestDone(
       pending_customer_data_query_ = 0;
     else if (h == pending_upi_ids_query_)
       pending_upi_ids_query_ = 0;
+    else if (h == pending_offer_data_query_)
+      pending_offer_data_query_ = 0;
   } else {
     switch (result->GetType()) {
       case AUTOFILL_PROFILES_RESULT:
@@ -473,6 +477,12 @@ void PersonalDataManager::OnWebDataServiceRequestDone(
             static_cast<WDResult<std::vector<std::string>>*>(result.get())
                 ->GetValue();
         break;
+      case AUTOFILL_OFFER_DATA:
+        DCHECK_EQ(h, pending_offer_data_query_)
+            << "received autofill offer data from invalid request.";
+        ReceiveLoadedDbValues(h, result.get(), &pending_offer_data_query_,
+                              &autofill_offer_data_);
+        break;
       default:
         NOTREACHED();
     }
@@ -494,9 +504,10 @@ void PersonalDataManager::OnWebDataServiceRequestDone(
       if (!IsSyncEnabledFor(sync_service_, syncer::AUTOFILL_WALLET_DATA))
         ApplyCardFixesAndCleanups();
 
-      // Log address and credit card startup metrics.
+      // Log address, credit card and offer startup metrics.
       LogStoredProfileMetrics();
       LogStoredCreditCardMetrics();
+      LogStoredOfferMetrics();
     }
 
     is_data_loaded_ = true;
@@ -910,6 +921,7 @@ void PersonalDataManager::ClearAllServerData() {
   server_profiles_.clear();
   payments_customer_data_.reset();
   server_credit_card_cloud_token_data_.clear();
+  autofill_offer_data_.clear();
 }
 
 void PersonalDataManager::ClearAllLocalData() {
@@ -1150,12 +1162,25 @@ PersonalDataManager::GetCreditCardCloudTokenData() const {
   return result;
 }
 
+std::vector<AutofillOfferData*> PersonalDataManager::GetCreditCardOffers()
+    const {
+  if (!IsAutofillWalletImportEnabled())
+    return {};
+
+  std::vector<AutofillOfferData*> result;
+  result.reserve(autofill_offer_data_.size());
+  for (const auto& data : autofill_offer_data_)
+    result.push_back(data.get());
+  return result;
+}
+
 void PersonalDataManager::Refresh() {
   LoadProfiles();
   LoadCreditCards();
   LoadCreditCardCloudTokenData();
   LoadPaymentsCustomerData();
   LoadUpiIds();
+  LoadCreditCardOffers();
 }
 
 std::vector<AutofillProfile*> PersonalDataManager::GetProfilesToSuggest()
@@ -1698,6 +1723,16 @@ void PersonalDataManager::LoadUpiIds() {
       database_helper_->GetLocalDatabase()->GetAllUpiIds(this);
 }
 
+void PersonalDataManager::LoadCreditCardOffers() {
+  if (!database_helper_->GetServerDatabase())
+    return;
+
+  CancelPendingServerQuery(&pending_offer_data_query_);
+
+  pending_offer_data_query_ =
+      database_helper_->GetServerDatabase()->GetCreditCardOffers(this);
+}
+
 void PersonalDataManager::CancelPendingLocalQuery(
     WebDataServiceBase::Handle* handle) {
   if (*handle) {
@@ -1727,6 +1762,7 @@ void PersonalDataManager::CancelPendingServerQueries() {
   CancelPendingServerQuery(&pending_server_creditcards_query_);
   CancelPendingServerQuery(&pending_customer_data_query_);
   CancelPendingServerQuery(&pending_server_creditcard_cloud_token_data_query_);
+  CancelPendingServerQuery(&pending_offer_data_query_);
 }
 
 bool PersonalDataManager::HasPendingQueriesForTesting() {
@@ -1828,6 +1864,14 @@ void PersonalDataManager::LogStoredCreditCardMetrics() const {
   }
 }
 
+void PersonalDataManager::LogStoredOfferMetrics() const {
+  if (!has_logged_stored_offer_metrics_) {
+    AutofillMetrics::LogStoredOfferMetrics(autofill_offer_data_);
+    // Only log this info once per chrome user profile load.
+    has_logged_stored_offer_metrics_ = true;
+  }
+}
+
 std::string PersonalDataManager::MostCommonCountryCodeFromProfiles() const {
   if (!IsAutofillEnabled())
     return std::string();
@@ -1916,11 +1960,8 @@ bool PersonalDataManager::IsServerCard(const CreditCard* credit_card) const {
 
 bool PersonalDataManager::ShouldShowCardsFromAccountOption() const {
 // The feature is only for Linux, Windows and Mac.
-#if defined(OS_CHROMEOS)
-  return false;
-#elif !defined(OS_LINUX) && !defined(OS_WIN) && !defined(OS_APPLE)
-  return false;
-#else
+#if (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || defined(OS_WIN) || \
+    defined(OS_APPLE)
   // This option should only be shown for users that have not enabled the Sync
   // Feature and that have server credit cards available.
   if (!sync_service_ || sync_service_->IsSyncFeatureEnabled() ||
@@ -1941,7 +1982,10 @@ bool PersonalDataManager::ShouldShowCardsFromAccountOption() const {
 
   // The option should only be shown if the user has not already opted-in.
   return !is_opted_in;
-#endif
+#else
+  return false;
+#endif // #if (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || defined(OS_WIN) || \
+       //     defined(OS_APPLE)
 }
 
 void PersonalDataManager::OnUserAcceptedCardsFromAccountOption() {
@@ -2590,7 +2634,8 @@ bool PersonalDataManager::HasPendingQueries() {
          pending_server_profiles_query_ != 0 ||
          pending_server_creditcards_query_ != 0 ||
          pending_server_creditcard_cloud_token_data_query_ != 0 ||
-         pending_customer_data_query_ != 0 || pending_upi_ids_query_ != 0;
+         pending_customer_data_query_ != 0 || pending_upi_ids_query_ != 0 ||
+         pending_offer_data_query_ != 0;
 }
 
 void PersonalDataManager::MigrateUserOptedInWalletSyncTransportIfNeeded() {

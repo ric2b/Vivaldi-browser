@@ -55,7 +55,7 @@ void OverlayProcessorUsingStrategy::NotifyOverlayPromotion(
 
 void OverlayProcessorUsingStrategy::ProcessForOverlays(
     DisplayResourceProvider* resource_provider,
-    RenderPassList* render_passes,
+    AggregatedRenderPassList* render_passes,
     const SkMatrix44& output_color_matrix,
     const OverlayProcessorInterface::FilterOperationsMap& render_pass_filters,
     const OverlayProcessorInterface::FilterOperationsMap&
@@ -67,7 +67,7 @@ void OverlayProcessorUsingStrategy::ProcessForOverlays(
   TRACE_EVENT0("viz", "OverlayProcessorUsingStrategy::ProcessForOverlays");
   DCHECK(candidates->empty());
 
-  RenderPass* render_pass = render_passes->back().get();
+  auto* render_pass = render_passes->back().get();
 
   // If we have any copy requests, we can't remove any quads for overlays or
   // CALayers because the framebuffer would be missing the removed quads'
@@ -157,6 +157,15 @@ void OverlayProcessorUsingStrategy::UpdateDamageRect(
       bool always_unoccluded =
           overlay.is_unoccluded && previous_frame_underlay_was_unoccluded;
 
+      // We need to make sure that when we change the overlay we damage the
+      // region where the underlay will be positioned. This is because a
+      // black transparent hole is made for the underlay to show through
+      // but its possible that the damage for this quad is less than the
+      // complete size of the underlay.  https://crbug.com/1130733
+      if (!same_underlay_rect) {
+        damage_rect->Union(this_frame_underlay_rect);
+      }
+
       if (same_underlay_rect && !transition_from_occluded_to_unoccluded &&
           (always_unoccluded || overlay.no_occluding_damage)) {
         damage_rect->Subtract(this_frame_underlay_rect);
@@ -195,7 +204,7 @@ bool OverlayProcessorUsingStrategy::AttemptWithStrategies(
     const OverlayProcessorInterface::FilterOperationsMap&
         render_pass_backdrop_filters,
     DisplayResourceProvider* resource_provider,
-    RenderPassList* render_pass_list,
+    AggregatedRenderPassList* render_pass_list,
     OverlayProcessorInterface::OutputSurfaceOverlayPlane* primary_plane,
     OverlayCandidateList* candidates,
     std::vector<gfx::Rect>* content_bounds) {

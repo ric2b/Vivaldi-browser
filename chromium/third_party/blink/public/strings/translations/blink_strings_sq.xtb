@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">shënim fundor</translation>
 <translation id="1281252709823657822">dialog</translation>
 <translation id="1306460908038601864">Joaktiv</translation>
+<translation id="1311894908970423688">Vlera duhet të jetë <ph name="VALUE_DATE_OR_TIME" />.</translation>
 <translation id="1335095011850992622">kredite</translation>
 <translation id="1342835525016946179">artikull</translation>
 <translation id="1359897965706325498">banderolë</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> artikuj</translation>
 <translation id="1480676835519562650">me zgjedhje të shumëfishtë, <ph name="SELECTED" /> nga <ph name="COUNT" /> të zgjedhura.</translation>
 <translation id="1589122976691792535">rajoni</translation>
 <translation id="1591562245178063882">Këtë muaj</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033">Java <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">Kënga <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">kutia e kontrollit</translation>
+<translation id="2307576640803031502">në listë, artikulli <ph name="INDEX" /> nga <ph name="COUNT" /></translation>
 <translation id="2311842470354187719">thyerje faqeje</translation>
 <translation id="2335594187091864976">zgjedhësi i datës dhe orës</translation>
 <translation id="2393030564806080191">Vlera e ngjyrave heksadecimale</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">më shumë opsione</translation>
 <translation id="576709008726043716">hyrje</translation>
 <translation id="57838592816432529">Hiqi zërin</translation>
+<translation id="5860033963881614850">Çaktivizuar</translation>
 <translation id="588258955323874662">Ekrani i plotë</translation>
 <translation id="5888666972993069672">Po transmeton tani në <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">kutia e kërkimit</translation>
+<translation id="5916664084637901428">Aktiv</translation>
 <translation id="5939518447894949180">Rivendos</translation>
 <translation id="5966707198760109579">Javë</translation>
 <translation id="5987525920412732405">butoni i rrotullimit</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">Pastro</translation>
 <translation id="668171684555832681">Tjetër...</translation>
 <translation id="6692633176391053278">pulsant</translation>
+<translation id="6709093583001123835">Vlera duhet të jetë <ph name="VALUE" />.</translation>
 <translation id="6709570249143506788">Cilësi e dobët e luajtjes</translation>
 <translation id="6755330956360078551">informacion për veglën</translation>
 <translation id="6790428901817661496">Luaj</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, fillon në <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Figura brenda figurës</translation>
 <translation id="9168329111483466115">fusnotë</translation>
+<translation id="945780513535800434">Pjesërisht e zgjedhur</translation>
 <translation id="954003015749068518">hyr në "figurë brenda figurës"</translation>
 <translation id="966787709310836684">meny</translation>
 </translationbundle>

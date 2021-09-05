@@ -406,7 +406,6 @@ void AutocompleteController::Start(const AutocompleteInput& input) {
   in_start_ = true;
   base::TimeTicks start_time = base::TimeTicks::Now();
   for (auto i(providers_.begin()); i != providers_.end(); ++i) {
-    // TODO(mpearson): Remove timing code once bug 178705 is resolved.
     base::TimeTicks provider_start_time = base::TimeTicks::Now();
     (*i)->Start(input_, minimal_changes);
     if (!input.want_asynchronous_matches())
@@ -681,18 +680,18 @@ void AutocompleteController::UpdateResult(
   if (OmniboxFieldTrial::IsTabSwitchSuggestionsEnabled())
     result_.ConvertOpenTabMatches(provider_client_.get(), &input_);
 
-  if (OmniboxFieldTrial::IsPedalSuggestionsEnabled()) {
-    result_.ConvertInSuggestionPedalMatches(provider_client_.get());
-  }
+  UpdateHeaderInfoFromZeroSuggestProvider(&result_);
 
   // Sort the matches and trim to a small number of "best" matches.
   const AutocompleteMatch* preserve_default_match = nullptr;
-  if (!in_start_ && last_default_match &&
-      base::FeatureList::IsEnabled(
-          omnibox::kOmniboxPreserveDefaultMatchAgainstAsyncUpdate)) {
+  if (!in_start_ && last_default_match) {
     preserve_default_match = &last_default_match.value();
   }
   result_.SortAndCull(input_, template_url_service_, preserve_default_match);
+
+  if (OmniboxFieldTrial::IsPedalSuggestionsEnabled()) {
+    result_.AttachPedalsToMatches(input_, *provider_client_);
+  }
 
   // Need to validate before invoking CopyOldMatches as the old matches are not
   // valid against the current input.
@@ -713,7 +712,6 @@ void AutocompleteController::UpdateResult(
                                                      result_);
   }
 
-  UpdateHeaders(&result_);
   UpdateKeywordDescriptions(&result_);
   UpdateAssociatedKeywords(&result_);
   UpdateAssistedQueryStats(&result_);
@@ -802,50 +800,22 @@ void AutocompleteController::UpdateAssociatedKeywords(
   }
 }
 
-void AutocompleteController::UpdateHeaders(AutocompleteResult* result) {
-  DCHECK(result);
-
+void AutocompleteController::UpdateHeaderInfoFromZeroSuggestProvider(
+    AutocompleteResult* result) {
   // Currently, we only populate the AutocompleteResult's header labels from
   // ZeroSuggestProvider. Even if another provider has header metadata, we
   // currently ignore it. This means that as-you-type suggestions will NEVER
   // show headers in the UI. For now, this is hacky, but intended.
   //
   // TODO(tommycli): Stop special casing ZeroSuggestProvider here.
-  if (zero_suggest_provider_) {
-    result->set_headers_map(zero_suggest_provider_->headers_map());
-    result->set_hidden_group_ids(zero_suggest_provider_->hidden_group_ids());
-  }
+  if (!zero_suggest_provider_)
+    return;
 
-  for (AutocompleteMatch& match : *result) {
-    if (match.suggestion_group_id.has_value()) {
-      // Record header data into the additional_info field for chrome://omnibox.
-      // Note, to improve debugging, we record the original group ID sent by
-      // the server before stripping empty headers.
-      int group_id = match.suggestion_group_id.value();
-      match.RecordAdditionalInfo("suggestion_group_id", group_id);
-
-      const base::string16 header = result->GetHeaderForGroupId(group_id);
-      if (!header.empty()) {
-        match.RecordAdditionalInfo("header string", base::UTF16ToUTF8(header));
-      } else {
-        // Strip all match group IDs that don't have a header string. Otherwise,
-        // these matches will be shown at the bottom with an empty header row.
-        // They should be treated as an ordinary match with no group ID.
-        match.suggestion_group_id.reset();
-      }
-    }
-  }
-
-  // Move all grouped matches to the bottom while maintaining the current order.
-  //
-  // TODO(tommycli): Currently, this pushes all suggestions with group IDs to
-  // the bottom, but doesn't group them together. That could lead to some
-  // awkward interleaving of groups.
-  std::stable_sort(result->begin(), result->end(),
-                   [](const auto& a, const auto& b) {
-                     return !a.suggestion_group_id.has_value() &&
-                            b.suggestion_group_id.has_value();
-                   });
+  // Merge the new header info with the existing one rather than replacing it.
+  // We might end up using the existing matches fully or partially if there are
+  // not enough new ones. Thus, we should also keep the existing header info.
+  result->MergeHeadersMap(zero_suggest_provider_->headers_map());
+  result->MergeHiddenGroupIds(zero_suggest_provider_->hidden_group_ids());
 }
 
 void AutocompleteController::UpdateKeywordDescriptions(

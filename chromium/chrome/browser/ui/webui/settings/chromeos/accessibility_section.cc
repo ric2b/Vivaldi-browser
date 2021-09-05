@@ -11,6 +11,8 @@
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
 #include "chrome/browser/accessibility/accessibility_state_utils.h"
+#include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/speech/extension_api/tts_engine_extension_observer.h"
 #include "chrome/browser/ui/webui/settings/accessibility_main_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/accessibility_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search_tag_registry.h"
@@ -23,6 +25,7 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/content_features.h"
+#include "extensions/browser/extension_system.h"
 #include "media/base/media_switches.h"
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/accessibility_switches.h"
@@ -96,12 +99,6 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSubpage,
        {.subpage = mojom::Subpage::kCaptions}},
-      {IDS_OS_SETTINGS_TAG_A11Y_SPEECH_ENGINES,
-       mojom::kTextToSpeechSubpagePath,
-       mojom::SearchResultIcon::kA11y,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kTextToSpeechEngines}},
       {IDS_OS_SETTINGS_TAG_A11Y_HIGHLIGHT_CURSOR,
        mojom::kManageAccessibilitySubpagePath,
        mojom::SearchResultIcon::kA11y,
@@ -147,7 +144,7 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kSpeakToType}},
+       {.setting = mojom::Setting::kHighlightKeyboardFocus}},
       {IDS_OS_SETTINGS_TAG_A11Y_STARTUP_SOUND,
        mojom::kManageAccessibilitySubpagePath,
        mojom::SearchResultIcon::kA11y,
@@ -190,6 +187,18 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kFullscreenMagnifier}},
+      {IDS_OS_SETTINGS_TAG_A11Y_ENABLE_SWITCH_ACCESS,
+       mojom::kManageAccessibilitySubpagePath,
+       mojom::SearchResultIcon::kA11y,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kEnableSwitchAccess}},
+  });
+  return *tags;
+}
+
+const std::vector<SearchConcept>& GetTextToSpeechVoiceSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_A11Y_SPEECH_VOICE_PREVIEW,
        mojom::kTextToSpeechSubpagePath,
        mojom::SearchResultIcon::kA11y,
@@ -200,14 +209,14 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
   return *tags;
 }
 
-const std::vector<SearchConcept>& GetA11ySwitchAccessSearchConcepts() {
+const std::vector<SearchConcept>& GetTextToSpeechEnginesSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      {IDS_OS_SETTINGS_TAG_A11Y_ENABLE_SWITCH_ACCESS,
-       mojom::kManageAccessibilitySubpagePath,
+      {IDS_OS_SETTINGS_TAG_A11Y_SPEECH_ENGINES,
+       mojom::kTextToSpeechSubpagePath,
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kEnableSwitchAccess}},
+       {.setting = mojom::Setting::kTextToSpeechEngines}},
   });
   return *tags;
 }
@@ -275,7 +284,7 @@ const std::vector<SearchConcept>& GetA11yLabelsSearchConcepts() {
 
 const std::vector<SearchConcept>& GetA11yLiveCaptionSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      {IDS_OS_SETTINGS_TAG_A11Y_LIVE_CAPTIONS,
+      {IDS_OS_SETTINGS_TAG_A11Y_LIVE_CAPTION,
        mojom::kManageAccessibilitySubpagePath,
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
@@ -308,11 +317,6 @@ bool AreLiveCaptionsAllowed() {
 
 bool IsCursorColorAllowed() {
   return features::IsAccessibilityCursorColorEnabled();
-}
-
-bool IsSwitchAccessAllowed() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      ::switches::kEnableExperimentalAccessibilitySwitchAccess);
 }
 
 bool IsSwitchAccessTextAllowed() {
@@ -348,10 +352,27 @@ AccessibilitySection::AccessibilitySection(
       ash::prefs::kAccessibilitySwitchAccessAutoScanEnabled,
       base::BindRepeating(&AccessibilitySection::UpdateSearchTags,
                           base::Unretained(this)));
+
   UpdateSearchTags();
+
+  // ExtensionService can be null for tests.
+  extensions::ExtensionService* extension_service =
+      extensions::ExtensionSystem::Get(profile)->extension_service();
+  if (!extension_service)
+    return;
+  content::TtsController::GetInstance()->AddVoicesChangedDelegate(this);
+  extension_registry_ = extensions::ExtensionRegistry::Get(profile);
+  extension_registry_->AddObserver(this);
+
+  UpdateTextToSpeechVoiceSearchTags();
+  UpdateTextToSpeechEnginesSearchTags();
 }
 
-AccessibilitySection::~AccessibilitySection() = default;
+AccessibilitySection::~AccessibilitySection() {
+  content::TtsController::GetInstance()->RemoveVoicesChangedDelegate(this);
+  if (extension_registry_)
+    extension_registry_->RemoveObserver(this);
+}
 
 void AccessibilitySection::AddLoadTimeData(
     content::WebUIDataSource* html_source) {
@@ -548,8 +569,6 @@ void AccessibilitySection::AddLoadTimeData(
   html_source->AddString("a11yLearnMoreUrl",
                          chrome::kChromeAccessibilityHelpURL);
 
-  html_source->AddBoolean("showExperimentalAccessibilitySwitchAccess",
-                          IsSwitchAccessAllowed());
   html_source->AddBoolean(
       "showExperimentalAccessibilitySwitchAccessImprovedTextInput",
       IsSwitchAccessTextAllowed());
@@ -595,10 +614,17 @@ mojom::SearchResultIcon AccessibilitySection::GetSectionIcon() const {
 std::string AccessibilitySection::GetSectionPath() const {
   return mojom::kAccessibilitySectionPath;
 }
+bool AccessibilitySection::LogMetric(mojom::Setting setting,
+                                     base::Value& value) const {
+  // Unimplemented.
+  return false;
+}
 
 void AccessibilitySection::RegisterHierarchy(
     HierarchyGenerator* generator) const {
   generator->RegisterTopLevelSetting(mojom::Setting::kA11yQuickSettings);
+  generator->RegisterTopLevelSetting(
+      mojom::Setting::kGetImageDescriptionsFromGoogle);
 
   // Manage accessibility.
   generator->RegisterTopLevelSubpage(
@@ -615,7 +641,7 @@ void AccessibilitySection::RegisterHierarchy(
       mojom::Setting::kStickyKeys,
       mojom::Setting::kOnScreenKeyboard,
       mojom::Setting::kDictation,
-      mojom::Setting::kSpeakToType,
+      mojom::Setting::kHighlightKeyboardFocus,
       mojom::Setting::kEnableSwitchAccess,
       mojom::Setting::kHighlightTextCaret,
       mojom::Setting::kAutoClickWhenCursorStops,
@@ -624,7 +650,6 @@ void AccessibilitySection::RegisterHierarchy(
       mojom::Setting::kTabletNavigationButtons,
       mojom::Setting::kMonoAudio,
       mojom::Setting::kStartupSound,
-      mojom::Setting::kGetImageDescriptionsFromGoogle,
       mojom::Setting::kLiveCaptions,
       mojom::Setting::kEnableCursorColor,
   };
@@ -658,11 +683,54 @@ void AccessibilitySection::RegisterHierarchy(
   RegisterNestedSettingBulk(mojom::Subpage::kSwitchAccessOptions,
                             kSwitchAccessSettings, generator);
 
-  // Captions.
+  // Caption preferences.
   generator->RegisterTopLevelSubpage(
       IDS_SETTINGS_CAPTIONS, mojom::Subpage::kCaptions,
       mojom::SearchResultIcon::kA11y, mojom::SearchResultDefaultRank::kMedium,
       mojom::kCaptionsSubpagePath);
+}
+
+void AccessibilitySection::OnVoicesChanged() {
+  UpdateTextToSpeechVoiceSearchTags();
+}
+
+void AccessibilitySection::UpdateTextToSpeechVoiceSearchTags() {
+  // Start with no text-to-speech voice search tags.
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+  updater.RemoveSearchTags(GetTextToSpeechVoiceSearchConcepts());
+
+  content::TtsController* tts_controller =
+      content::TtsController::GetInstance();
+  std::vector<content::VoiceData> voices;
+  tts_controller->GetVoices(profile(), &voices);
+  if (!voices.empty()) {
+    updater.AddSearchTags(GetTextToSpeechVoiceSearchConcepts());
+  }
+}
+
+void AccessibilitySection::OnExtensionLoaded(
+    content::BrowserContext* browser_context,
+    const extensions::Extension* extension) {
+  UpdateTextToSpeechEnginesSearchTags();
+}
+
+void AccessibilitySection::OnExtensionUnloaded(
+    content::BrowserContext* browser_context,
+    const extensions::Extension* extension,
+    extensions::UnloadedExtensionReason reason) {
+  UpdateTextToSpeechEnginesSearchTags();
+}
+
+void AccessibilitySection::UpdateTextToSpeechEnginesSearchTags() {
+  // Start with no text-to-speech engines search tags.
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+  updater.RemoveSearchTags(GetTextToSpeechEnginesSearchConcepts());
+
+  const std::set<std::string> extensions =
+      TtsEngineExtensionObserver::GetInstance(profile())->GetTtsExtensions();
+  if (!extensions.empty()) {
+    updater.AddSearchTags(GetTextToSpeechEnginesSearchConcepts());
+  }
 }
 
 void AccessibilitySection::UpdateSearchTags() {
@@ -675,7 +743,6 @@ void AccessibilitySection::UpdateSearchTags() {
     updater.RemoveSearchTags(GetA11yLabelsSearchConcepts());
   }
 
-  updater.RemoveSearchTags(GetA11ySwitchAccessSearchConcepts());
   updater.RemoveSearchTags(GetA11ySwitchAccessOnSearchConcepts());
   updater.RemoveSearchTags(GetA11ySwitchAccessKeyboardSearchConcepts());
 
@@ -691,11 +758,6 @@ void AccessibilitySection::UpdateSearchTags() {
     updater.RemoveSearchTags(GetA11yCursorColorSearchConcepts());
   }
 
-  if (!IsSwitchAccessAllowed())
-    return;
-
-  updater.AddSearchTags(GetA11ySwitchAccessSearchConcepts());
-
   if (!pref_service_->GetBoolean(
           ash::prefs::kAccessibilitySwitchAccessEnabled)) {
     return;
@@ -703,7 +765,8 @@ void AccessibilitySection::UpdateSearchTags() {
 
   updater.AddSearchTags(GetA11ySwitchAccessOnSearchConcepts());
 
-  if (pref_service_->GetBoolean(
+  if (IsSwitchAccessTextAllowed() &&
+      pref_service_->GetBoolean(
           ash::prefs::kAccessibilitySwitchAccessAutoScanEnabled)) {
     updater.AddSearchTags(GetA11ySwitchAccessKeyboardSearchConcepts());
   }

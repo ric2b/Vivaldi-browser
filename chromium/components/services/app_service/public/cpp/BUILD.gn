@@ -16,7 +16,20 @@ source_set("app_file_handling") {
   ]
 }
 
-source_set("app_update") {
+source_set("app_share_target") {
+  sources = [
+    "share_target.cc",
+    "share_target.h",
+  ]
+
+  deps = [
+    "//base",
+    "//url",
+  ]
+}
+
+component("app_update") {
+  output_name = "APP_UPDATE"
   sources = [
     "app_registry_cache.cc",
     "app_registry_cache.h",
@@ -25,6 +38,8 @@ source_set("app_update") {
     "app_update.cc",
     "app_update.h",
   ]
+
+  defines = [ "IS_APP_UPDATE_IMPL" ]
 
   public_deps = [
     "//components/account_id:account_id",

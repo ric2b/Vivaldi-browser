@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;مشاهده‌ی منبع قاب</translation>
 <translation id="1165039591588034296">خطا</translation>
 <translation id="1175364870820465910">&amp;چاپ...</translation>
-<translation id="1177863135347784049">سفارشی</translation>
 <translation id="1181037720776840403">حذف</translation>
 <translation id="1187722533808055681">تعداد خروج از حالت بی‌کار</translation>
 <translation id="119944043368869598">پاک کردن همه</translation>
 <translation id="1221825588892235038">فقط محتوای انتخاب شده</translation>
 <translation id="1244303850296295656">خطای افزونه</translation>
+<translation id="125220115284141797">پیش‌فرض</translation>
 <translation id="1274977772557788323">‏تنظیمات فضای ذخیره‌سازی Adobe Flash Player</translation>
 <translation id="1297175357211070620">مقصد</translation>
 <translation id="1303101771013849280">‏فایل HTML نشانک‌ها</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;پنجره جدید</translation>
 <translation id="1725149567830788547">نمایش &amp;کنترل‌ها</translation>
 <translation id="1729533290416704613">‏این برنامه صفحه‌ای را که هنگام جستجو از Omnibox نشان داده می‌شود، کنترل می‌کند.</translation>
+<translation id="174123615272205933">سفارشی</translation>
 <translation id="1744108098763830590">صفحه‌ی پس‌زمینه</translation>
 <translation id="176587472219019965">&amp;پنجره جدید</translation>
 <translation id="1769104665586091481">گشودن پیوند در &amp;پنجره‌ی جدید</translation>
+<translation id="1779468444204342338">حداقل</translation>
 <translation id="1815083418640426271">جای‌گذاری به‌عنوان نوشتار ساده</translation>
 <translation id="1828901632669367785">چاپ به کمک پیام‌های سیستمی...</translation>
 <translation id="1850508293116537636">چرخش درجهت &amp;عقربه‌های ساعت</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">پیش از ارسال سؤال شود (توصیه می‌شود)</translation>
 <translation id="241082044617551207">افزایه ناشناس</translation>
 <translation id="2423578206845792524">ذ&amp;خیره‌ی تصویر به‌عنوان...</translation>
-<translation id="2436707352762155834">حداقل</translation>
 <translation id="2439110203301358333">یکی از نرم‌افزارهای رایانه‌ی شما، افزونه‌ای را اضافه کرده که ممکن است بر کارکرد ویوالدی تأثیر بگذارد.</translation>
 <translation id="2445081178310039857">دایرکتوری ریشه برنامهٔ افزودنی لازم است.</translation>
 <translation id="2470702053775288986">افزونه‌های پشتیبانی نشده غیرفعال شدند</translation>
@@ -111,7 +112,7 @@
 <translation id="2881076733170862447">وقتی روی افزونه کلیک می‌کنید</translation>
 <translation id="2889064240420137087">گشودن پیوند با...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> نتوانست با این چاپگر ارتباط برقرار کند. مطمئن شوید چاپگر روشن است و دوباره امتحان کنید.</translation>
-<translation id="2904456025988372123">وقتی سایتی تلاش می‌کند پس از اولین فایل، فایل‌ها را به‌طور خودکار بارگیری کند، سؤال شود</translation>
+<translation id="2904456025988372123">هنگامی که سایتی پس از اولین فایل سعی در دانلود خودکار سایر فایل‌ها دارد، از کاربر سوال شود</translation>
 <translation id="2913331724188855103">اجازه به سایت‌ها برای ذخیره‌سازی و خواندن اطلاعات کوکی (توصیه می‌شود)</translation>
 <translation id="2931157624143513983">متناسب با ناحیه‌ی قابل چاپ</translation>
 <translation id="2932085390869194046">پیشنهاد رمز عبور…</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">پیش رندر: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">میکروفن</translation>
 <translation id="3241680850019875542">دایرکتوری ریشه برنامهٔ افزودنی را برای فشرده کردن انتخاب کنید. همچنین برای به‌روزرسانی برنامهٔ افزودنی، فایل کلید خصوصی را برای استفاده مجدد انتخاب کنید.</translation>
+<translation id="3266179261140759675">ارسال و دریافت اطلاعات توسط سایت‌های بسته شده را مسدود می‌کند</translation>
 <translation id="3280237271814976245">ذخیره &amp;به‌عنوان...</translation>
 <translation id="3285322247471302225">&amp;زبانه‌ی جدید</translation>
 <translation id="3288047731229977326">افزونه‌هایی که در حالت برنامه‌نوبس اجرا می‌شوند می‌توانند به رایانه شما آسیب برسانند. اگر برنامه‌نویس نیستید، باید این برنامه‌های افزودنی را که در حالت برنامه‌نویس اجرا می‌شوند غیرفعال کنید تا ایمن بمانید.</translation>
@@ -155,7 +157,7 @@
 <translation id="3432227430032737297">حذف همه‌ی موارد نشان‌ داده شده</translation>
 <translation id="3440761377721825626">وقتی سایتی می‌خواهد از افزایه‌ای برای دسترسی به رایانه‌تان استفاده کند، سؤال شود</translation>
 <translation id="345693547134384690">گشودن &amp;تصویر در زبانه‌ی جدید</translation>
-<translation id="3494769164076977169">وقتی سایتی تلاش می‌کند بعد از اولین فایل، فایل‌ها را به‌طور خودکار بارگیری کند سؤال شود (توصیه می‌شود)</translation>
+<translation id="3494769164076977169">هنگامی که سایتی پس از اولین فایل سعی در دانلود خودکار سایر فایل‌ها دارد، از کاربر سوال شود (توصیه می‌شود)</translation>
 <translation id="3505030558724226696">لغو دسترسی دستگاه</translation>
 <translation id="3511307672085573050">کپی آدر&amp;س پیوند</translation>
 <translation id="3523642406908660543">اگر سایتی می‌خواهد برای دسترسی به رایانه‌تان از افزایه‌ای استفاده کند، سؤال شود (توصیه می‌شود)</translation>
@@ -241,11 +243,10 @@
 <translation id="4994474651455208930">به سایت‌ها اجازه داده شود درخواست کنند تا کنترل کننده پیش‌فرض برای پروتکل ها شوند</translation>
 <translation id="5000922062037820727">مسدود (توصیه می‌شود)</translation>
 <translation id="5027562294707732951">افزودن افزونه</translation>
-<translation id="5036662165765606524">به هیچ سایتی اجازه داده نشود چند فایل را به‌طور خودکار بارگیری کند</translation>
+<translation id="5036662165765606524">اجازه‌ی دانلود خودکار چند فایل به هیچ سایتی داده نشود</translation>
 <translation id="5039804452771397117">اجازه دادن</translation>
 <translation id="5057110919553308744">وقتی روی افزونه کلیک می‌کنید</translation>
 <translation id="5063480226653192405">کاربرد</translation>
-<translation id="5068918910148307423">به سایت‌های اخیراً بسته‌شده امکان داده نشود ارسال و دریافت داده را تکمیل کنند</translation>
 <translation id="5116628073786783676">ذ&amp;خیره‌ی فایل صوتی به‌عنوان...</translation>
 <translation id="5143374789336132547">افزونه «<ph name="EXTENSION_NAME" />»، صفحه‌ای را با کلیک روی دکمه صفحه اصلی نمایش داده می‌شود، تغییر داده است.</translation>
 <translation id="5154108062446123722">تنظیمات پیشرفته برای <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">‏افزونه «<ph name="EXTENSION_NAME" />»، صفحه‌ای را تغییر داده است که هنگام جستجو از Omnibox نشان داده می‌شود.</translation>
 <translation id="5360150013186312835">نمایش در نوار ابزار</translation>
 <translation id="5362741141255528695">فایل کلید خصوصی را انتخاب کنید.</translation>
+<translation id="536638840841140142">هیچکدام</translation>
 <translation id="5370819323174483825">&amp;تازه‌سازی</translation>
 <translation id="5398572795982417028">محدوده‌ی تعیین شده بیش از حد مجاز است، حداکثر مجاز <ph name="MAXIMUM_PAGE" /> است</translation>
 <translation id="5425042808445046667">ادامه‌ی دانلود</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">گیرنده: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">نصب‌شده توسط مدیر شما</translation>
 <translation id="7685049629764448582">حافظه جاوااسکریپت</translation>
-<translation id="7701040980221191251">هیچکدام</translation>
 <translation id="7701869757853594372">کنترل‌های کاربر</translation>
 <translation id="7704305437604973648">کار</translation>
 <translation id="7710568461918838723">&amp;ارسال محتوا...</translation>
@@ -459,7 +460,7 @@
 <translation id="8783093612333542422">‏&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; می‌خواهد چاپگر &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; را با شما به اشتراک بگذارد.</translation>
 <translation id="8798099450830957504">پیش‌فرض</translation>
 <translation id="8800004011501252845">نمایش مقصدها برای</translation>
-<translation id="8808478386290700967">Web Store</translation>
+<translation id="8808478386290700967">فروشگاه وب</translation>
 <translation id="8823514049557262177">کپی &amp;متن پیوند</translation>
 <translation id="8823704566850948458">پیشنهاد رمز عبور…</translation>
 <translation id="8859174528519900719">قاب فرعی: <ph name="SUBFRAME_SITE" /></translation>

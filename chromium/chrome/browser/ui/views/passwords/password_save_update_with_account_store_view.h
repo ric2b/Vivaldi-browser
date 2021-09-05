@@ -8,7 +8,6 @@
 #include "chrome/browser/ui/passwords/bubble_controllers/save_update_with_account_store_bubble_controller.h"
 #include "chrome/browser/ui/views/passwords/password_bubble_view_base.h"
 #include "ui/views/controls/button/button.h"
-#include "ui/views/controls/combobox/combobox_listener.h"
 #include "ui/views/layout/animating_layout_manager.h"
 #include "ui/views/view.h"
 
@@ -33,7 +32,6 @@ class FeaturePromoBubbleView;
 class PasswordSaveUpdateWithAccountStoreView
     : public PasswordBubbleViewBase,
       public views::ButtonListener,
-      public views::ComboboxListener,
       public views::WidgetObserver,
       public views::AnimatingLayoutManager::Observer {
  public:
@@ -65,10 +63,6 @@ class PasswordSaveUpdateWithAccountStoreView
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
-  // views::ComboboxListener:
-  // Used for the destination combobox.
-  void OnPerformAction(views::Combobox* combobox) override;
-
   // views::WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
 
@@ -77,7 +71,6 @@ class PasswordSaveUpdateWithAccountStoreView
   views::View* GetInitiallyFocusedView() override;
   bool IsDialogButtonEnabled(ui::DialogButton button) const override;
   gfx::ImageSkia GetWindowIcon() override;
-  bool ShouldShowWindowIcon() const override;
   bool ShouldShowCloseButton() const override;
 
   // View:
@@ -91,6 +84,9 @@ class PasswordSaveUpdateWithAccountStoreView
   void TogglePasswordVisibility();
   void UpdateUsernameAndPasswordInModel();
   void UpdateBubbleUIElements();
+  void UpdateHeaderImage();
+
+  void DestinationChanged();
 
   // Whether we should show the IPH informing the user about the destination
   // picker and that they can now select where to store the passwords. It
@@ -107,6 +103,10 @@ class PasswordSaveUpdateWithAccountStoreView
   void ShowIPH(IPHType type);
 
   void CloseIPHBubbleIfOpen();
+
+  // Announces to the screen readers a change in the bubble between Save and
+  // Update states.
+  void AnnounceSaveUpdateChange();
 
   // Used for both the username and password editable comboboxes.
   void OnContentChanged();
@@ -138,6 +138,10 @@ class PasswordSaveUpdateWithAccountStoreView
   // promo is open and get called back when it closes.
   ScopedObserver<views::Widget, views::WidgetObserver>
       observed_account_storage_promo_{this};
+
+  // Hidden view that will contain status text for immediate output by
+  // screen readers when the bubble changes state between Save and Update.
+  views::View* accessibility_alert_ = nullptr;
 
   // Used to add |username_dropdown_| as an observer to the
   // AnimatingLayoutManager. This is needed such that the |username_dropdown_|

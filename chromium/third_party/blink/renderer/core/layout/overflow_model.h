@@ -202,10 +202,6 @@ class BoxVisualOverflowModel {
     self_visual_overflow_.Unite(rect);
   }
 
-  void ClearContentsVisualOverflow() {
-    contents_visual_overflow_ = LayoutRect();
-  }
-
   const LayoutRect& ContentsVisualOverflowRect() const {
     return contents_visual_overflow_;
   }
@@ -238,8 +234,8 @@ struct BoxOverflowModel {
   // Used by BoxPaintInvalidator. Stores the previous overflow data after the
   // last paint invalidation.
   struct PreviousOverflowData {
-    bool previously_had_overflow_clip = false;
     PhysicalRect previous_physical_layout_overflow_rect;
+    PhysicalRect previous_physical_visual_overflow_rect;
     PhysicalRect previous_physical_self_visual_overflow_rect;
   };
   base::Optional<PreviousOverflowData> previous_overflow_data;

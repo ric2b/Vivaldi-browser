@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">notă de final</translation>
 <translation id="1281252709823657822">dialog</translation>
 <translation id="1306460908038601864">Dezactivat</translation>
+<translation id="1311894908970423688">Valoarea trebuie să fie <ph name="VALUE_DATE_OR_TIME" />.</translation>
 <translation id="1335095011850992622">mulțumiri</translation>
 <translation id="1342835525016946179">articol</translation>
 <translation id="1359897965706325498">banner</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> elemente</translation>
 <translation id="1480676835519562650">Este posibilă selectarea multiplă, ai selectat <ph name="SELECTED" /> din <ph name="COUNT" />.</translation>
 <translation id="1589122976691792535">regiune</translation>
 <translation id="1591562245178063882">Luna aceasta</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033">Săptămâna <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">Melodia <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">casetă de selectare</translation>
+<translation id="2307576640803031502">în listă, elementul <ph name="INDEX" /> din <ph name="COUNT" /></translation>
 <translation id="2311842470354187719">sfârșit de pagină</translation>
 <translation id="2335594187091864976">selector pentru dată și oră</translation>
 <translation id="2393030564806080191">Valoarea hexazecimală a culorii</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">mai multe opțiuni</translation>
 <translation id="576709008726043716">introducere</translation>
 <translation id="57838592816432529">Dezactivează sunetul</translation>
+<translation id="5860033963881614850">Dezactivat</translation>
 <translation id="588258955323874662">Ecran complet</translation>
 <translation id="5888666972993069672">Se proiectează acum pe <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">casetă de căutare</translation>
+<translation id="5916664084637901428">Activat</translation>
 <translation id="5939518447894949180">Resetează</translation>
 <translation id="5966707198760109579">Săptămână</translation>
 <translation id="5987525920412732405">buton incrementare/decrementare</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">Șterge</translation>
 <translation id="668171684555832681">Altele...</translation>
 <translation id="6692633176391053278">control numeric cu incrementare/decrementare</translation>
+<translation id="6709093583001123835">Valoarea trebuie să fie <ph name="VALUE" />.</translation>
 <translation id="6709570249143506788">Calitate slabă a redării</translation>
 <translation id="6755330956360078551">balon explicativ</translation>
 <translation id="6790428901817661496">Redă</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, începând de pe <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Picture-in-Picture</translation>
 <translation id="9168329111483466115">notă de subsol</translation>
+<translation id="945780513535800434">Bifate parțial</translation>
 <translation id="954003015749068518">intră în modul picture-in-picture</translation>
 <translation id="966787709310836684">meniu</translation>
 </translationbundle>

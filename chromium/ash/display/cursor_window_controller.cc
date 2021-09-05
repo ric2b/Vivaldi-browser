@@ -4,12 +4,14 @@
 
 #include "ash/display/cursor_window_controller.h"
 
+#include "ash/capture_mode/capture_mode_controller.h"
 #include "ash/display/display_color_manager.h"
 #include "ash/display/mirror_window_controller.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/fast_ink/cursor/cursor_view.h"
 #include "ash/magnifier/magnification_controller.h"
 #include "ash/public/cpp/ash_constants.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/shell_window_ids.h"
@@ -26,13 +28,13 @@
 #include "ui/base/cursor/cursors_aura.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/compositor/dip_util.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/dip_util.h"
+#include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/views/widget/widget.h"
@@ -134,6 +136,12 @@ void CursorWindowController::SetCursorColor(SkColor cursor_color) {
 bool CursorWindowController::ShouldEnableCursorCompositing() {
   if (is_cursor_motion_blur_enabled_)
     return true;
+
+  if (features::IsCaptureModeEnabled() &&
+      CaptureModeController::Get()->is_recording_in_progress()) {
+    // To let the video capturer record the cursor.
+    return true;
+  }
 
   // During startup, we may not have a preference service yet. We need to check
   // display manager state first so that we don't accidentally ignore it while
@@ -313,16 +321,17 @@ void CursorWindowController::UpdateCursorImage() {
       ui::GetScaleForScaleFactor(ui::GetSupportedScaleFactor(original_scale));
 
   gfx::ImageSkia image;
+  gfx::Point hot_point_in_physical_pixels;
   if (cursor_.type() == ui::mojom::CursorType::kCustom) {
     const SkBitmap& bitmap = cursor_.custom_bitmap();
     if (bitmap.isNull())
       return;
     image = gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
-    hot_point_ = cursor_.custom_hotspot();
+    hot_point_in_physical_pixels = cursor_.custom_hotspot();
   } else {
     int resource_id;
     if (!ui::GetCursorDataFor(cursor_size_, cursor_.type(), cursor_scale,
-                              &resource_id, &hot_point_)) {
+                              &resource_id, &hot_point_in_physical_pixels)) {
       return;
     }
     image =
@@ -342,14 +351,17 @@ void CursorWindowController::UpdateCursorImage() {
     resized = gfx::ImageSkiaOperations::CreateResizedImage(
         image, skia::ImageOperations::ResizeMethod::RESIZE_GOOD,
         gfx::ScaleToCeiledSize(image.size(), rescale));
-    hot_point_ = gfx::ScaleToCeiledPoint(hot_point_, rescale);
+    hot_point_in_physical_pixels =
+        gfx::ScaleToCeiledPoint(hot_point_in_physical_pixels, rescale);
   }
 
   const gfx::ImageSkiaRep& image_rep = resized.GetRepresentation(cursor_scale);
   delegate_->SetCursorImage(resized.size(),
                             gfx::ImageSkia(gfx::ImageSkiaRep(
                                 GetAdjustedBitmap(image_rep), cursor_scale)));
-  hot_point_ = gfx::ConvertPointToDIP(cursor_scale, hot_point_);
+  // TODO(danakj): Should this be rounded? Or kept as a floating point?
+  hot_point_ = gfx::ToFlooredPoint(
+      gfx::ConvertPointToDips(hot_point_in_physical_pixels, cursor_scale));
 
   if (cursor_view_widget_) {
     static_cast<cursor::CursorView*>(cursor_view_widget_->GetContentsView())

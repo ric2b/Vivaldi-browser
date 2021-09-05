@@ -8,6 +8,7 @@
 #include <aura-shell-server-protocol.h>
 #include <color-space-unstable-v1-server-protocol.h>
 #include <cursor-shapes-unstable-v1-server-protocol.h>
+#include <extended-drag-unstable-v1-server-protocol.h>
 #include <gaming-input-unstable-v2-server-protocol.h>
 #include <grp.h>
 #include <input-timestamps-unstable-v1-server-protocol.h>
@@ -28,6 +29,7 @@
 #include <vsync-feedback-unstable-v1-server-protocol.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol-core.h>
+#include <xdg-decoration-unstable-v1-server-protocol.h>
 #include <xdg-shell-server-protocol.h>
 #include <xdg-shell-unstable-v6-server-protocol.h>
 
@@ -65,6 +67,7 @@
 #include "components/exo/wayland/xdg_shell.h"
 #include "components/exo/wayland/zcr_color_space.h"
 #include "components/exo/wayland/zcr_cursor_shapes.h"
+#include "components/exo/wayland/zcr_extended_drag.h"
 #include "components/exo/wayland/zcr_gaming_input.h"
 #include "components/exo/wayland/zcr_keyboard_configuration.h"
 #include "components/exo/wayland/zcr_keyboard_extension.h"
@@ -76,6 +79,7 @@
 #include "components/exo/wayland/zwp_pointer_gestures.h"
 #include "components/exo/wayland/zwp_relative_pointer_manager.h"
 #include "components/exo/wayland/zwp_text_input_manager.h"
+#include "components/exo/wayland/zxdg_decoration_manager.h"
 #include "components/exo/wayland/zxdg_shell.h"
 #endif
 
@@ -126,9 +130,8 @@ bool IsDrmAtomicAvailable() {
 // Server, public:
 
 Server::Server(Display* display)
-    : display_(display),
-      wl_display_(wl_display_create()),
-      serial_tracker_(std::make_unique<SerialTracker>(wl_display_.get())) {
+    : display_(display), wl_display_(wl_display_create()) {
+  serial_tracker_ = std::make_unique<SerialTracker>(wl_display_.get());
   wl_global_create(wl_display_.get(), &wl_compositor_interface,
                    kWlCompositorVersion, this, bind_compositor);
   wl_global_create(wl_display_.get(), &wl_shm_interface, 1, display_, bind_shm);
@@ -158,8 +161,8 @@ Server::Server(Display* display)
                    display_, bind_secure_output);
   wl_global_create(wl_display_.get(), &zcr_alpha_compositing_v1_interface, 1,
                    display_, bind_alpha_compositing);
-  wl_global_create(wl_display_.get(), &zcr_stylus_v2_interface, 1, display_,
-                   bind_stylus_v2);
+  wl_global_create(wl_display_.get(), &zcr_stylus_v2_interface,
+                   zcr_stylus_v2_interface.version, display_, bind_stylus_v2);
 
   seat_data_ =
       std::make_unique<WaylandSeat>(display_->seat(), serial_tracker_.get());
@@ -207,9 +210,13 @@ Server::Server(Display* display)
                    bind_relative_pointer_manager);
   wl_global_create(wl_display_.get(), &zcr_color_space_v1_interface, 1,
                    display_, bind_color_space);
+  wl_global_create(wl_display_.get(), &zxdg_decoration_manager_v1_interface, 1,
+                   display_, bind_zxdg_decoration_manager);
+  wl_global_create(wl_display_.get(), &zcr_extended_drag_v1_interface, 1,
+                   display_, bind_extended_drag);
 
-  zwp_text_manager_data_ =
-      std::make_unique<WaylandTextInputManager>(serial_tracker_.get());
+  zwp_text_manager_data_ = std::make_unique<WaylandTextInputManager>(
+      display_->seat()->xkb_tracker(), serial_tracker_.get());
   wl_global_create(wl_display_.get(), &zwp_text_input_manager_v1_interface, 1,
                    zwp_text_manager_data_.get(), bind_text_input_manager);
 
@@ -232,6 +239,10 @@ Server::Server(Display* display)
 
 Server::~Server() {
   display::Screen::GetScreen()->RemoveObserver(this);
+  // TODO(https://crbug.com/1124106): Investigate if we can eliminate Shutdown
+  // methods.
+  serial_tracker_->Shutdown();
+  display_->Shutdown();
 }
 
 // static

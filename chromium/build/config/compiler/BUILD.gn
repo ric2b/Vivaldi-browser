@@ -89,7 +89,7 @@ declare_args() {
   # nonsensical for said projects.
   clang_use_default_sample_profile =
       chrome_pgo_phase == 0 && build_with_chromium && is_official_build &&
-      (is_android || is_desktop_linux)
+      (is_android || chromeos_is_browser_only)
 
   # This configuration is used to select a default profile in Chrome OS based on
   # the microarchitectures we are using. This is only used if
@@ -120,13 +120,15 @@ declare_args() {
   # Initialize all local variables with a pattern. This flag will fill
   # uninitialized floating-point types (and 32-bit pointers) with 0xFF and the
   # rest with 0xAA. This makes behavior of uninitialized memory bugs consistent,
-  # recognizeble in debugger, and crashes memory accesses by uninitialized
-  # pointers.
-  # TODO(vitalybuka):
-  # 'is_android' breaks content_shell_test_apk on android-kitkat-arm-rel.
-  # 'use_xcode_clang' may call old clang.
-  init_stack_vars = !is_android && !use_xcode_clang &&
-                    (!is_official_build || is_linux || is_chromeos)
+  # recognizable in the debugger, and crashes on memory accesses through
+  # uninitialized pointers.
+  #
+  # TODO(crbug.com/1131993): Enabling this when 'is_android' is true breaks
+  # content_shell_test_apk on both ARM and x86.
+  #
+  # TODO(crbug.com/977230): Enabling this when 'use_xcode_clang' is true may
+  # call an old clang that doesn't support auto-init.
+  init_stack_vars = !is_android && !use_xcode_clang
 
   # This argument is to control whether enabling text section splitting in the
   # final binary. When enabled, the separated text sections with prefix
@@ -172,12 +174,6 @@ declare_args() {
             !use_clang_coverage && !(is_android && use_order_profiling) &&
             (use_lld || (use_gold && (is_chromeos || !(current_cpu == "x86" ||
                                                        current_cpu == "x64"))))
-}
-
-if (use_debug_fission == "default") {
-  use_debug_fission =
-      is_debug && !is_android && !is_fuchsia && !is_ios && !is_mac && !is_win &&
-      (use_gold || use_lld) && cc_wrapper == ""
 }
 
 if (is_win || is_android || (is_chromeos && is_chromeos_device)) {
@@ -295,7 +291,7 @@ config("compiler") {
     }
 
     # Linker warnings.
-    if (fatal_linker_warnings && !is_mac && !is_ios && current_os != "aix") {
+    if (fatal_linker_warnings && !is_apple && current_os != "aix") {
       ldflags += [ "-Wl,--fatal-warnings" ]
     }
     if (fatal_linker_warnings && is_apple &&
@@ -399,14 +395,6 @@ config("compiler") {
         "-Wl,--as-needed",
       ]
     }
-    if (use_lld && !is_chromeos_device) {
-      # TODO(thakis): Fix dump_syms to not need this and then remove it,
-      # https://crbug.com/1105559
-      ldflags += [
-        "-Wl,-z,dead-reloc-in-nonalloc=*=0",
-        "-Wl,-z,dead-reloc-in-nonalloc=.debug_ranges=1",
-      ]
-    }
   }
 
   # Linux-specific compiler flags setup.
@@ -501,6 +489,25 @@ config("compiler") {
       "-mllvm",
       "-instcombine-lower-dbg-declare=0",
     ]
+
+    # Pinned clang has enable-dse-memoryssa enabled by default but it's broken,
+    # so we have to force it off.
+    # Trunk clang has it disabled by default but it might work, so we force it
+    # on so the ToT bots can check if it works now.
+    if (!llvm_force_head_revision) {
+      cflags += [
+        # TODO(https://crbug.com/1127713): Investigate, remove.
+        "-mllvm",
+        "-enable-dse-memoryssa=false",
+      ]
+    }
+    if (llvm_force_head_revision) {
+      cflags += [
+        # TODO(https://crbug.com/1127713): Investigate, remove.
+        "-mllvm",
+        "-enable-dse-memoryssa=true",
+      ]
+    }
   }
 
   # C11/C++11 compiler flags setup.
@@ -594,8 +601,7 @@ config("compiler") {
   # TODO(pcc): Make this conditional on is_official_build rather than on gn
   # flags for specific features.
   if (!is_debug && use_thin_lto && is_a_target_toolchain) {
-    assert(use_lld || target_os == "chromeos",
-           "gold plugin only supported with ChromeOS")
+    assert(use_lld, "LTO is only supported with lld")
 
     cflags += [
       "-flto=thin",
@@ -630,39 +636,31 @@ config("compiler") {
       # Limit the parallelism to avoid too aggressive competition between
       # linker jobs. This is still suboptimal to a potential dynamic
       # resource allocation scheme, but should be good enough.
-      if (use_lld) {
-        ldflags += [ "-Wl,--thinlto-jobs=" + max_jobs_per_link ]
+      ldflags += [ "-Wl,--thinlto-jobs=" + max_jobs_per_link ]
 
-        # Limit the size of the ThinLTO cache to the lesser of 10% of
-        # available disk space, 10GB and 100000 files.
-        cache_policy =
-            "cache_size=10%:cache_size_bytes=10g:cache_size_files=100000"
-        ldflags += [
-          "-Wl,--thinlto-cache-dir=" +
-              rebase_path("$root_out_dir/thinlto-cache", root_build_dir),
-          "-Wl,--thinlto-cache-policy,$cache_policy",
-        ]
-      } else {
-        ldflags += [ "-Wl,-plugin-opt,jobs=" + max_jobs_per_link ]
-      }
+      # Limit the size of the ThinLTO cache to the lesser of 10% of
+      # available disk space, 10GB and 100000 files.
+      cache_policy =
+          "cache_size=10%:cache_size_bytes=10g:cache_size_files=100000"
+      ldflags += [
+        "-Wl,--thinlto-cache-dir=" +
+            rebase_path("$root_out_dir/thinlto-cache", root_build_dir),
+        "-Wl,--thinlto-cache-policy,$cache_policy",
+      ]
 
-      if (use_lld) {
-        ldflags += [ "-Wl,--lto-O" + lto_opt_level ]
-        if (thin_lto_enable_optimizations) {
-          if (is_android) {
-            # TODO(gbiv): We ideally shouldn't need to specify this; ThinLTO
-            # should be able to better manage binary size increases on its own.
-            ldflags += [ "-Wl,-mllvm,-import-instr-limit=5" ]
-          }
+      ldflags += [ "-Wl,--lto-O" + lto_opt_level ]
+      if (thin_lto_enable_optimizations) {
+        if (is_android) {
+          # TODO(gbiv): We ideally shouldn't need to specify this; ThinLTO
+          # should be able to better manage binary size increases on its own.
+          ldflags += [ "-Wl,-mllvm,-import-instr-limit=5" ]
         }
-      } else {
-        not_needed([ "lto_opt_level" ])
       }
     }
 
-    # Whole-program devirtualization increases android libchrome.so size
-    # by ~100kb on arm32 and reduces it by ~108kb on arm64 instead.
-    if (!is_android || current_cpu == "arm64") {
+    # TODO(pcc): Re-enable this flag on Android. This will require libc++ to be
+    # built with ThinLTO (see https://crbug.com/767901) as well as the GVR shim.
+    if (!is_android) {
       cflags += [ "-fwhole-program-vtables" ]
       if (!is_win) {
         ldflags += [ "-fwhole-program-vtables" ]
@@ -1541,9 +1539,6 @@ config("default_warnings") {
 
           # TODO(https://crbug.com/1050281): Clean up, enable.
           "-Wno-non-c-typedef-for-linkage",
-
-          # TODO(https://crbug.com/1114873): Clean up, enable.
-          "-Wno-string-concatenation",
         ]
 
         cflags_c += [
@@ -1769,7 +1764,7 @@ config("thin_archive") {
   # Mac and iOS use the mac-specific "libtool" command, not ar, which doesn't
   # have a "thin archive" mode (it does accept -T, but it means truncating
   # archive names to 16 characters, which is not what we want).
-  if ((is_posix && !is_nacl && !is_mac && !is_ios) || is_fuchsia) {
+  if ((is_posix && !is_nacl && !is_apple) || is_fuchsia) {
     arflags = [ "-T" ]
   } else if (is_win && use_lld) {
     arflags = [ "/llvmlibthin" ]
@@ -1984,7 +1979,7 @@ config("default_stack_frames") {
       # Omit frame pointers for leaf functions on x86, otherwise building libyuv
       # gives clang's register allocator issues, see llvm.org/PR15798 /
       # crbug.com/233709
-      if (is_clang && current_cpu == "x86" && !is_mac && !is_ios) {
+      if (is_clang && current_cpu == "x86" && !is_apple) {
         cflags += [ "-momit-leaf-frame-pointer" ]
       }
     } else {
@@ -2171,9 +2166,9 @@ if (is_clang && is_a_target_toolchain) {
   } else if (clang_use_default_sample_profile) {
     assert(build_with_chromium,
            "Our default profiles currently only apply to Chromium")
-    assert(is_android || is_desktop_linux || is_chromeos,
+    assert(is_android || chromeos_is_browser_only || is_chromeos,
            "The current platform has no default profile")
-    if (is_android || is_desktop_linux) {
+    if (is_android) {
       _clang_sample_profile = "//chrome/android/profiles/afdo.prof"
     } else {
       assert(
@@ -2239,8 +2234,8 @@ config("afdo") {
 # include as sub-config.
 config("win_pdbaltpath") {
   visibility = [
-    ":symbols",
     ":minimal_symbols",
+    ":symbols",
   ]
 
   # /DEBUG causes the linker to generate a pdb file, and to write the absolute
@@ -2306,17 +2301,23 @@ config("symbols") {
     }
 
     # TODO(https://crbug.com/1050118): Investigate missing debug info on mac.
-    if (is_clang && !is_nacl && !use_xcode_clang && !is_mac && !is_ios) {
+    if (is_clang && !is_nacl && !use_xcode_clang && !is_apple) {
       cflags += [
         "-Xclang",
         "-debug-info-kind=constructor",
       ]
     }
 
-    if (use_debug_fission && !is_nacl && !is_android) {
+    if (is_apple) {
+      swiftflags = [ "-g" ]
+    }
+
+    if (use_debug_fission && !is_nacl &&
+        (!is_android || target_os == "android")) {
       # NOTE: Some Chrome OS builds globally set |use_debug_fission| to true,
-      # but they also build some targets against Android toolchains which aren't
-      # compatible with it.
+      # but they also build some targets whose toolchains aren't
+      # compatible with it. In particular don't turn it on for Android
+      # toolchain if not building for Android OS.
       #
       # TODO(https://crbug.com/837032): See if we can clean this up by e.g. not
       # setting use_debug_fission globally.
@@ -2325,12 +2326,19 @@ config("symbols") {
     asmflags = cflags
     ldflags = []
 
+    if (use_debug_fission && is_android && target_os == "android") {
+      # NOTE: This flag is for use by the link wrapper scripts. They are also
+      # expected to remove it before sending the rest of ldflags to the actual
+      # linker. Only expect Android Chrome build on Android OS to need this.
+      ldflags += [ "-gsplit-dwarf" ]
+    }
+
     # TODO(thakis): Figure out if there's a way to make this go for 32-bit,
     # currently we get "warning:
     # obj/native_client/src/trusted/service_runtime/sel_asm/nacl_switch_32.o:
     # DWARF info may be corrupt; offsets in a range list entry are in different
     # sections" there.  Maybe just a bug in nacl_switch_32.S.
-    if (!is_mac && !is_ios && !is_nacl && current_cpu != "x86" &&
+    if (!is_apple && !is_nacl && current_cpu != "x86" &&
         (use_gold || use_lld)) {
       if (is_clang) {
         # This flag enables the GNU-format pubnames and pubtypes sections,

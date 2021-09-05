@@ -116,9 +116,8 @@ void FieldTrialSynchronizer::UpdateRendererVariationsHeader(
   mojo::AssociatedRemote<mojom::RendererVariationsConfiguration>
       renderer_variations_configuration;
   channel->GetRemoteAssociatedInterface(&renderer_variations_configuration);
-
-  renderer_variations_configuration->SetVariationsHeader(
-      client->GetVariationsHeader());
+  renderer_variations_configuration->SetVariationsHeaders(
+      client->GetVariationsHeaders());
 }
 
 void FieldTrialSynchronizer::VariationIdsHeaderUpdated() {

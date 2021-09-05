@@ -13,6 +13,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
 #include "chrome/browser/chromeos/multidevice_setup/multidevice_setup_service_factory.h"
+#include "chrome/browser/nearby_sharing/nearby_share_delegate_impl.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/back_gesture_contextual_nudge_delegate.h"
@@ -21,6 +22,7 @@
 #include "chrome/browser/ui/ash/chrome_screenshot_grabber.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_ui.h"
 #include "chrome/browser/ui/ash/session_util.h"
+#include "chrome/browser/ui/ash/tab_scrubber.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_navigator.h"
@@ -85,6 +87,10 @@ bool ChromeShellDelegate::CanGoBack(gfx::NativeWindow window) const {
   content::WebContents* contents =
       GetActiveWebContentsForNativeBrowserWindow(window);
   return contents ? contents->GetController().CanGoBack() : false;
+}
+
+void ChromeShellDelegate::SetTabScrubberEnabled(bool enabled) {
+  TabScrubber::GetInstance()->SetEnabled(enabled);
 }
 
 bool ChromeShellDelegate::AllowDefaultTouchActions(gfx::NativeWindow window) {
@@ -198,4 +204,10 @@ std::unique_ptr<ash::BackGestureContextualNudgeDelegate>
 ChromeShellDelegate::CreateBackGestureContextualNudgeDelegate(
     ash::BackGestureContextualNudgeController* controller) {
   return std::make_unique<BackGestureContextualNudgeDelegate>(controller);
+}
+
+std::unique_ptr<ash::NearbyShareDelegate>
+ChromeShellDelegate::CreateNearbyShareDelegate(
+    ash::NearbyShareController* controller) const {
+  return std::make_unique<NearbyShareDelegateImpl>(controller);
 }

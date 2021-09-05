@@ -95,8 +95,6 @@ blink_core_sources("frame") {
     "intervention.h",
     "intervention_report_body.cc",
     "intervention_report_body.h",
-    "is_input_pending_options.cc",
-    "is_input_pending_options.h",
     "layout_subtree_root_list.cc",
     "layout_subtree_root_list.h",
     "local_dom_window.cc",
@@ -137,6 +135,8 @@ blink_core_sources("frame") {
     "opened_frame_tracker.h",
     "overlay_interstitial_ad_detector.cc",
     "overlay_interstitial_ad_detector.h",
+    "page_dismissal_scope.cc",
+    "page_dismissal_scope.h",
     "page_scale_constraints.cc",
     "page_scale_constraints.h",
     "page_scale_constraints_set.cc",
@@ -184,6 +184,8 @@ blink_core_sources("frame") {
     "scheduling.h",
     "screen.cc",
     "screen.h",
+    "screen_metrics_emulator.cc",
+    "screen_metrics_emulator.h",
     "settings.cc",
     "settings.h",
     "settings_delegate.cc",
@@ -222,10 +224,12 @@ blink_core_sources("frame") {
   ]
 
   deps = [
+    "//printing/buildflags",
     "//skia",
     "//ui/accessibility:ax_base",
     "//ui/base/cursor:cursor_base",
     "//ui/base/cursor/mojom:cursor_type_blink",
+    "//ui/base/dragdrop/mojom:mojom_blink",
     "//ui/gfx:geometry_skia",
     "//ui/gfx/geometry",
   ]

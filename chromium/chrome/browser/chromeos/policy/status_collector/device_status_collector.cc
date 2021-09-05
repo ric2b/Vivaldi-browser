@@ -1057,7 +1057,8 @@ class DeviceStatusCollectorState : public StatusCollectorState {
 
             em::CpuInfo* const cpu_info_out =
                 response_params_.device_status->add_cpu_info();
-            cpu_info_out->set_model_name(physical_cpu->model_name);
+            if (physical_cpu->model_name)
+              cpu_info_out->set_model_name(physical_cpu->model_name.value());
             cpu_info_out->set_architecture(
                 static_cast<em::CpuInfo::Architecture>(cpu_info->architecture));
 
@@ -2061,8 +2062,16 @@ bool DeviceStatusCollector::GetWriteProtectSwitch(
   if (!statistics_provider_->GetMachineStatistic(
           chromeos::system::kFirmwareWriteProtectCurrentKey,
           &firmware_write_protect)) {
+    // TODO(crbug.com/1123153): Remove logging after the bug is fixed.
+    LOG(WARNING) << "Missing "
+                 << chromeos::system::kFirmwareWriteProtectCurrentKey
+                 << " statistics";
     return false;
   }
+  // TODO(crbug.com/1123153): Remove logging after the bug is fixed.
+  LOG(WARNING) << "Statistics "
+               << chromeos::system::kFirmwareWriteProtectCurrentKey << ": "
+               << firmware_write_protect;
 
   if (firmware_write_protect ==
       chromeos::system::kFirmwareWriteProtectCurrentValueOff) {

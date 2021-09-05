@@ -25,7 +25,7 @@ template("chrome_repack_percent") {
     forward_variables_from(invoker,
                            [
                              "copy_data_to_bundle",
-                             "repack_whitelist",
+                             "repack_allowlist",
                              "visibility",
                            ])
 
@@ -84,7 +84,7 @@ template("chrome_extra_paks") {
     forward_variables_from(invoker,
                            [
                              "copy_data_to_bundle",
-                             "repack_whitelist",
+                             "repack_allowlist",
                              "visibility",
                            ])
     output = "${invoker.output_dir}/resources.pak"
@@ -136,9 +136,8 @@ template("chrome_extra_paks") {
         "$root_gen_dir/chrome/gaia_auth_host_resources.pak",
         "$root_gen_dir/chrome/history_resources.pak",
         "$root_gen_dir/chrome/local_ntp_resources.pak",
-        "$root_gen_dir/chrome/nearby_internals_resources.pak",
-        "$root_gen_dir/chrome/nearby_share_dialog_resources.pak",
         "$root_gen_dir/chrome/new_tab_page_resources.pak",
+        "$root_gen_dir/chrome/read_later_resources.pak",
         "$root_gen_dir/chrome/settings_resources.pak",
         "$root_gen_dir/content/browser/devtools/devtools_resources.pak",
         "$root_gen_dir/headless/headless_lib_resources.pak",
@@ -152,9 +151,8 @@ template("chrome_extra_paks") {
         "//chrome/browser/resources:gaia_auth_host_resources",
         "//chrome/browser/resources:history_resources",
         "//chrome/browser/resources:local_ntp_resources",
-        "//chrome/browser/resources:nearby_internals_resources",
-        "//chrome/browser/resources:nearby_share_dialog_resources",
         "//chrome/browser/resources:new_tab_page_resources",
+        "//chrome/browser/resources:read_later_resources",
         "//chrome/browser/resources:settings_resources",
         "//content/browser/devtools:devtools_resources",
         "//headless:resources",
@@ -168,8 +166,13 @@ template("chrome_extra_paks") {
         "$root_gen_dir/chrome/cellular_setup_resources.pak",
         "$root_gen_dir/chrome/multidevice_internals_resources.pak",
         "$root_gen_dir/chrome/multidevice_setup_resources.pak",
+        "$root_gen_dir/chrome/nearby_internals_resources.pak",
+        "$root_gen_dir/chrome/nearby_share_dialog_resources.pak",
+        "$root_gen_dir/chrome/nearby_shared_resources.pak",
+        "$root_gen_dir/chrome/nearby_shared_resources_v3.pak",
         "$root_gen_dir/chrome/os_settings_resources.pak",
         "$root_gen_dir/chromeos/chromeos_camera_app_resources.pak",
+        "$root_gen_dir/chromeos/chromeos_diagnostics_app_resources.pak",
         "$root_gen_dir/chromeos/chromeos_help_app_bundle_resources.pak",
         "$root_gen_dir/chromeos/chromeos_help_app_resources.pak",
         "$root_gen_dir/chromeos/chromeos_media_app_bundle_resources.pak",
@@ -184,12 +187,17 @@ template("chrome_extra_paks") {
         "//ash/public/cpp/resources:ash_public_unscaled_resources",
         "//chrome/browser/resources:bluetooth_pairing_dialog_resources",
         "//chrome/browser/resources:multidevice_internals_resources",
+        "//chrome/browser/resources:nearby_internals_resources",
+        "//chrome/browser/resources:nearby_share_dialog_resources",
+        "//chrome/browser/resources:nearby_shared_resources",
+        "//chrome/browser/resources:nearby_shared_resources_v3",
         "//chrome/browser/resources:os_settings_resources",
         "//chrome/browser/resources/chromeos:cellular_setup_resources",
         "//chrome/browser/resources/chromeos:multidevice_setup_resources",
         "//chrome/browser/supervised_user:supervised_user_unscaled_resources",
         "//chromeos/resources",
         "//chromeos/resources:camera_app_resources",
+        "//chromeos/resources:diagnostics_app_resources",
         "//chromeos/resources:help_app_bundle_resources",
         "//chromeos/resources:help_app_resources",
         "//chromeos/resources:media_app_bundle_resources",
@@ -202,10 +210,12 @@ template("chrome_extra_paks") {
 
       if (!is_official_build) {
         sources += [
+          "$root_gen_dir/chromeos/chromeos_file_manager_resources.pak",
           "$root_gen_dir/chromeos/chromeos_sample_system_web_app_resources.pak",
           "$root_gen_dir/chromeos/chromeos_telemetry_extension_resources.pak",
         ]
         deps += [
+          "//chromeos/resources:file_manager_resources",
           "//chromeos/resources:sample_system_web_app_resources",
           "//chromeos/resources:telemetry_extension_resources",
         ]
@@ -265,12 +275,12 @@ template("chrome_extra_paks") {
 #   output_dir [required]: Directory to output .pak files. Locale .pak files
 #       will always be place in $output_dir/locales
 #   additional_extra_paks: List of extra .pak sources for resources.pak.
-#   locale_whitelist: if set, override repack_whitelist for locale .pak files.
+#   locale_allowlist: if set, override repack_allowlist for locale .pak files.
 #   copy_data_to_bundle:
 #   deps:
 #   output_dir:
 #   public_deps:
-#   repack_whitelist:
+#   repack_allowlist:
 #   visibility:
 #     Normal meanings.
 #
@@ -282,7 +292,7 @@ template("chrome_paks") {
                              "copy_data_to_bundle",
                              "deps",
                              "output_dir",
-                             "repack_whitelist",
+                             "repack_allowlist",
                              "visibility",
                            ])
   }
@@ -295,7 +305,7 @@ template("chrome_paks") {
                                "copy_data_to_bundle",
                                "deps",
                                "output_dir",
-                               "repack_whitelist",
+                               "repack_allowlist",
                                "visibility",
                              ])
     }
@@ -307,7 +317,7 @@ template("chrome_paks") {
                              "copy_data_to_bundle",
                              "deps",
                              "output_dir",
-                             "repack_whitelist",
+                             "repack_allowlist",
                              "visibility",
                            ])
     if (defined(invoker.additional_extra_paks)) {
@@ -322,10 +332,10 @@ template("chrome_paks") {
                              "deps",
                              "visibility",
                            ])
-    if (defined(invoker.locale_whitelist)) {
-      repack_whitelist = invoker.locale_whitelist
-    } else if (defined(invoker.repack_whitelist)) {
-      repack_whitelist = invoker.repack_whitelist
+    if (defined(invoker.locale_allowlist)) {
+      repack_allowlist = invoker.locale_allowlist
+    } else if (defined(invoker.repack_allowlist)) {
+      repack_allowlist = invoker.repack_allowlist
     }
 
     input_locales = locales

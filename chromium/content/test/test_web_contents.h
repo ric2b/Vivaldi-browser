@@ -16,6 +16,7 @@
 
 #include "base/optional.h"
 #include "base/unguessable_token.h"
+#include "content/browser/site_instance_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/test/web_contents_tester.h"
 #include "content/test/test_render_frame_host.h"
@@ -32,13 +33,8 @@ namespace gfx {
 class Size;
 }
 
-namespace net {
-class HttpResponseHeaders;
-}
-
 namespace content {
 
-class NavigationHandle;
 struct Referrer;
 class RenderViewHost;
 class TestRenderViewHost;
@@ -76,10 +72,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
       const GURL& url,
       ui::PageTransition transition = ui::PAGE_TRANSITION_LINK) override;
 
-  void NavigateAndFail(
-      const GURL& url,
-      int error_code,
-      scoped_refptr<net::HttpResponseHeaders> response_headers) override;
+  void NavigateAndFail(const GURL& url, int error_code) override;
   void TestSetIsLoading(bool value) override;
   void TestDidNavigate(RenderFrameHost* render_frame_host,
                        int nav_entry_id,
@@ -95,9 +88,6 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
                                          bool was_within_same_document,
                                          int item_sequence_number,
                                          int document_sequence_number);
-  void SetHttpResponseHeaders(
-      NavigationHandle* navigation_handle,
-      scoped_refptr<net::HttpResponseHeaders> response_headers) override;
   void SetOpener(WebContents* opener) override;
   const std::string& GetSaveFrameHeaders() override;
   const base::string16& GetSuggestedFileName() override;
@@ -185,14 +175,14 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
       bool is_new_browsing_instance,
       bool has_user_gesture,
       SessionStorageNamespace* session_storage_namespace) override;
-  void CreateNewWidget(int32_t render_process_id,
+  void CreateNewWidget(AgentSchedulingGroupHost& agent_scheduling_group,
                        int32_t route_id,
                        mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
                            blink_widget_host,
                        mojo::PendingAssociatedRemote<blink::mojom::Widget>
                            blink_widget) override;
   void CreateNewFullscreenWidget(
-      int32_t render_process_id,
+      AgentSchedulingGroupHost& agent_scheduling_group,
       int32_t route_id,
       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
           blink_widget_host,

@@ -142,7 +142,7 @@ void ServiceWorkerStorageControlImpl::FindRegistrationForScope(
 
 void ServiceWorkerStorageControlImpl::FindRegistrationForId(
     int64_t registration_id,
-    const base::Optional<GURL>& origin,
+    const base::Optional<url::Origin>& origin,
     FindRegistrationForClientUrlCallback callback) {
   if (origin.has_value()) {
     storage_->FindRegistrationForId(
@@ -254,8 +254,7 @@ void ServiceWorkerStorageControlImpl::CreateResourceReader(
     int64_t resource_id,
     mojo::PendingReceiver<storage::mojom::ServiceWorkerResourceReader> reader) {
   DCHECK_NE(resource_id, blink::mojom::kInvalidServiceWorkerResourceId);
-  mojo::MakeSelfOwnedReceiver(std::make_unique<ServiceWorkerResourceReaderImpl>(
-                                  storage_->CreateResponseReader(resource_id)),
+  mojo::MakeSelfOwnedReceiver(storage_->CreateResourceReader(resource_id),
                               std::move(reader));
 }
 
@@ -302,7 +301,7 @@ void ServiceWorkerStorageControlImpl::GetUserData(
 
 void ServiceWorkerStorageControlImpl::StoreUserData(
     int64_t registration_id,
-    const GURL& origin,
+    const url::Origin& origin,
     std::vector<storage::mojom::ServiceWorkerUserDataPtr> user_data,
     StoreUserDataCallback callback) {
   storage_->StoreUserData(registration_id, origin, std::move(user_data),
@@ -432,8 +431,7 @@ void ServiceWorkerStorageControlImpl::DidStoreRegistration(
     int64_t deleted_version_id,
     const std::vector<int64_t>& newly_purgeable_resources) {
   MaybePurgeResources(deleted_version_id, newly_purgeable_resources);
-  std::move(callback).Run(status, deleted_version_id,
-                          newly_purgeable_resources);
+  std::move(callback).Run(status);
 }
 
 void ServiceWorkerStorageControlImpl::DidDeleteRegistration(
@@ -443,8 +441,7 @@ void ServiceWorkerStorageControlImpl::DidDeleteRegistration(
     int64_t deleted_version_id,
     const std::vector<int64_t>& newly_purgeable_resources) {
   MaybePurgeResources(deleted_version_id, newly_purgeable_resources);
-  std::move(callback).Run(status, origin_state, deleted_version_id,
-                          newly_purgeable_resources);
+  std::move(callback).Run(status, origin_state);
 }
 
 void ServiceWorkerStorageControlImpl::DidGetNewVersionId(

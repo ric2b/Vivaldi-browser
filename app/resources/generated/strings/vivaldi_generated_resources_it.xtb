@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Visualizza sorgente frame</translation>
 <translation id="1165039591588034296">Errore</translation>
 <translation id="1175364870820465910">&amp;Stampa...</translation>
-<translation id="1177863135347784049">Personalizzati</translation>
 <translation id="1181037720776840403">Rimuovi</translation>
 <translation id="1187722533808055681">Riattivazioni</translation>
 <translation id="119944043368869598">Cancella tutto</translation>
 <translation id="1221825588892235038">Solo selezione</translation>
 <translation id="1244303850296295656">Errore delle estensioni</translation>
+<translation id="125220115284141797">Predefinito</translation>
 <translation id="1274977772557788323">Impostazioni di archiviazione Adobe Flash Player</translation>
 <translation id="1297175357211070620">Destinazione</translation>
 <translation id="1303101771013849280">File HTML Segnalibri</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Nuova finestra</translation>
 <translation id="1725149567830788547">Mostra &amp;controlli</translation>
 <translation id="1729533290416704613">Controlla anche la pagina visualizzata quando esegui ricerche dalla Omnibox.</translation>
+<translation id="174123615272205933">Personalizzati</translation>
 <translation id="1744108098763830590">Pagina in secondo piano</translation>
 <translation id="176587472219019965">&amp;Nuova finestra</translation>
 <translation id="1769104665586091481">Apri Link in una Nuova &amp;Finestra</translation>
+<translation id="1779468444204342338">Minimi</translation>
 <translation id="1815083418640426271">Incolla come Solo Testo</translation>
 <translation id="1828901632669367785">Stampa utilizzando la finestra di dialogo di sistema...</translation>
 <translation id="1850508293116537636">Ruota in senso &amp;orario</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Chiedi prima di inviare (opzione consigliata)</translation>
 <translation id="241082044617551207">Plug-in sconosciuto</translation>
 <translation id="2423578206845792524">Sa&amp;lva immagine come...</translation>
-<translation id="2436707352762155834">Minimi</translation>
 <translation id="2439110203301358333">Un altro programma sul computer ha aggiunto un'estensione che potrebbe modificare il funzionamento di Vivaldi.</translation>
 <translation id="2445081178310039857">La directory principale dell'estensione è obbligatoria.</translation>
 <translation id="2470702053775288986">Estensioni non supportate disattivate</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Prerenderizza: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Microfono</translation>
 <translation id="3241680850019875542">Seleziona la directory principale dell'estensione di cui creare il pacchetto. Per aggiornare un'estensione, seleziona anche il file delle chiave privata da riutilizzare.</translation>
+<translation id="3266179261140759675">Impedisci ai siti chiusi di inviare e ricevere dati</translation>
 <translation id="3280237271814976245">Salv&amp;a come...</translation>
 <translation id="3285322247471302225">Nuova &amp;Scheda</translation>
 <translation id="3288047731229977326">Le estensioni in esecuzione in modalità sviluppatore potrebbero danneggiare il computer. Se non sei uno sviluppatore, dovresti disattivare queste estensioni per la tua sicurezza.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Consenti</translation>
 <translation id="5057110919553308744">Quando fai clic sull'estensione</translation>
 <translation id="5063480226653192405">Utilizzo</translation>
-<translation id="5068918910148307423">Non consentire ai siti chiusi di recente di terminare l'invio e la ricezione di dati</translation>
 <translation id="5116628073786783676">Sal&amp;va Audio Come...</translation>
 <translation id="5143374789336132547">L'estensione "<ph name="EXTENSION_NAME" />" ha cambiato la pagina mostrata quando fai clic sul pulsante Pagina iniziale.</translation>
 <translation id="5154108062446123722">Impostazioni avanzate per <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">L'estensione "<ph name="EXTENSION_NAME" />" ha cambiato la pagina mostrata quando esegui ricerche dalla omnibox.</translation>
 <translation id="5360150013186312835">Mostra nella barra degli strumenti</translation>
 <translation id="5362741141255528695">Seleziona il file della chiave privata.</translation>
+<translation id="536638840841140142">Nessuno</translation>
 <translation id="5370819323174483825">&amp;Ricarica</translation>
 <translation id="5398572795982417028">Riferimento pagina oltre i limiti. Il limite è <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Continua il trasferimento</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Ricevitore: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installata dall'amministratore</translation>
 <translation id="7685049629764448582">Memoria JavaScript</translation>
-<translation id="7701040980221191251">Nessuno</translation>
 <translation id="7701869757853594372">Risorse UTENTE</translation>
 <translation id="7704305437604973648">Attività</translation>
 <translation id="7710568461918838723">&amp;Trasmissione...</translation>

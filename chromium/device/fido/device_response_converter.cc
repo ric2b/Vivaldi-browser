@@ -40,13 +40,14 @@ ProtocolVersion ConvertStringToProtocolVersion(base::StringPiece version) {
   return ProtocolVersion::kUnknown;
 }
 
-Ctap2Version ConvertStringToCtap2Version(base::StringPiece version) {
+base::Optional<Ctap2Version> ConvertStringToCtap2Version(
+    base::StringPiece version) {
   if (version == kCtap2Version)
     return Ctap2Version::kCtap2_0;
   if (version == kCtap2_1Version)
     return Ctap2Version::kCtap2_1;
 
-  return Ctap2Version::kUnknown;
+  return base::nullopt;
 }
 
 // Converts a CBOR unsigned integer value to a uint32_t. The conversion is
@@ -67,7 +68,7 @@ CtapDeviceResponseCode GetResponseCode(base::span<const uint8_t> buffer) {
     return CtapDeviceResponseCode::kCtap2ErrInvalidCBOR;
 
   auto code = static_cast<CtapDeviceResponseCode>(buffer[0]);
-  return base::Contains(GetCtapResponseCodeList(), code)
+  return base::Contains(kCtapResponseCodeList, code)
              ? code
              : CtapDeviceResponseCode::kCtap2ErrInvalidCBOR;
 }
@@ -118,6 +119,16 @@ ReadCTAPMakeCredentialResponse(FidoTransportProtocol transport_used,
     if (it != decoded_map.end() && it->second.is_bytestring()) {
       response.set_android_client_data_ext(it->second.GetBytestring());
     }
+  }
+
+  it = decoded_map.find(CBOR(5));
+  if (it != decoded_map.end()) {
+    if (!it->second.is_bytestring() ||
+        it->second.GetBytestring().size() != kLargeBlobKeyLength) {
+      return base::nullopt;
+    }
+    response.set_large_blob_key(
+        base::make_span<kLargeBlobKeyLength>(it->second.GetBytestring()));
   }
 
   return response;
@@ -179,6 +190,16 @@ base::Optional<AuthenticatorGetAssertionResponse> ReadCTAPGetAssertionResponse(
     }
   }
 
+  it = response_map.find(CBOR(0x0B));
+  if (it != response_map.end()) {
+    if (!it->second.is_bytestring() ||
+        it->second.GetBytestring().size() != kLargeBlobKeyLength) {
+      return base::nullopt;
+    }
+    response.set_large_blob_key(
+        base::make_span<kLargeBlobKeyLength>(it->second.GetBytestring()));
+  }
+
   return response;
 }
 
@@ -224,21 +245,28 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
       return base::nullopt;
     }
 
-    auto protocol = ConvertStringToProtocolVersion(version_string);
+    ProtocolVersion protocol = ConvertStringToProtocolVersion(version_string);
     if (protocol == ProtocolVersion::kUnknown) {
       FIDO_LOG(DEBUG) << "Unexpected protocol version received.";
       continue;
     }
 
     if (protocol == ProtocolVersion::kCtap2) {
-      ctap2_versions.insert(ConvertStringToCtap2Version(version_string));
+      base::Optional<Ctap2Version> ctap2_version =
+          ConvertStringToCtap2Version(version_string);
+      if (ctap2_version) {
+        ctap2_versions.insert(*ctap2_version);
+      }
     }
 
     protocol_versions.insert(protocol);
   }
 
-  if (protocol_versions.empty())
+  if (protocol_versions.empty() ||
+      (base::Contains(protocol_versions, ProtocolVersion::kCtap2) &&
+       ctap2_versions.empty())) {
     return base::nullopt;
+  }
 
   it = response_map.find(CBOR(3));
   if (it == response_map.end() || !it->second.is_bytestring() ||
@@ -402,6 +430,14 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
         return base::nullopt;
       }
       options.enterprise_attestation = option_map_it->second.GetBool();
+    }
+
+    option_map_it = option_map.find(CBOR(kLargeBlobsKey));
+    if (option_map_it != option_map.end()) {
+      if (!option_map_it->second.is_bool() || !options.supports_resident_key) {
+        return base::nullopt;
+      }
+      options.supports_large_blobs = option_map_it->second.GetBool();
     }
 
     response.options = std::move(options);

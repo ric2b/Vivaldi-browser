@@ -30,6 +30,7 @@
 <translation id="1208421848177517699">Transliteration (namaste → નમસ્તે)</translation>
 <translation id="1243314992276662751">I-upload</translation>
 <translation id="1249250836236328755">Genre</translation>
+<translation id="1276362640455948667">Portuguese na may US International keyboard</translation>
 <translation id="1278813325885878377">Hungarian na QWERTY keyboard</translation>
 <translation id="1293556467332435079">Mga File</translation>
 <translation id="1297922636971898492">Hindi available sa ngayon ang Google Drive. Awtomatikong magre-restart ang pag-a-upload sa sandaling bumalik na ang Google Drive.</translation>
@@ -63,6 +64,7 @@
 <translation id="1572585716423026576">Itakda bilang wallpaper</translation>
 <translation id="158809615184981282">Faroese na keyboard</translation>
 <translation id="1589128298353575783"><ph name="NUMBER_OF_PB" /> PB</translation>
+<translation id="1620510694547887537">Camera</translation>
 <translation id="1646136617204068573">Hungarian na keyboard</translation>
 <translation id="164729547906544836">Tamil keyboard (itrans)</translation>
 <translation id="164969095109328410">Chrome device</translation>
@@ -70,6 +72,7 @@
 <translation id="1673103856845176271">Hindi ma-access ang file sa mga kadahilanang pang-seguridad.</translation>
 <translation id="169515659049020177">Shift</translation>
 <translation id="1722487484194605434">Zini-zip ang <ph name="NUMBER_OF_ITEMS" /> (na) item...</translation>
+<translation id="1731889557567069540"><ph name="NUMBER_OF_ITEMS" /> (na) item ang nakopya.</translation>
 <translation id="174173592514158117">Ipakita ang lahat ng folder ng Play</translation>
 <translation id="174937106936716857">Kabuuang bilang ng file</translation>
 <translation id="1775381402323441512">Impormasyon ng video</translation>
@@ -114,7 +117,9 @@
 <translation id="2208158072373999562">Zip archive</translation>
 <translation id="2225536596944493418">Sigurado ka bang gusto mong i-delete ang <ph name="NUMBER_OF_ITEMS" /> (na) item?</translation>
 <translation id="2230062665678605299">Hindi malikha ang folder na "<ph name="FOLDER_NAME" />". <ph name="ERROR_MESSAGE" /></translation>
+<translation id="2275059641601412272">Nailipat.</translation>
 <translation id="2278988676849463018">Kannada keyboard (Phonetic)</translation>
+<translation id="2287742181953707290">Portuguese na may US International PC keyboard</translation>
 <translation id="2288278176040912387">Record player</translation>
 <translation id="2291538123825441971">Binubuksan ang <ph name="NUMBER_OF_FILES" /> (na) file.</translation>
 <translation id="2303301624314357662">Binubuksan ang file na <ph name="FILE_NAME" />.</translation>
@@ -185,7 +190,6 @@
 <translation id="3064388234319122767">Transliteration (zdravo → здраво)</translation>
 <translation id="3067790092342515856">Mga Windows file</translation>
 <translation id="3078461028045006476">Ibahagi sa <ph name="EXTENSION_NAME" /></translation>
-<translation id="3088034400796962477">Transliteration (salam ← سلام)</translation>
 <translation id="3116361045094675131">UK keyboard</translation>
 <translation id="3126026824346185272">Ctrl</translation>
 <translation id="3144126448740580210">TAPOS NA</translation>
@@ -219,6 +223,7 @@
 <translation id="3473378059788601120">Kinopya sa <ph name="FOLDER_NAME" />.</translation>
 <translation id="3475447146579922140">Spreadsheet ng Google</translation>
 <translation id="3495304270784461826"><ph name="COUNT" /> (na) error.</translation>
+<translation id="349603508045926994">Persian Transliteration</translation>
 <translation id="3519867315646775981">Transliteration (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Portuguese</translation>
 <translation id="3524311639100184459">Mag-ingat: Ang mga file na ito ay pansamantala lang at puwedeng awtomatikong ma-delete para magbakante ng espasyo sa disk.  <ph name="BEGIN_LINK" />Matuto Pa<ph name="END_LINK" /></translation>
@@ -235,6 +240,7 @@
 <translation id="3620292326130836921">Naka-back up na ang lahat!</translation>
 <translation id="3626281679859535460">Tingkad</translation>
 <translation id="3644896802912593514">Lapad</translation>
+<translation id="3645233063072417428"><ph name="NUMBER_OF_ITEMS" /> (na) item ang inilipat.</translation>
 <translation id="3645531960514756307">I-unpin ang folder</translation>
 <translation id="3678559383040232393">Maltese keyboard</translation>
 <translation id="3685122418104378273">Naka-disable ang Google Drive bilang default, kapag gumagamit ng mobile data.</translation>
@@ -276,6 +282,7 @@
 <translation id="4072248638558688893">Tamil keyboard (Phonetic)</translation>
 <translation id="4124935795427217608">Unicorn</translation>
 <translation id="4158739975813877944">Buksan ang play list</translation>
+<translation id="4159731583141908892">Inilipat ang <ph name="FILE_NAME" />.</translation>
 <translation id="418179967336296930">Russian Phonetic (YaZHert) keyboard</translation>
 <translation id="4193154014135846272">Dokumento ng Google</translation>
 <translation id="4195249722193633765">I-install ang app gamit ang Linux (Beta)</translation>
@@ -289,6 +296,7 @@
 <translation id="4298972503445160211">Danish na keyboard</translation>
 <translation id="4299729908419173967">Brazilian</translation>
 <translation id="4309915981827077375">Pangkalahatang impormasyon</translation>
+<translation id="4315949787858895817">Dutch (Belgium)</translation>
 <translation id="4326192123064055915">Kape</translation>
 <translation id="4336032328163998280">Nabigo ang pagkopya. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">Melon</translation>
@@ -300,7 +308,6 @@
 <translation id="4477219268485577442">Bulgarian phonetic</translation>
 <translation id="4479812471636796472">US Dvorak na keyboard</translation>
 <translation id="4481711095103932593">Nakabahagi ang folder na ito sa Windows</translation>
-<translation id="4487088045714738411">Belgian na keyboard</translation>
 <translation id="4522570452068850558">Mga Detalye</translation>
 <translation id="4542387084127299777">Hindi mabuksan ang "<ph name="PATH" />"</translation>
 <translation id="4552678318981539154">Bumili ng higit pang storage</translation>
@@ -311,6 +318,7 @@
 <translation id="4582497162516204941">I-install gamit ang Linux (Beta)</translation>
 <translation id="4594543368593301662">Ipinapakita ang mga resulta para sa <ph name="SEARCH_TERM" />.</translation>
 <translation id="4603392156942865207">Kinokopya ang <ph name="FILE_NAME" /> sa <ph name="FOLDER_NAME" /></translation>
+<translation id="4627439232948440198">Sanskrit</translation>
 <translation id="4631887759990505102">Artist</translation>
 <translation id="4656293982926141856">Sa computer na ito</translation>
 <translation id="4669606053856530811">Mawawalan ng access ang mga miyembro ng '<ph name="SOURCE_NAME" />' maliban na lang kung ibinahagi sa kanila ang mga item na ito.</translation>
@@ -336,6 +344,7 @@
 <translation id="4804827417948292437">Abukado</translation>
 <translation id="4823651846660089135">Read-only ang device</translation>
 <translation id="4839847978919684242"><ph name="SELCTED_FILES_COUNT" /> (na) item ang pinili</translation>
+<translation id="4849981557599196363">German (Belgium)</translation>
 <translation id="4850886885716139402">View</translation>
 <translation id="485316830061041779">German</translation>
 <translation id="4867079195717347957">I-click para pagbukud-bukurin ang column sa pababang pagkakasunud-sunod.</translation>
@@ -361,6 +370,7 @@
 <translation id="5010406651457630570">Mga Computer</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">Mas matagal kaysa sa inaasahan ang isang pagpapatakbo. Gusto mo ba itong i-abort?</translation>
+<translation id="5026887030745057099">Hindi</translation>
 <translation id="5036159836254554629">Pamahalaan ang pagbabahagi sa Parallels Desktop</translation>
 <translation id="5038625366300922036">Tingnan ang higit pa...</translation>
 <translation id="5061708541166515394">Contrast</translation>
@@ -371,6 +381,7 @@
 <translation id="5098629044894065541">Hebrew</translation>
 <translation id="5123433949759960244">Basketball</translation>
 <translation id="5129662217315786329">Polish</translation>
+<translation id="5132435854979302863">Filipino</translation>
 <translation id="5144820558584035333">Hangul 3 Set (390)</translation>
 <translation id="5145331109270917438">Petsa ng pagbabago</translation>
 <translation id="515594325917491223">Chess</translation>
@@ -395,7 +406,9 @@
     Anuman ang mangyari sa iyong device, ligtas na naka-store ang iyong mga file sa Google Drive.<ph name="MARKUP_6" />
     <ph name="MARKUP_7" />Magbahagi, gumawa at mag-collaborate<ph name="MARKUP_8" />
     sa mga file kasama ng iba pa, lahat sa iisang lugar.<ph name="MARKUP_9" /></translation>
+<translation id="5274350207900771082">Nakopya.</translation>
 <translation id="5275973617553375938">Mga nabawing file mula sa Google Drive</translation>
+<translation id="5283140566205748520">French (Belgium)</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
 <translation id="5317780077021120954">I-save</translation>
 <translation id="5318819489018851358">Ibahagi sa Linux</translation>
@@ -412,16 +425,17 @@
 <translation id="5418923334382419584">Myanmar keyboard</translation>
 <translation id="5428105026674456456">Spanish</translation>
 <translation id="5438282218546237410">Walang resulta para sa <ph name="SEARCH_TERM" />.</translation>
+<translation id="5449551289610225147">Di-wastong password</translation>
 <translation id="5464696796438641524">Polish na keyboard</translation>
 <translation id="5465122519792752163">Nepali keyboard (InScript)</translation>
 <translation id="5469868506864199649">Italyano</translation>
+<translation id="5484429245813572665">Indonesian</translation>
 <translation id="5494920125229734069">Piliin ang lahat</translation>
 <translation id="5500122897333236901">Icelandic</translation>
 <translation id="5508696409934741614">Mga Dot</translation>
 <translation id="5522908512596376669">Naging list view ang listahan ng file.</translation>
 <translation id="5524517123096967210">Hindi mabasa ang file.</translation>
 <translation id="5533102081734025921"><ph name="IMAGE_TYPE" /> na larawan</translation>
-<translation id="5533555070048896610">Transliteration (namaste → नमस्ते)</translation>
 <translation id="5534520101572674276">Kinakalkula ang laki</translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5605830556594064952">US Dvorak</translation>
@@ -593,6 +607,7 @@
 <translation id="751507702149411736">Belarusian</translation>
 <translation id="7544853251252956727">I-shuffle</translation>
 <translation id="7547811415869834682">Dutch</translation>
+<translation id="7551643184018910560">I-pin sa shelf</translation>
 <translation id="7576032389798113292">6x4</translation>
 <translation id="7589661784326793847">Maghintay lamang ng isang segundo</translation>
 <translation id="7603724359189955920">Mga Grid</translation>
@@ -601,8 +616,10 @@
 <translation id="7649070708921625228">Tulong</translation>
 <translation id="7654209398114106148">Inililipat ang <ph name="NUMBER_OF_ITEMS" /> (na) item...</translation>
 <translation id="7658239707568436148">Kanselahin</translation>
+<translation id="7693909743393669729">Kapag nag-format ng drive, mabubura ang lahat ng data na naka-store dito at maaalis ang lahat ng kasalukuyang partition, kasama ang mga partition na posibleng hindi nakikita. Hindi maa-undo ang pagkilos na ito.</translation>
 <translation id="7695430100978772476">Hindi ma-format ang <ph name="DRIVE_NAME" /></translation>
 <translation id="770015031906360009">Greko</translation>
+<translation id="7705251383879779343">Nakopya ang <ph name="FILE_NAME" />.</translation>
 <translation id="7706319470528945664">Portuguese na keyboard</translation>
 <translation id="7711920809702896782">Impormasyon ng larawan</translation>
 <translation id="7724603315864178912">I-cut</translation>
@@ -632,6 +649,7 @@
 <translation id="78946041517601018">Mga shared drive</translation>
 <translation id="7896906914454843592">US Extended keyboard</translation>
 <translation id="7898607018410277265">Gujarati keyboard (New Phonetic)</translation>
+<translation id="7908793776359722643">Kapag nag-format ng partition, mabubura ang lahat ng data na naka-store dito. Hindi maa-undo ang pagkilos na ito.</translation>
 <translation id="7917972308273378936">Lithuanian na keyboard</translation>
 <translation id="7925686952655276919">Huwag gumamit ng data sa mobile para sa pag-sync</translation>
 <translation id="7928710562641958568">I-eject ang device</translation>
@@ -676,7 +694,9 @@
 <translation id="8299269255470343364">Japanese</translation>
 <translation id="8312871300878166382">I-paste sa loob ng folder</translation>
 <translation id="8329978297633540474">Plain text</translation>
+<translation id="8335587457941836791">I-unpin mula sa shelf</translation>
 <translation id="8336153091935557858">Kahapon <ph name="YESTERDAY_DAYTIME" /></translation>
+<translation id="8336524887811696057">Nepali Transliteration</translation>
 <translation id="8336579025507394412">Icelandic keyboard</translation>
 <translation id="8342318071240498787">Umiiral na ang isang file o direktoryong may parehong pangalan.</translation>
 <translation id="8382450452152102026">Sa <ph name="FOLDER_NAME" /></translation>
@@ -702,12 +722,14 @@
 <translation id="8600173386174225982">Naging thumbnail view ang listahan ng file.</translation>
 <translation id="8601932370724196034">Crostini image file</translation>
 <translation id="8669949407341943408">Inililipat...</translation>
+<translation id="8694836330346852143">Urdu</translation>
 <translation id="8698464937041809063">Drawing ng Google</translation>
 <translation id="8714406895390098252">Bisikleta</translation>
 <translation id="8719721339511222681">Pinili ang <ph name="ENTRY_NAME" />.</translation>
 <translation id="8722421161699219904">US International keyboard</translation>
 <translation id="872537912056138402">Croatian</translation>
 <translation id="874420130893181774">Tradisyonal na Pinyin na paraan ng pag-input</translation>
+<translation id="8770002329960263418">Dutch (Netherlands) na may US International PC keyboard</translation>
 <translation id="8775404590947523323">Awtomatikong na-save ang iyong mga pag-edit.<ph name="BREAKS" />Upang maitago ang kopya ng orihinal na larawan, tanggalan ng check ang "Patungan ang orihinal"</translation>
 <translation id="8803496343472038847">Russian Phonetic keyboard</translation>
 <translation id="8808686172382650546">Pusa</translation>
@@ -718,6 +740,7 @@
 <translation id="8900820606136623064">Hungarian</translation>
 <translation id="8901822611024316615">Czech na QWERTY keyboard</translation>
 <translation id="8919081441417203123">Danish</translation>
+<translation id="8941776146379310519">Malay</translation>
 <translation id="8960999352790021682">Bengali keyboard (Phonetic)</translation>
 <translation id="8965697826696209160">Walang sapat na espasyo.</translation>
 <translation id="9017798300203431059">Russian phonetic</translation>

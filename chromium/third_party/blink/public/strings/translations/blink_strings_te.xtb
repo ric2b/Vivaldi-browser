@@ -1,7 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="te">
-<translation id="1018939186200882850">మెను అంశం</translation>
+<translation id="1018939186200882850">మెనూ అంశం</translation>
 <translation id="10623998915015855">టోగుల్ బటన్</translation>
 <translation id="1088086359088493902">సెకన్లు</translation>
 <translation id="1142001580032786438">వారం పికర్‌ను చూపుతుంది</translation>
@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">ఎండ్‌నోట్</translation>
 <translation id="1281252709823657822">డైలాగ్</translation>
 <translation id="1306460908038601864">ఆఫ్ చేయబడ్డాయి</translation>
+<translation id="1311894908970423688">విలువ ఖచ్చితంగా <ph name="VALUE_DATE_OR_TIME" /> అయ్యి ఉండాలి.</translation>
 <translation id="1335095011850992622">సహకారులు</translation>
 <translation id="1342835525016946179">కథనం</translation>
 <translation id="1359897965706325498">బ్యానర్</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> అంశాలు</translation>
 <translation id="1480676835519562650">బహుళంగా ఎంచుకోదగినది, <ph name="COUNT" />లో <ph name="SELECTED" /> ఎంచుకోబడ్డాయి.</translation>
 <translation id="1589122976691792535">ప్రాంతం</translation>
 <translation id="1591562245178063882">ఈ నెల</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033"><ph name="WEEKNUMBER" />వ వారం, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">ట్రాక్ <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">చెక్‌బాక్స్</translation>
+<translation id="2307576640803031502">లిస్ట్‌లో, <ph name="COUNT" />లో <ph name="INDEX" />వ ఐటమ్</translation>
 <translation id="2311842470354187719">పేజీ విభజన</translation>
 <translation id="2335594187091864976">తేదీ మరియు సమయం ఎంపిక</translation>
 <translation id="2393030564806080191">హెక్సాడెసిమల్ రంగు విలువ</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">మరిన్ని ఎంపికలు</translation>
 <translation id="576709008726043716">పరిచయం</translation>
 <translation id="57838592816432529">మ్యూట్ చేయి</translation>
+<translation id="5860033963881614850">ఆఫ్ అయ్యింది</translation>
 <translation id="588258955323874662">పూర్తితెర</translation>
 <translation id="5888666972993069672">ఇప్పుడు <ph name="DEVICE_FRIENDLY_NAME" />కి ప్రసారం చేస్తోంది</translation>
 <translation id="591047860372322273">శోధన పెట్టె</translation>
+<translation id="5916664084637901428">ఆన్ చేయి</translation>
 <translation id="5939518447894949180">రీసెట్ చేయి</translation>
 <translation id="5966707198760109579">వారం</translation>
 <translation id="5987525920412732405">స్పిన్ బటన్</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">క్లియర్ చేయి</translation>
 <translation id="668171684555832681">ఇతర...</translation>
 <translation id="6692633176391053278">స్టెప్పర్</translation>
+<translation id="6709093583001123835">విలువ ఖచ్చితంగా <ph name="VALUE" /> అయ్యి ఉండాలి.</translation>
 <translation id="6709570249143506788">ప్లేబ్యాక్ నాణ్యత బాగాలేదు</translation>
 <translation id="6755330956360078551">సాధన చిట్కా</translation>
 <translation id="6790428901817661496">ప్లే చేయి</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, <ph name="WEEK_START_DATE" /> నుండి ప్రారంభమవుతుంది</translation>
 <translation id="916607977885256133">చిత్రంలో చిత్రం</translation>
 <translation id="9168329111483466115">ఫుట్‌నోట్</translation>
+<translation id="945780513535800434">పాక్షికంగా టిక్ గుర్తు పెట్టబడింది</translation>
 <translation id="954003015749068518">చిత్రంలో చిత్రం మోడ్‌లోకి ప్రవేశిస్తుంది</translation>
-<translation id="966787709310836684">మెను</translation>
+<translation id="966787709310836684">మెనూ</translation>
 </translationbundle>

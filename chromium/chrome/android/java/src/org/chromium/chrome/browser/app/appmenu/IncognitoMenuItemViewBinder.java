@@ -11,8 +11,11 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
+import org.chromium.chrome.browser.ui.appmenu.AppMenuClickHandler;
 import org.chromium.chrome.browser.ui.appmenu.CustomViewBinder;
 import org.chromium.components.browser_ui.widget.text.TextViewWithCompoundDrawables;
 import org.chromium.ui.widget.ChromeImageView;
@@ -35,8 +38,9 @@ class IncognitoMenuItemViewBinder implements CustomViewBinder {
     }
 
     @Override
-    public View getView(
-            MenuItem item, View convertView, ViewGroup parent, LayoutInflater inflater) {
+    public View getView(MenuItem item, @Nullable View convertView, ViewGroup parent,
+            LayoutInflater inflater, AppMenuClickHandler appMenuClickHandler,
+            @Nullable Integer highlightedItemId) {
         assert item.getItemId() == R.id.new_incognito_tab_menu_id;
 
         IncognitoMenuItemViewHolder holder;
@@ -52,10 +56,14 @@ class IncognitoMenuItemViewBinder implements CustomViewBinder {
 
         holder.title.setCompoundDrawablesRelative(item.getIcon(), null, null, null);
         holder.title.setEnabled(item.isEnabled());
-        holder.title.setFocusable(item.isEnabled());
+        // Setting |holder.title| to non-focusable will allow TalkBack highlighting the whole view
+        // of the menu item, not just title text.
+        holder.title.setFocusable(false);
+        convertView.setFocusable(item.isEnabled());
         if (IncognitoUtils.isIncognitoModeManaged()) {
             holder.image.setVisibility(View.VISIBLE);
         }
+        convertView.setOnClickListener(v -> appMenuClickHandler.onItemClick(item));
 
         return convertView;
     }

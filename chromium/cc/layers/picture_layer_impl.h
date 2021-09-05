@@ -54,7 +54,7 @@ class CC_EXPORT PictureLayerImpl
   const char* LayerTypeAsString() const override;
   std::unique_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl) override;
   void PushPropertiesTo(LayerImpl* layer) override;
-  void AppendQuads(viz::RenderPass* render_pass,
+  void AppendQuads(viz::CompositorRenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override;
   void NotifyTileStateChanged(const Tile* tile) override;
   gfx::Rect GetDamageRect() const override;
@@ -175,7 +175,7 @@ class CC_EXPORT PictureLayerImpl
       const PictureLayerTiling& high_res) const;
   void UpdateTilingsForRasterScaleAndTranslation(bool adjusted_raster_scale);
   void AddLowResolutionTilingIfNeeded();
-  bool ShouldAdjustRasterScale(float old_ideal_contents_scale) const;
+  bool ShouldAdjustRasterScale() const;
   void RecalculateRasterScales();
   // Returns false if raster translation is not applicable.
   bool CalculateRasterTranslation(gfx::Vector2dF& raster_translation) const;
@@ -199,7 +199,6 @@ class CC_EXPORT PictureLayerImpl
   // factors, and bumps up the reduced scale if those layers end up increasing
   // their contents scale.
   float CalculateDirectlyCompositedImageRasterScale() const;
-  void LogDirectlyCompositedImageRasterScaleUMAs() const;
 
   void SanityCheckTilingState() const;
 
@@ -223,8 +222,12 @@ class CC_EXPORT PictureLayerImpl
 
   LCDTextDisallowedReason ComputeLCDTextDisallowedReason(
       bool raster_translation_aligns_pixels) const;
-  // Returns true if the LCD state changed.
-  bool UpdateCanUseLCDText(bool raster_translation_aligns_pixels);
+  void UpdateCanUseLCDText(bool raster_translation_aligns_pixels);
+
+  // TODO(crbug.com/1114504): For now this checks the immediate transform node
+  // only. The callers may actually want to know if this layer or ancestor has
+  // will change transform.
+  bool HasWillChangeTransformHint() const;
 
   PictureLayerImpl* twin_layer_;
 

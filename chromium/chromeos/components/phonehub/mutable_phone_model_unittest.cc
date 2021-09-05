@@ -4,6 +4,7 @@
 
 #include "chromeos/components/phonehub/mutable_phone_model.h"
 
+#include "base/strings/utf_string_conversions.h"
 #include "chromeos/components/phonehub/phone_model_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -48,6 +49,31 @@ class MutablePhoneModelTest : public testing::Test {
   FakeObserver fake_observer_;
 };
 
+TEST_F(MutablePhoneModelTest, PhoneName) {
+  const base::string16 fake_phone_name = base::UTF8ToUTF16("Phone name");
+
+  // Set the phone name to be null (the default value); observers should
+  // not be notified, since this is not a change.
+  model_.SetPhoneName(/*phone_name=*/base::nullopt);
+  EXPECT_FALSE(model_.phone_name().has_value());
+  EXPECT_EQ(0u, GetNumObserverCalls());
+
+  // Set the phone name; observers should be notified.
+  model_.SetPhoneName(fake_phone_name);
+  EXPECT_EQ(fake_phone_name, model_.phone_name());
+  EXPECT_EQ(1u, GetNumObserverCalls());
+
+  // Set the same phone name; observers should not be notified.
+  model_.SetPhoneName(fake_phone_name);
+  EXPECT_EQ(fake_phone_name, model_.phone_name());
+  EXPECT_EQ(1u, GetNumObserverCalls());
+
+  // Set the phone name back to null; observers should be notified.
+  model_.SetPhoneName(/*phone_name=*/base::nullopt);
+  EXPECT_FALSE(model_.phone_name().has_value());
+  EXPECT_EQ(2u, GetNumObserverCalls());
+}
+
 TEST_F(MutablePhoneModelTest, PhoneStatusModel) {
   // Set the PhoneStatusModel to be null (the default value); observers should
   // not be notified, since this is not a change.
@@ -68,6 +94,29 @@ TEST_F(MutablePhoneModelTest, PhoneStatusModel) {
   // Set the PhoneStatusModel back to null; observers should be notified.
   model_.SetPhoneStatusModel(/*phone_status_model=*/base::nullopt);
   EXPECT_FALSE(model_.phone_status_model().has_value());
+  EXPECT_EQ(2u, GetNumObserverCalls());
+}
+
+TEST_F(MutablePhoneModelTest, BrowserTabsModel) {
+  // Set the BrowserTabsModel to be null (the default value); observers should
+  // not be notified, since this is not a change.
+  model_.SetBrowserTabsModel(/*browser_tabs_model=*/base::nullopt);
+  EXPECT_FALSE(model_.browser_tabs_model().has_value());
+  EXPECT_EQ(0u, GetNumObserverCalls());
+
+  // Set the BrowserTabsModel; observers should be notified.
+  model_.SetBrowserTabsModel(CreateFakeBrowserTabsModel());
+  EXPECT_EQ(CreateFakeBrowserTabsModel(), model_.browser_tabs_model());
+  EXPECT_EQ(1u, GetNumObserverCalls());
+
+  // Set the same BrowserTabsModel; observers should not be notified.
+  model_.SetBrowserTabsModel(CreateFakeBrowserTabsModel());
+  EXPECT_EQ(CreateFakeBrowserTabsModel(), model_.browser_tabs_model());
+  EXPECT_EQ(1u, GetNumObserverCalls());
+
+  // Set the BrowserTabsModel back to null; observers should be notified.
+  model_.SetBrowserTabsModel(/*browser_tabs_model=*/base::nullopt);
+  EXPECT_FALSE(model_.browser_tabs_model().has_value());
   EXPECT_EQ(2u, GetNumObserverCalls());
 }
 

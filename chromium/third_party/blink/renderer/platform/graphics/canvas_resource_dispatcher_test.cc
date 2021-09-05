@@ -89,6 +89,7 @@ class CanvasResourceDispatcherTest
     dispatcher_ = std::make_unique<MockCanvasResourceDispatcher>();
     resource_provider_ = CanvasResourceProvider::CreateSharedBitmapProvider(
         IntSize(kWidth, kHeight), kLow_SkFilterQuality, CanvasColorParams(),
+        CanvasResourceProvider::ShouldInitialize::kCallClear,
         dispatcher_->GetWeakPtr());
   }
 
@@ -235,7 +236,7 @@ TEST_P(CanvasResourceDispatcherTest, DispatchFrame) {
               SubmitCompositorFrame_(_))
       .WillOnce(::testing::WithArg<0>(
           ::testing::Invoke([context_alpha](const viz::CompositorFrame* frame) {
-            const viz::RenderPass* render_pass =
+            const viz::CompositorRenderPass* render_pass =
                 frame->render_pass_list[0].get();
 
             EXPECT_EQ(render_pass->transform_to_root_target, gfx::Transform());

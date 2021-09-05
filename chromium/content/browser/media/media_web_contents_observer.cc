@@ -147,6 +147,7 @@ MediaWebContentsObserver::MediaWebContentsObserver(WebContents* web_contents)
 MediaWebContentsObserver::~MediaWebContentsObserver() = default;
 
 void MediaWebContentsObserver::WebContentsDestroyed() {
+  use_after_free_checker_.check();
   AudioStreamMonitor* audio_stream_monitor =
       web_contents_impl()->audio_stream_monitor();
 
@@ -160,6 +161,7 @@ void MediaWebContentsObserver::WebContentsDestroyed() {
 
 void MediaWebContentsObserver::RenderFrameDeleted(
     RenderFrameHost* render_frame_host) {
+  use_after_free_checker_.check();
   base::EraseIf(
       player_info_map_,
       [render_frame_host](const PlayerInfoMap::value_type& id_and_player_info) {
@@ -175,6 +177,7 @@ void MediaWebContentsObserver::RenderFrameDeleted(
   }
 
   // Cancel any pending callbacks for players from this frame.
+  use_after_free_checker_.check();
   per_frame_factory_.erase(render_frame_host);
 }
 
@@ -242,6 +245,9 @@ bool MediaWebContentsObserver::OnMessageReceived(
         OnPictureInPictureAvailabilityChanged)
     IPC_MESSAGE_HANDLER(MediaPlayerDelegateHostMsg_OnAudioOutputSinkChanged,
                         OnAudioOutputSinkChanged);
+    IPC_MESSAGE_HANDLER(
+        MediaPlayerDelegateHostMsg_OnAudioOutputSinkChangingDisabled,
+        OnAudioOutputSinkChangingDisabled)
     IPC_MESSAGE_HANDLER(MediaPlayerDelegateHostMsg_OnBufferUnderflow,
                         OnBufferUnderflow)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -433,6 +439,13 @@ void MediaWebContentsObserver::OnReceivedTranslatedDeviceId(
       MediaPlayerId(render_frame_host, delegate_id), raw_device_id);
 }
 
+void MediaWebContentsObserver::OnAudioOutputSinkChangingDisabled(
+    RenderFrameHost* render_frame_host,
+    int delegate_id) {
+  session_controllers_manager_.OnAudioOutputSinkChangingDisabled(
+      MediaPlayerId(render_frame_host, delegate_id));
+}
+
 void MediaWebContentsObserver::OnBufferUnderflow(
     RenderFrameHost* render_frame_host,
     int delegate_id) {
@@ -496,6 +509,7 @@ void MediaWebContentsObserver::SuspendAllMediaPlayers() {
 
 void MediaWebContentsObserver::OnExperimentStateChanged(MediaPlayerId id,
                                                         bool is_starting) {
+  use_after_free_checker_.check();
   id.render_frame_host->Send(
       new MediaPlayerDelegateMsg_NotifyPowerExperimentState(
           id.render_frame_host->GetRoutingID(), id.delegate_id, is_starting));

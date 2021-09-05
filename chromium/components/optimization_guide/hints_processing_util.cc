@@ -47,34 +47,13 @@ std::string GetStringNameForOptimizationType(
       return "FastHostHints";
     case proto::OptimizationType::DELAY_ASYNC_SCRIPT_EXECUTION:
       return "DelayAsyncScriptExecution";
+    case proto::OptimizationType::DELAY_COMPETING_LOW_PRIORITY_REQUESTS:
+      return "DelayCompetingLowPriorityRequests";
     case proto::OptimizationType::LITE_VIDEO:
       return "LiteVideo";
   }
   NOTREACHED();
   return std::string();
-}
-
-bool IsDisabledPerOptimizationHintExperiment(
-    const proto::Optimization& optimization) {
-  // First check if optimization depends on an experiment being enabled.
-  if (optimization.has_experiment_name() &&
-      !optimization.experiment_name().empty() &&
-      optimization.experiment_name() !=
-          base::GetFieldTrialParamValueByFeature(
-              features::kOptimizationHintsExperiments,
-              features::kOptimizationHintsExperimentNameParam)) {
-    return true;
-  }
-  // Now check if optimization depends on an experiment not being enabled.
-  if (optimization.has_excluded_experiment_name() &&
-      !optimization.excluded_experiment_name().empty() &&
-      optimization.excluded_experiment_name() ==
-          base::GetFieldTrialParamValueByFeature(
-              features::kOptimizationHintsExperiments,
-              features::kOptimizationHintsExperimentNameParam)) {
-    return true;
-  }
-  return false;
 }
 
 const proto::PageHint* FindPageHintForURL(const GURL& gurl,

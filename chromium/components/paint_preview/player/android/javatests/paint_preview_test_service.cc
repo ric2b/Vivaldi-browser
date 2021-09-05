@@ -18,6 +18,7 @@
 #include "components/paint_preview/common/file_stream.h"
 #include "components/paint_preview/common/file_utils.h"
 #include "components/paint_preview/common/proto/paint_preview.pb.h"
+#include "components/paint_preview/common/version.h"
 #include "components/paint_preview/player/android/javatests_jni_headers/PaintPreviewTestService_jni.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -178,8 +179,8 @@ PaintPreviewTestService::CreateSingleSkp(
     const int y = child_rects[i * 4 + 1];
     const int width = child_rects[i * 4 + 2];
     const int height = child_rects[i * 4 + 3];
-    auto sub_pic =
-        SkPicture::MakePlaceholder(SkRect::MakeXYWH(x, y, width, height));
+    auto rect = SkRect::MakeXYWH(x, y, width, height);
+    auto sub_pic = SkPicture::MakePlaceholder(rect);
     SkMatrix matrix = SkMatrix::Translate(x, y);
     uint32_t sub_id = sub_pic->uniqueID();
     canvas->drawPicture(sub_pic, &matrix, nullptr);
@@ -198,7 +199,10 @@ PaintPreviewTestService::CreateSingleSkp(
     // Re-find |data| as it may have moved when emplacing the new frame.
     it = frames_.find(id);
     data = &it->second;
-    data->ctx.insert(std::make_pair(sub_id, token));
+    data->ctx.content_id_to_embedding_token.insert(
+        std::make_pair(sub_id, token));
+    data->ctx.content_id_to_transformed_clip.insert(
+        std::make_pair(sub_id, rect));
   }
 
   data->skp = recorder.finishRecordingAsPicture();
@@ -234,6 +238,7 @@ jboolean PaintPreviewTestService::SerializeFrames(
   PaintPreviewProto paint_preview;
   auto* metadata = paint_preview.mutable_metadata();
   metadata->set_url(base::android::ConvertJavaStringToUTF8(env, j_url));
+  metadata->set_version(kPaintPreviewVersion);
 
   auto skp_path =
       path.AppendASCII(base::StrCat({root_it->second.guid.ToString(), ".skp"}));

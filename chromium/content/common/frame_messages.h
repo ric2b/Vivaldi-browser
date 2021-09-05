@@ -26,7 +26,6 @@
 #include "content/common/content_param_traits.h"
 #include "content/common/frame_delete_intention.h"
 #include "content/common/frame_replication_state.h"
-#include "content/common/frame_visual_properties.h"
 #include "content/common/navigation_gesture.h"
 #include "content/common/navigation_params.h"
 #include "content/public/common/common_param_traits.h"
@@ -47,6 +46,7 @@
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/common/frame/frame_visual_properties.h"
 #include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
 #include "third_party/blink/public/common/navigation/triggering_event_info.h"
@@ -68,13 +68,11 @@
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom.h"
 #include "third_party/blink/public/platform/viewport_intersection_state.h"
-#include "third_party/blink/public/platform/web_float_size.h"
 #include "third_party/blink/public/web/web_frame_owner_properties.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
 #include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
-#include "ui/gfx/range/range.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -141,11 +139,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::Impression)
   IPC_STRUCT_TRAITS_MEMBER(expiry)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(blink::WebFloatSize)
-  IPC_STRUCT_TRAITS_MEMBER(width)
-  IPC_STRUCT_TRAITS_MEMBER(height)
-IPC_STRUCT_TRAITS_END()
-
 IPC_STRUCT_TRAITS_BEGIN(content::UntrustworthyContextMenuParams)
   IPC_STRUCT_TRAITS_MEMBER(media_type)
   IPC_STRUCT_TRAITS_MEMBER(x)
@@ -199,7 +192,7 @@ IPC_STRUCT_TRAITS_BEGIN(blink::mojom::FrameOwnerProperties)
   IPC_STRUCT_TRAITS_MEMBER(required_csp)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(content::FrameVisualProperties)
+IPC_STRUCT_TRAITS_BEGIN(blink::FrameVisualProperties)
   IPC_STRUCT_TRAITS_MEMBER(screen_info)
   IPC_STRUCT_TRAITS_MEMBER(auto_resize_enabled)
   IPC_STRUCT_TRAITS_MEMBER(visible_viewport_size)
@@ -213,7 +206,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::FrameVisualProperties)
   IPC_STRUCT_TRAITS_MEMBER(screen_space_rect)
   IPC_STRUCT_TRAITS_MEMBER(local_frame_size)
   IPC_STRUCT_TRAITS_MEMBER(compositor_viewport)
-  IPC_STRUCT_TRAITS_MEMBER(local_surface_id_allocation)
+  IPC_STRUCT_TRAITS_MEMBER(local_surface_id)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(blink::FramePolicy)
@@ -607,9 +600,8 @@ IPC_MESSAGE_CONTROL3(FrameHostMsg_PluginInstanceThrottleStateChange,
 IPC_MESSAGE_ROUTED0(FrameHostMsg_Unload_ACK)
 
 // Tells the browser that a child's visual properties have changed.
-IPC_MESSAGE_ROUTED2(FrameHostMsg_SynchronizeVisualProperties,
-                    viz::FrameSinkId /* frame_sink_id */,
-                    content::FrameVisualProperties)
+IPC_MESSAGE_ROUTED1(FrameHostMsg_SynchronizeVisualProperties,
+                    blink::FrameVisualProperties)
 
 // Sent by a parent frame to notify its child about the state of the child's
 // intersection with the parent's viewport, primarily for use by the
@@ -623,14 +615,6 @@ IPC_MESSAGE_ROUTED1(FrameHostMsg_UpdateViewportIntersection,
 // user right clicked.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_ContextMenu,
                     content::UntrustworthyContextMenuParams)
-
-// Notification that the text selection has changed.
-// Note: The second parameter is the character based offset of the
-// base::string16 text in the document.
-IPC_MESSAGE_ROUTED3(FrameHostMsg_SelectionChanged,
-                    base::string16 /* text covers the selection range */,
-                    uint32_t /* the offset of the text in the document */,
-                    gfx::Range /* selection range in the document */)
 
 // Adding a new message? Stick to the sort order above: first platform
 // independent FrameMsg, then ifdefs for platform specific FrameMsg, then

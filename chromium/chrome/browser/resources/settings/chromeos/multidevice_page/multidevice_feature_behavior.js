@@ -114,6 +114,8 @@ const MultiDeviceFeatureBehaviorImpl = {
         return this.i18n('multidevicePhoneHubNotificationBadgeItemTitle');
       case settings.MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION:
         return this.i18n('multidevicePhoneHubTaskContinuationItemTitle');
+      case settings.MultiDeviceFeature.WIFI_SYNC:
+        return this.i18n('multideviceWifiSyncItemTitle');
       default:
         return '';
     }
@@ -139,6 +141,9 @@ const MultiDeviceFeatureBehaviorImpl = {
       case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATION_BADGE:
       case settings.MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION:
         return 'os-settings:multidevice-better-together-suite';
+      // TODO(cvandermerwe): Use real Wifi Sync asset.
+      case settings.MultiDeviceFeature.WIFI_SYNC:
+        return 'os-settings:multidevice-wifi';
       default:
         return '';
     }
@@ -158,6 +163,18 @@ const MultiDeviceFeatureBehaviorImpl = {
         return this.i18nAdvanced('multideviceInstantTetheringItemSummary');
       case settings.MultiDeviceFeature.MESSAGES:
         return this.i18nAdvanced('multideviceAndroidMessagesItemSummary');
+      case settings.MultiDeviceFeature.PHONE_HUB:
+        return this.i18nAdvanced('multidevicePhoneHubItemSummary');
+      case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS:
+        return this.i18nAdvanced('multidevicePhoneHubNotificationsItemSummary');
+      case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATION_BADGE:
+        return this.i18nAdvanced(
+            'multidevicePhoneHubNotificationBadgeItemSummary');
+      case settings.MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION:
+        return this.i18nAdvanced(
+            'multidevicePhoneHubTaskContinuationItemSummary');
+      case settings.MultiDeviceFeature.WIFI_SYNC:
+        return this.i18nAdvanced('multideviceWifiSyncItemSummary');
       default:
         return '';
     }
@@ -192,6 +209,8 @@ const MultiDeviceFeatureBehaviorImpl = {
         return this.pageContentData.phoneHubNotificationBadgeState;
       case settings.MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION:
         return this.pageContentData.phoneHubTaskContinuationState;
+      case settings.MultiDeviceFeature.WIFI_SYNC:
+        return this.pageContentData.wifiSyncState;
       default:
         return null;
     }

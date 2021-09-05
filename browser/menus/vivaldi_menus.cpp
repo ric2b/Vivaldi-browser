@@ -24,6 +24,7 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/api/runtime/runtime_api.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "net/base/escape.h"
@@ -33,6 +34,7 @@
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/vivaldi_ui_utils.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using blink::WebContextMenuData;
 using extensions::WebViewGuest;
@@ -151,9 +153,12 @@ void VivaldiAddLinkItems(SimpleMenuModel* menu,
     index = firstIndex;
     menu->InsertItemWithStringIdAt(index, IDC_CONTENT_CONTEXT_OPENLINKNEWTAB,
                                    IDS_VIV_OPEN_LINK_NEW_FOREGROUND_TAB);
-    menu->InsertItemWithStringIdAt(++index,
-                                   IDC_CONTENT_CONTEXT_OPENLINKBACKGROUNDTAB,
-                                   IDS_VIV_OPEN_LINK_NEW_BACKGROUND_TAB);
+    if (!profile->GetPrefs()->GetBoolean(
+          vivaldiprefs::kTabsOpenNewInBackground)) {
+      menu->InsertItemWithStringIdAt(++index,
+                                     IDC_CONTENT_CONTEXT_OPENLINKBACKGROUNDTAB,
+                                     IDS_VIV_OPEN_LINK_NEW_BACKGROUND_TAB);
+    }
     menu->InsertItemWithStringIdAt(++index, IDC_VIV_OPEN_LINK_CURRENT_TAB,
                                    IDS_VIV_OPEN_LINK_CURRENT_TAB);
 
@@ -174,18 +179,19 @@ void VivaldiAddLinkItems(SimpleMenuModel* menu,
       }
       menu->InsertItemWithStringIdAt(++index, IDC_VIV_ADD_LINK_TO_WEBPANEL,
                                      IDS_VIV_ADD_LINK_TO_WEBPANEL);
-#if !defined(OFFICIAL_BUILD)
+      if (extensions::VivaldiRuntimeFeatures::IsEnabled(profile,
+                                                        "calendar_mail_feeds")) {
       // Text under context menu is always auto selected on mac so we can not
       // test for selected text to determine behavior in that OS.
 #if !defined(OS_MAC)
-      if (params.selection_text.empty()) {
+        if (params.selection_text.empty()) {
 #endif
-        menu->InsertItemWithStringIdAt(++index, IDC_VIV_SEND_LINK_BY_MAIL,
-                                       IDS_VIV_SEND_LINK_BY_MAIL);
+          menu->InsertItemWithStringIdAt(++index, IDC_VIV_SEND_LINK_BY_MAIL,
+                                         IDS_VIV_SEND_LINK_BY_MAIL);
 #if !defined(OS_MAC)
-      }
+        }
 #endif
-#endif  // OFFICIAL_BUILD
+      }
     }
   }
 }
@@ -202,9 +208,12 @@ void VivaldiAddImageItems(SimpleMenuModel* menu,
 
     menu->InsertItemWithStringIdAt(index, IDC_VIV_OPEN_IMAGE_NEW_FOREGROUND_TAB,
                                    IDS_VIV_OPEN_IMAGE_NEW_FOREGROUND_TAB);
-    menu->InsertItemWithStringIdAt(++index,
-                                   IDC_VIV_OPEN_IMAGE_NEW_BACKGROUND_TAB,
-                                   IDS_VIV_OPEN_IMAGE_NEW_BACKGROUND_TAB);
+    if (!profile->GetPrefs()->GetBoolean(
+          vivaldiprefs::kTabsOpenNewInBackground)) {
+      menu->InsertItemWithStringIdAt(++index,
+                                     IDC_VIV_OPEN_IMAGE_NEW_BACKGROUND_TAB,
+                                     IDS_VIV_OPEN_IMAGE_NEW_BACKGROUND_TAB);
+    }
     menu->InsertItemWithStringIdAt(++index, IDC_VIV_OPEN_IMAGE_CURRENT_TAB,
                                    IDS_VIV_OPEN_IMAGE_CURRENT_TAB);
     menu->InsertSeparatorAt(++index, ui::NORMAL_SEPARATOR);
@@ -241,11 +250,12 @@ void VivaldiAddCopyItems(SimpleMenuModel* menu,
   if (IsVivaldiRunning() && WebViewGuest::FromWebContents(web_contents) &&
       !IsVivaldiWebPanel(web_contents) && !profile->IsGuestSession()) {
     menu->AddItemWithStringId(IDC_VIV_COPY_TO_NOTE, IDS_VIV_COPY_TO_NOTE);
-#if !defined(OFFICIAL_BUILD)
-    menu->AddItemWithStringId(IDC_VIV_SEND_SELECTION_BY_MAIL,
-                              IDS_VIV_SEND_BY_MAIL);
-    menu->AddItemWithStringId(IDC_VIV_ADD_AS_EVENT, IDS_VIV_ADD_AS_EVENT);
-#endif
+    if (extensions::VivaldiRuntimeFeatures::IsEnabled(profile,
+                                                      "calendar_mail_feeds")) {
+      menu->AddItemWithStringId(IDC_VIV_SEND_SELECTION_BY_MAIL,
+                                IDS_VIV_SEND_BY_MAIL);
+      menu->AddItemWithStringId(IDC_VIV_ADD_AS_EVENT, IDS_VIV_ADD_AS_EVENT);
+    }
   }
 }
 
@@ -264,10 +274,11 @@ void VivaldiAddPageItems(SimpleMenuModel* menu,
     }
     menu->InsertItemWithStringIdAt(++index, IDC_VIV_ADD_PAGE_TO_WEBPANEL,
                                    IDS_VIV_ADD_PAGE_TO_WEBPANEL);
-#if !defined(OFFICIAL_BUILD)
-    menu->InsertItemWithStringIdAt(++index, IDC_VIV_SEND_PAGE_BY_MAIL,
-                                   IDS_VIV_SEND_BY_MAIL);
-#endif
+    if (extensions::VivaldiRuntimeFeatures::IsEnabled(profile,
+                                                      "calendar_mail_feeds")) {
+      menu->InsertItemWithStringIdAt(++index, IDC_VIV_SEND_PAGE_BY_MAIL,
+                                    IDS_VIV_SEND_BY_MAIL);
+    }
     menu->InsertSeparatorAt(++index, ui::NORMAL_SEPARATOR);
     index = menu->GetIndexOfCommandId(IDC_ROUTE_MEDIA);
     DCHECK_GE(index, 0);
@@ -469,6 +480,15 @@ void OnUseLocalImageAsBackground(content::WebContents* web_contents,
   SendSimpleAction(web_contents, event_flags, "useLocalImageAsBackground");
 }
 
+WindowOpenDisposition VivaldiGetNewTabDispostion(WebContents* web_contents) {
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  bool open_in_background =
+      profile->GetPrefs()->GetBoolean(vivaldiprefs::kTabsOpenNewInBackground);
+  return open_in_background ? WindowOpenDisposition::NEW_BACKGROUND_TAB :
+      WindowOpenDisposition::NEW_FOREGROUND_TAB;
+}
+
 bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
                            const ContextMenuParams& params,
                            WebContents* source_web_contents,
@@ -506,7 +526,7 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
       break;
     case IDC_VIV_OPEN_IMAGE_NEW_FOREGROUND_TAB:
       openurl.Run(params.src_url, GetDocumentURL(params),
-                  WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                  VivaldiGetNewTabDispostion(source_web_contents),
                   ui::PAGE_TRANSITION_LINK);
       break;
     case IDC_VIV_OPEN_IMAGE_NEW_BACKGROUND_TAB:

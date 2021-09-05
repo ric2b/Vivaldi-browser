@@ -6,6 +6,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/search/local_ntp_test_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
@@ -37,11 +38,11 @@ class WebAppLinkCapturingBrowserTest : public WebAppNavigationBrowserTest {
   void SetUpOnMainThread() override {
     WebAppNavigationBrowserTest::SetUpOnMainThread();
     auto web_app_info = std::make_unique<WebApplicationInfo>();
-    web_app_info->app_url = app_url_;
+    web_app_info->start_url = start_url_;
     web_app_info->open_as_window = true;
     app_id_ = web_app::InstallWebApp(profile(), std::move(web_app_info));
-    provider().registry_controller().SetExperimentalTabbedWindowMode(app_id_,
-                                                                     true);
+    provider().registry_controller().SetExperimentalTabbedWindowMode(
+        app_id_, true, /*is_user_action=*/false);
   }
 
   WebAppProviderBase& provider() {
@@ -67,15 +68,18 @@ class WebAppLinkCapturingBrowserTest : public WebAppNavigationBrowserTest {
     }
   }
 
+  GURL NtpUrl() {
+    return local_ntp_test_utils::GetFinalNtpUrl(browser()->profile());
+  }
+
  protected:
   AppId app_id_;
-  GURL app_url_{"https://example.org/dir/start.html"};
+  GURL start_url_{"https://example.org/dir/start.html"};
   GURL about_blank_{"about:blank"};
   GURL in_scope_1_{"https://example.org/dir/page1.html"};
   GURL in_scope_2_{"https://example.org/dir/page2.html"};
   GURL origin_{"https://example.org/"};
   GURL out_of_scope_{"https://other-domain.org/"};
-  GURL new_tab_{"chrome://newtab/"};
 
  private:
   base::test::ScopedFeatureList features_;
@@ -121,7 +125,7 @@ IN_PROC_BROWSER_TEST_F(WebAppLinkCapturingBrowserTest,
   NavigateMainBrowser(in_scope_1_);
   Browser* app_browser = BrowserList::GetInstance()->GetLastActive();
   EXPECT_TRUE(AppBrowserController::IsForWebAppBrowser(app_browser, app_id_));
-  ExpectTabs(browser(), {new_tab_});
+  ExpectTabs(browser(), {NtpUrl()});
   ExpectTabs(app_browser, {in_scope_1_});
   EXPECT_EQ(reparent_web_contents,
             app_browser->tab_strip_model()->GetActiveWebContents());
@@ -130,7 +134,7 @@ IN_PROC_BROWSER_TEST_F(WebAppLinkCapturingBrowserTest,
   // reparent. When there is already an app window open we should reparent into
   // it.
   chrome::AddTabAt(browser(), about_blank_, /*index=*/-1, /*foreground=*/true);
-  ExpectTabs(browser(), {new_tab_, about_blank_});
+  ExpectTabs(browser(), {NtpUrl(), about_blank_});
   reparent_web_contents = browser()->tab_strip_model()->GetActiveWebContents();
   {
     auto observer =
@@ -141,7 +145,7 @@ IN_PROC_BROWSER_TEST_F(WebAppLinkCapturingBrowserTest,
         base::StringPrintf("location = '%s';", in_scope_2_.spec().c_str())));
     observer->Wait();
   }
-  ExpectTabs(browser(), {new_tab_});
+  ExpectTabs(browser(), {NtpUrl()});
   ExpectTabs(app_browser, {in_scope_1_, in_scope_2_});
   EXPECT_EQ(reparent_web_contents,
             app_browser->tab_strip_model()->GetActiveWebContents());

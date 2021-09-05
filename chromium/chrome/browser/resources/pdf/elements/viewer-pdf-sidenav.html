@@ -12,7 +12,7 @@
   #icons {
     display: flex;
     flex-direction: column;
-    min-width: 48px;
+    min-width: 64px;
   }
 
   /* These are dummy styles currently - replace with real content. */
@@ -22,41 +22,75 @@
     overflow-x: hidden;
   }
 
+  #icons:not([hidden]) + #content {
+    --viewer-thumbnail-bar-padding-inline-end: 28px;
+  }
+
   .selected cr-icon-button {
     --cr-icon-button-fill-color: var(--sidenav-selected-tab-color);
   }
 
   .button-wrapper {
-    --highlight-border-width: 4px;
+    --button-wrapper-height: 36px;
+    --button-wrapper-margin: 12px;
+    --button-wrapper-total-height: calc(
+        var(--button-wrapper-height) + var(--button-wrapper-margin));
     align-items: center;
-    border-inline-start: var(--highlight-border-width) solid transparent;
     display: flex;
-    height: var(--cr-icon-button-size);
-    justify-content: center;
-    margin: 6px 0;
-    width: calc(100% - var(--highlight-border-width));
+    height: var(--button-wrapper-height);
+    margin: var(--button-wrapper-margin) 0;
+    width: 100%;
   }
 
-  .button-wrapper.selected {
-    border-color: var(--sidenav-selected-tab-color);
+  .button-wrapper::before {
+    border-radius: 0 3px 3px 0;
+    content: '';
+    display: block;
+    height: 100%;
+    transform: translateY(var(--button-wrapper-total-height));
+    transition: transform 250ms cubic-bezier(.4, 0, .2, 1);
+    width: 4px;
+  }
+
+  .button-wrapper.selected + .button-wrapper::before {
+    transform: translateY(calc(-1 * var(--button-wrapper-total-height)));
+  }
+
+  .button-wrapper.selected::before {
+    background: var(--sidenav-selected-tab-color);
+    transform: translateY(0);
+  }
+
+  :host-context([dir=rtl]) .button-wrapper::before {
+    /* Border-radius based on block/inline is not yet supported. */
+    transform: scaleX(-1);
+  }
+
+  cr-icon-button {
+    margin: 0 auto;
   }
 </style>
-<div id="icons">
+<div id="icons" hidden$="[[!bookmarks.length]]">
   <div class$="button-wrapper [[thumbnailButtonClass_(thumbnailView_)]]">
     <cr-icon-button iron-icon="pdf:thumbnails" role="tab"
-        title="$i18n{tooltipThumbnails}" on-click="onThumbnailClick_">
+        title="$i18n{tooltipThumbnails}" aria-label="$i18n{tooltipThumbnails}"
+        aria-selected$="[[getAriaSelectedThumbnails_(thumbnailView_)]]"
+        on-click="onThumbnailClick_">
     </cr-icon-button>
   </div>
-  <div class$="button-wrapper [[outlineButtonClass_(thumbnailView_)]]"
-      hidden$="[[!bookmarks.length]]">
+  <div class$="button-wrapper [[outlineButtonClass_(thumbnailView_)]]">
     <cr-icon-button iron-icon="pdf:doc-outline" role="tab"
-        title="$i18n{tooltipDocumentOutline}" on-click="onOutlineClick_">
+        title="$i18n{tooltipDocumentOutline}"
+        aria-label="$i18n{tooltipDocumentOutline}"
+        aria-selected$="[[getAriaSelectedOutline_(thumbnailView_)]]"
+        on-click="onOutlineClick_">
     </cr-icon-button>
   </div>
 </div>
 <div id="content">
-  <viewer-thumbnail-bar id="thumbnail-bar" hidden="[[!thumbnailView_]]"
-      doc-length="[[docLength]]">
+  <viewer-thumbnail-bar id="thumbnail-bar" tabindex="0"
+      hidden="[[!thumbnailView_]]" active-page="[[activePage]]"
+      clockwise-rotations="[[clockwiseRotations]]" doc-length="[[docLength]]">
   </viewer-thumbnail-bar>
   <viewer-document-outline id="outline" hidden="[[thumbnailView_]]"
       bookmarks="[[bookmarks]]">

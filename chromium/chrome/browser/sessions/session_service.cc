@@ -75,7 +75,13 @@ using sessions::ContentSerializedNavigationBuilder;
 using sessions::SerializedNavigationEntry;
 
 // Every kWritesPerReset commands triggers recreating the file.
+#if defined(VIVALDI_BUILD)
+// Ties in with tag_restore_service_helper.h kMaxEntries, so both
+// must be changed.
+static const int kWritesPerReset = 600;
+#else
 static const int kWritesPerReset = 250;
+#endif  // defined(VIVALDI_BUILD)
 
 // SessionService -------------------------------------------------------------
 
@@ -414,6 +420,15 @@ void SessionService::SetWindowAppName(
     return;
 
   ScheduleCommand(sessions::CreateSetWindowAppNameCommand(window_id, app_name));
+}
+
+void SessionService::SetWindowUserTitle(const SessionID& window_id,
+                                        const std::string& user_title) {
+  if (!ShouldTrackChangesToWindow(window_id))
+    return;
+
+  ScheduleCommand(
+      sessions::CreateSetWindowUserTitleCommand(window_id, user_title));
 }
 
 void SessionService::TabRestored(WebContents* tab, bool pinned) {
@@ -773,6 +788,12 @@ void SessionService::BuildCommandsForBrowser(
     command_storage_manager_->AppendRebuildCommand(
         sessions::CreateSetWindowAppNameCommand(browser->session_id(),
                                                 browser->app_name()));
+  }
+
+  if (!browser->user_title().empty()) {
+    command_storage_manager_->AppendRebuildCommand(
+        sessions::CreateSetWindowUserTitleCommand(browser->session_id(),
+                                                  browser->user_title()));
   }
 
   sessions::CreateSetWindowWorkspaceCommand(

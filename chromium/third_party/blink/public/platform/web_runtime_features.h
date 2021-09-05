@@ -72,11 +72,11 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static bool IsCompositedSelectionUpdateEnabled();
 
   BLINK_PLATFORM_EXPORT static void EnableAccelerated2dCanvas(bool);
-  BLINK_PLATFORM_EXPORT static void EnableAccessibilityExposeARIAAnnotations(
-      bool);
   BLINK_PLATFORM_EXPORT static void EnableAccessibilityExposeDisplayNone(bool);
   BLINK_PLATFORM_EXPORT static void EnableAccessibilityExposeHTMLElement(bool);
   BLINK_PLATFORM_EXPORT static void EnableAccessibilityObjectModel(bool);
+  BLINK_PLATFORM_EXPORT static void
+  EnableAccessibilityUseAXPositionForDocumentMarkers(bool);
   BLINK_PLATFORM_EXPORT static void EnableAdTagging(bool);
   BLINK_PLATFORM_EXPORT static void EnableAllowActivationDelegationAttr(bool);
   BLINK_PLATFORM_EXPORT static void EnableAudioOutputDevices(bool);
@@ -103,6 +103,7 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableDatabase(bool);
   BLINK_PLATFORM_EXPORT static void EnableDecodeJpeg420ImagesToYUV(bool);
   BLINK_PLATFORM_EXPORT static void EnableDecodeLossyWebPImagesToYUV(bool);
+  BLINK_PLATFORM_EXPORT static void EnableDisallowDocumentAccess(bool);
   BLINK_PLATFORM_EXPORT static void EnableDisplayCutoutAPI(bool);
   BLINK_PLATFORM_EXPORT static void EnableDocumentPolicy(bool);
   BLINK_PLATFORM_EXPORT static void EnableDocumentPolicyNegotiation(bool);
@@ -132,10 +133,8 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableNotifications(bool);
   BLINK_PLATFORM_EXPORT static void EnableOnDeviceChange(bool);
   BLINK_PLATFORM_EXPORT static void EnableOrientationEvent(bool);
-  BLINK_PLATFORM_EXPORT static void EnableOverflowIconsForMediaControls(bool);
   BLINK_PLATFORM_EXPORT static void EnableOverlayScrollbars(bool);
   BLINK_PLATFORM_EXPORT static void EnableOverscrollCustomization(bool);
-  BLINK_PLATFORM_EXPORT static void EnableOutOfBlinkCors(bool);
   BLINK_PLATFORM_EXPORT static void EnablePagePopup(bool);
   BLINK_PLATFORM_EXPORT static void EnablePaymentApp(bool);
   BLINK_PLATFORM_EXPORT static void EnablePaymentHandlerMinimalUI(bool);
@@ -154,7 +153,7 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnablePresentationAPI(bool);
   BLINK_PLATFORM_EXPORT static void EnablePushMessaging(bool);
   BLINK_PLATFORM_EXPORT static void EnablePushSubscriptionChangeEvent(bool);
-  BLINK_PLATFORM_EXPORT static void EnableReducedReferrerGranularity(bool);
+  BLINK_PLATFORM_EXPORT static void EnableDirectSockets(bool);
   BLINK_PLATFORM_EXPORT static void EnableRemotePlaybackAPI(bool);
   BLINK_PLATFORM_EXPORT static void
   EnableRestrictAutomaticLazyFrameLoadingToDataSaver(bool);
@@ -190,6 +189,7 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableWebXRAnchors(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebXRARModule(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebXRCameraAccess(bool);
+  BLINK_PLATFORM_EXPORT static void EnableWebXRDepth(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebXRHitTest(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebXRLightEstimation(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebXRPlaneDetection(bool);

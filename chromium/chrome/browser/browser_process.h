@@ -29,7 +29,6 @@ class DownloadRequestLimiter;
 class DownloadStatusUpdater;
 class GpuModeManager;
 class IconManager;
-class IntranetRedirectDetector;
 class MediaFileSystemRegistry;
 class NotificationPlatformBridge;
 class NotificationUIManager;
@@ -40,6 +39,10 @@ class SystemNetworkContextManager;
 class WatchDogThread;
 class WebRtcLogUploader;
 class StartupData;
+
+#if !defined(OS_ANDROID)
+class IntranetRedirectDetector;
+#endif
 
 namespace network {
 class NetworkQualityTracker;
@@ -56,6 +59,7 @@ class RulesetService;
 
 namespace federated_learning {
 class FlocBlocklistService;
+class FlocSortingLshClustersService;
 }
 
 namespace variations {
@@ -189,7 +193,9 @@ class BrowserProcess {
   virtual printing::BackgroundPrintingManager*
       background_printing_manager() = 0;
 
+#if !defined(OS_ANDROID)
   virtual IntranetRedirectDetector* intranet_redirect_detector() = 0;
+#endif
 
   // Returns the locale used by the application. It is the IETF language tag,
   // defined in BCP 47. The region subtag is not included when it adds no
@@ -222,6 +228,11 @@ class BrowserProcess {
   // Returns the service providing versioned storage for a blocklist of flocs.
   virtual federated_learning::FlocBlocklistService*
   floc_blocklist_service() = 0;
+
+  // Returns the service providing versioned storage for a list of limit values
+  // for calculating the floc based on SortingLSH.
+  virtual federated_learning::FlocSortingLshClustersService*
+  floc_sorting_lsh_clusters_service() = 0;
 
   // Returns the service used to provide hints for what optimizations can be
   // performed on slow page loads.
@@ -256,7 +267,10 @@ class BrowserProcess {
 
   virtual network_time::NetworkTimeTracker* network_time_tracker() = 0;
 
+#if !defined(OS_ANDROID)
+  // Avoid using this. Prefer using GCMProfileServiceFactory.
   virtual gcm::GCMDriver* gcm_driver() = 0;
+#endif
 
   // Returns the tab manager. On non-supported platforms, this returns null.
   // TODO(sebmarchand): Update callers to

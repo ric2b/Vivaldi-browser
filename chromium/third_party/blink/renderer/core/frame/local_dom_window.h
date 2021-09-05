@@ -69,6 +69,7 @@ class MessageEvent;
 class Modulator;
 class Navigator;
 class Screen;
+class ScriptController;
 class ScriptPromise;
 class ScriptState;
 class ScrollToOptions;
@@ -120,6 +121,8 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   LocalFrame* GetFrame() const { return To<LocalFrame>(DOMWindow::GetFrame()); }
 
+  ScriptController& GetScriptController() const { return *script_controller_; }
+
   void Initialize();
   void ClearForReuse() { document_ = nullptr; }
 
@@ -160,6 +163,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   TrustedTypePolicyFactory* GetTrustedTypes() const final {
     return trustedTypes();
   }
+  ScriptWrappable* ToScriptWrappable() final { return this; }
   void CountPotentialFeaturePolicyViolation(
       mojom::blink::FeaturePolicyFeature) const final;
   void ReportFeaturePolicyViolation(
@@ -407,6 +411,8 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   void ClearIsolatedWorldCSPForTesting(int32_t world_id);
 
+  bool CrossOriginIsolatedCapability() const override;
+
   // These delegate to the document_.
   ukm::UkmRecorder* UkmRecorder() override;
   ukm::SourceId UkmSourceID() const override;
@@ -437,6 +443,8 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   // Return the viewport size including scrollbars.
   IntSize GetViewportSize() const;
+
+  Member<ScriptController> script_controller_;
 
   Member<Document> document_;
   Member<DOMVisualViewport> visualViewport_;

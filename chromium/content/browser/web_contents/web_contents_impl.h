@@ -28,15 +28,15 @@
 #include "build/build_config.h"
 #include "components/download/public/common/download_url_parameters.h"
 #include "content/browser/accessibility/accessibility_event_recorder.h"
-#include "content/browser/frame_host/frame_tree.h"
-#include "content/browser/frame_host/frame_tree_node.h"
-#include "content/browser/frame_host/navigation_controller_delegate.h"
-#include "content/browser/frame_host/navigation_controller_impl.h"
-#include "content/browser/frame_host/navigator_delegate.h"
-#include "content/browser/frame_host/render_frame_host_delegate.h"
-#include "content/browser/frame_host/render_frame_host_manager.h"
 #include "content/browser/media/audio_stream_monitor.h"
 #include "content/browser/media/forwarding_audio_stream_factory.h"
+#include "content/browser/renderer_host/frame_tree.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
+#include "content/browser/renderer_host/navigation_controller_delegate.h"
+#include "content/browser/renderer_host/navigation_controller_impl.h"
+#include "content/browser/renderer_host/navigator_delegate.h"
+#include "content/browser/renderer_host/render_frame_host_delegate.h"
+#include "content/browser/renderer_host/render_frame_host_manager.h"
 #include "content/browser/renderer_host/render_view_host_delegate.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
@@ -55,7 +55,6 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_receiver_set.h"
 #include "content/public/common/three_d_api_types.h"
-#include "content/public/common/web_preferences.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -66,7 +65,9 @@
 #include "services/device/public/mojom/geolocation_context.mojom.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/network/public/mojom/fetch_api.mojom-forward.h"
-#include "third_party/blink/public/common/page/web_drag_operation.h"
+#include "third_party/blink/public/common/frame/transient_allow_fullscreen.h"
+#include "third_party/blink/public/common/page/drag_operation.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/choosers/color_chooser.mojom.h"
 #include "third_party/blink/public/mojom/choosers/popup_menu.mojom.h"
 #include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom.h"
@@ -96,6 +97,7 @@ class InterfaceProvider;
 
 namespace content {
 enum class PictureInPictureResult;
+class AgentSchedulingGroupHost;
 class BrowserPluginEmbedder;
 class BrowserPluginGuest;
 class ConversionHost;
@@ -238,7 +240,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
                          float client_y,
                          float screen_x,
                          float screen_y,
-                         blink::WebDragOperation operation,
+                         blink::DragOperation operation,
                          RenderWidgetHost* source_rwh);
 
   // Notification that the RenderViewHost's load state changed.
@@ -542,9 +544,9 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // Implementation of PageNavigator.
   WebContents* OpenURL(const OpenURLParams& params) override;
 
-  const WebPreferences& GetOrCreateWebPreferences() override;
+  const blink::web_pref::WebPreferences& GetOrCreateWebPreferences() override;
   void NotifyPreferencesChanged() override;
-  void SetWebPreferences(const WebPreferences& prefs) override;
+  void SetWebPreferences(const blink::web_pref::WebPreferences& prefs) override;
   void OnWebPreferencesChanged() override;
 
   // RenderFrameHostDelegate ---------------------------------------------------
@@ -595,6 +597,8 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void UpdateTitle(RenderFrameHost* render_frame_host,
                    const base::string16& title,
                    base::i18n::TextDirection title_direction) override;
+  void UpdateTargetURL(RenderFrameHost* render_frame_host,
+                       const GURL& url) override;
   WebContents* GetAsWebContents() override;
   bool IsNeverComposited() override;
   ui::AXMode GetAccessibilityMode() override;
@@ -605,16 +609,13 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
       const AXEventNotificationDetails& details) override;
   void AccessibilityLocationChangesReceived(
       const std::vector<AXLocationChangeNotificationDetails>& details) override;
-  base::string16 DumpAccessibilityTree(
+  std::string DumpAccessibilityTree(
       bool internal,
       std::vector<content::AccessibilityTreeFormatter::PropertyFilter>
           property_filters) override;
   void RecordAccessibilityEvents(
       bool start_recording,
       base::Optional<AccessibilityEventCallback> callback) override;
-  RenderFrameHost* GetGuestByInstanceID(
-      RenderFrameHost* render_frame_host,
-      int browser_plugin_instance_id) override;
   device::mojom::GeolocationContext* GetGeolocationContext() override;
   device::mojom::WakeLockContext* GetWakeLockContext() override;
 #if defined(OS_ANDROID)
@@ -726,15 +727,16 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
       RenderFrameHostImpl* source,
       blink::mojom::TextAutosizerPageInfoPtr page_info) override;
   bool HasSeenRecentScreenOrientationChange() override;
-  void CreateNewWidget(int32_t render_process_id,
+  bool IsTransientAllowFullscreenActive() const override;
+  void CreateNewWidget(AgentSchedulingGroupHost& agent_scheduling_group,
                        int32_t route_id,
                        mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
                            blink_widget_host,
                        mojo::PendingAssociatedRemote<blink::mojom::Widget>
                            blink_widget) override;
   void CreateNewFullscreenWidget(
-      int32_t render_process_id,
-      int32_t widget_route_id,
+      AgentSchedulingGroupHost& agent_scheduling_group,
+      int32_t route_id,
       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
           blink_widget_host,
       mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget)
@@ -762,8 +764,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
       blink::mojom::ReferrerPtr referrer,
       const std::vector<blink::mojom::SavableSubframePtr>& subframes) override;
   void SavableResourceLinksError(RenderFrameHostImpl* source) override;
-
-  // Called when the |RenderFrameHostImpl::lifecycle_state()| changes.
   void RenderFrameHostStateChanged(
       RenderFrameHost* render_frame_host,
       RenderFrameHostImpl::LifecycleState old_state,
@@ -782,8 +782,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
                             base::TerminationStatus status,
                             int error_code) override;
   void RenderViewDeleted(RenderViewHost* render_view_host) override;
-  void UpdateTargetURL(RenderViewHost* render_view_host,
-                       const GURL& url) override;
   void Close(RenderViewHost* render_view_host) override;
   void RequestSetBounds(const gfx::Rect& new_bounds) override;
   bool DidAddMessageToConsole(blink::mojom::ConsoleMessageLevel log_level,
@@ -958,12 +956,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
       int proxy_routing_id) override;
   void CreateRenderWidgetHostViewForRenderManager(
       RenderViewHost* render_view_host) override;
-  bool CreateRenderFrameForRenderManager(
-      RenderFrameHost* render_frame_host,
-      int previous_routing_id,
-      const base::Optional<base::UnguessableToken>& opener_frame_token,
-      int parent_routing_id,
-      int previous_sibling_routing_id) override;
   void BeforeUnloadFiredFromRenderManager(
       bool proceed,
       const base::TimeTicks& proceed_time,
@@ -1187,6 +1179,11 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // this won't create one if none exists.
   FindRequestManager* GetFindRequestManagerForTesting();
 
+  // Convenience method to notify observers that an inner WebContents was
+  // created with |this| WebContents as its owner. This does *not* immediately
+  // guarantee that |inner_web_contents| has been added to the WebContents tree.
+  void InnerWebContentsCreated(WebContents* inner_web_contents);
+
   // Detaches this WebContents from its outer WebContents.
   std::unique_ptr<WebContents> DetachFromOuterWebContents();
 
@@ -1245,7 +1242,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // Recomputes only the "fast" preferences (those not requiring slow
   // platform/device polling); the remaining "slow" ones are recomputed only if
   // the preference cache is empty.
-  const WebPreferences ComputeWebPreferences();
+  const blink::web_pref::WebPreferences ComputeWebPreferences();
 
   void SetExtData(const std::string& ext_data) override;
   const std::string& GetExtData() const override;
@@ -1571,11 +1568,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // each inner WebContents is attached.
   void FocusOuterAttachmentFrameChain();
 
-  // Convenience method to notify observers that an inner WebContents was
-  // created with |this| WebContents as its owner. This does *not* immediately
-  // guarantee that |inner_web_contents| has been added to the WebContents tree.
-  void InnerWebContentsCreated(WebContents* inner_web_contents);
-
   // Called just after an inner web contents is attached.
   void InnerWebContentsAttached(WebContents* inner_web_contents);
 
@@ -1593,7 +1585,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
 
   // Helper for CreateNewWidget/CreateNewFullscreenWidget.
   void CreateNewWidget(
-      int32_t render_process_id,
+      AgentSchedulingGroupHost& agent_scheduling_group,
       int32_t route_id,
       bool is_fullscreen,
       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
@@ -1743,7 +1735,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // Sets the hardware-related fields in |prefs| that are slow to compute.  The
   // fields are set from cache if available, otherwise recomputed.
   void SetSlowWebPreferences(const base::CommandLine& command_line,
-                             WebPreferences* prefs);
+                             blink::web_pref::WebPreferences* prefs);
 
   // Data for core operation ---------------------------------------------------
 
@@ -1998,7 +1990,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // The last set/computed value of WebPreferences for this WebContents, either
   // set directly through SetWebPreferences, or set after recomputing values
   // from ComputeWebPreferences.
-  std::unique_ptr<WebPreferences> web_preferences_;
+  std::unique_ptr<blink::web_pref::WebPreferences> web_preferences_;
 
   bool updating_web_preferences_ = false;
 
@@ -2093,7 +2085,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   bool was_ever_audible_ = false;
 
   // Helper variable for resolving races in UpdateTargetURL / ClearTargetURL.
-  RenderViewHost* view_that_set_last_target_url_ = nullptr;
+  RenderFrameHost* frame_that_set_last_target_url_ = nullptr;
 
   // Whether we should override user agent in new tabs.
   bool should_override_user_agent_in_new_tabs_ = false;
@@ -2157,9 +2149,11 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // Monitors system screen info changes to notify the renderer.
   std::unique_ptr<ScreenChangeMonitor> screen_change_monitor_;
 
-  // This time is used to record the last time we saw a screen orientation
-  // change.
+  // Records the last time we saw a screen orientation change.
   base::TimeTicks last_screen_orientation_change_time_;
+
+  // Manages a transient affordance for this page's frames to enter fullscreen.
+  blink::TransientAllowFullscreen transient_allow_fullscreen_;
 
   // Indicates how many sources are currently suppressing the unresponsive
   // renderer dialog.

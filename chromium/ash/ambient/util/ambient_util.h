@@ -7,7 +7,9 @@
 
 #include "ash/ash_export.h"
 #include "ash/login/ui/lock_screen.h"
+#include "ash/public/cpp/ambient/ambient_backend_controller.h"
 #include "ui/gfx/font_list.h"
+#include "ui/gfx/shadow_value.h"
 
 namespace ash {
 
@@ -19,6 +21,11 @@ ASH_EXPORT bool IsShowing(LockScreen::ScreenType type);
 
 // Returns the default fontlist for Ambient Mode.
 ASH_EXPORT const gfx::FontList& GetDefaultFontlist();
+
+// Returns the default static text shadow for Ambient Mode.
+ASH_EXPORT gfx::ShadowValues GetTextShadowValues();
+
+ASH_EXPORT bool IsAmbientModeTopicTypeAllowed(AmbientModeTopicType topic);
 
 }  // namespace util
 }  // namespace ambient

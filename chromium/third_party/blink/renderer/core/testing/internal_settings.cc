@@ -167,11 +167,11 @@ void InternalSettings::setViewportStyle(const String& style,
                                         ExceptionState& exception_state) {
   InternalSettingsGuardForSettings();
   if (EqualIgnoringASCIICase(style, "default"))
-    GetSettings()->SetViewportStyle(WebViewportStyle::kDefault);
+    GetSettings()->SetViewportStyle(web_pref::ViewportStyle::kDefault);
   else if (EqualIgnoringASCIICase(style, "mobile"))
-    GetSettings()->SetViewportStyle(WebViewportStyle::kMobile);
+    GetSettings()->SetViewportStyle(web_pref::ViewportStyle::kMobile);
   else if (EqualIgnoringASCIICase(style, "television"))
-    GetSettings()->SetViewportStyle(WebViewportStyle::kTelevision);
+    GetSettings()->SetViewportStyle(web_pref::ViewportStyle::kTelevision);
   else
     exception_state.ThrowDOMException(
         DOMExceptionCode::kSyntaxError,
@@ -315,15 +315,15 @@ void InternalSettings::setEditingBehavior(const String& editing_behavior,
                                           ExceptionState& exception_state) {
   InternalSettingsGuardForSettings();
   if (EqualIgnoringASCIICase(editing_behavior, "win"))
-    GetSettings()->SetEditingBehaviorType(kEditingWindowsBehavior);
+    GetSettings()->SetEditingBehaviorType(web_pref::kEditingWindowsBehavior);
   else if (EqualIgnoringASCIICase(editing_behavior, "mac"))
-    GetSettings()->SetEditingBehaviorType(kEditingMacBehavior);
+    GetSettings()->SetEditingBehaviorType(web_pref::kEditingMacBehavior);
   else if (EqualIgnoringASCIICase(editing_behavior, "unix"))
-    GetSettings()->SetEditingBehaviorType(kEditingUnixBehavior);
+    GetSettings()->SetEditingBehaviorType(web_pref::kEditingUnixBehavior);
   else if (EqualIgnoringASCIICase(editing_behavior, "android"))
-    GetSettings()->SetEditingBehaviorType(kEditingAndroidBehavior);
+    GetSettings()->SetEditingBehaviorType(web_pref::kEditingAndroidBehavior);
   else if (EqualIgnoringASCIICase(editing_behavior, "chromeos"))
-    GetSettings()->SetEditingBehaviorType(kEditingChromeOSBehavior);
+    GetSettings()->SetEditingBehaviorType(web_pref::kEditingChromeOSBehavior);
   else
     exception_state.ThrowDOMException(DOMExceptionCode::kSyntaxError,
                                       "The editing behavior type provided ('" +
@@ -367,11 +367,11 @@ void InternalSettings::setAvailablePointerTypes(
     String token = split_token.StripWhiteSpace();
 
     if (token == "coarse") {
-      pointer_types |= kPointerTypeCoarse;
+      pointer_types |= ui::POINTER_TYPE_COARSE;
     } else if (token == "fine") {
-      pointer_types |= kPointerTypeFine;
+      pointer_types |= ui::POINTER_TYPE_FINE;
     } else if (token == "none") {
-      pointer_types |= kPointerTypeNone;
+      pointer_types |= ui::POINTER_TYPE_NONE;
     } else {
       exception_state.ThrowDOMException(
           DOMExceptionCode::kSyntaxError,
@@ -412,13 +412,13 @@ void InternalSettings::setPrimaryPointerType(const String& pointer,
   InternalSettingsGuardForSettings();
   String token = pointer.StripWhiteSpace();
 
-  PointerType type = kPointerTypeNone;
+  ui::PointerType type = ui::POINTER_TYPE_NONE;
   if (token == "coarse") {
-    type = kPointerTypeCoarse;
+    type = ui::POINTER_TYPE_COARSE;
   } else if (token == "fine") {
-    type = kPointerTypeFine;
+    type = ui::POINTER_TYPE_FINE;
   } else if (token == "none") {
-    type = kPointerTypeNone;
+    type = ui::POINTER_TYPE_NONE;
   } else {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kSyntaxError,
@@ -442,9 +442,9 @@ void InternalSettings::setAvailableHoverTypes(const String& types,
   for (const String& split_token : tokens) {
     String token = split_token.StripWhiteSpace();
     if (token == "none") {
-      hover_types |= kHoverTypeNone;
+      hover_types |= ui::HOVER_TYPE_NONE;
     } else if (token == "hover") {
-      hover_types |= kHoverTypeHover;
+      hover_types |= ui::HOVER_TYPE_HOVER;
     } else {
       exception_state.ThrowDOMException(
           DOMExceptionCode::kSyntaxError,
@@ -461,11 +461,11 @@ void InternalSettings::setPrimaryHoverType(const String& type,
   InternalSettingsGuardForSettings();
   String token = type.StripWhiteSpace();
 
-  HoverType hover_type = kHoverTypeNone;
+  ui::HoverType hover_type = ui::HOVER_TYPE_NONE;
   if (token == "none") {
-    hover_type = kHoverTypeNone;
+    hover_type = ui::HOVER_TYPE_NONE;
   } else if (token == "hover") {
-    hover_type = kHoverTypeHover;
+    hover_type = ui::HOVER_TYPE_HOVER;
   } else {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kSyntaxError,
@@ -481,11 +481,14 @@ void InternalSettings::setImageAnimationPolicy(
     ExceptionState& exception_state) {
   InternalSettingsGuardForSettings();
   if (EqualIgnoringASCIICase(policy, "allowed")) {
-    GetSettings()->SetImageAnimationPolicy(kImageAnimationPolicyAllowed);
+    GetSettings()->SetImageAnimationPolicy(
+        web_pref::kImageAnimationPolicyAllowed);
   } else if (EqualIgnoringASCIICase(policy, "once")) {
-    GetSettings()->SetImageAnimationPolicy(kImageAnimationPolicyAnimateOnce);
+    GetSettings()->SetImageAnimationPolicy(
+        web_pref::kImageAnimationPolicyAnimateOnce);
   } else if (EqualIgnoringASCIICase(policy, "none")) {
-    GetSettings()->SetImageAnimationPolicy(kImageAnimationPolicyNoAnimation);
+    GetSettings()->SetImageAnimationPolicy(
+        web_pref::kImageAnimationPolicyNoAnimation);
   } else {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kSyntaxError,

@@ -49,9 +49,8 @@ struct DeviceScaleFactorDPIThreshold {
 // Update the list of zoom levels whenever a new device scale factor is added
 // here. See zoom level list in /ui/display/manager/display_util.cc
 const DeviceScaleFactorDPIThreshold kThresholdTableForInternal[] = {
-    {300.f, kDsf_2_666},  {270.0f, kDsf_2_252}, {230.0f, 2.0f},
-    {220.0f, kDsf_1_777}, {180.0f, 1.6f},       {150.0f, 1.25f},
-    {0.0f, 1.0f},
+    {310.f, kDsf_2_666}, {270.0f, 2.4f},  {230.0f, 2.0f}, {220.0f, kDsf_1_777},
+    {180.0f, 1.6f},      {150.0f, 1.25f}, {0.0f, 1.0f},
 };
 
 // Returns a list of display modes for the given |output| that doesn't exclude
@@ -92,11 +91,24 @@ gfx::DisplayColorSpaces FillDisplayColorSpaces(
                                    DisplaySnapshot::PrimaryFormat());
   }
 
-  // TODO(b/158126931): |snapshot_color_space| Primaries/Transfer function
-  // cannot be used directly, as users prefer saturated colors to accurate ones.
-  // Instead, clamp at DCI-P3 and clamp at that level or with a small overshoot.
-  gfx::DisplayColorSpaces display_color_spaces(
-      gfx::ColorSpace::CreateSRGB(), DisplaySnapshot::PrimaryFormat());
+  const auto primary_id = snapshot_color_space.GetPrimaryID();
+
+  skcms_Matrix3x3 primary_matrix{};
+  if (primary_id == gfx::ColorSpace::PrimaryID::CUSTOM)
+    snapshot_color_space.GetPrimaryMatrix(&primary_matrix);
+
+  // Reconstruct the native colorspace with an IEC61966 2.1 transfer function
+  // for SDR content (matching that of sRGB).
+  gfx::ColorSpace sdr_color_space;
+  if (primary_id == gfx::ColorSpace::PrimaryID::CUSTOM) {
+    sdr_color_space = gfx::ColorSpace::CreateCustom(
+        primary_matrix, gfx::ColorSpace::TransferID::IEC61966_2_1);
+  } else {
+    sdr_color_space =
+        gfx::ColorSpace(primary_id, gfx::ColorSpace::TransferID::IEC61966_2_1);
+  }
+  gfx::DisplayColorSpaces display_color_spaces = gfx::DisplayColorSpaces(
+      sdr_color_space, DisplaySnapshot::PrimaryFormat());
 
   // AMD Chromebooks have issues playing back and scanning out high bit depth
   // content. TODO(b/169576243, b/165825264): remove this provision when fixed.
@@ -108,11 +120,8 @@ gfx::DisplayColorSpaces FillDisplayColorSpaces(
   if (allow_high_bit_depth && snapshot_color_space.IsHDR()) {
     constexpr float kSDRJoint = 0.75;
     constexpr float kHDRLevel = 4.0;
-    const auto primary_id = snapshot_color_space.GetPrimaryID();
     gfx::ColorSpace hdr_color_space;
     if (primary_id == gfx::ColorSpace::PrimaryID::CUSTOM) {
-      skcms_Matrix3x3 primary_matrix{};
-      snapshot_color_space.GetPrimaryMatrix(&primary_matrix);
       hdr_color_space = gfx::ColorSpace::CreatePiecewiseHDR(
           primary_id, kSDRJoint, kHDRLevel, &primary_matrix);
     } else {
@@ -364,16 +373,9 @@ ManagedDisplayInfo DisplayChangeObserver::CreateManagedDisplayInfo(
                         ? kInchInMm * mode_info->size().width() /
                               snapshot->physical_size().width()
                         : 0;
-  constexpr gfx::Size k225DisplaySizeHack(3000, 2000);
-
   if (snapshot->type() == DISPLAY_CONNECTION_TYPE_INTERNAL) {
     new_info.set_native(true);
-    // This is a stopgap hack to deal with b/74845106. Unfortunately, some old
-    // devices (like evt) does not have a firmware fix, so we need to keep this.
-    if (mode_info->size() == k225DisplaySizeHack)
-      device_scale_factor = kDsf_2_252;
-    else if (dpi)
-      device_scale_factor = FindDeviceScaleFactor(dpi);
+    device_scale_factor = FindDeviceScaleFactor(dpi, mode_info->size());
   } else {
     ManagedDisplayMode mode;
     if (display_manager_->GetSelectedModeForDisplayId(snapshot->display_id(),
@@ -423,10 +425,19 @@ ManagedDisplayInfo DisplayChangeObserver::CreateManagedDisplayInfo(
 }
 
 // static
-float DisplayChangeObserver::FindDeviceScaleFactor(float dpi) {
-  for (size_t i = 0; i < base::size(kThresholdTableForInternal); ++i) {
-    if (dpi >= kThresholdTableForInternal[i].dpi)
-      return kThresholdTableForInternal[i].device_scale_factor;
+float DisplayChangeObserver::FindDeviceScaleFactor(
+    float dpi,
+    const gfx::Size& size_in_pixels) {
+  // Nocturne has special scale factor 3000/1332=2.252.. for the panel 3kx2k.
+  constexpr gfx::Size k225DisplaySizeHack(3000, 2000);
+
+  if (size_in_pixels == k225DisplaySizeHack)
+    return kDsf_2_252;
+  else {
+    for (size_t i = 0; i < base::size(kThresholdTableForInternal); ++i) {
+      if (dpi >= kThresholdTableForInternal[i].dpi)
+        return kThresholdTableForInternal[i].device_scale_factor;
+    }
   }
   return 1.0f;
 }

@@ -13,6 +13,7 @@
 #include "ios/chrome/browser/crash_report/crash_keys_helper.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_table_view_controller.h"
+#import "ios/chrome/browser/ui/tab_grid/features.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_commands.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_consumer.h"
@@ -304,9 +305,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
                                    : gridViewController.selectedCellVisible;
 }
 
-- (GridTransitionLayout*)transitionLayout {
+- (GridTransitionLayout*)transitionLayout:(TabGridPage)activePage {
   GridViewController* gridViewController =
-      [self gridViewControllerForPage:self.activePage];
+      [self gridViewControllerForPage:activePage];
   if (!gridViewController)
     return nil;
 
@@ -358,6 +359,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
   [self.incognitoTabsViewController contentWillAppearAnimated:animated];
   [self.regularTabsViewController contentWillAppearAnimated:animated];
+
+  if (@available(iOS 13.0, *)) {
+    self.remoteTabsViewController.session =
+        self.view.window.windowScene.session;
+  }
+
   self.remoteTabsViewController.preventUpdates = NO;
 }
 
@@ -419,6 +426,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 - (void)setActivePage:(TabGridPage)activePage {
   [self scrollToPage:activePage animated:YES];
   _activePage = activePage;
+}
+
+#pragma mark - LayoutSwitcherProvider
+
+- (id<LayoutSwitcher>)layoutSwitcher {
+  return [self gridViewControllerForPage:self.activePage];
 }
 
 #pragma mark - Private
@@ -742,7 +755,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   [self.view addSubview:topToolbar];
 
   topToolbar.leadingButton.target = self;
-  topToolbar.leadingButton.action = @selector(closeAllButtonTapped:);
+  if (base::FeatureList::IsEnabled(kEnableCloseAllTabsConfirmation)) {
+    topToolbar.leadingButton.action =
+        @selector(closeAllButtonTappedShowConfirmation:);
+  } else {
+    topToolbar.leadingButton.action = @selector(closeAllButtonTapped:);
+  }
   topToolbar.trailingButton.title =
       l10n_util::GetNSString(IDS_IOS_TAB_GRID_DONE_BUTTON);
   topToolbar.trailingButton.accessibilityIdentifier =
@@ -781,7 +799,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   ]];
 
   bottomToolbar.leadingButton.target = self;
-  bottomToolbar.leadingButton.action = @selector(closeAllButtonTapped:);
+  if (base::FeatureList::IsEnabled(kEnableCloseAllTabsConfirmation)) {
+    bottomToolbar.leadingButton.action =
+        @selector(closeAllButtonTappedShowConfirmation:);
+  } else {
+    bottomToolbar.leadingButton.action = @selector(closeAllButtonTapped:);
+  }
   bottomToolbar.trailingButton.title =
       l10n_util::GetNSString(IDS_IOS_TAB_GRID_DONE_BUTTON);
   bottomToolbar.trailingButton.accessibilityIdentifier =
@@ -1135,6 +1158,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 - (void)gridViewController:(GridViewController*)gridViewController
         didChangeItemCount:(NSUInteger)count {
+  if (count > 0) {
+    // Undo is only available when the tab grid is empty.
+    self.undoCloseAllAvailable = NO;
+  }
   [self configureButtonsForActiveAndCurrentPage];
   if (gridViewController == self.regularTabsViewController) {
     self.topToolbar.pageControl.regularTabCount = count;
@@ -1198,26 +1225,37 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
 }
 
+// Shows an action sheet that asks for confirmation when 'Close All' button is
+// tapped.
+- (void)closeAllButtonTappedShowConfirmation:(id)sender {
+  switch (self.currentPage) {
+    case TabGridPageIncognitoTabs:
+      [self.incognitoTabsDelegate showCloseAllConfirmationActionSheet];
+      break;
+    case TabGridPageRegularTabs:
+      [self.regularTabsDelegate showCloseAllConfirmationActionSheet];
+      break;
+    case TabGridPageRemoteTabs:
+      NOTREACHED() << "It is invalid to call close all tabs on remote tabs.";
+      break;
+  }
+}
+
 - (void)closeAllButtonTapped:(id)sender {
   switch (self.currentPage) {
     case TabGridPageIncognitoTabs:
-      base::RecordAction(
-          base::UserMetricsAction("MobileTabGridCloseAllIncognitoTabs"));
       [self.incognitoTabsDelegate closeAllItems];
       break;
     case TabGridPageRegularTabs:
       DCHECK_EQ(self.undoCloseAllAvailable,
                 self.regularTabsViewController.gridEmpty);
       if (self.undoCloseAllAvailable) {
-        base::RecordAction(
-            base::UserMetricsAction("MobileTabGridUndoCloseAllRegularTabs"));
         [self.regularTabsDelegate undoCloseAllItems];
+        self.undoCloseAllAvailable = NO;
       } else {
-        base::RecordAction(
-            base::UserMetricsAction("MobileTabGridCloseAllRegularTabs"));
         [self.regularTabsDelegate saveAndCloseAllItems];
+        self.undoCloseAllAvailable = YES;
       }
-      self.undoCloseAllAvailable = !self.undoCloseAllAvailable;
       [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
       break;
     case TabGridPageRemoteTabs:

@@ -5,12 +5,6 @@
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 
-# Reset sources_assignment_filter for the BUILD.gn file to prevent
-# regression during the migration of Chromium away from the feature.
-# See docs/no_sources_assignment_filter.md for more information.
-# TODO(crbug.com/1018739): remove this when migration is done.
-set_sources_assignment_filter([])
-
 component("compositor") {
   sources = [
     "animation_metrics_recorder.cc",
@@ -37,8 +31,6 @@ component("compositor") {
     "compositor_switches.h",
     "debug_utils.cc",
     "debug_utils.h",
-    "dip_util.cc",
-    "dip_util.h",
     "float_animation_curve_adapter.cc",
     "float_animation_curve_adapter.h",
     "layer.cc",
@@ -226,15 +218,13 @@ static_library("test_support") {
     ]
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     sources += [ "test/test_compositor_host_linux.cc" ]
   }
 }
 
 test("compositor_unittests") {
-  if ((is_linux && !is_chromeos) || chromeos_is_browser_only) {
-    use_xvfb = true
-  }
+  use_xvfb = use_xvfb_in_this_config
 
   sources = [
     "animation_throughput_reporter_unittest.cc",

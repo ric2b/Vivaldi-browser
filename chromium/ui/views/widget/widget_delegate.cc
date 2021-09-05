@@ -47,7 +47,11 @@ bool WidgetDelegate::OnCloseRequested(Widget::ClosedReason close_reason) {
 }
 
 View* WidgetDelegate::GetInitiallyFocusedView() {
-  return nullptr;
+  return params_.initially_focused_view.value_or(nullptr);
+}
+
+bool WidgetDelegate::HasConfiguredInitiallyFocusedView() const {
+  return params_.initially_focused_view.has_value();
 }
 
 BubbleDialogDelegate* WidgetDelegate::AsBubbleDialogDelegate() {
@@ -75,7 +79,7 @@ bool WidgetDelegate::CanActivate() const {
 }
 
 ui::ModalType WidgetDelegate::GetModalType() const {
-  return ui::MODAL_TYPE_NONE;
+  return params_.modal_type;
 }
 
 ax::mojom::Role WidgetDelegate::GetAccessibleWindowRole() {
@@ -153,10 +157,6 @@ bool WidgetDelegate::GetSavedWindowPlacement(
   return display.bounds().Intersects(*bounds);
 }
 
-bool WidgetDelegate::ShouldRestoreWindowSize() const {
-  return true;
-}
-
 void WidgetDelegate::WidgetInitializing(Widget* widget) {
   widget_ = widget;
   OnWidgetInitializing();
@@ -186,6 +186,8 @@ void WidgetDelegate::WindowClosing() {
 void WidgetDelegate::DeleteDelegate() {
   for (auto&& callback : delete_delegate_callbacks_)
     std::move(callback).Run();
+  if (params_.owned_by_widget)
+    delete this;
 }
 
 Widget* WidgetDelegate::GetWidget() {
@@ -202,8 +204,14 @@ View* WidgetDelegate::GetContentsView() {
   return default_contents_view_;
 }
 
+View* WidgetDelegate::TransferOwnershipOfContentsView() {
+  DCHECK(!contents_view_taken_);
+  contents_view_taken_ = true;
+  return GetContentsView();
+}
+
 ClientView* WidgetDelegate::CreateClientView(Widget* widget) {
-  return new ClientView(widget, GetContentsView());
+  return new ClientView(widget, TransferOwnershipOfContentsView());
 }
 
 std::unique_ptr<NonClientFrameView> WidgetDelegate::CreateNonClientFrameView(
@@ -249,12 +257,28 @@ void WidgetDelegate::SetCanResize(bool can_resize) {
   params_.can_resize = can_resize;
 }
 
+void WidgetDelegate::SetOwnedByWidget(bool owned) {
+  params_.owned_by_widget = owned;
+}
+
 void WidgetDelegate::SetFocusTraversesOut(bool focus_traverses_out) {
   params_.focus_traverses_out = focus_traverses_out;
 }
 
 void WidgetDelegate::SetIcon(const gfx::ImageSkia& icon) {
   params_.icon = icon;
+  if (GetWidget())
+    GetWidget()->UpdateWindowIcon();
+}
+
+void WidgetDelegate::SetInitiallyFocusedView(View* initially_focused_view) {
+  DCHECK(!GetWidget());
+  params_.initially_focused_view = initially_focused_view;
+}
+
+void WidgetDelegate::SetModalType(ui::ModalType modal_type) {
+  DCHECK(!GetWidget());
+  params_.modal_type = modal_type;
 }
 
 void WidgetDelegate::SetShowCloseButton(bool show_close_button) {
@@ -263,6 +287,8 @@ void WidgetDelegate::SetShowCloseButton(bool show_close_button) {
 
 void WidgetDelegate::SetShowIcon(bool show_icon) {
   params_.show_icon = show_icon;
+  if (GetWidget())
+    GetWidget()->UpdateWindowIcon();
 }
 
 void WidgetDelegate::SetShowTitle(bool show_title) {
@@ -313,13 +339,10 @@ void WidgetDelegate::RegisterDeleteDelegateCallback(
 WidgetDelegateView::WidgetDelegateView() {
   // A WidgetDelegate should be deleted on DeleteDelegate.
   set_owned_by_client();
+  SetOwnedByWidget(true);
 }
 
 WidgetDelegateView::~WidgetDelegateView() = default;
-
-void WidgetDelegateView::DeleteDelegate() {
-  delete this;
-}
 
 Widget* WidgetDelegateView::GetWidget() {
   return View::GetWidget();
@@ -333,8 +356,7 @@ views::View* WidgetDelegateView::GetContentsView() {
   return this;
 }
 
-BEGIN_METADATA(WidgetDelegateView)
-METADATA_PARENT_CLASS(View)
-END_METADATA()
+BEGIN_METADATA(WidgetDelegateView, View)
+END_METADATA
 
 }  // namespace views

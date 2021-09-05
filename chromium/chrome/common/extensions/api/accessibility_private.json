@@ -166,6 +166,12 @@
             "optional": true
           }
         }
+      },
+      {
+        "id": "AcceleratorAction",
+        "type": "string",
+        "enum": [ "focusPreviousPane", "focusNextPane" ],
+        "description": "A subset of accelerator actions used by accessibility."
       }
     ],
     "functions": [
@@ -378,7 +384,7 @@
         "platforms": ["chromeos"]
       },
       {
-        "name": "onSelectToSpeakStateChanged",
+        "name": "setSelectToSpeakState",
         "type": "function",
         "description": "Called by the Select-to-Speak extension when Select-to-Speak has changed states, between selecting with the mouse, speaking, and inactive.",
         "parameters": [
@@ -390,13 +396,26 @@
         "platforms": ["chromeos"]
       },
       {
-        "name": "onScrollableBoundsForPointFound",
+        "name": "handleScrollableBoundsForPointFound",
         "type": "function",
-        "description": "Called by the Accessibility Common extension when findScrollableBoundsForPoint has found a scrolling container. |rect| will be the bounds of the nearest scrollable ancestor of the node at the point requested using findScrollableBoundsForPoint.",
+        "description": "Called by the Accessibility Common extension when onScrollableBoundsForPointRequested has found a scrolling container. |rect| will be the bounds of the nearest scrollable ancestor of the node at the point requested using onScrollableBoundsForPointRequested.",
         "parameters": [
           {
             "name": "rect",
             "$ref": "ScreenRect"
+          }
+        ],
+        "platforms": ["chromeos"]
+      },
+      {
+        "name": "moveMagnifierToRect",
+        "type": "function",
+        "description": "Called by the Accessibility Common extension to move |rect| within the magnifier viewport (e.g. when focus has changed). If |rect| is already completely within the viewport, magnifier doesn't move. If any edge of |rect| is outside the viewport (e.g. if rect is larger than or extends partially beyond the viewport), magnifier will center the overflowing dimensions of the viewport on center of |rect| (e.g. center viewport vertically if |rect| extends beyond bottom of screen).",
+        "parameters": [
+          {
+            "name": "rect",
+            "$ref": "ScreenRect",
+            "description": "Rect to ensure visible in the magnified viewport."
           }
         ],
         "platforms": ["chromeos"]
@@ -428,6 +447,18 @@
           {
             "name": "subpage",
             "type": "string"
+          }
+        ],
+        "platforms": ["chromeos"]
+      },
+      {
+        "name": "performAcceleratorAction",
+        "type": "function",
+        "description": "Performs an accelerator action.",
+        "parameters": [
+          {
+            "name": "acceleratorAction",
+            "$ref": "AcceleratorAction"
           }
         ],
         "platforms": ["chromeos"]
@@ -504,7 +535,7 @@
         "platforms": ["chromeos"]
       },
       {
-        "name": "findScrollableBoundsForPoint",
+        "name": "onScrollableBoundsForPointRequested",
         "type": "function",
         "description": "Fired when an internal component within accessibility wants to find the nearest scrolling container at a given screen coordinate. Used in Automatic Clicks.",
         "parameters": [

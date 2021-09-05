@@ -198,7 +198,7 @@ template <typename STRING_TYPE> class BasicStringPiece {
   constexpr const value_type* data() const { return ptr_; }
   constexpr size_type size() const noexcept { return length_; }
   constexpr size_type length() const noexcept { return length_; }
-  bool empty() const { return length_ == 0; }
+  constexpr bool empty() const noexcept { return length_ == 0; }
 
   constexpr value_type operator[](size_type i) const {
     CHECK(i < length_);
@@ -237,19 +237,24 @@ template <typename STRING_TYPE> class BasicStringPiece {
   }
 
   // This is the style of conversion preferred by std::string_view in C++17.
-  explicit operator STRING_TYPE() const { return as_string(); }
-
-  STRING_TYPE as_string() const {
-    // std::string doesn't like to take a NULL pointer even with a 0 size.
+  explicit operator STRING_TYPE() const {
     return empty() ? STRING_TYPE() : STRING_TYPE(data(), size());
   }
 
-  const_iterator begin() const { return ptr_; }
-  const_iterator end() const { return ptr_ + length_; }
-  const_reverse_iterator rbegin() const {
+  // Deprecated, use operator STRING_TYPE() instead.
+  // TODO(crbug.com/1049498): Remove for all STRING_TYPEs.
+  template <typename StrT = STRING_TYPE,
+            typename = std::enable_if_t<std::is_same<StrT, std::string>::value>>
+  STRING_TYPE as_string() const {
+    return STRING_TYPE(*this);
+  }
+
+  constexpr const_iterator begin() const noexcept { return ptr_; }
+  constexpr const_iterator end() const noexcept { return ptr_ + length_; }
+  constexpr const_reverse_iterator rbegin() const noexcept {
     return const_reverse_iterator(ptr_ + length_);
   }
-  const_reverse_iterator rend() const {
+  constexpr const_reverse_iterator rend() const noexcept {
     return const_reverse_iterator(ptr_);
   }
 
@@ -320,8 +325,7 @@ template <typename STRING_TYPE> class BasicStringPiece {
   constexpr BasicStringPiece substr(
       size_type pos,
       size_type n = BasicStringPiece::npos) const {
-    // TODO(crbug.com/1049498): Be less lenient here and CHECK(pos <= size()).
-    pos = std::min(pos, size());
+    CHECK_LE(pos, size());
     return {data() + pos, std::min(n, size() - pos)};
   }
 

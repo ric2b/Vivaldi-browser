@@ -67,6 +67,9 @@ bool IsPermissionGrantedInAppConfig(
   return false;
 }
 
+// Ephemeral remote debugging port used by child contexts.
+const uint16_t kEphemeralRemoteDebuggingPort = 0;
+
 }  // namespace
 
 CastRunner::CastRunner(bool is_headless)
@@ -126,9 +129,8 @@ void CastRunner::StartComponent(
       std::move(controller_request), cast_url.GetContent()));
 }
 
-void CastRunner::SetOnMainContextLostCallbackForTest(
-    base::OnceClosure on_context_lost) {
-  main_context_->SetOnContextLostCallbackForTest(std::move(on_context_lost));
+fuchsia::web::FrameHost* CastRunner::main_context_frame_host() const {
+  return main_context_.get();
 }
 
 void CastRunner::LaunchPendingComponent(PendingCastComponent* pending_component,
@@ -193,6 +195,9 @@ void CastRunner::CancelPendingComponent(
 void CastRunner::OnComponentDestroyed(CastComponent* component) {
   if (component == audio_capturer_component_)
     audio_capturer_component_ = nullptr;
+
+  if (component == video_capturer_component_)
+    video_capturer_component_ = nullptr;
 }
 
 fuchsia::web::CreateContextParams CastRunner::GetCommonContextParams() {
@@ -222,15 +227,15 @@ fuchsia::web::CreateContextParams CastRunner::GetCommonContextParams() {
 
   // See http://b/141956135.
   params.set_user_agent_product("CrKey");
-  params.set_user_agent_version("1.43.000000");
-
-  params.set_remote_debugging_port(CastRunner::kRemoteDebuggingPort);
+  params.set_user_agent_version("1.52.000000");
 
   // When tests require that VULKAN be disabled, DRM must also be disabled.
   if (disable_vulkan_for_test_) {
     *params.mutable_features() &=
         ~(fuchsia::web::ContextFeatureFlags::WIDEVINE_CDM |
-          fuchsia::web::ContextFeatureFlags::VULKAN);
+          fuchsia::web::ContextFeatureFlags::VULKAN |
+          fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER |
+          fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER_ONLY);
     params.clear_playready_key_system();
   }
 
@@ -244,6 +249,7 @@ fuchsia::web::CreateContextParams CastRunner::GetCommonContextParams() {
 
 fuchsia::web::CreateContextParams CastRunner::GetMainContextParams() {
   fuchsia::web::CreateContextParams params = GetCommonContextParams();
+  params.set_remote_debugging_port(CastRunner::kRemoteDebuggingPort);
   *params.mutable_features() |=
       fuchsia::web::ContextFeatureFlags::NETWORK |
       fuchsia::web::ContextFeatureFlags::LEGACYMETRICS;
@@ -262,6 +268,7 @@ fuchsia::web::CreateContextParams
 CastRunner::GetIsolatedContextParamsWithFuchsiaDirs(
     std::vector<fuchsia::web::ContentDirectoryProvider> content_directories) {
   fuchsia::web::CreateContextParams params = GetCommonContextParams();
+  params.set_remote_debugging_port(kEphemeralRemoteDebuggingPort);
   params.set_content_directories(std::move(content_directories));
   isolated_services_->ConnectClient(
       params.mutable_service_directory()->NewRequest());
@@ -271,6 +278,7 @@ CastRunner::GetIsolatedContextParamsWithFuchsiaDirs(
 fuchsia::web::CreateContextParams
 CastRunner::GetIsolatedContextParamsForCastStreaming() {
   fuchsia::web::CreateContextParams params = GetCommonContextParams();
+  params.set_remote_debugging_port(kEphemeralRemoteDebuggingPort);
   ApplyCastStreamingContextParams(&params);
   // TODO(crbug.com/1069746): Use a different FilteredServiceDirectory for Cast
   // Streaming Contexts.

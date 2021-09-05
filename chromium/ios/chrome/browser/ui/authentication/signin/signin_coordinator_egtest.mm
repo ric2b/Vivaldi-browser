@@ -9,6 +9,7 @@
 #include "base/test/scoped_feature_list.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_constants.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -52,18 +53,35 @@ namespace {
 // Taps on the primary sign-in button in recent tabs, and scroll first, if
 // necessary.
 void TapOnPrimarySignInButtonInRecentTabs() {
-  id<GREYMatcher> matcher =
-      grey_allOf(PrimarySignInButton(), grey_sufficientlyVisible(), nil);
-  const CGFloat kPixelsToScroll = 300;
-  id<GREYAction> searchAction =
-      grey_scrollInDirection(kGREYDirectionDown, kPixelsToScroll);
-  GREYElementInteraction* interaction =
-      [[EarlGrey selectElementWithMatcher:matcher]
-             usingSearchAction:searchAction
-          onElementWithMatcher:
-              grey_accessibilityID(
-                  kRecentTabsTableViewControllerAccessibilityIdentifier)];
-  [interaction performAction:grey_tap()];
+  [[[EarlGrey
+      selectElementWithMatcher:grey_allOf(PrimarySignInButton(),
+                                          grey_sufficientlyVisible(), nil)]
+         usingSearchAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)
+      onElementWithMatcher:
+          grey_allOf(grey_accessibilityID(
+                         kRecentTabsTableViewControllerAccessibilityIdentifier),
+                     grey_sufficientlyVisible(), nil)]
+      performAction:grey_tap()];
+}
+
+// Collapses the recently closed tabs section if the sign in promo is
+// inaccessible otherwise.
+void CollapseRecentlyClosedTabsSectionIfNecessary() {
+  NSError* error = nil;
+  [[EarlGrey selectElementWithMatcher:
+                 grey_accessibilityID(
+                     kRecentTabsTableViewControllerAccessibilityIdentifier)]
+      assertWithMatcher:chrome_test_util::ContentViewSmallerThanScrollView()
+                  error:&error];
+
+  if (error) {
+    [[EarlGrey selectElementWithMatcher:
+                   grey_allOf(chrome_test_util::ButtonWithAccessibilityLabel(
+                                  l10n_util::GetNSString(
+                                      IDS_IOS_RECENT_TABS_RECENTLY_CLOSED)),
+                              grey_sufficientlyVisible(), nil)]
+        performAction:grey_tap()];
+  }
 }
 
 // Returns a matcher for |userEmail| in IdentityChooserViewController.
@@ -114,6 +132,12 @@ void ChooseImportOrKeepDataSepareteDialog(id<GREYMatcher> choiceButtonMatcher) {
 @end
 
 @implementation SigninCoordinatorTestCase
+
+- (AppLaunchConfiguration)appConfigurationForTestCase {
+  AppLaunchConfiguration config;
+  config.features_disabled.push_back(kDiscoverFeedInNtp);
+  return config;
+}
 
 - (void)setUp {
   [super setUp];
@@ -441,6 +465,10 @@ void ChooseImportOrKeepDataSepareteDialog(id<GREYMatcher> choiceButtonMatcher) {
       [[EarlGrey selectElementWithMatcher:chrome_test_util::
                                               TabGridOtherDevicesPanelButton()]
           performAction:grey_tap()];
+
+      // TODO(crbug.com/1131479): Find a way to scroll the view instead.
+      CollapseRecentlyClosedTabsSectionIfNecessary();
+
       TapOnPrimarySignInButtonInRecentTabs();
       break;
   }
@@ -580,6 +608,28 @@ void ChooseImportOrKeepDataSepareteDialog(id<GREYMatcher> choiceButtonMatcher) {
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
+}
+
+// Simulates a potential race condition in which the account is invalidated
+// after the user taps the Settings button to navigate to the identity
+// choosing UI. Depending on the timing, the account removal may occur after
+// the UI has retrieved the list of valid accounts. The test ensures that in
+// this case no account is presented to the user.
+- (void)testAccountInvalidatedDuringSignin {
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGrey fakeIdentity1];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity];
+
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
+
+  // Invalidate account after menu generation. If the underlying code does not
+  // handle the race condition of removing an identity while showing menu is in
+  // progress this test will likely be flaky.
+  [SigninEarlGrey forgetFakeIdentity:fakeIdentity];
+  // Check that the identity has been removed.
+  [[EarlGrey selectElementWithMatcher:identityChooserButtonMatcherWithEmail(
+                                          fakeIdentity.userEmail)]
+      assertWithMatcher:grey_notVisible()];
 }
 
 @end

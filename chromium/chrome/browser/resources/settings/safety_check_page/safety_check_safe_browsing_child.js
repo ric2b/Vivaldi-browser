@@ -52,6 +52,23 @@ Polymer({
      * @private
      */
     displayString_: String,
+
+    /**
+     * A set of statuses that the entire row is clickable.
+     * @type {!Set<!SafetyCheckSafeBrowsingStatus>}
+     * @private
+     */
+    rowClickableStatuses: {
+      readOnly: true,
+      type: Object,
+      value: () => new Set([
+        SafetyCheckSafeBrowsingStatus.ENABLED_STANDARD,
+        SafetyCheckSafeBrowsingStatus.ENABLED_ENHANCED,
+        SafetyCheckSafeBrowsingStatus.ENABLED_STANDARD_AVAILABLE_ENHANCED,
+        SafetyCheckSafeBrowsingStatus.DISABLED_BY_ADMIN,
+        SafetyCheckSafeBrowsingStatus.DISABLED_BY_EXTENSION,
+      ]),
+    },
   },
 
   /** @private {?MetricsBrowserProxy} */
@@ -120,10 +137,7 @@ Polymer({
         SafetyCheckInteractions.SAFETY_CHECK_SAFE_BROWSING_MANAGE);
     this.metricsBrowserProxy_.recordAction(
         'Settings.SafetyCheck.ManageSafeBrowsing');
-
-    Router.getInstance().navigateTo(
-        routes.SECURITY, /* dynamicParams= */ null,
-        /* removeSearch= */ true);
+    this.openSecurityPage_();
   },
 
   /**
@@ -139,5 +153,35 @@ Polymer({
       default:
         return null;
     }
+  },
+
+  /**
+   * @private
+   * @return {?boolean}
+   */
+  isRowClickable_: function() {
+    return this.rowClickableStatuses.has(this.status_);
+  },
+
+  /** @private */
+  onRowClick_: function() {
+    if (this.isRowClickable_()) {
+      // Log click both in action and histogram.
+      this.metricsBrowserProxy_.recordSafetyCheckInteractionHistogram(
+          SafetyCheckInteractions
+              .SAFETY_CHECK_SAFE_BROWSING_MANAGE_THROUGH_CARET_NAVIGATION);
+      this.metricsBrowserProxy_.recordAction(
+          'Settings.SafetyCheck.ManageSafeBrowsingThroughCaretNavigation');
+      this.openSecurityPage_();
+    }
+  },
+
+  /** @private */
+  openSecurityPage_: function() {
+    this.metricsBrowserProxy_.recordAction(
+        'SafeBrowsing.Settings.ShowedFromSafetyCheck');
+    Router.getInstance().navigateTo(
+        routes.SECURITY, /* dynamicParams= */ null,
+        /* removeSearch= */ true);
   },
 });

@@ -11,4 +11,10 @@ interface SharedRemoteSyncTest {
 interface LargeMessageTest {
   [Sync]
   ProcessData(array<uint8> data) => (uint64 data_size);
+
+  [Sync, UnlimitedSize]
+  ProcessLotsOfData(array<uint8> data) => (uint64 data_size);
+
+  [Sync, UnlimitedSize]
+  GetLotsOfData(uint64 data_size) => (array<uint8> data);
 };

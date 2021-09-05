@@ -209,7 +209,7 @@ class AutofillDownloadManagerTest : public AutofillDownloadManager::Observer,
   // AutofillDownloadManager::Observer implementation.
   void OnLoadedServerPredictions(
       std::string response_xml,
-      const FormAndFieldSignatures& form_signatures) override {
+      const std::vector<FormSignature>& form_signatures) override {
     ResponseData response;
     response.response = std::move(response_xml);
     response.type_of_response = QUERY_SUCCESSFULL;
@@ -523,14 +523,6 @@ TEST_F(AutofillDownloadManagerTest, QueryAndUploadTest) {
 }
 
 TEST_F(AutofillDownloadManagerTest, QueryAPITest) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      // Enabled
-      // We want to query the API rather than the legacy server.
-      {features::kAutofillUseApi},
-      // Disabled
-      {});
-
   // Build the form structures that we want to query.
   FormData form;
   FormFieldData field;
@@ -629,14 +621,6 @@ TEST_F(AutofillDownloadManagerTest, QueryAPITest) {
 }
 
 TEST_F(AutofillDownloadManagerTest, QueryAPITestWhenTooLongUrl) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      // Enabled
-      // We want to query the API rather than the legacy server.
-      {features::kAutofillUseApi},
-      // Disabled
-      {});
-
   // Build the form structures that we want to query.
   FormData form;
   FormFieldData field;
@@ -740,8 +724,7 @@ TEST_F(AutofillDownloadManagerTest, UploadToAPITest) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       // Enabled
-      // We want to query the API rather than the legacy server.
-      {features::kAutofillUseApi},
+      {},
       // Disabled
       // We don't want upload throttling for testing purpose.
       {features::kAutofillUploadThrottling});
@@ -1399,7 +1382,7 @@ class AutofillServerCommunicationTest
   // AutofillDownloadManager::Observer implementation.
   void OnLoadedServerPredictions(
       std::string /* response_xml */,
-      const FormAndFieldSignatures& /*form_signatures */) override {
+      const std::vector<FormSignature>& /*form_signatures */) override {
     ASSERT_TRUE(run_loop_);
     run_loop_->QuitWhenIdle();
   }

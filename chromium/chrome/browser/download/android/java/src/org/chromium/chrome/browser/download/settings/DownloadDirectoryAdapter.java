@@ -103,7 +103,7 @@ public class DownloadDirectoryAdapter extends ArrayAdapter<Object> {
         DirectoryOption directoryOption = (DirectoryOption) getItem(position);
         if (directoryOption == null) return view;
 
-        TextView titleText = (TextView) view.findViewById(R.id.text);
+        TextView titleText = (TextView) view.findViewById(R.id.title);
         titleText.setText(directoryOption.name);
 
         // ModalDialogView may do a measure pass on the view hierarchy to limit the layout inside
@@ -197,6 +197,41 @@ public class DownloadDirectoryAdapter extends ArrayAdapter<Object> {
                 mSelectedPosition = i;
                 return i;
             }
+        }
+
+        // Display an option that says there are no available download locations.
+        adjustErrorDirectoryOption();
+        return 0;
+    }
+
+    /**
+     * Get the ID of the suggested item based on total bytes and threshold.
+     * @param totalBytes The total bytes of the download file.
+     * @return  ID of the suggested item and the new default location.
+     */
+    public int useSuggestedItemId(long totalBytes) {
+        double maxSpaceLeft = 0;
+        int suggestedId = NO_SELECTED_ITEM_ID;
+        String defaultLocation = DownloadDialogBridge.getDownloadDefaultDirectory();
+
+        for (int i = 0; i < getCount(); i++) {
+            DirectoryOption option = (DirectoryOption) getItem(i);
+            if (option == null) continue;
+            if (defaultLocation.equals(option.location)) continue;
+
+            double spaceLeft = (double) (option.availableSpace - totalBytes) / option.totalSpace;
+            // If a larger storage is found, mark it as the suggested option.
+            if (spaceLeft > maxSpaceLeft) {
+                maxSpaceLeft = spaceLeft;
+                suggestedId = i;
+            }
+        }
+
+        // If there is a suggested option, set it as default directory and return its position.
+        if (suggestedId != NO_SELECTED_ITEM_ID) {
+            DirectoryOption suggestedOption = (DirectoryOption) getItem(suggestedId);
+            mSelectedPosition = suggestedId;
+            return suggestedId;
         }
 
         // Display an option that says there are no available download locations.

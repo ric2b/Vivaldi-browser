@@ -127,7 +127,7 @@ void OverlayScrollBar::Thumb::OnStateChanged() {
 }
 
 OverlayScrollBar::OverlayScrollBar(bool horizontal) : ScrollBar(horizontal) {
-  set_notify_enter_exit_on_child(true);
+  SetNotifyEnterExitOnChild(true);
   SetPaintToLayer();
   layer()->SetMasksToBounds(true);
   layer()->SetFillsBoundsOpaquely(false);
@@ -187,8 +187,7 @@ void OverlayScrollBar::StartHideCountdown() {
       base::BindOnce(&OverlayScrollBar::Hide, base::Unretained(this)));
 }
 
-BEGIN_METADATA(OverlayScrollBar)
-METADATA_PARENT_CLASS(ScrollBar)
-END_METADATA()
+BEGIN_METADATA(OverlayScrollBar, ScrollBar)
+END_METADATA
 
 }  // namespace views

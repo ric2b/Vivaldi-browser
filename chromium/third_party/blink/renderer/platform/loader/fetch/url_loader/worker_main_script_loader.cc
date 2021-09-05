@@ -72,6 +72,11 @@ void WorkerMainScriptLoader::Start(
   resource_response_ = response.ToResourceResponse();
   NotifyResponseReceived(std::move(response_head));
 
+  resource_load_observer_->DidReceiveResponse(
+      initial_request_.InspectorId(), initial_request_, resource_response_,
+      /*resource=*/nullptr,
+      ResourceLoadObserver::ResponseSource::kNotFromMemoryCache);
+
   if (resource_response_.IsHTTP() &&
       !cors::IsOkStatus(resource_response_.HttpStatusCode())) {
     client_->OnFailedLoadingWorkerMainScript();
@@ -85,10 +90,6 @@ void WorkerMainScriptLoader::Start(
     return;
   }
 
-  resource_load_observer_->DidReceiveResponse(
-      initial_request_.InspectorId(), initial_request_, resource_response_,
-      /*resource=*/nullptr,
-      ResourceLoadObserver::ResponseSource::kNotFromMemoryCache);
   script_encoding_ =
       resource_response_.TextEncodingName().IsEmpty()
           ? UTF8Encoding()
@@ -331,7 +332,7 @@ void WorkerMainScriptLoader::NotifyResponseReceived(
     resource_load_info_->network_info->network_accessed =
         response_head->network_accessed;
     resource_load_info_->network_info->always_access_network =
-        AlwaysAccessNetwork(response_head->headers);
+        network_utils::AlwaysAccessNetwork(response_head->headers);
     resource_load_info_->network_info->remote_endpoint =
         response_head->remote_endpoint;
     resource_loader_info_notifier_->NotifyResourceResponseReceived(
@@ -355,7 +356,7 @@ void WorkerMainScriptLoader::NotifyRedirectionReceived(
     net_redirect_info->network_info->network_accessed =
         redirect_response->network_accessed;
     net_redirect_info->network_info->always_access_network =
-        AlwaysAccessNetwork(redirect_response->headers);
+        network_utils::AlwaysAccessNetwork(redirect_response->headers);
     net_redirect_info->network_info->remote_endpoint =
         redirect_response->remote_endpoint;
     resource_load_info_->redirect_info_chain.push_back(

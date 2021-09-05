@@ -21,7 +21,6 @@
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/gaia_id_hash.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/autofill/core/common/password_form_generation_data.h"
 #include "components/autofill/core/common/password_generation_util.h"
@@ -30,6 +29,7 @@
 #include "components/password_manager/core/browser/fake_form_fetcher.h"
 #include "components/password_manager/core/browser/field_info_manager.h"
 #include "components/password_manager/core/browser/multi_store_password_save_manager.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_manager_for_ui.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
@@ -62,7 +62,6 @@ using autofill::FormSignature;
 using autofill::FormStructure;
 using autofill::GaiaIdHash;
 using autofill::NOT_USERNAME;
-using autofill::PasswordForm;
 using autofill::PasswordFormFillData;
 using autofill::PasswordFormGenerationData;
 using autofill::ServerFieldType;
@@ -121,6 +120,9 @@ class MockAutofillDownloadManager : public autofill::AutofillDownloadManager {
  public:
   MockAutofillDownloadManager()
       : AutofillDownloadManager(nullptr, &fake_observer) {}
+  MockAutofillDownloadManager(const MockAutofillDownloadManager&) = delete;
+  MockAutofillDownloadManager& operator=(const MockAutofillDownloadManager&) =
+      delete;
 
   MOCK_METHOD6(StartUploadRequest,
                bool(const FormStructure&,
@@ -134,11 +136,10 @@ class MockAutofillDownloadManager : public autofill::AutofillDownloadManager {
   class StubObserver : public AutofillDownloadManager::Observer {
     void OnLoadedServerPredictions(
         std::string response,
-        const autofill::FormAndFieldSignatures& form_signatures) override {}
+        const std::vector<autofill::FormSignature>& form_signatures) override {}
   };
 
   StubObserver fake_observer;
-  DISALLOW_COPY_AND_ASSIGN(MockAutofillDownloadManager);
 };
 
 class MockPasswordManagerClient : public StubPasswordManagerClient {
@@ -241,7 +242,8 @@ std::map<FormSignature, FormPredictions> CreatePredictions(
 class MockFormSaver : public StubFormSaver {
  public:
   MockFormSaver() = default;
-
+  MockFormSaver(const MockFormSaver&) = delete;
+  MockFormSaver& operator=(const MockFormSaver&) = delete;
   ~MockFormSaver() override = default;
 
   // FormSaver:
@@ -269,9 +271,6 @@ class MockFormSaver : public StubFormSaver {
   static MockFormSaver& Get(PasswordFormManager* form_manager) {
     return *static_cast<MockFormSaver*>(form_manager->form_saver());
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockFormSaver);
 };
 
 class MockFieldInfoManager : public FieldInfoManager {
@@ -477,7 +476,7 @@ class PasswordFormManagerTest : public testing::Test,
   }
 
   void SetNonFederatedAndNotifyFetchCompleted(
-      const std::vector<const autofill::PasswordForm*>& non_federated) {
+      const std::vector<const PasswordForm*>& non_federated) {
     fetcher_->SetNonFederated(non_federated);
     fetcher_->NotifyFetchCompleted();
   }
@@ -2061,7 +2060,7 @@ TEST_P(PasswordFormManagerTest, iOSUpdateStateWithoutPresaving) {
       observed_form_.unique_renderer_id, password_field, new_field_value));
 
   EXPECT_EQ(new_field_value,
-            form_manager_->observed_form().fields[kPasswordFieldIndex].value);
+            form_manager_->observed_form()->fields[kPasswordFieldIndex].value);
 }
 
 TEST_P(PasswordFormManagerTest, iOSUsingFieldDataManagerData) {
@@ -2079,14 +2078,14 @@ TEST_P(PasswordFormManagerTest, iOSUsingFieldDataManagerData) {
   form_manager_->UpdateObservedFormDataWithFieldDataManagerInfo(
       field_data_manager.get());
 
-  EXPECT_EQ(form_manager_->observed_form().fields[1].typed_value,
+  EXPECT_EQ(form_manager_->observed_form()->fields[1].typed_value,
             base::UTF8ToUTF16("typed_username"));
-  EXPECT_EQ(form_manager_->observed_form().fields[1].properties_mask,
+  EXPECT_EQ(form_manager_->observed_form()->fields[1].properties_mask,
             FieldPropertiesFlags::kUserTyped);
 
-  EXPECT_EQ(form_manager_->observed_form().fields[2].value,
+  EXPECT_EQ(form_manager_->observed_form()->fields[2].value,
             base::UTF8ToUTF16("autofilled_pw"));
-  EXPECT_EQ(form_manager_->observed_form().fields[2].properties_mask,
+  EXPECT_EQ(form_manager_->observed_form()->fields[2].properties_mask,
             FieldPropertiesFlags::kAutofilledOnPageLoad);
 }
 
@@ -2369,34 +2368,34 @@ INSTANTIATE_TEST_SUITE_P(All,
 class MockPasswordSaveManager : public PasswordSaveManager {
  public:
   MockPasswordSaveManager() = default;
+  MockPasswordSaveManager(const MockPasswordSaveManager&) = delete;
+  MockPasswordSaveManager& operator=(const MockPasswordSaveManager&) = delete;
   ~MockPasswordSaveManager() override = default;
   MOCK_METHOD4(Init,
                void(PasswordManagerClient*,
                     const FormFetcher*,
                     scoped_refptr<PasswordFormMetricsRecorder>,
                     VotesUploader*));
-  MOCK_CONST_METHOD0(GetPendingCredentials, const autofill::PasswordForm&());
+  MOCK_CONST_METHOD0(GetPendingCredentials, const PasswordForm&());
   MOCK_CONST_METHOD0(GetGeneratedPassword, const base::string16&());
   MOCK_CONST_METHOD0(GetFormSaver, FormSaver*());
   MOCK_METHOD5(CreatePendingCredentials,
-               void(const autofill::PasswordForm&,
+               void(const PasswordForm&,
                     const autofill::FormData*,
                     const autofill::FormData&,
                     bool,
                     bool));
   MOCK_METHOD0(ResetPendingCredentials, void());
-  MOCK_METHOD2(Save,
-               void(const autofill::FormData*, const autofill::PasswordForm&));
+  MOCK_METHOD2(Save, void(const autofill::FormData*, const PasswordForm&));
   MOCK_METHOD3(Update,
-               void(const autofill::PasswordForm&,
+               void(const PasswordForm&,
                     const autofill::FormData*,
-                    const autofill::PasswordForm&));
+                    const PasswordForm&));
   MOCK_METHOD1(PermanentlyBlacklist, void(const PasswordStore::FormDigest&));
   MOCK_METHOD1(Unblacklist, void(const PasswordStore::FormDigest&));
-  MOCK_METHOD1(PresaveGeneratedPassword, void(autofill::PasswordForm));
+  MOCK_METHOD1(PresaveGeneratedPassword, void(PasswordForm));
   MOCK_METHOD2(GeneratedPasswordAccepted,
-               void(autofill::PasswordForm,
-                    base::WeakPtr<PasswordManagerDriver>));
+               void(PasswordForm, base::WeakPtr<PasswordManagerDriver>));
   MOCK_METHOD0(PasswordNoLongerGenerated, void());
   MOCK_CONST_METHOD0(IsNewLogin, bool());
   MOCK_CONST_METHOD0(IsPasswordUpdate, bool());
@@ -2407,14 +2406,15 @@ class MockPasswordSaveManager : public PasswordSaveManager {
   MOCK_METHOD1(MoveCredentialsToAccountStore,
                void(metrics_util::MoveToAccountStoreTrigger));
   MOCK_METHOD1(BlockMovingToAccountStoreFor, void(const autofill::GaiaIdHash&));
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockPasswordSaveManager);
 };
 
 class PasswordFormManagerTestWithMockedSaver : public PasswordFormManagerTest {
  public:
   PasswordFormManagerTestWithMockedSaver() = default;
+  PasswordFormManagerTestWithMockedSaver(
+      const PasswordFormManagerTestWithMockedSaver&) = delete;
+  PasswordFormManagerTestWithMockedSaver& operator=(
+      const PasswordFormManagerTestWithMockedSaver&) = delete;
 
   MockPasswordSaveManager* mock_password_save_manager() {
     return mock_password_save_manager_;
@@ -2449,7 +2449,6 @@ class PasswordFormManagerTestWithMockedSaver : public PasswordFormManagerTest {
 
  private:
   NiceMock<MockPasswordSaveManager>* mock_password_save_manager_;
-  DISALLOW_COPY_AND_ASSIGN(PasswordFormManagerTestWithMockedSaver);
 };
 
 TEST_F(
@@ -2648,8 +2647,7 @@ TEST_F(PasswordFormManagerTestWithMockedSaver, GetPendingCredentials) {
 TEST_F(PasswordFormManagerTestWithMockedSaver, PresaveGeneratedPassword) {
   fetcher_->NotifyFetchCompleted();
   EXPECT_FALSE(form_manager_->HasGeneratedPassword());
-  form_manager_->SetGenerationPopupWasShown(false /* is_manual_generation
-  */);
+  form_manager_->SetGenerationPopupWasShown(/*is_manual_generation=*/false);
   PasswordForm form_with_generated_password = parsed_submitted_form_;
   FormData& form_data = form_with_generated_password.form_data;
   // Check that the generated password is forwarded to the save manager.

@@ -27,11 +27,10 @@ body {
 }
 
 table {
-    width: 100%;
+    width: max-content;
     border-spacing: 0;
-    white-space: pre-wrap !important;
+    white-space: pre;
     margin: 0;
-    word-break: break-word;
     font-size: initial;
     font-family: monospace;
     tab-size: 4;

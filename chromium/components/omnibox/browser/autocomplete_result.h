@@ -73,8 +73,27 @@ class AutocompleteResult {
                    TemplateURLService* template_url_service,
                    const AutocompleteMatch* preserve_default_match = nullptr);
 
+  // Ensures that matches with headers, i.e., matches with a suggestion_group_id
+  // value, are grouped together at the bottom of result set based on their
+  // suggestion_group_id values and in the order the group IDs first appear.
+  // Certain types of remote zero-prefix matches need to appear under a header
+  // for transparency reasons. This information is sent to Chrome by the server.
+  // Also it is possible for zero-prefix matches from different providers (e.g.,
+  // local and remote) to mix and match. Hence, we group matches with the same
+  // headers and demote them to the bottom of the result set to ensure, one,
+  // matches without headers appear at the top of the result set, and two, there
+  // are no interleaving headers whether this is caused by bad server data or by
+  // mixing of local and remote zero-prefix suggestions.
+  // Note that prior to grouping and demoting the matches with headers, we strip
+  // all match group IDs that don't have an equivalent header string;
+  // essentially treating those matches as if they did not belong to any
+  // suggestion group.
+  // Called after matches are deduped and sorted and before they are culled.
+  void GroupAndDemoteMatchesWithHeaders();
+
   // Sets |pedal| in matches that have Pedal-triggering text.
-  void ConvertInSuggestionPedalMatches(AutocompleteProviderClient* client);
+  void AttachPedalsToMatches(const AutocompleteInput& input,
+                             const AutocompleteProviderClient& client);
 
   // Sets |has_tab_match| in matches whose URL matches an open tab's URL.
   // Also, fixes up the description if not using another UI element to
@@ -136,7 +155,7 @@ class AutocompleteResult {
     return headers_map_;
   }
 
-  const std::vector<int>& hidden_group_ids() const { return hidden_group_ids_; }
+  const std::set<int>& hidden_group_ids() const { return hidden_group_ids_; }
 
   // Clears the matches for this result set.
   void Reset();
@@ -177,19 +196,25 @@ class AutocompleteResult {
   bool IsSuggestionGroupIdHidden(PrefService* prefs,
                                  int suggestion_group_id) const;
 
+  void MergeHeadersMap(const SearchSuggestionParser::HeadersMap& headers_map);
+
+  void MergeHiddenGroupIds(const std::vector<int>& hidden_group_ids);
+
   // Logs metrics for when |new_result| replaces |old_result| asynchronously.
   // |old_result| a list of the comparators for the old matches.
   static void LogAsynchronousUpdateMetrics(
       const std::vector<MatchDedupComparator>& old_result,
       const AutocompleteResult& new_result);
 
-  void set_headers_map(const SearchSuggestionParser::HeadersMap& headers_map) {
-    headers_map_ = headers_map;
-  }
+  // Group suggestions in specified range by search vs url.
+  // The range used is [first_index, last_index), which contains all the
+  // elements between first_index and last_index, including the element pointed
+  // by first_index, but not the element pointed by last_index.
+  void GroupSuggestionsBySearchVsURL(int first_index, int last_index) const;
 
-  void set_hidden_group_ids(const std::vector<int>& hidden_group_ids) {
-    hidden_group_ids_ = hidden_group_ids;
-  }
+  // This value should be comfortably larger than any max-autocomplete-matches
+  // under consideration.
+  static constexpr size_t kMaxAutocompletePositionValue = 30;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(AutocompleteResultTest, ConvertsOpenTabsCorrectly);
@@ -199,6 +224,7 @@ class AutocompleteResult {
                            TestGroupSuggestionsBySearchVsURL);
   FRIEND_TEST_ALL_PREFIXES(AutocompleteResultTest,
                            DemoteOnDeviceSearchSuggestions);
+  FRIEND_TEST_ALL_PREFIXES(AutocompleteResultTest, BubbleURLSuggestions);
   friend class HistoryURLProviderTest;
 
   typedef std::map<AutocompleteProvider*, ACMatches> ProviderToMatches;
@@ -259,7 +285,17 @@ class AutocompleteResult {
   // search types, and their submatches regardless of type, are shifted
   // earlier in the range, while non-search types and their submatches
   // are shifted later.
-  static void GroupSuggestionsBySearchVsURL(iterator begin, iterator end);
+  static iterator GroupSuggestionsBySearchVsURL(iterator begin, iterator end);
+
+  // Bubbles groups of high scoring URLs into gaps between searches. |matches|
+  // should already be grouped (see |GroupSuggestionsBySearchVsURL()|) such that
+  // search suggestions are ordered before URL suggestions. |begin_search|
+  // refers to the first search suggestion to be considered (e.g. excluding the
+  // default or clipboard suggestions). |begin_url| refers to the first URL
+  // suggestion.
+  static void BubbleURLSuggestions(iterator begin_search,
+                                   iterator begin_url,
+                                   ACMatches& matches);
 
   // If we have SearchProvider search suggestions, demote OnDeviceProvider
   // search suggestions, since, which in general have lower quality than
@@ -277,8 +313,7 @@ class AutocompleteResult {
   SearchSuggestionParser::HeadersMap headers_map_;
 
   // The server supplied list of group IDs that should be hidden-by-default.
-  // Typical size is 0 to 3, from one provider. That's why it's not a set.
-  std::vector<int> hidden_group_ids_;
+  std::set<int> hidden_group_ids_;
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_RESULT_H_

@@ -7,6 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/post_task.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/nearby_sharing/logging/logging.h"
 #include "chrome/services/sharing/nearby/nearby_connections_conversions.h"
 #include "chrome/services/sharing/nearby/platform_v2/input_file.h"
@@ -24,7 +25,7 @@ ConnectionRequestInfo CreateConnectionRequestInfo(
   mojo::SharedRemote<mojom::ConnectionLifecycleListener> remote(
       std::move(listener));
   return ConnectionRequestInfo{
-      .name = std::string(endpoint_info.begin(), endpoint_info.end()),
+      .endpoint_info = ByteArrayFromMojom(endpoint_info),
       .listener = {
           .initiated_cb =
               [remote](const std::string& endpoint_id,
@@ -37,7 +38,7 @@ ConnectionRequestInfo CreateConnectionRequestInfo(
                     mojom::ConnectionInfo::New(
                         info.authentication_token,
                         ByteArrayToMojom(info.raw_authentication_token),
-                        ByteArrayToMojom(info.endpoint_info),
+                        ByteArrayToMojom(info.remote_endpoint_info),
                         info.is_incoming_connection));
               },
           .accepted_cb =
@@ -63,11 +64,11 @@ ConnectionRequestInfo CreateConnectionRequestInfo(
                 remote->OnDisconnected(endpoint_id);
               },
           .bandwidth_changed_cb =
-              [remote](const std::string& endpoint_id, std::int32_t quality) {
+              [remote](const std::string& endpoint_id, Medium medium) {
                 if (!remote)
                   return;
 
-                remote->OnBandwidthChanged(endpoint_id, quality);
+                remote->OnBandwidthChanged(endpoint_id, MediumToMojom(medium));
               },
       },
   };
@@ -87,17 +88,19 @@ NearbyConnections& NearbyConnections::GetInstance() {
 NearbyConnections::NearbyConnections(
     mojo::PendingReceiver<mojom::NearbyConnections> nearby_connections,
     mojom::NearbyConnectionsDependenciesPtr dependencies,
+    scoped_refptr<base::SequencedTaskRunner> io_task_runner,
     base::OnceClosure on_disconnect,
     std::unique_ptr<Core> core)
     : nearby_connections_(this, std::move(nearby_connections)),
       on_disconnect_(std::move(on_disconnect)),
-      core_(std::move(core)) {
+      core_(std::move(core)),
+      thread_task_runner_(base::ThreadTaskRunnerHandle::Get()) {
   nearby_connections_.set_disconnect_handler(base::BindOnce(
       &NearbyConnections::OnDisconnect, weak_ptr_factory_.GetWeakPtr()));
 
   if (dependencies->bluetooth_adapter) {
     bluetooth_adapter_.Bind(std::move(dependencies->bluetooth_adapter),
-                            /*bind_task_runner=*/nullptr);
+                            io_task_runner);
     bluetooth_adapter_.set_disconnect_handler(
         base::BindOnce(&NearbyConnections::OnDisconnect,
                        weak_ptr_factory_.GetWeakPtr()),
@@ -106,7 +109,7 @@ NearbyConnections::NearbyConnections(
 
   socket_manager_.Bind(
       std::move(dependencies->webrtc_dependencies->socket_manager),
-      /*bind_task_runner=*/nullptr);
+      io_task_runner);
   socket_manager_.set_disconnect_handler(
       base::BindOnce(&NearbyConnections::OnDisconnect,
                      weak_ptr_factory_.GetWeakPtr()),
@@ -114,7 +117,7 @@ NearbyConnections::NearbyConnections(
 
   mdns_responder_.Bind(
       std::move(dependencies->webrtc_dependencies->mdns_responder),
-      /*bind_task_runner=*/nullptr);
+      io_task_runner);
   mdns_responder_.set_disconnect_handler(
       base::BindOnce(&NearbyConnections::OnDisconnect,
                      weak_ptr_factory_.GetWeakPtr()),
@@ -122,15 +125,14 @@ NearbyConnections::NearbyConnections(
 
   ice_config_fetcher_.Bind(
       std::move(dependencies->webrtc_dependencies->ice_config_fetcher),
-      /*bind_task_runner=*/nullptr);
+      io_task_runner);
   ice_config_fetcher_.set_disconnect_handler(
       base::BindOnce(&NearbyConnections::OnDisconnect,
                      weak_ptr_factory_.GetWeakPtr()),
       base::SequencedTaskRunnerHandle::Get());
 
   webrtc_signaling_messenger_.Bind(
-      std::move(dependencies->webrtc_dependencies->messenger),
-      /*bind_task_runner=*/nullptr);
+      std::move(dependencies->webrtc_dependencies->messenger), io_task_runner);
   webrtc_signaling_messenger_.set_disconnect_handler(
       base::BindOnce(&NearbyConnections::OnDisconnect,
                      weak_ptr_factory_.GetWeakPtr()),
@@ -152,61 +154,20 @@ void NearbyConnections::OnDisconnect() {
   // Note: |this| might be destroyed here.
 }
 
-bluetooth::mojom::Adapter* NearbyConnections::GetBluetoothAdapter() {
-  if (!bluetooth_adapter_.is_bound())
-    return nullptr;
-
-  return bluetooth_adapter_.get();
-}
-
-network::mojom::P2PSocketManager*
-NearbyConnections::GetWebRtcP2PSocketManager() {
-  if (!socket_manager_.is_bound())
-    return nullptr;
-
-  return socket_manager_.get();
-}
-
-network::mojom::MdnsResponder* NearbyConnections::GetWebRtcMdnsResponder() {
-  if (!mdns_responder_.is_bound())
-    return nullptr;
-
-  return mdns_responder_.get();
-}
-
-sharing::mojom::IceConfigFetcher*
-NearbyConnections::GetWebRtcIceConfigFetcher() {
-  if (!ice_config_fetcher_.is_bound())
-    return nullptr;
-
-  return ice_config_fetcher_.get();
-}
-
-sharing::mojom::WebRtcSignalingMessenger*
-NearbyConnections::GetWebRtcSignalingMessenger() {
-  if (!webrtc_signaling_messenger_.is_bound())
-    return nullptr;
-
-  return webrtc_signaling_messenger_.get();
-}
-
 void NearbyConnections::StartAdvertising(
     const std::vector<uint8_t>& endpoint_info,
     const std::string& service_id,
     mojom::AdvertisingOptionsPtr options,
     mojo::PendingRemote<mojom::ConnectionLifecycleListener> listener,
     StartAdvertisingCallback callback) {
-  BooleanMediumSelector allowed_mediums = {
-      .bluetooth = options->allowed_mediums->bluetooth,
-      .web_rtc = options->allowed_mediums->web_rtc,
-      .wifi_lan = options->allowed_mediums->wifi_lan,
-  };
   ConnectionOptions connection_options{
       .strategy = StrategyFromMojom(options->strategy),
-      .allowed = std::move(allowed_mediums),
+      .allowed = MediumSelectorFromMojom(options->allowed_mediums.get()),
       .auto_upgrade_bandwidth = options->auto_upgrade_bandwidth,
       .enforce_topology_constraints = options->enforce_topology_constraints,
-  };
+      .enable_bluetooth_listening = options->enable_bluetooth_listening,
+      .fast_advertisement_service_uuid =
+          options->fast_advertisement_service_uuid.canonical_value()};
 
   core_->StartAdvertising(
       service_id, std::move(connection_options),
@@ -230,7 +191,7 @@ void NearbyConnections::StartDiscovery(
   DiscoveryListener discovery_listener{
       .endpoint_found_cb =
           [remote](const std::string& endpoint_id,
-                   const std::string& endpoint_name,
+                   const ByteArray& endpoint_info,
                    const std::string& service_id) {
             if (!remote) {
               return;
@@ -238,9 +199,7 @@ void NearbyConnections::StartDiscovery(
 
             remote->OnEndpointFound(
                 endpoint_id, mojom::DiscoveredEndpointInfo::New(
-                                 std::vector<uint8_t>(endpoint_name.begin(),
-                                                      endpoint_name.end()),
-                                 service_id));
+                                 ByteArrayToMojom(endpoint_info), service_id));
           },
       .endpoint_lost_cb =
           [remote](const std::string& endpoint_id) {
@@ -264,11 +223,19 @@ void NearbyConnections::StopDiscovery(StopDiscoveryCallback callback) {
 void NearbyConnections::RequestConnection(
     const std::vector<uint8_t>& endpoint_info,
     const std::string& endpoint_id,
+    mojom::ConnectionOptionsPtr options,
     mojo::PendingRemote<mojom::ConnectionLifecycleListener> listener,
     RequestConnectionCallback callback) {
+  ConnectionOptions connection_options{
+      .allowed = MediumSelectorFromMojom(options->allowed_mediums.get())};
+  if (options->remote_bluetooth_mac_address) {
+    connection_options.remote_bluetooth_mac_address =
+        ByteArrayFromMojom(*options->remote_bluetooth_mac_address);
+  }
   core_->RequestConnection(
       endpoint_id,
       CreateConnectionRequestInfo(endpoint_info, std::move(listener)),
+      std::move(connection_options),
       ResultCallbackFromMojom(std::move(callback)));
 }
 
@@ -359,12 +326,12 @@ void NearbyConnections::SendPayload(
     const std::vector<std::string>& endpoint_ids,
     mojom::PayloadPtr payload,
     SendPayloadCallback callback) {
-  std::unique_ptr<Payload> core_payload;
+  Payload core_payload;
   switch (payload->content->which()) {
     case mojom::PayloadContent::Tag::BYTES:
-      core_payload = std::make_unique<Payload>(
-          payload->id,
-          ByteArrayFromMojom(payload->content->get_bytes()->bytes));
+      core_payload =
+          Payload(payload->id,
+                  ByteArrayFromMojom(payload->content->get_bytes()->bytes));
       break;
     case mojom::PayloadContent::Tag::FILE:
       int64_t file_size = payload->content->get_file()->file.GetLength();
@@ -373,12 +340,11 @@ void NearbyConnections::SendPayload(
         input_file_map_.insert_or_assign(
             payload->id, std::move(payload->content->get_file()->file));
       }
-      core_payload = std::make_unique<Payload>(
-          payload->id, InputFile(payload->id, file_size));
+      core_payload = Payload(payload->id, InputFile(payload->id, file_size));
       break;
   }
 
-  core_->SendPayload(absl::MakeSpan(endpoint_ids), std::move(*core_payload),
+  core_->SendPayload(absl::MakeSpan(endpoint_ids), std::move(core_payload),
                      ResultCallbackFromMojom(std::move(callback)));
 }
 
@@ -442,6 +408,11 @@ base::File NearbyConnections::ExtractOutputFile(int64_t payload_id) {
   base::File file = std::move(file_it->second);
   output_file_map_.erase(file_it);
   return file;
+}
+
+scoped_refptr<base::SingleThreadTaskRunner>
+NearbyConnections::GetThreadTaskRunner() {
+  return thread_task_runner_;
 }
 
 }  // namespace connections

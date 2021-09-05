@@ -8,8 +8,10 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_split.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -17,9 +19,14 @@
 #include "components/query_tiles/internal/tile_config.h"
 #include "components/query_tiles/internal/tile_iterator.h"
 #include "components/query_tiles/internal/tile_manager.h"
+#include "components/query_tiles/internal/tile_utils.h"
+#include "components/query_tiles/switches.h"
 
 namespace query_tiles {
 namespace {
+
+// A special tile group for tile stats.
+constexpr char kTileStatsGroup[] = "tile_stats";
 
 class TileManagerImpl : public TileManager {
  public:
@@ -137,6 +144,9 @@ class TileManagerImpl : public TileManager {
       if (!group)
         continue;
 
+      if (pair.first == kTileStatsGroup)
+        continue;
+
       if (ValidateLocale(group) && !IsGroupExpired(group) &&
           (group->last_updated_ts > last_updated_time)) {
         last_updated_time = group->last_updated_ts;
@@ -150,6 +160,16 @@ class TileManagerImpl : public TileManager {
       loaded_groups.erase(selected_group_id);
     } else {
       status = TileGroupStatus::kNoTiles;
+    }
+
+    // Keep the stats group in memory for tile score calculation.
+    if (loaded_groups.find(kTileStatsGroup) != loaded_groups.end() &&
+        base::FeatureList::IsEnabled(features::kQueryTilesLocalOrdering)) {
+      tile_stats_group_ = std::move(loaded_groups[kTileStatsGroup]);
+      // prevent the stats group from being deleted.
+      loaded_groups.erase(kTileStatsGroup);
+      if (tile_group_)
+        SortTiles(&tile_group_->tiles, &tile_stats_group_->tile_stats);
     }
 
     // Deletes other groups.
@@ -213,6 +233,43 @@ class TileManagerImpl : public TileManager {
     NOTIMPLEMENTED();
   }
 
+  void OnTileClicked(const std::string& tile_id) override {
+    // If the tile stats haven't been created, create it here.
+    if (!tile_stats_group_) {
+      tile_stats_group_ = std::make_unique<TileGroup>();
+      tile_stats_group_->id = kTileStatsGroup;
+    }
+    tile_stats_group_->OnTileClicked(tile_id);
+    // It's fine if |tile_stats_group_| is not saved, so no callback needs to
+    // be passed to Update().
+    store_->Update(kTileStatsGroup, *tile_stats_group_, base::DoNothing());
+  }
+
+  void OnQuerySelected(const base::Optional<std::string>& parent_tile_id,
+                       const base::string16& query_text) override {
+    if (!tile_group_)
+      return;
+
+    // Find the parent tile first. If it cannot be found, that's fine as the
+    // old tile score will be used.
+    std::vector<std::unique_ptr<Tile>>* tiles = &tile_group_->tiles;
+    if (parent_tile_id.has_value()) {
+      for (const auto& tile : tile_group_->tiles) {
+        if (tile->id == parent_tile_id.value()) {
+          tiles = &tile->sub_tiles;
+          break;
+        }
+      }
+    }
+    // Now check if a tile has the same query text.
+    for (const auto& tile : *tiles) {
+      if (query_text == base::UTF8ToUTF16(tile->query_text)) {
+        OnTileClicked(tile->id);
+        break;
+      }
+    }
+  }
+
   // Indicates if the db is fully initialized, rejects calls if not.
   bool initialized_;
 
@@ -221,6 +278,11 @@ class TileManagerImpl : public TileManager {
 
   // The tile group in-memory holder.
   std::unique_ptr<TileGroup> tile_group_;
+
+  // The tile group that contains stats for ranking all tiles.
+  // TODO(qinmin): Having a separate TileGroup just for ranking the tiles
+  // seems weird, probably do it through a separate store or use PrefService.
+  std::unique_ptr<TileGroup> tile_stats_group_;
 
   // Clock object.
   base::Clock* clock_;

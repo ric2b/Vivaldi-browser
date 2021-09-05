@@ -16,7 +16,7 @@
 #include "build/build_config.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/gpu/context_lost_reason.h"
-#include "components/viz/common/quads/render_pass.h"
+#include "components/viz/common/quads/compositor_render_pass.h"
 #include "components/viz/service/display/external_use_client.h"
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display/output_surface_frame.h"
@@ -140,7 +140,7 @@ class SkiaOutputSurfaceImplOnGpu
   void EnsureBackbuffer() { output_device_->EnsureBackbuffer(); }
   void DiscardBackbuffer() { output_device_->DiscardBackbuffer(); }
   void FinishPaintRenderPass(base::TimeTicks post_task_timestamp,
-                             RenderPassId id,
+                             AggregatedRenderPassId id,
                              sk_sp<SkDeferredDisplayList> ddl,
                              std::vector<ImageContextImpl*> image_contexts,
                              std::vector<gpu::SyncToken> sync_tokens,
@@ -148,9 +148,9 @@ class SkiaOutputSurfaceImplOnGpu
   // Deletes resources for RenderPasses in |ids|. Also takes ownership of
   // |images_contexts| and destroys them on GPU thread.
   void RemoveRenderPassResource(
-      std::vector<RenderPassId> ids,
+      std::vector<AggregatedRenderPassId> ids,
       std::vector<std::unique_ptr<ImageContextImpl>> image_contexts);
-  bool CopyOutput(RenderPassId id,
+  bool CopyOutput(AggregatedRenderPassId id,
                   copy_output::RenderPassGeometry geometry,
                   const gfx::ColorSpace& color_space,
                   std::unique_ptr<CopyOutputRequest> request,
@@ -168,7 +168,8 @@ class SkiaOutputSurfaceImplOnGpu
       std::vector<std::unique_ptr<ExternalUseClient::ImageContext>>
           image_contexts,
       uint64_t sync_fence_release);
-  void ScheduleOverlays(SkiaOutputSurface::OverlayList overlays);
+  void ScheduleOverlays(SkiaOutputSurface::OverlayList overlays,
+                        std::vector<ImageContextImpl*> image_contexts);
 
   void SetEnableDCLayers(bool enable);
   void SetGpuVSyncEnabled(bool enabled);
@@ -267,6 +268,12 @@ class SkiaOutputSurfaceImplOnGpu
   // after a short delay.
   void CheckReadbackCompletion();
 
+#if defined(OS_APPLE)
+  std::unique_ptr<gpu::SharedImageRepresentationSkia>
+  GetOrCreateRenderPassOverlayBacking(
+      const SkSurfaceCharacterization& characterization);
+#endif
+
   class ReleaseCurrent {
    public:
     ReleaseCurrent(scoped_refptr<gl::GLSurface> gl_surface,
@@ -285,10 +292,10 @@ class SkiaOutputSurfaceImplOnGpu
   SkiaOutputSurfaceDependency* const dependency_;
   scoped_refptr<gpu::gles2::FeatureInfo> feature_info_;
   scoped_refptr<gpu::SyncPointClientState> sync_point_client_state_;
-  gpu::MemoryTracker* memory_tracker_;
+  gpu::MemoryTracker* const memory_tracker_;
+  std::unique_ptr<gpu::SharedImageFactory> shared_image_factory_;
   std::unique_ptr<gpu::SharedImageRepresentationFactory>
       shared_image_representation_factory_;
-  std::unique_ptr<gpu::SharedImageFactory> shared_image_factory_;
   VulkanContextProvider* const vulkan_context_provider_;
   DawnContextProvider* const dawn_context_provider_;
   const RendererSettings renderer_settings_;
@@ -339,13 +346,41 @@ class SkiaOutputSurfaceImplOnGpu
   base::Optional<OverlayProcessorInterface::OutputSurfaceOverlayPlane>
       output_surface_plane_;
 
-  base::flat_map<RenderPassId, OffscreenSurface> offscreen_surfaces_;
+  base::flat_map<AggregatedRenderPassId, OffscreenSurface> offscreen_surfaces_;
 
   // Micro-optimization to get to issuing GPU SwapBuffers as soon as possible.
   std::vector<sk_sp<SkDeferredDisplayList>> destroy_after_swap_;
 
   int num_readbacks_pending_ = 0;
   bool readback_poll_pending_ = false;
+
+#if defined(OS_APPLE)
+  using UniqueBackingPtr = std::unique_ptr<gpu::SharedImageRepresentationSkia>;
+  class BackingComparator {
+   public:
+    using is_transparent = void;
+    bool operator()(const UniqueBackingPtr& lhs,
+                    const UniqueBackingPtr& rhs) const {
+      return lhs->mailbox() < rhs->mailbox();
+    }
+    bool operator()(const UniqueBackingPtr& lhs,
+                    const gpu::Mailbox& rhs) const {
+      return lhs->mailbox() < rhs;
+    }
+    bool operator()(const gpu::Mailbox& lhs,
+                    const UniqueBackingPtr& rhs) const {
+      return lhs < rhs->mailbox();
+    }
+  };
+  // Render pass overlay backings are in flight.
+  // The base::flat_set uses backing->mailbox() as the unique key.
+  base::flat_set<UniqueBackingPtr, BackingComparator>
+      in_flight_render_pass_overlay_backings_;
+
+  // Render pass overlay backings are available for reusing.
+  std::vector<std::unique_ptr<gpu::SharedImageRepresentationSkia>>
+      available_render_pass_overlay_backings_;
+#endif
 
   THREAD_CHECKER(thread_checker_);
 

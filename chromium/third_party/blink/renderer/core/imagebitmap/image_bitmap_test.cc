@@ -141,33 +141,33 @@ TEST_F(ImageBitmapTest, ImageResourceConsistency) {
 
   ASSERT_EQ(image_bitmap_no_crop->BitmapImage()
                 ->PaintImageForCurrentFrame()
-                .GetSkImage(),
+                .GetSwSkImage(),
             image_element->CachedImage()
                 ->GetImage()
                 ->PaintImageForCurrentFrame()
-                .GetSkImage());
+                .GetSwSkImage());
   ASSERT_NE(image_bitmap_interior_crop->BitmapImage()
                 ->PaintImageForCurrentFrame()
-                .GetSkImage(),
+                .GetSwSkImage(),
             image_element->CachedImage()
                 ->GetImage()
                 ->PaintImageForCurrentFrame()
-                .GetSkImage());
+                .GetSwSkImage());
   ASSERT_EQ(image_bitmap_exterior_crop->BitmapImage()
                 ->PaintImageForCurrentFrame()
-                .GetSkImage(),
+                .GetSwSkImage(),
             image_element->CachedImage()
                 ->GetImage()
                 ->PaintImageForCurrentFrame()
-                .GetSkImage());
+                .GetSwSkImage());
 
   scoped_refptr<StaticBitmapImage> empty_image =
       image_bitmap_outside_crop->BitmapImage();
-  ASSERT_NE(empty_image->PaintImageForCurrentFrame().GetSkImage(),
+  ASSERT_NE(empty_image->PaintImageForCurrentFrame().GetSwSkImage(),
             image_element->CachedImage()
                 ->GetImage()
                 ->PaintImageForCurrentFrame()
-                .GetSkImage());
+                .GetSwSkImage());
 }
 
 // Verifies that ImageBitmaps constructed from HTMLImageElements hold a
@@ -192,10 +192,10 @@ TEST_F(ImageBitmapTest, ImageBitmapSourceChanged) {
       MakeGarbageCollected<ImageBitmap>(image, crop_rect, default_options);
   ASSERT_TRUE(image_bitmap);
   ASSERT_EQ(
-      image_bitmap->BitmapImage()->PaintImageForCurrentFrame().GetSkImage(),
+      image_bitmap->BitmapImage()->PaintImageForCurrentFrame().GetSwSkImage(),
       original_image_content->GetImage()
           ->PaintImageForCurrentFrame()
-          .GetSkImage());
+          .GetSwSkImage());
 
   ImageResourceContent* new_image_content = ImageResourceContent::CreateLoaded(
       UnacceleratedStaticBitmapImage::Create(image2_).get());
@@ -203,18 +203,18 @@ TEST_F(ImageBitmapTest, ImageBitmapSourceChanged) {
 
   {
     ASSERT_EQ(
-        image_bitmap->BitmapImage()->PaintImageForCurrentFrame().GetSkImage(),
+        image_bitmap->BitmapImage()->PaintImageForCurrentFrame().GetSwSkImage(),
         original_image_content->GetImage()
             ->PaintImageForCurrentFrame()
-            .GetSkImage());
+            .GetSwSkImage());
     SkImage* image1 = image_bitmap->BitmapImage()
                           ->PaintImageForCurrentFrame()
-                          .GetSkImage()
+                          .GetSwSkImage()
                           .get();
     ASSERT_NE(image1, nullptr);
     SkImage* image2 = original_image_content->GetImage()
                           ->PaintImageForCurrentFrame()
-                          .GetSkImage()
+                          .GetSwSkImage()
                           .get();
     ASSERT_NE(image2, nullptr);
     ASSERT_EQ(image1, image2);
@@ -222,18 +222,18 @@ TEST_F(ImageBitmapTest, ImageBitmapSourceChanged) {
 
   {
     ASSERT_NE(
-        image_bitmap->BitmapImage()->PaintImageForCurrentFrame().GetSkImage(),
+        image_bitmap->BitmapImage()->PaintImageForCurrentFrame().GetSwSkImage(),
         new_image_content->GetImage()
             ->PaintImageForCurrentFrame()
-            .GetSkImage());
+            .GetSwSkImage());
     SkImage* image1 = image_bitmap->BitmapImage()
                           ->PaintImageForCurrentFrame()
-                          .GetSkImage()
+                          .GetSwSkImage()
                           .get();
     ASSERT_NE(image1, nullptr);
     SkImage* image2 = new_image_content->GetImage()
                           ->PaintImageForCurrentFrame()
-                          .GetSkImage()
+                          .GetSwSkImage()
                           .get();
     ASSERT_NE(image2, nullptr);
     ASSERT_NE(image1, image2);
@@ -255,8 +255,9 @@ TEST_F(ImageBitmapTest, AvoidGPUReadback) {
       SharedGpuContext::ContextProviderWrapper();
   CanvasColorParams color_params;
   auto resource_provider = CanvasResourceProvider::CreateSharedImageProvider(
-      IntSize(100, 100), context_provider_wrapper, kLow_SkFilterQuality,
-      color_params, true /*is_origin_top_left*/, RasterMode::kGPU,
+      IntSize(100, 100), kLow_SkFilterQuality, color_params,
+      CanvasResourceProvider::ShouldInitialize::kNo, context_provider_wrapper,
+      RasterMode::kGPU, true /*is_origin_top_left*/,
       0u /*shared_image_usage_flags*/);
 
   scoped_refptr<StaticBitmapImage> bitmap = resource_provider->Snapshot();
@@ -305,68 +306,6 @@ TEST_F(ImageBitmapTest, AvoidGPUReadback) {
       }
     }
   }
-}
-
-TEST_F(ImageBitmapTest, ImageBitmapPixelFormat) {
-  SkImageInfo info = SkImageInfo::MakeS32(10, 10, kPremul_SkAlphaType);
-  sk_sp<SkSurface> surface(SkSurface::MakeRaster(info));
-  sk_sp<SkImage> sk_image = surface->makeImageSnapshot();
-  scoped_refptr<StaticBitmapImage> bitmap_image =
-      UnacceleratedStaticBitmapImage::Create(sk_image);
-
-  // source: uint8, bitmap pixel format: default
-  ImageBitmapOptions* options = ImageBitmapOptions::Create();
-  auto* image_bitmap = MakeGarbageCollected<ImageBitmap>(
-      bitmap_image, bitmap_image->Rect(), options);
-
-  ASSERT_TRUE(image_bitmap);
-  sk_sp<SkImage> sk_image_internal =
-      image_bitmap->BitmapImage()->PaintImageForCurrentFrame().GetSkImage();
-  ASSERT_EQ(kN32_SkColorType, sk_image_internal->colorType());
-
-  // source: uint8, bitmap pixel format: uint8
-  options->setImagePixelFormat("uint8");
-  auto* image_bitmap_8888 = MakeGarbageCollected<ImageBitmap>(
-      bitmap_image, bitmap_image->Rect(), options);
-  ASSERT_TRUE(image_bitmap_8888);
-  sk_sp<SkImage> sk_image_internal_8888 = image_bitmap_8888->BitmapImage()
-                                              ->PaintImageForCurrentFrame()
-                                              .GetSkImage();
-  ASSERT_EQ(kN32_SkColorType, sk_image_internal_8888->colorType());
-
-  // Since there is no conversion from uint8 to default for image bitmap pixel
-  // format option, we expect the two image bitmaps to refer to the same
-  // internal SkImage back storage.
-  ASSERT_EQ(sk_image_internal, sk_image_internal_8888);
-
-  sk_sp<SkColorSpace> p3_color_space = SkColorSpace::MakeRGB(
-      SkNamedTransferFn::kLinear, SkNamedGamut::kDisplayP3);
-  SkImageInfo info_f16 = SkImageInfo::Make(10, 10, kRGBA_F16_SkColorType,
-                                           kPremul_SkAlphaType, p3_color_space);
-  sk_sp<SkSurface> surface_f16(SkSurface::MakeRaster(info_f16));
-  sk_sp<SkImage> sk_image_f16 = surface_f16->makeImageSnapshot();
-  scoped_refptr<StaticBitmapImage> bitmap_image_f16 =
-      UnacceleratedStaticBitmapImage::Create(sk_image_f16);
-
-  // source: f16, bitmap pixel format: default
-  ImageBitmapOptions* options_f16 = ImageBitmapOptions::Create();
-  auto* image_bitmap_f16 = MakeGarbageCollected<ImageBitmap>(
-      bitmap_image_f16, bitmap_image_f16->Rect(), options_f16);
-  ASSERT_TRUE(image_bitmap_f16);
-  sk_sp<SkImage> sk_image_internal_f16 =
-      image_bitmap_f16->BitmapImage()->PaintImageForCurrentFrame().GetSkImage();
-  ASSERT_EQ(kRGBA_F16_SkColorType, sk_image_internal_f16->colorType());
-
-  // source: f16, bitmap pixel format: uint8
-  options_f16->setImagePixelFormat("uint8");
-  auto* image_bitmap_f16_8888 = MakeGarbageCollected<ImageBitmap>(
-      bitmap_image_f16, bitmap_image_f16->Rect(), options_f16);
-  ASSERT_TRUE(image_bitmap_f16_8888);
-  sk_sp<SkImage> sk_image_internal_f16_8888 =
-      image_bitmap_f16_8888->BitmapImage()
-          ->PaintImageForCurrentFrame()
-          .GetSkImage();
-  ASSERT_EQ(kN32_SkColorType, sk_image_internal_f16_8888->colorType());
 }
 
 // This test is failing on asan-clang-phone because memory allocation is

@@ -5,6 +5,7 @@
 #include "ui/base/models/dialog_model.h"
 
 #include "base/bind_helpers.h"
+#include "base/ranges/algorithm.h"
 
 namespace ui {
 
@@ -18,29 +19,6 @@ DialogModel::Builder::~Builder() {
 std::unique_ptr<DialogModel> DialogModel::Builder::Build() {
   DCHECK(model_);
   return std::move(model_);
-}
-
-DialogModel::Builder& DialogModel::Builder::SetShowCloseButton(
-    bool show_close_button) {
-  model_->show_close_button_ = show_close_button;
-  return *this;
-}
-
-DialogModel::Builder& DialogModel::Builder::SetTitle(base::string16 title) {
-  model_->title_ = std::move(title);
-  return *this;
-}
-
-DialogModel::Builder& DialogModel::Builder::SetCloseCallback(
-    base::OnceClosure callback) {
-  model_->close_callback_ = std::move(callback);
-  return *this;
-}
-
-DialogModel::Builder& DialogModel::Builder::SetWindowClosingCallback(
-    base::OnceClosure callback) {
-  model_->window_closing_callback_ = std::move(callback);
-  return *this;
 }
 
 DialogModel::Builder& DialogModel::Builder::AddOkButton(
@@ -84,29 +62,6 @@ DialogModel::Builder& DialogModel::Builder::AddDialogExtraButton(
   return *this;
 }
 
-DialogModel::Builder& DialogModel::Builder::AddBodyText(
-    base::string16 text,
-    const DialogModelBodyText::Params& params) {
-  model_->AddBodyText(std::move(text), params);
-  return *this;
-}
-
-DialogModel::Builder& DialogModel::Builder::AddCombobox(
-    base::string16 label,
-    std::unique_ptr<ui::ComboboxModel> combobox_model,
-    const DialogModelCombobox::Params& params) {
-  model_->AddCombobox(std::move(label), std::move(combobox_model), params);
-  return *this;
-}
-
-DialogModel::Builder& DialogModel::Builder::AddTextfield(
-    base::string16 label,
-    base::string16 text,
-    const DialogModelTextfield::Params& params) {
-  model_->AddTextfield(std::move(label), std::move(text), params);
-  return *this;
-}
-
 DialogModel::Builder& DialogModel::Builder::SetInitiallyFocusedField(
     int unique_id) {
   // This must be called with unique_id >= 0 (-1 is "no ID").
@@ -125,10 +80,13 @@ DialogModel::DialogModel(util::PassKey<Builder>,
 
 DialogModel::~DialogModel() = default;
 
-void DialogModel::AddBodyText(base::string16 text,
-                              const DialogModelBodyText::Params& params) {
-  AddField(std::make_unique<DialogModelBodyText>(GetPassKey(), this,
-                                                 std::move(text), params));
+void DialogModel::AddBodyText(const DialogModelLabel& label) {
+  AddField(std::make_unique<DialogModelBodyText>(GetPassKey(), this, label));
+}
+
+void DialogModel::AddCheckbox(int unique_id, const DialogModelLabel& label) {
+  AddField(std::make_unique<DialogModelCheckbox>(GetPassKey(), this, unique_id,
+                                                 label));
 }
 
 void DialogModel::AddCombobox(base::string16 label,
@@ -145,6 +103,12 @@ void DialogModel::AddTextfield(base::string16 label,
       GetPassKey(), this, std::move(label), std::move(text), params));
 }
 
+bool DialogModel::HasField(int unique_id) const {
+  return base::ranges::any_of(fields_, [unique_id](auto& field) {
+    return field->unique_id_ == unique_id;
+  });
+}
+
 DialogModelField* DialogModel::GetFieldByUniqueId(int unique_id) {
   for (auto& field : fields_) {
     if (field->unique_id_ == unique_id)
@@ -152,6 +116,10 @@ DialogModelField* DialogModel::GetFieldByUniqueId(int unique_id) {
   }
   NOTREACHED();
   return nullptr;
+}
+
+DialogModelCheckbox* DialogModel::GetCheckboxByUniqueId(int unique_id) {
+  return GetFieldByUniqueId(unique_id)->AsCheckbox();
 }
 
 DialogModelCombobox* DialogModel::GetComboboxByUniqueId(int unique_id) {

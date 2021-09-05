@@ -19,36 +19,63 @@ chrome.automation = {};
  * @see https://developer.chrome.com/extensions/automation#type-EventType
  */
 chrome.automation.EventType = {
-  ACTIVEDESCENDANTCHANGED: 'activedescendantchanged',
+  ACCESS_KEY_CHANGED: 'accessKeyChanged',
+  ACTIVE_DESCENDANT_CHANGED: 'activeDescendantChanged',
   ALERT: 'alert',
   ARIA_ATTRIBUTE_CHANGED: 'ariaAttributeChanged',
+  ATOMIC_CHANGED: 'atomicChanged',
+  AUTO_COMPLETE_CHANGED: 'autoCompleteChanged',
   AUTOCORRECTION_OCCURED: 'autocorrectionOccured',
   BLUR: 'blur',
+  BUSY_CHANGED: 'busyChanged',
   CHECKED_STATE_CHANGED: 'checkedStateChanged',
   CHILDREN_CHANGED: 'childrenChanged',
+  CLASS_NAME_CHANGED: 'classNameChanged',
   CLICKED: 'clicked',
+  COLLAPSED: 'collapsed',
   CONTROLS_CHANGED: 'controlsChanged',
+  DESCRIBED_BY_CHANGED: 'describedByChanged',
+  DESCRIPTION_CHANGED: 'descriptionChanged',
   DOCUMENT_SELECTION_CHANGED: 'documentSelectionChanged',
   DOCUMENT_TITLE_CHANGED: 'documentTitleChanged',
+  DROPEFFECT_CHANGED: 'dropeffectChanged',
+  ENABLED_CHANGED: 'enabledChanged',
   END_OF_TEST: 'endOfTest',
+  EXPANDED: 'expanded',
   EXPANDED_CHANGED: 'expandedChanged',
+  FLOW_FROM_CHANGED: 'flowFromChanged',
+  FLOW_TO_CHANGED: 'flowToChanged',
   FOCUS: 'focus',
   FOCUS_AFTER_MENU_CLOSE: 'focusAfterMenuClose',
+  FOCUS_CHANGED: 'focusChanged',
   FOCUS_CONTEXT: 'focusContext',
+  GRABBED_CHANGED: 'grabbedChanged',
+  HASPOPUP_CHANGED: 'haspopupChanged',
   HIDE: 'hide',
+  HIERARCHICAL_LEVEL_CHANGED: 'hierarchicalLevelChanged',
   HIT_TEST_RESULT: 'hitTestResult',
   HOVER: 'hover',
+  IGNORED_CHANGED: 'ignoredChanged',
+  IMAGE_ANNOTATION_CHANGED: 'imageAnnotationChanged',
   IMAGE_FRAME_UPDATED: 'imageFrameUpdated',
   INVALID_STATUS_CHANGED: 'invalidStatusChanged',
+  KEY_SHORTCUTS_CHANGED: 'keyShortcutsChanged',
+  LABELED_BY_CHANGED: 'labeledByChanged',
+  LANGUAGE_CHANGED: 'languageChanged',
   LAYOUT_COMPLETE: 'layoutComplete',
+  LAYOUT_INVALIDATED: 'layoutInvalidated',
   LIVE_REGION_CHANGED: 'liveRegionChanged',
   LIVE_REGION_CREATED: 'liveRegionCreated',
+  LIVE_REGION_NODE_CHANGED: 'liveRegionNodeChanged',
+  LIVE_RELEVANT_CHANGED: 'liveRelevantChanged',
+  LIVE_STATUS_CHANGED: 'liveStatusChanged',
   LOAD_COMPLETE: 'loadComplete',
   LOAD_START: 'loadStart',
   LOCATION_CHANGED: 'locationChanged',
   MEDIA_STARTED_PLAYING: 'mediaStartedPlaying',
   MEDIA_STOPPED_PLAYING: 'mediaStoppedPlaying',
   MENU_END: 'menuEnd',
+  MENU_ITEM_SELECTED: 'menuItemSelected',
   MENU_LIST_ITEM_SELECTED: 'menuListItemSelected',
   MENU_LIST_VALUE_CHANGED: 'menuListValueChanged',
   MENU_POPUP_END: 'menuPopupEnd',
@@ -59,26 +86,48 @@ chrome.automation.EventType = {
   MOUSE_MOVED: 'mouseMoved',
   MOUSE_PRESSED: 'mousePressed',
   MOUSE_RELEASED: 'mouseReleased',
+  MULTILINE_STATE_CHANGED: 'multilineStateChanged',
+  MULTISELECTABLE_STATE_CHANGED: 'multiselectableStateChanged',
+  NAME_CHANGED: 'nameChanged',
+  OBJECT_ATTRIBUTE_CHANGED: 'objectAttributeChanged',
+  OTHER_ATTRIBUTE_CHANGED: 'otherAttributeChanged',
+  PLACEHOLDER_CHANGED: 'placeholderChanged',
+  PORTAL_ACTIVATED: 'portalActivated',
+  POSITION_IN_SET_CHANGED: 'positionInSetChanged',
+  READONLY_CHANGED: 'readonlyChanged',
+  RELATED_NODE_CHANGED: 'relatedNodeChanged',
+  REQUIRED_STATE_CHANGED: 'requiredStateChanged',
+  ROLE_CHANGED: 'roleChanged',
   ROW_COLLAPSED: 'rowCollapsed',
   ROW_COUNT_CHANGED: 'rowCountChanged',
   ROW_EXPANDED: 'rowExpanded',
+  SCROLL_HORIZONTAL_POSITION_CHANGED: 'scrollHorizontalPositionChanged',
   SCROLL_POSITION_CHANGED: 'scrollPositionChanged',
+  SCROLL_VERTICAL_POSITION_CHANGED: 'scrollVerticalPositionChanged',
   SCROLLED_TO_ANCHOR: 'scrolledToAnchor',
+  SELECTED_CHANGED: 'selectedChanged',
   SELECTED_CHILDREN_CHANGED: 'selectedChildrenChanged',
   SELECTION: 'selection',
   SELECTION_ADD: 'selectionAdd',
   SELECTION_REMOVE: 'selectionRemove',
+  SET_SIZE_CHANGED: 'setSizeChanged',
   SHOW: 'show',
+  SORT_CHANGED: 'sortChanged',
   STATE_CHANGED: 'stateChanged',
+  SUBTREE_CREATED: 'subtreeCreated',
+  TEXT_ATTRIBUTE_CHANGED: 'textAttributeChanged',
   TEXT_CHANGED: 'textChanged',
   TEXT_SELECTION_CHANGED: 'textSelectionChanged',
   TOOLTIP_CLOSED: 'tooltipClosed',
   TOOLTIP_OPENED: 'tooltipOpened',
+  TREE_CHANGED: 'treeChanged',
+  VALUE_CHANGED: 'valueChanged',
+  VALUE_MAX_CHANGED: 'valueMaxChanged',
+  VALUE_MIN_CHANGED: 'valueMinChanged',
+  VALUE_STEP_CHANGED: 'valueStepChanged',
   WINDOW_ACTIVATED: 'windowActivated',
   WINDOW_DEACTIVATED: 'windowDeactivated',
   WINDOW_VISIBILITY_CHANGED: 'windowVisibilityChanged',
-  TREE_CHANGED: 'treeChanged',
-  VALUE_CHANGED: 'valueChanged',
 };
 
 /**
@@ -210,7 +259,6 @@ chrome.automation.RoleType = {
   MATH: 'math',
   MENU: 'menu',
   MENU_BAR: 'menuBar',
-  MENU_BUTTON: 'menuButton',
   MENU_ITEM: 'menuItem',
   MENU_ITEM_CHECK_BOX: 'menuItemCheckBox',
   MENU_ITEM_RADIO: 'menuItemRadio',
@@ -436,29 +484,71 @@ chrome.automation.MarkerType = {
 
 /**
  * @enum {string}
- * @see https://developer.chrome.com/extensions/automation#type-EventCommandType
+ * @see https://developer.chrome.com/extensions/automation#type-IntentCommandType
  */
-chrome.automation.EventCommandType = {
+chrome.automation.IntentCommandType = {
   CLEAR_SELECTION: 'clearSelection',
-  CUT: 'cut',
   DELETE: 'delete',
   DICTATE: 'dictate',
   EXTEND_SELECTION: 'extendSelection',
   FORMAT: 'format',
+  HISTORY: 'history',
   INSERT: 'insert',
   MARKER: 'marker',
   MOVE_SELECTION: 'moveSelection',
-  PASTE: 'paste',
-  REPLACE: 'replace',
   SET_SELECTION: 'setSelection',
-  TYPE: 'type',
 };
 
 /**
  * @enum {string}
- * @see https://developer.chrome.com/extensions/automation#type-EventTextBoundaryType
+ * @see https://developer.chrome.com/extensions/automation#type-IntentInputEventType
  */
-chrome.automation.EventTextBoundaryType = {
+chrome.automation.IntentInputEventType = {
+  INSERT_TEXT: 'insertText',
+  INSERT_LINE_BREAK: 'insertLineBreak',
+  INSERT_PARAGRAPH: 'insertParagraph',
+  INSERT_ORDERED_LIST: 'insertOrderedList',
+  INSERT_UNORDERED_LIST: 'insertUnorderedList',
+  INSERT_HORIZONTAL_RULE: 'insertHorizontalRule',
+  INSERT_FROM_PASTE: 'insertFromPaste',
+  INSERT_FROM_DROP: 'insertFromDrop',
+  INSERT_FROM_YANK: 'insertFromYank',
+  INSERT_TRANSPOSE: 'insertTranspose',
+  INSERT_REPLACEMENT_TEXT: 'insertReplacementText',
+  INSERT_COMPOSITION_TEXT: 'insertCompositionText',
+  DELETE_WORD_BACKWARD: 'deleteWordBackward',
+  DELETE_WORD_FORWARD: 'deleteWordForward',
+  DELETE_SOFT_LINE_BACKWARD: 'deleteSoftLineBackward',
+  DELETE_SOFT_LINE_FORWARD: 'deleteSoftLineForward',
+  DELETE_HARD_LINE_BACKWARD: 'deleteHardLineBackward',
+  DELETE_HARD_LINE_FORWARD: 'deleteHardLineForward',
+  DELETE_CONTENT_BACKWARD: 'deleteContentBackward',
+  DELETE_CONTENT_FORWARD: 'deleteContentForward',
+  DELETE_BY_CUT: 'deleteByCut',
+  DELETE_BY_DRAG: 'deleteByDrag',
+  HISTORY_UNDO: 'historyUndo',
+  HISTORY_REDO: 'historyRedo',
+  FORMAT_BOLD: 'formatBold',
+  FORMAT_ITALIC: 'formatItalic',
+  FORMAT_UNDERLINE: 'formatUnderline',
+  FORMAT_STRIKE_THROUGH: 'formatStrikeThrough',
+  FORMAT_SUPERSCRIPT: 'formatSuperscript',
+  FORMAT_SUBSCRIPT: 'formatSubscript',
+  FORMAT_JUSTIFY_CENTER: 'formatJustifyCenter',
+  FORMAT_JUSTIFY_FULL: 'formatJustifyFull',
+  FORMAT_JUSTIFY_RIGHT: 'formatJustifyRight',
+  FORMAT_JUSTIFY_LEFT: 'formatJustifyLeft',
+  FORMAT_INDENT: 'formatIndent',
+  FORMAT_OUTDENT: 'formatOutdent',
+  FORMAT_REMOVE: 'formatRemove',
+  FORMAT_SET_BLOCK_TEXT_DIRECTION: 'formatSetBlockTextDirection',
+};
+
+/**
+ * @enum {string}
+ * @see https://developer.chrome.com/extensions/automation#type-IntentTextBoundaryType
+ */
+chrome.automation.IntentTextBoundaryType = {
   CHARACTER: 'character',
   FORMAT: 'format',
   LINE_END: 'lineEnd',
@@ -482,11 +572,22 @@ chrome.automation.EventTextBoundaryType = {
 
 /**
  * @enum {string}
- * @see https://developer.chrome.com/extensions/automation#type-EventMoveDirectionType
+ * @see https://developer.chrome.com/extensions/automation#type-IntentMoveDirectionType
  */
-chrome.automation.EventMoveDirectionType = {
-  FORWARD: 'forward',
+chrome.automation.IntentMoveDirectionType = {
   BACKWARD: 'backward',
+  FORWARD: 'forward',
+};
+
+/**
+ * @enum {string}
+ * @see https://developer.chrome.com/extensions/automation#type-SortDirectionType
+ */
+chrome.automation.SortDirectionType = {
+  UNSORTED: 'unsorted',
+  ASCENDING: 'ascending',
+  DESCENDING: 'descending',
+  OTHER: 'other',
 };
 
 /**
@@ -523,9 +624,9 @@ chrome.automation.SetDocumentSelectionParams;
 
 /**
  * @typedef {{
- *   command: !chrome.automation.EventCommandType,
- *   textBoundary: !chrome.automation.EventTextBoundaryType,
- *   moveDirection: !chrome.automation.EventMoveDirectionType
+ *   command: !chrome.automation.IntentCommandType,
+ *   textBoundary: !chrome.automation.IntentTextBoundaryType,
+ *   moveDirection: !chrome.automation.IntentMoveDirectionType
  * }}
  * @see https://developer.chrome.com/extensions/automation#type-AutomationIntent
  */
@@ -560,6 +661,7 @@ chrome.automation.AutomationEvent.prototype.type;
 chrome.automation.AutomationEvent.prototype.eventFrom;
 
 /**
+ * Any mouse coordinates associated with this event.
  * @type {number}
  * @see https://developer.chrome.com/extensions/automation#type-mouseX
  */
@@ -572,7 +674,7 @@ chrome.automation.AutomationEvent.prototype.mouseX;
 chrome.automation.AutomationEvent.prototype.mouseY;
 
 /**
- * Intents associated with this event.
+ * A list of $(ref:automation.AutomationIntent)s associated with this event.
  * @type {!Array<!chrome.automation.AutomationIntent>}
  * @see https://developer.chrome.com/extensions/automation#type-intents
  */
@@ -580,7 +682,7 @@ chrome.automation.AutomationEvent.prototype.intents;
 
 /**
  * Stops this event from further processing except for any remaining listeners
- * on $(ref:AutomationEvent.target).
+ * on $(ref:automation.AutomationEvent.target).
  * @see https://developer.chrome.com/extensions/automation#method-stopPropagation
  */
 chrome.automation.AutomationEvent.prototype.stopPropagation = function() {};
@@ -1046,8 +1148,7 @@ chrome.automation.AutomationNode.prototype.boundsForRange = function(startIndex,
  * @param {function(!chrome.automation.Rect): void} callback
  * @see https://developer.chrome.com/extensions/automation#method-unclippedBoundsForRange
  */
-chrome.automation.AutomationNode.prototype.unclippedBoundsForRange = function(
-    startIndex, endIndex, callback) {};
+chrome.automation.AutomationNode.prototype.unclippedBoundsForRange = function(startIndex, endIndex, callback) {};
 
 /**
  * The location (as a bounding box) of this node in global screen coordinates without applying any clipping from ancestors.
@@ -1943,6 +2044,13 @@ chrome.automation.AutomationNode.prototype.nextFocus;
  * @see https://developer.chrome.com/extensions/automation#type-indexInParent
  */
 chrome.automation.AutomationNode.prototype.indexInParent;
+
+/**
+ * The sort direction of this node.
+ * @type {!chrome.automation.SortDirectionType}
+ * @see https://developer.chrome.com/extensions/automation#type-sortDirection
+ */
+chrome.automation.AutomationNode.prototype.sortDirection;
 
 /**
  * Does the default action based on this node's role. This is generally the same

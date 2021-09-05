@@ -23,6 +23,7 @@
 <translation id="1553358976309200471">Update Chrome</translation>
 <translation id="1587223624401073077">Google Chrome iသည် သင်၏ ကင်မရာကို သုံးနေ</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> သည် အန္တရာယ်ရှိသောကြောင့် Chrome က ၎င်းကို ပိတ်ဆို့ထားပါသည်။</translation>
+<translation id="1597911401261118146">သင်၏စကားဝှက်များတွင် ဒေတာပေါက်ကြားမှုနှင့် အခြားသော လုံခြုံရေးပြဿနာများ ရှိ၊ မရှိ စစ်ဆေးရန် <ph name="BEGIN_LINK" />Chrome သို့ လက်မှတ်ထိုးဝင်ပါ<ph name="END_LINK" />။</translation>
 <translation id="1619887657840448962">Chrome ပိုမိုလုံခြုံမှုရှိစေရန်၊ <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> တွင် စာရင်းဝင်ထားခြင်း မရှိသည့်အပြင် သင့်အား အသိမပေးဘဲ ထည့်ထားပုံရသည့် အောက်ပါ တိုးချဲ့လိုင်းအား ပိတ်ထားခဲ့၏။</translation>
 <translation id="162448658176061655">မလိုချင်သောဆော့ဖ်ဝဲကို Chrome က တစ်ပတ်တစ်ကြိမ် စစ်ဆေးသည်။ နောက်ဆုံးစစ်ဆေးမှု - မကြာမီက။</translation>
 <translation id="162629503687514352">Chrome OS က သင့်စကားဝှက်များကို စင့်ခ်လုပ်၍မရပါ။</translation>
@@ -38,6 +39,7 @@
 <translation id="1734234790201236882">Chrome သည် ဤစကားဝှက်ကို သင်၏ Google အကောင့်သို့ သိမ်းဆည်းသွားပါမည်။ သင်၎င်းကို မှတ်ထားစရာမလိုပါ။</translation>
 <translation id="174539241580958092">Google Chrome သည် ဝင်ရောက်မှု ပြဿနာကြောင့် သင့်ဒေတာကို စင့်ခ်မလုပ်နိုင်ပါ။</translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1786003790898721085">သင်၏ <ph name="TARGET_DEVICE_NAME" /> တွင် Chrome သို့ လက်မှတ်ထိုးဝင်ထားကြောင်း သေချာစေပြီး ထပ်ပို့ကြည့်ပါ။</translation>
 <translation id="1812689907177901597">၎င်းကိုပိတ်ခြင်းဖြင့် Chrome တွင် လက်မှတ်ထိုးမဝင်ဘဲ Gmail ကဲ့သို့ Google ဝဘ်ဆိုက်များသို့ လက်မှတ်ထိုးဝင်နိုင်ပါသည်</translation>
 <translation id="1860536484129686729">ဤဝဘ်ဆိုက်အတွက် Chrome သည် သင်၏ကင်မရာကို အသုံးပြုခွင့်ရရန် လိုအပ်ပါသည်</translation>
 <translation id="1873233029667955273">Google Chrome သည် သင်၏ မူရင်းဘရောင်ဇာ မဟုတ်ပါ</translation>
@@ -75,6 +77,7 @@
 <translation id="2871893339301912279">Chrome သို့သင် ဝင်ရောက်ပြီးဖြစ်သည်။</translation>
 <translation id="2885378588091291677">အလုပ် မန်နေဂျာ</translation>
 <translation id="2888126860611144412">Chrome အကြောင်း</translation>
+<translation id="2926676257163822632">လုံခြုံမှုလျော့နည်းသည့် စကားဝှက်များကို အလွယ်တကူ ခန့်မှန်းနိုင်သည်။ <ph name="BEGIN_LINK" />သင့်အတွက် လုံခြုံမှုမြင့်သည့်စကားဝှက်များ ပြုလုပ်ပြီး မှတ်ထားရန်<ph name="END_LINK" /> Chrome ကို ခွင့်ပြုပါ။</translation>
 <translation id="2929907241665500097">Chrome အပ်ဒိတ်လုပ်၍ မရပါ၊ တစ်ခုခု မှားသွားသည်။ <ph name="BEGIN_LINK" />Chrome အပ်ဒိတ်ပြဿနာများနှင့် လုပ်၍မရသော အပ်ဒိတ်များကို ပြင်ဆင်ပါ။<ph name="END_LINK" /></translation>
 <translation id="2969728957078202736"><ph name="PAGE_TITLE" /> - ကွန်ရက် လက်မှတ်ထိုးဝင်ခြင်း - Chrome</translation>
 <translation id="3037838751736561277">Google Chrome သည် နောက်ခံ မုဒ်ထဲမျာ ရှိနေသည်။</translation>
@@ -82,6 +85,7 @@
 <translation id="3065168410429928842">Chrome တဘ်</translation>
 <translation id="3080151273017101988">Google Chrome ကို ပိတ်လိုက်ချိန်မှာ နောက်ခံအက်ပ်များကို ဆက်ဖွင့် ထားရန်</translation>
 <translation id="3089968997497233615">ပိုသစ်သော၊ ပိုလုံခြုံသော Google Chrome ရနိုင်ပါသည်။</translation>
+<translation id="3114643501466072395">သင်၏အခြားစကားဝှက်များတွင် ဒေတာပေါက်ကြားမှုနှင့် အခြားသော လုံခြုံရေးပြဿနာများ ရှိ၊ မရှိ စစ်ဆေးရန် <ph name="BEGIN_LINK" />Chrome သို့ လက်မှတ်ထိုးဝင်ပါ<ph name="END_LINK" />။</translation>
 <translation id="3127818369811890733">Chrome OS က သင့်ဒေတာများကို စင့်ခ်လုပ်၍မရပါ။</translation>
 <translation id="3149510190863420837">Chrome အက်ပ်များ</translation>
 <translation id="3360895254066713204">Chrome ကူညီပေးသူ</translation>
@@ -102,6 +106,7 @@
 <translation id="3622797965165704966">ယခုအခါ သင့် Google အကောင့်ဖြင့် Chrome နှင့် မျှဝေထားသည့် ကွန်ပျူတာများတွင် အသုံးပြုရ ပိုမိုလွယ်ကူလာပါသည်။</translation>
 <translation id="3718181793972440140">၎င်းသည် ဤစက်ပစ္စည်းမှ အကြောင်းအရာ ၁ ခုကို ဖျက်လိုက်ပါမည်။ သင့်ဒေတာကို နောက်မှ ပြန်ယူရန် Chrome သို့ <ph name="USER_EMAIL" /> အဖြစ် လက်မှတ်ထိုးဝင်ပါ။</translation>
 <translation id="3735758079232443276">သင် Chrome အား စသုံးသောအခါ စာမျက်နှာမှ ပြသသည်ကို ဤတိုးချဲလိုင်း "<ph name="EXTENSION_NAME" />" မှ ပြောင်းလဲခဲ့၏။</translation>
+<translation id="3779473566290487688">Google Chrome အနာဂတ်အပ်ဒိတ်များ ရယူရန် OS X 10.11 နှင့်အထက် လိုအပ်ပါမည်။ ဤကွန်ပျူတာက OS X 10.10 အသုံးပြုနေသည်။</translation>
 <translation id="3780814664026482060">Chrome - <ph name="PAGE_TITLE" /></translation>
 <translation id="386202838227397562">ကျေးဇူးပြုပြီး Google Chrome ဝင်ဒိုးများကို ပိတ်ပြီ ထပ်စမ်းပါ။</translation>
 <translation id="3865754807470779944">Chrome ဗားရှင်း <ph name="PRODUCT_VERSION" /> ကို ထည့်သွင်းလိုက်သည်</translation>
@@ -192,6 +197,7 @@ Google Chrome သည် သင်၏ ဆက်တင်များကို ပ
 <translation id="6454142105866844106">မလိုချင်သောဆော့ဖ်ဝဲကို Chrome က တစ်ပတ်တစ်ကြိမ် စစ်ဆေးသည်</translation>
 <translation id="6515495397637126556"><ph name="PAGE_TITLE" /> - Google Chrome Dev</translation>
 <translation id="6566149418543181476">Google Chrome ကို အပ်ဒိတ်လုပ်နေသည် (<ph name="PROGRESS_PERCENT" />)</translation>
+<translation id="6650333065969705433">ကာကွယ်ထားသောမီဒီယာ ဖွင့်ရန်အတွက် Rosetta အသုံးပြုရန် Chrome ကို ပြန်စရမည်။</translation>
 <translation id="6676384891291319759">အင်တာနက် ရယူရန်</translation>
 <translation id="6679975945624592337">Google Chrome ကို နောက်ခံတွင် ဖွင့်ခွင့်ပေးပါ</translation>
 <translation id="6750954913813541382">စာလုံးပေါင်း အမှားများ ပြင်ရန် Chrome က ဘရောင်ဇာတွင် သင်ရိုက်သည့် စာသားကို Google သို့ ပို့ပါသည်</translation>
@@ -202,6 +208,7 @@ Google Chrome သည် သင်၏ ဆက်တင်များကို ပ
 <translation id="6967962315388095737">Google Chrome စမ်းသပ်ဆော့ဖ်ဝဲက mDNS အသွားအလာကို ခွင့်ပြုပေးနိုင်ရန်အတွက် ချမှတ်ထားသော အတွင်းစည်းမျဉ်း။</translation>
 <translation id="6982337800632491844"><ph name="DOMAIN" /> က ဒီကိရိယာကို မသုံးမီမှာ သင့်အနေနှင့်  အောက်ပါ ဝန်ဆောင်မှု စည်းကမ်းချက်များကို ဖတ်ကြားလျက် လက်ခံရန် တောင်းဆိုပါသည်။ ဒီ စည်းကမ်းချက်များသည် Google Chrome OS  စည်းကမ်းချက်များကို တိုးချဲ့မှု၊ မွမ်းမံမှု သို့မဟုတ် ကန့်သတ်မှု မဟုတ်စေရပါ။</translation>
 <translation id="6989339256997917931">Google Chrome ကို မွမ်းမံပြီးသွားပြီ၊ သို့သော် သင်သည် ၎င်းကို အနည်းဆုံးအားဖြင့် ရက် ၃၀ အတွင်းမှာ မသုံးခဲ့ပါ။</translation>
+<translation id="7054640471403081847">ဤကွန်ပျူတာသည် မကြာခင်တွင် Google Chrome မှအဆင့်မြှင့်မှုများကို လက်ခံရရှိခြင်းမှ ရပ်စဲတော့မည်ဖြစ်သည် အကြောင်းမှာ ၎င်း၏ စက်ပစ္စည်းသည် မထောက်ပံ့တော့သောကြောင့် ဖြစ်သည်။</translation>
 <translation id="7062128746136194023">Chrome အတွက် "ဝဘ်ဆိုက်၊ အက်ပ်နှင့် နောက်ဆက်တွဲ ခွင့်ပြုချက်များ" ကို သင့်မိဘက ပိတ်လိုက်သည်။ ဤ <ph name="EXTENSION_TYPE_PARAMETER" /> ထည့်ခြင်းကို ခွင့်မပြုပါ။</translation>
 <translation id="7098166902387133879">Google Chrome သည် သင်၏ မိုက်ခရိုဖုန်းကို သုံးနေ</translation>
 <translation id="7106741999175697885">တာဝန် မန်နေဂျာ - Google Chrome</translation>
@@ -221,7 +228,6 @@ Google Chrome သည် သင်၏ ဆက်တင်များကို ပ
 <translation id="7486227612705979895">လိပ်စာဘားတွင် အကြံပြုချက်များ ပေးနိုင်ရန် Chrome သည် သင်၏ Drive ကို အသုံးပြုသွားပါမည်။</translation>
 <translation id="7535429826459677826">Google Chrome Dev</translation>
 <translation id="7573289029918943991">သင်၏စက် အပ်ဒိတ်ဖြစ်မဖြစ် ကြည့်ရန် <ph name="LINK_BEGIN" />Chrome OS ဆက်တင်များ<ph name="LINK_END" /> သို့သွားပါ</translation>
-<translation id="7589360514048265910">Mac OS X 10.9 ကို ဆက်လက် မပံ့ပိုးတော့သောကြောင့် ဤကွန်ပျူတာသည် Google Chrome အပ်ဒိတ်များကို မရရှိနိုင်တော့ပါ။</translation>
 <translation id="7592736734348559088">သင်၏ လက်မှတ်ထိုးရေး အသေးစိတ်များမှာ ဟောင်းသွားကြပြီ ဖြစ်၍ Google Chrome သည် သင်၏ ဒေတာကို စင့်က် မလုပ်နိုင်ခဲ့ပါ။</translation>
 <translation id="7626032353295482388">Chrome မှ ကြိုဆိုပါသည်</translation>
 <translation id="7629695634924605473">သင့်စကားဝှက်များ ကျိုးပေါက်ထားခြင်း ရှိမရှိ Chrome က သင့်အား အသိပေးပါမည်</translation>
@@ -252,14 +258,16 @@ Google Chrome သည် သင်၏ ဆက်တင်များကို ပ
 <translation id="8344083974188970894">{NUM_MINS,plural, =1{မလိုချင်သောဆော့ဖ်ဝဲကို Chrome က တစ်ပတ်တစ်ကြိမ် စစ်ဆေးသည်။ နောက်ဆုံးစစ်ဆေးမှု - လွန်ခဲ့သော ၁ မိနစ်က။}other{မလိုချင်သောဆော့ဖ်ဝဲကို Chrome က တစ်ပတ်တစ်ကြိမ် စစ်ဆေးသည်။ နောက်ဆုံးစစ်ဆေးမှု - လွန်ခဲ့သော {NUM_MINS} မိနစ်က။}}</translation>
 <translation id="8370517070665726704">မူပိုင် <ph name="YEAR" /> Google LLC. မူပိုင်ခွင့်အားလုံး ယူထားသည်။</translation>
 <translation id="840084489713044809">Google Chrome သည် သင်၏ စကားဝှက်များကို တင်ပို့လိုသည်။</translation>
+<translation id="8433638294851456451">ဤနေရာမှ သင်၏ Android ဖုန်းသို့ နံပါတ်တစ်ခုပို့ရန် စက်နှစ်ခုလုံးတွင် Chrome သို့ လက်မှတ်ထိုးဝင်ပါ။</translation>
 <translation id="8498858610309223613">Google Chrome အတွက် အထူးလုံခြုံရေးအပ်ဒိတ်ကို ယခုလေးတင် ထည့်သွင်းထားသည်။ ယခုပြန်လည်စတင်လိုက်ပါက သင်၏ တဘ်များကို ပြန်ဖွင့်ပေးပါမည်။</translation>
 <translation id="8521348052903287641">Google Chrome Dev က mDNS အသွားအလာကို ခွင့်ပြုပေးနိုင်ရန်အတွက် ချမှတ်ထားသော အတွင်းစည်းမျဉ်း။</translation>
 <translation id="8540666473246803645">Google Chrome</translation>
 <translation id="8556340503434111824">Google Chrome ၏ ဗားရှင်း အသစ်ကို ရနိုင်ပါပြီ၊ ၎င်းသည် မကြုံစဖူး ပိုမြန်ပါသည်။</translation>
+<translation id="861359755029082151">Rosetta သည် Chrome အား ဤစာမျက်နှာရှိ ကာကွယ်ထားသောမီဒီယာကို ဖွင့်ခွင့်ပေးသည်။</translation>
 <translation id="8614913330719544658">Google Chrome သည် မတုံ့ပြန်ပါ။ ယခု ပြန်ပြီးဖွင့်တင်ရမလား?</translation>
 <translation id="861702415419836452">သင့်ပတ်ဝန်းကျင်၏ 3D မြေပုံ ပြုလုပ်ရန် Chrome က သင့်ကင်မရာကို အသုံးပြုခွင့် လိုအပ်သည်</translation>
 <translation id="8625237574518804553">{0,plural, =1{Chrome ကို ၁ မိနစ်အကြာတွင် ပြန်လည်စတင်ပါမည်}other{Chrome ကို # မိနစ်အကြာတွင် ပြန်လည်စတင်ပါမည်}}</translation>
-<translation id="8641606876632989680">ကျိုးပေါက်ထားသည့် စကားဝှက်ဖြင့် လက်မှတ်ထိုးဝင်သည့်အခါ Chrome က သင့်ကို ကြောင်းကြားပါမည်</translation>
+<translation id="8641606876632989680">ကျိုးပေါက်ထားသည့် စကားဝှက်ဖြင့် လက်မှတ်ထိုးဝင်သည့်အခါ Chrome က သင့်ကို အကြောင်းကြားပါမည်</translation>
 <translation id="8669527147644353129">Google Chrome ကူညီပေးသူ</translation>
 <translation id="8679801911857917785">သင်က Chrome ကို စတင်စဉ် ဘယ်စာမျက်နှာ ပြကြောင်းကိုပါ ၎င်းက ထိန်းချုပ်ပါသည်။</translation>
 <translation id="8681614230122836773">Chrome က သင့်ကွန်ပျူတာတွင် အန္တရာယ်ရှိသောဆော့ဖ်ဝဲ တွေ့ထားသည်</translation>
@@ -270,7 +278,9 @@ Google Chrome သည် သင်၏ ဆက်တင်များကို ပ
 <translation id="8834965163890861871">Google Chrome သည် စကားဝှက်များ တည်းဖြတ်ရန် ကြိုးပမ်းနေသည်။ ၎င်းကို ခွင့်ပြုရန် သင်၏ Windows စကားဝှက်ကို ထည့်ပါ။</translation>
 <translation id="884296878221830158">သင် Chrome ကိုအစပြုချိန် သို့မဟုတ် ပင်မခလုတ် နှိပ်လိုက်လျှင် မည်သည့် စာမျက်နှာပြမည်ကိုပါ ထိန်းချုပ်ပါသည်။</translation>
 <translation id="8862326446509486874">သင့်ဆီမှာ စနစ်အဆင့်မှာ တပ်ဆင်နိုင်ရန် အတွက် လိုအပ်သည့် လုပ်ပိုင်ခွင့်များ မရှိပါ။ တပ်ဆင်သူကို ထပ်ပြီး စီမံအုပ်ချုပ်သူ အဖြစ် ဖွင့်သုံးကြည့်ပါ။</translation>
+<translation id="8907709077090383765">ကာကွယ်ထားသောမီဒီယာကို Chrome က ဖွင့်ရန်အတွက် Rosetta ထည့်သွင်းရပါမည်။ ၎င်းကို ယခုထည့်သွင်းလိုသလား။</translation>
 <translation id="8914504000324227558">Chromium ကို အသစ်တစ်ဖန် ပြန်စရန်</translation>
+<translation id="8922193594870374009"><ph name="ORIGIN" /> မှ သင်၏ Android ဖုန်းသို့ နံပါတ်တစ်ခုပို့ရန် စက်နှစ်ခုလုံးတွင် Chrome သို့ လက်မှတ်ထိုးဝင်ပါ။</translation>
 <translation id="8999208279178790196">{0,plural, =0{Chrome အပ်ဒိတ်တစ်ခု ရနိုင်ပါသည်}=1{Chrome အပ်ဒိတ်တစ်ခု ရနိုင်ပါသည်}other{Chrome အပ်ဒိတ်တစ်ခု ရနိုင်သည်မှာ # ရက်ရှိပါပြီ}}</translation>
 <translation id="9026991721384951619">သင်၏ လက်မှတ်ထိုးရေး အသေးစိတ်များမှာ ဟောင်းသွားကြပြီ ဖြစ်၍ Chrome OSသည် သင်၏ ဒေတာကို စင့်က် မလုပ်နိုင်ခဲ့ပါ။</translation>
 <translation id="9067395829937117663">Google Chrome ကိုထည့်သွင်းရန် Windows 7 နှင့်အထက် လိုအပ်ပါသည်။</translation>

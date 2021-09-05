@@ -88,6 +88,10 @@
   // Used to expose the view to extensions, only popups now.
   std::unique_ptr<::vivaldi::VivaldiExtensionHost> extension_host_;
 
+  bool IsNavigatingAwayFromVivaldiUI() {
+    return is_navigating_away_from_vivaldi_ui_;
+  }
+
  protected:
 
   WebContentsDelegate* GetDevToolsConnector() override;
@@ -105,7 +109,8 @@
   // over responsibilty of the webcontents after the guest is destroyed.
   void AddGuestToTabStripModel(WebViewGuest* guest,
                                int windowId,
-                               bool activePage = true);
+                               bool activePage = true,
+                               bool inherit_opener = true);
 
   // Starts loading in the current WebContents if this is needed.
   void LoadTabContentsIfNecessary();
@@ -119,6 +124,12 @@
 
   bool is_fullscreen_;
   ui::WindowShowState window_state_prior_to_fullscreen_ = ui::SHOW_STATE_NORMAL;
+
+  // Used to reset webkitprefs that is overridden in
+  // extension_webkit_preferences::SetPreferences when navigating away from
+  // Vivaldi ui.
+  void SetIsNavigatingAwayFromVivaldiUI(bool away);
+  bool is_navigating_away_from_vivaldi_ui_ = false;
 
   // NOTE(david@vivaldi.com): |connector_item_| is a proxy delegate which is
   // required by Vivaldi.

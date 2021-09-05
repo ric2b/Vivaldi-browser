@@ -46,7 +46,7 @@ PageInfoHoverButton::PageInfoHoverButton(views::ButtonListener* listener,
                      views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
 
   // Make sure hovering over the icon also hovers the |PageInfoHoverButton|.
-  icon->set_can_process_events_within_subtree(false);
+  icon->SetCanProcessEventsWithinSubtree(false);
   // Don't cover |icon_view| when the ink drops are being painted.
   icon->SetPaintToLayer();
   icon->layer()->SetFillsBoundsOpaquely(false);
@@ -59,22 +59,21 @@ PageInfoHoverButton::PageInfoHoverButton(views::ButtonListener* listener,
 
   icon_view_ = grid_layout->AddView(std::move(icon));
 
-  auto title_label =
-      std::make_unique<views::StyledLabel>(base::string16(), nullptr);
+  auto title_label = std::make_unique<views::StyledLabel>();
   title_label->SetTextContext(views::style::CONTEXT_LABEL);
-  // |views::StyledLabel|s are all multi-line. With a layout manager,
-  // |StyledLabel| will try use the available space to size itself, and long
-  // titles will wrap to the next line (for smaller |PageInfoHoverButton|s, this
-  // will also cover up |subtitle_|). Wrap it in a parent view with no layout
-  // manager to ensure it keeps its original size set by SizeToFit() above. Long
-  // titles will then be truncated.
+  // views::StyledLabels are all multi-line. With a layout manager, StyledLabel
+  // will try use the available space to size itself, and long titles will wrap
+  // to the next line (for smaller PageInfoHoverButtons, this will also cover up
+  // |subtitle_|). Wrap it in a parent view with no layout manager to ensure it
+  // keeps its original size set by SizeToFit() above. Long titles will then be
+  // truncated.
   auto title_wrapper = std::make_unique<views::View>();
   title_ = title_wrapper->AddChildView(std::move(title_label));
   SetTitleText(title_resource_id, secondary_text);
 
   // Hover the whole button when hovering |title_|. This is OK because |title_|
   // will never have a link in it.
-  title_wrapper->set_can_process_events_within_subtree(false);
+  title_wrapper->SetCanProcessEventsWithinSubtree(false);
   grid_layout->AddView(std::move(title_wrapper));
 
   if (!subtitle_text.empty()) {
@@ -149,6 +148,5 @@ views::View* PageInfoHoverButton::GetTooltipHandlerForPoint(
   return Button::GetTooltipHandlerForPoint(point);
 }
 
-BEGIN_METADATA(PageInfoHoverButton)
-METADATA_PARENT_CLASS(HoverButton)
-END_METADATA()
+BEGIN_METADATA(PageInfoHoverButton, HoverButton)
+END_METADATA

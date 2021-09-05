@@ -12,34 +12,34 @@
 #include "ui/base/models/dialog_model.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/button/button.h"
-#include "ui/views/controls/combobox/combobox_listener.h"
 
 namespace views {
-class Combobox;
 class GridLayout;
-class Label;
-class Textfield;
 
 // BubbleDialogModelHost is a views implementation of ui::DialogModelHost which
-// hosts a ui::DialogModel as a BubbleDialogDelegateView. This exposes
-// views-specific methods such as SetAnchorView(), SetArrow() and
-// SetHighlightedButton(). For methods that are reflected in ui::DialogModelHost
-// (such as ::Close()), preferusing the ui::DialogModelHost to avoid
-// platform-specific code (GetWidget()->Close()) where unnecessary. For those
-// methods, note that this can be retrieved as a ui::DialogModelHost through
-// DialogModel::host(). This helps minimize platform-specific code from
-// platform-agnostic model-delegate code.
+// hosts a ui::DialogModel as a BubbleDialogDelegateView. This exposes such as
+// SetAnchorView(), SetArrow() and SetHighlightedButton(). For methods that are
+// reflected in ui::DialogModelHost (such as ::Close()), prefer using the
+// ui::DialogModelHost to avoid platform-specific code (GetWidget()->Close())
+// where unnecessary. For those methods, note that this can be retrieved as a
+// ui::DialogModelHost through DialogModel::host(). This helps minimize
+// platform-specific code from platform-agnostic model-delegate code.
 class VIEWS_EXPORT BubbleDialogModelHost : public BubbleDialogDelegateView,
-                                           public ui::DialogModelHost,
-                                           public ButtonListener,
-                                           public ComboboxListener {
+                                           public ui::DialogModelHost {
  public:
+  METADATA_HEADER(BubbleDialogModelHost);
   // Constructs a BubbleDialogModelHost, which for most purposes is to used as a
   // BubbleDialogDelegateView. The BubbleDialogDelegateView is nominally handed
   // to BubbleDialogDelegateView::CreateBubble() which returns a Widget that has
   // taken ownership of the bubble. Widget::Show() finally shows the bubble.
-  explicit BubbleDialogModelHost(std::unique_ptr<ui::DialogModel> model);
+  BubbleDialogModelHost(std::unique_ptr<ui::DialogModel> model,
+                        View* anchor_view,
+                        BubbleBorder::Arrow arrow);
   ~BubbleDialogModelHost() override;
+
+  static std::unique_ptr<BubbleDialogModelHost> CreateModal(
+      std::unique_ptr<ui::DialogModel> model,
+      ui::ModalType modal_type);
 
   // BubbleDialogDelegateView:
   // TODO(pbos): Populate initparams with initial view instead of overriding
@@ -53,33 +53,30 @@ class VIEWS_EXPORT BubbleDialogModelHost : public BubbleDialogDelegateView,
   void SelectAllText(int unique_id) override;
   void OnFieldAdded(ui::DialogModelField* field) override;
 
-  // ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
-  // ComboboxListener:
-  void OnPerformAction(views::Combobox* combobox) override;
-
  private:
+  void OnWindowClosing();
+
   GridLayout* GetGridLayout();
   void ConfigureGridLayout();
 
   void AddInitialFields();
-  Label* AddOrUpdateBodyText(ui::DialogModelBodyText* field);
-  Combobox* AddOrUpdateCombobox(ui::DialogModelCombobox* field);
-  Textfield* AddOrUpdateTextfield(ui::DialogModelTextfield* field);
+  View* AddOrUpdateBodyText(ui::DialogModelBodyText* field);
+  View* AddOrUpdateCheckbox(ui::DialogModelCheckbox* field);
+  View* AddOrUpdateCombobox(ui::DialogModelCombobox* field);
+  View* AddOrUpdateTextfield(ui::DialogModelTextfield* field);
   void AddLabelAndField(const base::string16& label_text,
                         std::unique_ptr<views::View> field,
                         const gfx::FontList& field_font);
 
-  void OnViewCreatedForField(View* view, ui::DialogModelField* field);
+  std::unique_ptr<View> CreateViewForLabel(
+      const ui::DialogModelLabel& dialog_label);
 
-  void NotifyTextfieldTextChanged(views::Textfield* textfield);
-  void NotifyComboboxSelectedIndexChanged(views::Combobox* combobox);
+  void OnViewCreatedForField(View* view, ui::DialogModelField* field);
 
   View* FieldToView(ui::DialogModelField* field);
 
   std::unique_ptr<ui::DialogModel> model_;
-  base::flat_map<View*, ui::DialogModelField*> view_to_field_;
+  base::flat_map<ui::DialogModelField*, View*> field_to_view_;
   std::vector<PropertyChangedSubscription> property_changed_subscriptions_;
 };
 

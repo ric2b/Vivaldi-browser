@@ -84,10 +84,12 @@ void PropertyTree<T>::clear() {
 #endif
 }
 
+#if DCHECK_IS_ON()
 template <typename T>
 bool PropertyTree<T>::operator==(const PropertyTree<T>& other) const {
   return nodes_ == other.nodes() && needs_update_ == other.needs_update();
 }
+#endif
 
 template <typename T>
 void PropertyTree<T>::AsValueInto(base::trace_event::TracedValue* value) const {
@@ -124,7 +126,9 @@ void TransformTree::clear() {
   cached_data_.push_back(TransformCachedNodeData());
   sticky_position_data_.clear();
 
+#if DCHECK_IS_ON()
   DCHECK(TransformTree() == *this);
+#endif
 }
 
 void TransformTree::set_needs_update(bool needs_update) {
@@ -179,6 +183,7 @@ void TransformTree::UpdateTransforms(int id) {
   UpdateSnapping(node);
   UpdateTransformChanged(node, parent_node);
   UpdateNodeAndAncestorsAreAnimatedOrInvertible(node, parent_node);
+  UpdateNodeOrAncestorsWillChangeTransform(node, parent_node);
 
   DCHECK(!node->needs_local_transform_update);
 }
@@ -544,6 +549,16 @@ void TransformTree::UpdateNodeAndAncestorsAreAnimatedOrInvertible(
       node->has_potential_animation || is_invertible;
 }
 
+void TransformTree::UpdateNodeOrAncestorsWillChangeTransform(
+    TransformNode* node,
+    TransformNode* parent_node) {
+  node->node_or_ancestors_will_change_transform = node->will_change_transform;
+  if (parent_node) {
+    node->node_or_ancestors_will_change_transform |=
+        parent_node->node_or_ancestors_will_change_transform;
+  }
+}
+
 void TransformTree::SetRootScaleAndTransform(
     float device_scale_factor,
     const gfx::Transform& device_transform) {
@@ -628,6 +643,7 @@ void TransformTree::SetToScreen(int node_id, const gfx::Transform& transform) {
   cached_data_[node_id].is_showing_backface = transform.IsBackFaceVisible();
 }
 
+#if DCHECK_IS_ON()
 bool TransformTree::operator==(const TransformTree& other) const {
   return PropertyTree::operator==(other) &&
          page_scale_factor_ == other.page_scale_factor() &&
@@ -638,6 +654,7 @@ bool TransformTree::operator==(const TransformTree& other) const {
              other.nodes_affected_by_outer_viewport_bounds_delta() &&
          cached_data_ == other.cached_data();
 }
+#endif
 
 StickyPositionNodeData* TransformTree::MutableStickyPositionData(int node_id) {
   const TransformNode* node = Node(node_id);
@@ -726,7 +743,8 @@ void EffectTree::UpdateEffectChanged(EffectNode* node,
 }
 
 void EffectTree::UpdateHasFilters(EffectNode* node, EffectNode* parent_node) {
-  node->node_or_ancestor_has_filters = !node->filters.IsEmpty();
+  node->node_or_ancestor_has_filters =
+      !node->filters.IsEmpty() || node->has_potential_filter_animation;
   if (parent_node) {
     node->node_or_ancestor_has_filters |=
         parent_node->node_or_ancestor_has_filters;
@@ -1142,9 +1160,11 @@ gfx::RectF ClipTree::ViewportClip() const {
   return Node(kViewportNodeId)->clip;
 }
 
+#if DCHECK_IS_ON()
 bool ClipTree::operator==(const ClipTree& other) const {
   return PropertyTree::operator==(other);
 }
+#endif
 
 EffectTree& EffectTree::operator=(const EffectTree& from) {
   PropertyTree::operator=(from);
@@ -1155,9 +1175,11 @@ EffectTree& EffectTree::operator=(const EffectTree& from) {
   return *this;
 }
 
+#if DCHECK_IS_ON()
 bool EffectTree::operator==(const EffectTree& other) const {
   return PropertyTree::operator==(other);
 }
+#endif
 
 ScrollTree::ScrollTree()
     : currently_scrolling_node_id_(kInvalidNodeId),
@@ -1177,6 +1199,7 @@ ScrollTree& ScrollTree::operator=(const ScrollTree& from) {
   return *this;
 }
 
+#if DCHECK_IS_ON()
 bool ScrollTree::operator==(const ScrollTree& other) const {
   if (scroll_offset_map_ != other.scroll_offset_map_)
     return false;
@@ -1191,14 +1214,13 @@ bool ScrollTree::operator==(const ScrollTree& other) const {
   return PropertyTree::operator==(other) && is_currently_scrolling_node_equal;
 }
 
-#if DCHECK_IS_ON()
 void ScrollTree::CopyCompleteTreeState(const ScrollTree& other) {
   currently_scrolling_node_id_ = other.currently_scrolling_node_id_;
   scroll_offset_map_ = other.scroll_offset_map_;
   synced_scroll_offset_map_ = other.synced_scroll_offset_map_;
   callbacks_ = other.callbacks_;
 }
-#endif
+#endif  // DCHECK_IS_ON()
 
 ScrollNode* ScrollTree::FindNodeFromElementId(ElementId id) {
   if (!id)
@@ -1718,6 +1740,7 @@ PropertyTrees::PropertyTrees()
 
 PropertyTrees::~PropertyTrees() = default;
 
+#if DCHECK_IS_ON()
 bool PropertyTrees::operator==(const PropertyTrees& other) const {
   return transform_tree == other.transform_tree &&
          effect_tree == other.effect_tree && clip_tree == other.clip_tree &&
@@ -1734,6 +1757,7 @@ bool PropertyTrees::operator==(const PropertyTrees& other) const {
          is_active == other.is_active &&
          sequence_number == other.sequence_number;
 }
+#endif
 
 PropertyTrees& PropertyTrees::operator=(const PropertyTrees& from) {
   transform_tree = from.transform_tree;

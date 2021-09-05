@@ -13,18 +13,45 @@
 namespace autofill_assistant {
 namespace ActionDelegateUtil {
 
-void ClickOrTapElement(ActionDelegate* delegate,
-                       const Selector& selector,
-                       ClickType click_type,
-                       base::OnceCallback<void(const ClientStatus&)> callback);
+using ElementActionCallback =
+    base::OnceCallback<void(const ElementFinder::Result&,
+                            base::OnceCallback<void(const ClientStatus&)>)>;
 
-void SendKeyboardInput(ActionDelegate* delegate,
+using ElementActionVector = std::vector<ElementActionCallback>;
+
+// Finds the element given by the selector. If the resolution fails, it
+// immediately executes the |done| callback. If the resolution succeeds, it
+// executes the |perform| callback with the element and the |done| callback as
+// arguments, while retaining the element.
+void FindElementAndPerform(
+    /* const */ ActionDelegate* delegate,
+    const Selector& selector,
+    ElementActionCallback perform,
+    base::OnceCallback<void(const ClientStatus&)> done);
+
+// Finds the element given by the selector. If the resolution fails, it
+// immediately executes the |done| callback. If the resolution succeeds, it
+// executes the |perform_actions| callbacks in sequence with the element and
+// the |done| callback as arguments, while retaining the element.
+void FindElementAndPerform(
+    /* const */ ActionDelegate* delegate,
+    const Selector& selector,
+    std::unique_ptr<ElementActionVector> perform_actions,
+    base::OnceCallback<void(const ClientStatus&)> done);
+
+void ClickOrTapElement(
+    /* const */ ActionDelegate* delegate,
+    const Selector& selector,
+    ClickType click_type,
+    base::OnceCallback<void(const ClientStatus&)> callback);
+
+void SendKeyboardInput(/* const */ ActionDelegate* delegate,
                        const Selector& selector,
                        const std::vector<UChar32> codepoints,
                        int delay_in_millis,
                        base::OnceCallback<void(const ClientStatus&)> callback);
 
-void SetFieldValue(ActionDelegate* delegate,
+void SetFieldValue(/* const */ ActionDelegate* delegate,
                    const Selector& selector,
                    const std::string& value,
                    KeyboardValueFillStrategy fill_strategy,

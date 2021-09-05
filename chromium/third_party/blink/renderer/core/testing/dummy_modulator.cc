@@ -52,8 +52,8 @@ ScriptState* DummyModulator::GetScriptState() {
   return nullptr;
 }
 
-V8CacheOptions DummyModulator::GetV8CacheOptions() const {
-  return kV8CacheOptionsDefault;
+mojom::blink::V8CacheOptions DummyModulator::GetV8CacheOptions() const {
+  return mojom::blink::V8CacheOptions::kDefault;
 }
 
 bool DummyModulator::IsScriptingDisabled() const {
@@ -163,16 +163,16 @@ ScriptValue DummyModulator::InstantiateModule(v8::Local<v8::Module>,
   return ScriptValue();
 }
 
-Vector<Modulator::ModuleRequest> DummyModulator::ModuleRequestsFromModuleRecord(
+Vector<ModuleRequest> DummyModulator::ModuleRequestsFromModuleRecord(
     v8::Local<v8::Module>) {
   NOTREACHED();
   return Vector<ModuleRequest>();
 }
 
-ModuleEvaluationResult DummyModulator::ExecuteModule(ModuleScript*,
+ScriptEvaluationResult DummyModulator::ExecuteModule(ModuleScript*,
                                                      CaptureEvalErrorFlag) {
   NOTREACHED();
-  return ModuleEvaluationResult::Empty();
+  return ScriptEvaluationResult::FromModuleNotRun();
 }
 
 ModuleScriptFetcher* DummyModulator::CreateModuleScriptFetcher(

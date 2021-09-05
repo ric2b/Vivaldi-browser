@@ -574,10 +574,10 @@ void PageSpecificContentSettings::OnContentAllowed(ContentSettingsType type) {
     status.blocked = false;
     access_changed = true;
   }
-
   if (!status.allowed) {
     status.allowed = true;
     access_changed = true;
+    delegate_->OnContentAllowed(type);
   }
 
   if (access_changed)
@@ -777,6 +777,8 @@ void PageSpecificContentSettings::OnMediaStreamPermissionSet(
     bool mic_blocked = (new_microphone_camera_state & MICROPHONE_BLOCKED) != 0;
     ContentSettingsStatus& status =
         content_settings_status_[ContentSettingsType::MEDIASTREAM_MIC];
+    if (!status.allowed && !mic_blocked)
+      delegate_->OnContentAllowed(ContentSettingsType::MEDIASTREAM_MIC);
     status.allowed = !mic_blocked;
     status.blocked = mic_blocked;
   }
@@ -787,6 +789,8 @@ void PageSpecificContentSettings::OnMediaStreamPermissionSet(
     bool cam_blocked = (new_microphone_camera_state & CAMERA_BLOCKED) != 0;
     ContentSettingsStatus& status =
         content_settings_status_[ContentSettingsType::MEDIASTREAM_CAMERA];
+    if (!status.allowed && !cam_blocked)
+      delegate_->OnContentAllowed(ContentSettingsType::MEDIASTREAM_CAMERA);
     status.allowed = !cam_blocked;
     status.blocked = cam_blocked;
   }

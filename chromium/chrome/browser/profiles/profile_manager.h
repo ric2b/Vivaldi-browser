@@ -17,17 +17,19 @@
 
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/profiles/profile_shortcut_manager.h"
-#include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/common/buildflags.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+
+#if !defined(OS_ANDROID)
+#include "chrome/browser/ui/browser_list_observer.h"
+#endif  // !defined(OS_ANDROID)
 
 class ProfileAttributesStorage;
 class ProfileInfoCache;
@@ -41,6 +43,8 @@ class ProfileManager : public content::NotificationObserver,
   using ProfileLoadedCallback = base::OnceCallback<void(Profile*)>;
 
   explicit ProfileManager(const base::FilePath& user_data_dir);
+  ProfileManager(const ProfileManager&) = delete;
+  ProfileManager& operator=(const ProfileManager&) = delete;
   ~ProfileManager() override;
 
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
@@ -72,16 +76,10 @@ class ProfileManager : public content::NotificationObserver,
 
   // Get the profile for the user which created the current session.
   // Note that in case of a guest account this will return a 'suitable' profile.
-  // This function is temporary and will soon be moved to ash. As such avoid
-  // using it at all cost.
-  // TODO(skuhne): Move into ash's new user management function.
   static Profile* GetPrimaryUserProfile();
 
   // Get the profile for the currently active user.
   // Note that in case of a guest account this will return a 'suitable' profile.
-  // This function is temporary and will soon be moved to ash. As such avoid
-  // using it at all cost.
-  // TODO(skuhne): Move into ash's new user management function.
   static Profile* GetActiveUserProfile();
 
   // Load and return the initial profile for browser. On ChromeOS, this returns
@@ -280,7 +278,8 @@ class ProfileManager : public content::NotificationObserver,
   // were loaded.
   struct ProfileInfo {
     ProfileInfo(std::unique_ptr<Profile> profile, bool created);
-
+    ProfileInfo(const ProfileInfo&) = delete;
+    ProfileInfo& operator=(const ProfileInfo&) = delete;
     ~ProfileInfo();
 
     std::unique_ptr<Profile> profile;
@@ -289,9 +288,6 @@ class ProfileManager : public content::NotificationObserver,
     // List of callbacks to run when profile initialization is done. Note, when
     // profile is fully loaded this vector will be empty.
     std::vector<CreateCallback> callbacks;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(ProfileInfo);
   };
 
   // Does final initial actions.
@@ -386,6 +382,8 @@ class ProfileManager : public content::NotificationObserver,
   class BrowserListObserver : public ::BrowserListObserver {
    public:
     explicit BrowserListObserver(ProfileManager* manager);
+    BrowserListObserver(const BrowserListObserver&) = delete;
+    BrowserListObserver& operator=(const BrowserListObserver&) = delete;
     ~BrowserListObserver() override;
 
     // ::BrowserListObserver implementation.
@@ -395,7 +393,6 @@ class ProfileManager : public content::NotificationObserver,
 
    private:
     ProfileManager* profile_manager_;
-    DISALLOW_COPY_AND_ASSIGN(BrowserListObserver);
   };
 
   // If the |loaded_profile| has been loaded successfully (according to
@@ -467,8 +464,6 @@ class ProfileManager : public content::NotificationObserver,
   // enough to do as part of the mass refactor CL which introduced
   // |thread_checker_|, ref. https://codereview.chromium.org/2907253003/#msg37.
   THREAD_CHECKER(thread_checker_);
-
-  DISALLOW_COPY_AND_ASSIGN(ProfileManager);
 };
 
 // Same as the ProfileManager, but doesn't initialize some services of the
@@ -476,9 +471,9 @@ class ProfileManager : public content::NotificationObserver,
 class ProfileManagerWithoutInit : public ProfileManager {
  public:
   explicit ProfileManagerWithoutInit(const base::FilePath& user_data_dir);
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ProfileManagerWithoutInit);
+  ProfileManagerWithoutInit(const ProfileManagerWithoutInit&) = delete;
+  ProfileManagerWithoutInit& operator=(const ProfileManagerWithoutInit&) =
+      delete;
 };
 
 #endif  // CHROME_BROWSER_PROFILES_PROFILE_MANAGER_H_

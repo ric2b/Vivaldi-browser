@@ -65,6 +65,7 @@
 #include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
 #include "third_party/blink/renderer/platform/graphics/touch_action.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
+#include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -92,7 +93,6 @@ class WebLocalFrame;
 class WebLocalFrameImpl;
 class WebSettingsImpl;
 class WebViewClient;
-class WebFrameWidgetBase;
 class WebViewFrameWidget;
 
 enum class FullscreenRequestType;
@@ -184,6 +184,9 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   WebSize GetSize() override;
   void SetScreenOrientationOverrideForTesting(
       base::Optional<blink::mojom::ScreenOrientation> orientation) override;
+  void UseSynchronousResizeModeForTesting(bool enable) override;
+  void SetWindowRectSynchronouslyForTesting(
+      const gfx::Rect& new_window_rect) override;
   void ResetScrollAndScaleState() override;
   void SetIgnoreViewportTagScaleLimits(bool) override;
   WebSize ContentsPreferredMinimumSize() override;
@@ -216,6 +219,8 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void SetDeviceColorSpaceForTesting(
       const gfx::ColorSpace& color_space) override;
   void PaintContent(cc::PaintCanvas*, const gfx::Rect&) override;
+  void SetWebPreferences(const web_pref::WebPreferences& preferences) override;
+  const web_pref::WebPreferences& GetWebPreferences() override;
 
   // Overrides the page's background and base background color. You
   // can use this to enforce a transparent background, which is useful if you
@@ -237,6 +242,8 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
       SetPageLifecycleStateCallback callback) override;
   void AudioStateChanged(bool is_audio_playing) override;
   void SetInsidePortal(bool is_inside_portal) override;
+  void UpdateWebPreferences(
+      const blink::web_pref::WebPreferences& preferences) override;
 
   void DispatchPageshow(base::TimeTicks navigation_start);
   void DispatchPagehide(mojom::blink::PagehideDispatch pagehide_dispatch);
@@ -257,6 +264,8 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void EnableAutoResizeMode(const gfx::Size& min_viewport_size,
                             const gfx::Size& max_viewport_size);
   void DisableAutoResizeMode();
+  void ActivateDevToolsTransform(const DeviceEmulationParams&);
+  void DeactivateDevToolsTransform();
 
   SkColor BackgroundColor() const;
   Color BaseBackgroundColor() const;
@@ -270,11 +279,11 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // Returns the currently focused Element or null if no element has focus.
   Element* FocusedElement() const;
 
-  WebViewClient* Client() { return AsView().client; }
+  WebViewClient* Client() { return web_view_client_; }
 
   // Returns the page object associated with this view. This may be null when
   // the page is shutting down, but will be valid at all other times.
-  Page* GetPage() const { return AsView().page.Get(); }
+  Page* GetPage() const { return page_.Get(); }
 
   WebDevToolsAgentImpl* MainFrameDevToolsAgentImpl();
 
@@ -448,8 +457,14 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void DidEnterFullscreen();
   void DidExitFullscreen();
 
-  void SetMainFrameWidgetBase(WebViewFrameWidget* widget);
-  WebFrameWidgetBase* MainFrameWidgetBase();
+  void SetMainFrameViewWidget(WebViewFrameWidget* widget);
+  WebViewFrameWidget* MainFrameViewWidget();
+
+  // Called when hovering over an anchor with the given URL.
+  void SetMouseOverURL(const KURL&);
+
+  // Called when keyboard focus switches to an anchor with the given URL.
+  void SetKeyboardFocusURL(const KURL&);
 
   // Vivaldi start
   void SetImagesEnabled(const bool images_enabled) override;
@@ -472,17 +487,14 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   FRIEND_TEST_ALL_PREFIXES(WebViewTest, SetBaseBackgroundColorBeforeMainFrame);
   FRIEND_TEST_ALL_PREFIXES(WebViewTest, LongPressImage);
   FRIEND_TEST_ALL_PREFIXES(WebViewTest, LongPressImageAndThenLongTapImage);
+  FRIEND_TEST_ALL_PREFIXES(WebViewTest, UpdateTargetURLWithInvalidURL);
   FRIEND_TEST_ALL_PREFIXES(WebViewTest, TouchDragContextMenu);
+
   friend class frame_test_helpers::WebViewHelper;
   friend class SimCompositor;
   friend class WebView;  // So WebView::Create can call our constructor
   friend class WebViewFrameWidget;
   friend class WTF::RefCounted<WebViewImpl>;
-
-  // TODO(danakj): DCHECK in these that we're not inside a wrong API stackframe.
-  struct ViewData;
-  ViewData& AsView() { return as_view_; }
-  const ViewData& AsView() const { return as_view_; }
 
   // These are temporary methods to allow WebViewFrameWidget to delegate to
   // WebViewImpl. We expect to eventually move these out.
@@ -509,6 +521,15 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void SetFocus(bool enable) override;
   bool SelectionBounds(WebRect& anchor, WebRect& focus) const;
   WebURL GetURLForDebugTrace();
+
+  // Update the target url locally and tell the browser that the target URL has
+  // changed. If |url| is empty, show |fallback_url|.
+  void UpdateTargetURL(const WebURL& url, const WebURL& fallback_url);
+
+  // Helper functions to send the updated target URL to the right render frame
+  // in the browser process, and to handle its associated reply message.
+  void SendUpdatedTargetURLToBrowser(const KURL& target_url);
+  void TargetURLUpdatedInBrowser();
 
   void SetPageScaleFactorAndLocation(float scale,
                                      bool is_pinch_gesture_active,
@@ -607,18 +628,10 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // Sends any outstanding TrackedFeaturesUpdate messages to the browser.
   void ReportActiveSchedulerTrackedFeatures();
 
-  // These member variables should not be accessed within calls to WebWidget
-  // APIs. They can be called from within WebView APIs, and internal methods,
-  // though these need to be sorted as being for the view or the widget also.
-  struct ViewData {
-    ViewData(WebViewClient* client) : client(client) {}
-
-    // Can be null (e.g. unittests, shared workers, etc).
-    WebViewClient* client;
-    Persistent<Page> page;
-  } as_view_;
-
+  // Can be null (e.g. unittests, shared workers, etc).
+  WebViewClient* web_view_client_;
   Persistent<ChromeClient> chrome_client_;
+  Persistent<Page> page_;
 
   // This is the size of the page that the web contents will render into. This
   // is usually, but not necessarily the same as the VisualViewport size. The
@@ -638,6 +651,35 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // against WebCore. This is lazily allocated the first time GetWebSettings()
   // is called.
   std::unique_ptr<WebSettingsImpl> web_settings_;
+
+  // The state of our target_url transmissions. When we receive a request to
+  // send a URL to the browser, we set this to TARGET_INFLIGHT until an ACK
+  // comes back - if a new request comes in before the ACK, we store the new
+  // URL in pending_target_url_ and set the status to TARGET_PENDING. If an
+  // ACK comes back and we are in TARGET_PENDING, we send the stored URL and
+  // revert to TARGET_INFLIGHT.
+  //
+  // We don't need a queue of URLs to send, as only the latest is useful.
+  enum {
+    TARGET_NONE,
+    TARGET_INFLIGHT,  // We have a request in-flight, waiting for an ACK
+    TARGET_PENDING    // INFLIGHT + we have a URL waiting to be sent
+  } target_url_status_ = TARGET_NONE;
+
+  // The URL we show the user in the status bar. We use this to determine if we
+  // want to send a new one (we do not need to send duplicates). It will be
+  // equal to either |mouse_over_url_| or |focus_url_|, depending on which was
+  // updated last.
+  KURL target_url_;
+
+  // The next target URL we want to send to the browser.
+  KURL pending_target_url_;
+
+  // The URL the user's mouse is hovering over.
+  KURL mouse_over_url_;
+
+  // The URL that has keyboard focus.
+  KURL focus_url_;
 
   // Keeps track of the current zoom level. 0 means no zoom, positive numbers
   // mean zoom in, negative numbers mean zoom out.
@@ -743,9 +785,11 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
 
   // Cache the preferred size of the page in order to prevent sending the IPC
   // when layout() recomputes but doesn't actually change sizes.
-  WebSize preferred_size_;
+  gfx::Size preferred_size_in_dips_;
 
   Persistent<EventListener> popup_mouse_wheel_event_listener_;
+
+  web_pref::WebPreferences web_preferences_;
 
   // The local root whose document has |popup_mouse_wheel_event_listener_|
   // registered.

@@ -9,14 +9,18 @@
 #include <vector>
 
 #include "base/logging.h"
-#include "chrome/browser/chromeos/crosapi/attestation_ash.h"
+#include "chrome/browser/chromeos/crosapi/browser_manager.h"
+#include "chrome/browser/chromeos/crosapi/feedback_ash.h"
+#include "chrome/browser/chromeos/crosapi/keystore_service_ash.h"
 #include "chrome/browser/chromeos/crosapi/message_center_ash.h"
 #include "chrome/browser/chromeos/crosapi/screen_manager_ash.h"
 #include "chrome/browser/chromeos/crosapi/select_file_ash.h"
-#include "chromeos/crosapi/mojom/attestation.mojom.h"
+#include "chromeos/crosapi/mojom/feedback.mojom.h"
+#include "chromeos/crosapi/mojom/keystore_service.mojom.h"
 #include "chromeos/crosapi/mojom/message_center.mojom.h"
 #include "chromeos/crosapi/mojom/screen_manager.mojom.h"
 #include "chromeos/crosapi/mojom/select_file.mojom.h"
+#include "content/public/browser/device_service.h"
 
 namespace crosapi {
 
@@ -31,10 +35,10 @@ AshChromeServiceImpl::AshChromeServiceImpl(
 
 AshChromeServiceImpl::~AshChromeServiceImpl() = default;
 
-void AshChromeServiceImpl::BindAttestation(
-    mojo::PendingReceiver<crosapi::mojom::Attestation> receiver) {
-  attestation_ash_ =
-      std::make_unique<crosapi::AttestationAsh>(std::move(receiver));
+void AshChromeServiceImpl::BindKeystoreService(
+    mojo::PendingReceiver<crosapi::mojom::KeystoreService> receiver) {
+  keystore_service_ash_ =
+      std::make_unique<crosapi::KeystoreServiceAsh>(std::move(receiver));
 }
 
 void AshChromeServiceImpl::BindMessageCenter(
@@ -50,6 +54,20 @@ void AshChromeServiceImpl::BindSelectFile(
 void AshChromeServiceImpl::BindScreenManager(
     mojo::PendingReceiver<mojom::ScreenManager> receiver) {
   screen_manager_ash_->BindReceiver(std::move(receiver));
+}
+
+void AshChromeServiceImpl::BindHidManager(
+    mojo::PendingReceiver<device::mojom::HidManager> receiver) {
+  content::GetDeviceService().BindHidManager(std::move(receiver));
+}
+
+void AshChromeServiceImpl::BindFeedback(
+    mojo::PendingReceiver<mojom::Feedback> receiver) {
+  feedback_ash_ = std::make_unique<FeedbackAsh>(std::move(receiver));
+}
+
+void AshChromeServiceImpl::OnLacrosStartup(mojom::LacrosInfoPtr lacros_info) {
+  BrowserManager::Get()->set_lacros_version(lacros_info->lacros_version);
 }
 
 }  // namespace crosapi

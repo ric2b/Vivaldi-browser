@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
@@ -89,7 +90,7 @@ class MediaComboboxModel : public ui::ComboboxModel {
 // and/or camera).
 class MediaMenuBlock : public views::View {
  public:
-  MediaMenuBlock(views::ComboboxListener* listener,
+  MediaMenuBlock(base::RepeatingCallback<void(views::Combobox*)> callback,
                  ContentSettingBubbleModel::MediaMenuMap media) {
     const ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
 
@@ -137,7 +138,7 @@ class MediaMenuBlock : public views::View {
       auto combobox =
           std::make_unique<views::Combobox>(std::move(combobox_model));
       combobox->SetEnabled(combobox_enabled);
-      combobox->set_listener(listener);
+      combobox->set_callback(base::BindRepeating(callback, combobox.get()));
       combobox->SetSelectedIndex(combobox_selected_index);
       layout->AddView(std::move(combobox));
     }
@@ -200,9 +201,6 @@ class ContentSettingBubbleContents::ListItemContainer : public views::View {
   // Calling this will delete related children.
   void RemoveRowAtIndex(int index);
 
-  // Returns row index of |link| among list items.
-  int GetRowIndexOf(const views::Link* link) const;
-
  private:
   using Row = std::pair<views::ImageView*, views::View*>;
   using NewRow = std::pair<std::unique_ptr<views::ImageView>,
@@ -237,8 +235,9 @@ void ContentSettingBubbleContents::ListItemContainer::AddItem(
   if (item.image) {
     item_icon->SetBorder(
         views::CreateEmptyBorder(kTitleDescriptionListItemInset));
-    const SkColor icon_color = views::style::GetColor(
-        *item_icon, CONTEXT_BODY_TEXT_SMALL, views::style::STYLE_PRIMARY);
+    const SkColor icon_color =
+        views::style::GetColor(*item_icon, CONTEXT_DIALOG_BODY_TEXT_SMALL,
+                               views::style::STYLE_PRIMARY);
     item_icon->SetImage(CreateVectorIconWithBadge(
         *item.image, GetLayoutConstant(LOCATION_BAR_ICON_SIZE), icon_color,
         item.has_blocked_badge ? vector_icons::kBlockedBadgeIcon
@@ -251,7 +250,14 @@ void ContentSettingBubbleContents::ListItemContainer::AddItem(
     link->SetElideBehavior(gfx::ELIDE_MIDDLE);
     link->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
     link->set_callback(base::BindRepeating(
-        &ContentSettingBubbleContents::LinkClicked, base::Unretained(parent_)));
+        [](const std::vector<Row>* items, const views::Link* link,
+           ContentSettingBubbleContents* parent, const ui::Event& event) {
+          const auto it = base::ranges::find(*items, link, &Row::second);
+          DCHECK(it != items->cend());
+          parent->LinkClicked(std::distance(items->cbegin(), it), event);
+        },
+        base::Unretained(&list_item_views_), base::Unretained(link.get()),
+        base::Unretained(parent_)));
     item_contents = std::move(link);
   } else {
     item_contents = std::make_unique<views::View>();
@@ -289,16 +295,6 @@ void ContentSettingBubbleContents::ListItemContainer::RemoveRowAtIndex(
   ResetLayout();
   for (auto& row : list_item_views_)
     AddRowToLayout(row);
-}
-
-int ContentSettingBubbleContents::ListItemContainer::GetRowIndexOf(
-    const views::Link* link) const {
-  auto has_link = [link](const Row& row) { return row.second == link; };
-  auto iter =
-      std::find_if(list_item_views_.begin(), list_item_views_.end(), has_link);
-  return (iter == list_item_views_.end())
-             ? -1
-             : std::distance(list_item_views_.begin(), iter);
 }
 
 void ContentSettingBubbleContents::ListItemContainer::ResetLayout() {
@@ -516,7 +512,10 @@ void ContentSettingBubbleContents::Init() {
   // Layout code for the media device menus.
   if (content_setting_bubble_model_->AsMediaStreamBubbleModel()) {
     rows.push_back(
-        {std::make_unique<MediaMenuBlock>(this, bubble_content.media_menus),
+        {std::make_unique<MediaMenuBlock>(
+             base::BindRepeating(&ContentSettingBubbleContents::OnPerformAction,
+                                 base::Unretained(this)),
+             bubble_content.media_menus),
          LayoutRowType::INDENTED});
   }
 
@@ -620,12 +619,11 @@ ContentSettingBubbleContents::CreateHelpAndManageView() {
   return container;
 }
 
-void ContentSettingBubbleContents::LinkClicked(views::Link* source,
-                                               int event_flags) {
+void ContentSettingBubbleContents::LinkClicked(int row,
+                                               const ui::Event& event) {
   DCHECK(content_setting_bubble_model_);
-  int row = list_item_container_->GetRowIndexOf(source);
   DCHECK_NE(row, -1);
-  content_setting_bubble_model_->OnListItemClicked(row, event_flags);
+  content_setting_bubble_model_->OnListItemClicked(row, event);
 }
 
 void ContentSettingBubbleContents::CustomLinkClicked() {

@@ -33,7 +33,7 @@ void MathMLPaddedElement::AddMathPaddedLSpaceIfNeeded(
     const CSSToLengthConversionData& conversion_data) {
   if (auto length_or_percentage_value = AddMathLengthToComputedStyle(
           conversion_data, mathml_names::kLspaceAttr))
-    style.SetMathPaddedLSpace(std::move(*length_or_percentage_value));
+    style.SetMathLSpace(std::move(*length_or_percentage_value));
 }
 
 void MathMLPaddedElement::AddMathPaddedVOffsetIfNeeded(
@@ -85,9 +85,9 @@ void MathMLPaddedElement::CollectStyleForPresentationAttribute(
 LayoutObject* MathMLPaddedElement::CreateLayoutObject(
     const ComputedStyle& style,
     LegacyLayout legacy) {
-  // TODO(rbuis): legacy check should be removed.
+  DCHECK(!style.IsDisplayMathType() || legacy != LegacyLayout::kForce);
   if (!RuntimeEnabledFeatures::MathMLCoreEnabled() ||
-      legacy == LegacyLayout::kForce || !style.IsDisplayMathType())
+      !style.IsDisplayMathType())
     return MathMLElement::CreateLayoutObject(style, legacy);
   return new LayoutNGMathMLBlockWithAnonymousMrow(this);
 }

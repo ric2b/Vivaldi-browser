@@ -5,8 +5,8 @@
 #include <bitset>
 #include "base/single_thread_task_runner.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/v8_cache_options.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_cache_options.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/inspector/console_message_storage.h"
 #include "third_party/blink/renderer/core/inspector/thread_debugger.h"
@@ -138,7 +138,7 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
   // Emulates API use on threaded WorkletGlobalScope.
   void CountFeature(WebFeature feature) {
     EXPECT_TRUE(IsCurrentThread());
-    GlobalScope()->CountFeature(feature);
+    GlobalScope()->CountUse(feature);
     PostCrossThreadTask(*GetParentTaskRunnerForTesting(), FROM_HERE,
                         CrossThreadBindOnce(&test::ExitRunLoop));
   }
@@ -148,7 +148,7 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
     EXPECT_TRUE(IsCurrentThread());
     Deprecation::CountDeprecation(GlobalScope(), feature);
 
-    // countDeprecation() should add a warning message.
+    // CountDeprecation() should add a warning message.
     EXPECT_EQ(1u, GetConsoleMessageStorage()->size());
     String console_message = GetConsoleMessageStorage()->at(0)->Message();
     EXPECT_TRUE(console_message.Contains("deprecated"));
@@ -217,7 +217,7 @@ class ThreadedWorkletMessagingProxyForTest
             GetExecutionContext()->AddressSpace(),
             OriginTrialContext::GetTokens(GetExecutionContext()).get(),
             base::UnguessableToken::Create(), std::move(worker_settings),
-            kV8CacheOptionsDefault,
+            mojom::blink::V8CacheOptions::kDefault,
             MakeGarbageCollected<WorkletModuleResponsesMap>(),
             mojo::NullRemote() /* browser_interface_broker */,
             BeginFrameProviderParams(), nullptr /* parent_feature_policy */,

@@ -15,11 +15,11 @@ import("//chrome/android/chrome_public_apk_tmpl.gni")
 import("//chrome/android/trichrome.gni")
 import("//components/spellcheck/spellcheck_build_features.gni")
 import("//tools/grit/repack.gni")
-import("//tools/resources/generate_resource_whitelist.gni")
+import("//tools/resources/generate_resource_allowlist.gni")
 import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
 import("//weblayer/variables.gni")
 
-if (enable_resource_whitelist_generation) {
+if (enable_resource_allowlist_generation) {
   system_webview_pak_allowlist =
       "$target_gen_dir/system_webview_pak_allowlist.txt"
 }
@@ -53,6 +53,19 @@ standalone_system_webview_apk_tmpl("system_webview_apk") {
 standalone_system_webview_apk_tmpl("system_webview_no_weblayer_apk") {
   exclude_weblayer_java = true
   apk_name = "SystemWebViewNoWebLayer"
+
+  # Adding deps on recycler view in the base WebView APK will end up keeping the
+  # Java in the base APK instead of the WebLayer DFM, even though it is not
+  # needed in the base APK.
+  #
+  # If you hit this check and are adding a dep to //ui/android:ui_java, use
+  # //ui/android:ui_no_recycler_view instead. If you hit this check because you
+  # are adding //third_party/android_deps:android_support_*, use the androidx
+  # version of the dep instead.
+  # TODO(b/165810905): Use per-feature -keep rules in R8 once supported, then
+  # this can be removed.
+  assert_no_deps =
+      [ "//third_party/android_deps:androidx_recyclerview_recyclerview_java" ]
 }
 
 if (enable_webview_bundles) {
@@ -384,8 +397,6 @@ generate_jni("browser_jni_headers") {
     "java/src/org/chromium/android_webview/AwTracingController.java",
     "java/src/org/chromium/android_webview/AwWebContentsDelegate.java",
     "java/src/org/chromium/android_webview/AwWebResourceInterceptResponse.java",
-    "java/src/org/chromium/android_webview/AwWebResourceResponse.java",
-    "java/src/org/chromium/android_webview/InputStreamUtil.java",
     "java/src/org/chromium/android_webview/JsReplyProxy.java",
     "java/src/org/chromium/android_webview/PopupTouchHandleDrawable.java",
     "java/src/org/chromium/android_webview/VariationsSeedLoader.java",
@@ -457,7 +468,6 @@ android_library("browser_java") {
     "java/src/org/chromium/android_webview/AwWebContentsDelegateAdapter.java",
     "java/src/org/chromium/android_webview/AwWebContentsObserver.java",
     "java/src/org/chromium/android_webview/AwWebResourceInterceptResponse.java",
-    "java/src/org/chromium/android_webview/AwWebResourceResponse.java",
     "java/src/org/chromium/android_webview/AwZoomControls.java",
     "java/src/org/chromium/android_webview/CleanupReference.java",
     "java/src/org/chromium/android_webview/ClientCertLookupTable.java",
@@ -466,7 +476,6 @@ android_library("browser_java") {
     "java/src/org/chromium/android_webview/FindAddress.java",
     "java/src/org/chromium/android_webview/FullScreenView.java",
     "java/src/org/chromium/android_webview/HttpAuthDatabase.java",
-    "java/src/org/chromium/android_webview/InputStreamUtil.java",
     "java/src/org/chromium/android_webview/JsPromptResultReceiver.java",
     "java/src/org/chromium/android_webview/JsReplyProxy.java",
     "java/src/org/chromium/android_webview/JsResultHandler.java",
@@ -483,6 +492,7 @@ android_library("browser_java") {
     "java/src/org/chromium/android_webview/WebMessageListenerHolder.java",
     "java/src/org/chromium/android_webview/WebMessageListenerInfo.java",
     "java/src/org/chromium/android_webview/WebViewChromiumRunQueue.java",
+    "java/src/org/chromium/android_webview/WebviewErrorCode.java",
     "java/src/org/chromium/android_webview/gfx/AwDrawFnImpl.java",
     "java/src/org/chromium/android_webview/gfx/AwFunctor.java",
     "java/src/org/chromium/android_webview/gfx/AwGLFunctor.java",
@@ -536,7 +546,7 @@ android_library("browser_java") {
     "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_deps:protobuf_lite_runtime_java",
     "//third_party/blink/public:blink_headers_java",
-    "//ui/android:ui_java",
+    "//ui/android:ui_no_recycler_view_java",
     "//url:gurl_java",
   ]
   annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
@@ -672,11 +682,11 @@ android_library("android_webview_product_config_java") {
   jar_excluded_patterns = [ "*/ProductConfig.class" ]
 }
 
-if (enable_resource_whitelist_generation) {
+if (enable_resource_allowlist_generation) {
   libwebviewchromium_tmpl("system_webview_pak_allowlist_inputs") {
     ldflags = [ "--collect-inputs-only" ]
   }
-  generate_resource_whitelist("system_webview_pak_allowlist") {
+  generate_resource_allowlist("system_webview_pak_allowlist") {
     deps = [ ":system_webview_pak_allowlist_inputs" ]
     inputs = [ "$root_out_dir/lib.unstripped/libsystem_webview_pak_allowlist_inputs$shlib_extension" ]
     output = system_webview_pak_allowlist
@@ -687,8 +697,8 @@ webview_repack_locales("repack_locales") {
   input_locales = locales
   output_locales = locales
 
-  if (enable_resource_whitelist_generation) {
-    repack_whitelist = system_webview_pak_allowlist
+  if (enable_resource_allowlist_generation) {
+    repack_allowlist = system_webview_pak_allowlist
     deps = [ ":system_webview_pak_allowlist" ]
   }
 }
@@ -726,8 +736,8 @@ repack("repack_pack") {
   ]
   output = "$target_gen_dir/resources.pak"
 
-  if (enable_resource_whitelist_generation) {
-    repack_whitelist = system_webview_pak_allowlist
+  if (enable_resource_allowlist_generation) {
+    repack_allowlist = system_webview_pak_allowlist
     deps += [ ":system_webview_pak_allowlist" ]
   }
 
@@ -750,8 +760,8 @@ repack("repack_100_percent") {
   ]
   output = "$target_gen_dir/chrome_100_percent.pak"
 
-  if (enable_resource_whitelist_generation) {
-    repack_whitelist = system_webview_pak_allowlist
+  if (enable_resource_allowlist_generation) {
+    repack_allowlist = system_webview_pak_allowlist
     deps += [ ":system_webview_pak_allowlist" ]
   }
   if (webview_includes_weblayer) {
@@ -780,7 +790,7 @@ if (android_64bit_target_cpu) {
            "32-bit targets shouldn't have secondary abi")
     arch_suffix = "32"
     if (use_v8_context_snapshot) {
-      renaming_sources = [ "$_secondary_abi_out_dir/v8_context_snapshot.bin" ]
+      renaming_sources = [ "$_secondary_abi_out_dir/$v8_context_snapshot_filename" ]
       renaming_destinations = [ "v8_context_snapshot_$arch_suffix.bin" ]
     } else {
       renaming_sources = [ "$_secondary_abi_out_dir/snapshot_blob.bin" ]
@@ -846,7 +856,6 @@ android_resources("resources") {
     "java/res/drawable-xxhdpi/ic_play_circle_outline_black_48dp.png",
     "java/res/drawable-xxxhdpi/ic_play_circle_outline_black_48dp.png",
   ]
-  create_srcjar = false
   deps = [ ":strings_grd" ]
 }
 

@@ -85,12 +85,12 @@ void OnRemovedPrinter(const Printer::PrinterProtocol& protocol, bool success) {
 
 // Log if the IPP attributes request was succesful.
 void RecordIppQueryResult(const PrinterQueryResult& result) {
-  bool reachable = (result != PrinterQueryResult::UNREACHABLE);
+  bool reachable = (result != PrinterQueryResult::kUnreachable);
   UMA_HISTOGRAM_BOOLEAN("Printing.CUPS.IppDeviceReachable", reachable);
 
   if (reachable) {
     // Only record whether the query was successful if we reach the printer.
-    bool query_success = (result == PrinterQueryResult::SUCCESS);
+    bool query_success = (result == PrinterQueryResult::kSuccess);
     UMA_HISTOGRAM_BOOLEAN("Printing.CUPS.IppAttributesSuccess", query_success);
   }
 }
@@ -147,10 +147,13 @@ std::unique_ptr<chromeos::Printer> DictToPrinter(
   }
 
   std::string printer_queue;
-  printer_dict.GetString("printerQueue", &printer_queue);
-  // Path must start from '/' character.
-  if (!printer_queue.empty() && printer_queue.front() != '/')
-    printer_queue = "/" + printer_queue;
+  // The protocol "socket" does not allow path.
+  if (printer_protocol != "socket") {
+    printer_dict.GetString("printerQueue", &printer_queue);
+    // Path must start from '/' character.
+    if (!printer_queue.empty() && printer_queue.front() != '/')
+      printer_queue.insert(0, "/");
+  }
 
   auto printer = std::make_unique<chromeos::Printer>(printer_id);
   printer->set_display_name(printer_name);
@@ -480,7 +483,7 @@ void CupsPrintersHandler::HandleGetPrinterInfo(const base::ListValue* args) {
   if (uri.GetLastParsingError().status != Uri::ParserStatus::kNoErrors ||
       !IsValidPrinterUri(uri)) {
     // Run the failure callback.
-    OnAutoconfQueried(callback_id, PrinterQueryResult::UNKNOWN_FAILURE,
+    OnAutoconfQueried(callback_id, PrinterQueryResult::kUnknownFailure,
                       printing::PrinterStatus(), "", "", "", {}, false);
     return;
   }
@@ -502,7 +505,7 @@ void CupsPrintersHandler::OnAutoconfQueriedDiscovered(
     bool ipp_everywhere) {
   RecordIppQueryResult(result);
 
-  const bool success = result == PrinterQueryResult::SUCCESS;
+  const bool success = result == PrinterQueryResult::kSuccess;
   if (success) {
     // If we queried a valid make and model, use it.  The mDNS record isn't
     // guaranteed to have it.  However, don't overwrite it if the printer
@@ -548,9 +551,9 @@ void CupsPrintersHandler::OnAutoconfQueried(
     const std::vector<std::string>& document_formats,
     bool ipp_everywhere) {
   RecordIppQueryResult(result);
-  const bool success = result == PrinterQueryResult::SUCCESS;
+  const bool success = result == PrinterQueryResult::kSuccess;
 
-  if (result == PrinterQueryResult::UNREACHABLE) {
+  if (result == PrinterQueryResult::kUnreachable) {
     PRINTER_LOG(DEBUG) << "Could not reach printer";
     RejectJavascriptCallback(
         base::Value(callback_id),
@@ -736,8 +739,14 @@ void CupsPrintersHandler::OnAddedOrEditedPrinterCommon(
     const Printer& printer,
     PrinterSetupResult result_code,
     bool is_automatic) {
-  UMA_HISTOGRAM_ENUMERATION("Printing.CUPS.PrinterSetupResult", result_code,
-                            PrinterSetupResult::kMaxValue);
+  if (printer.IsZeroconf()) {
+    UMA_HISTOGRAM_ENUMERATION("Printing.CUPS.ZeroconfPrinterSetupResult",
+                              result_code, PrinterSetupResult::kMaxValue);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION("Printing.CUPS.PrinterSetupResult", result_code,
+                              PrinterSetupResult::kMaxValue);
+  }
+
   switch (result_code) {
     case PrinterSetupResult::kSuccess:
       UMA_HISTOGRAM_ENUMERATION("Printing.CUPS.PrinterAdded",
@@ -752,47 +761,30 @@ void CupsPrintersHandler::OnAddedOrEditedPrinterCommon(
       }
       return;
     case PrinterSetupResult::kEditSuccess:
-      PRINTER_LOG(USER) << "Printer updated";
+      PRINTER_LOG(USER) << ResultCodeToMessage(result_code);
       printers_manager_->SavePrinter(printer);
       return;
-    case PrinterSetupResult::kPpdNotFound:
-      PRINTER_LOG(ERROR) << "Could not locate requested PPD";
-      break;
-    case PrinterSetupResult::kPpdTooLarge:
-      PRINTER_LOG(ERROR) << "PPD is too large";
-      break;
-    case PrinterSetupResult::kPpdUnretrievable:
-      PRINTER_LOG(ERROR) << "Could not retrieve PPD from server";
-      break;
-    case PrinterSetupResult::kInvalidPpd:
-      PRINTER_LOG(ERROR) << "Provided PPD is invalid.";
-      break;
+    case PrinterSetupResult::kNativePrintersNotAllowed:
+    case PrinterSetupResult::kBadUri:
+    case PrinterSetupResult::kInvalidPrinterUpdate:
     case PrinterSetupResult::kPrinterUnreachable:
-      PRINTER_LOG(ERROR) << "Could not contact printer for configuration";
+    case PrinterSetupResult::kPrinterSentWrongResponse:
+    case PrinterSetupResult::kPrinterIsNotAutoconfigurable:
+    case PrinterSetupResult::kPpdTooLarge:
+    case PrinterSetupResult::kInvalidPpd:
+    case PrinterSetupResult::kPpdNotFound:
+    case PrinterSetupResult::kPpdUnretrievable:
+    case PrinterSetupResult::kDbusError:
+    case PrinterSetupResult::kDbusNoReply:
+    case PrinterSetupResult::kDbusTimeout:
+    case PrinterSetupResult::kIoError:
+    case PrinterSetupResult::kMemoryAllocationError:
+    case PrinterSetupResult::kFatalError:
+      PRINTER_LOG(ERROR) << ResultCodeToMessage(result_code);
       break;
     case PrinterSetupResult::kComponentUnavailable:
-      LOG(WARNING) << "Could not install component";
-      break;
-    case PrinterSetupResult::kDbusError:
-    case PrinterSetupResult::kFatalError:
-      PRINTER_LOG(ERROR) << "Unrecoverable error.  Reboot required.";
-      break;
-    case PrinterSetupResult::kNativePrintersNotAllowed:
-      PRINTER_LOG(ERROR)
-          << "Unable to add or edit printer due to enterprise policy.";
-      break;
-    case PrinterSetupResult::kInvalidPrinterUpdate:
-      PRINTER_LOG(ERROR)
-          << "Requested printer changes would make printer unusable";
-      break;
-    case PrinterSetupResult::kDbusNoReply:
-      PRINTER_LOG(ERROR) << "Couldn't talk to debugd over D-Bus.";
-      break;
-    case PrinterSetupResult::kDbusTimeout:
-      PRINTER_LOG(ERROR) << "Timed out trying to reach debugd over D-Bus.";
-      break;
     case PrinterSetupResult::kMaxValue:
-      NOTREACHED() << "This is not an expected value";
+      NOTREACHED() << ResultCodeToMessage(result_code);
       break;
   }
   // Log an event that tells us this printer setup failed, so we can get

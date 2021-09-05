@@ -161,6 +161,9 @@ suite('SiteDetails', function() {
           createContentSettingTypeToValuePair(
               ContentSettingsTypes.FONT_ACCESS,
               [createRawSiteException('https://foo.com:443')]),
+          createContentSettingTypeToValuePair(
+              ContentSettingsTypes.IDLE_DETECTION,
+              [createRawSiteException('https://foo.com:443')]),
         ],
         [
           createContentSettingTypeToValuePair(
@@ -216,11 +219,6 @@ suite('SiteDetails', function() {
     optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes
                                                 .WINDOW_PLACEMENT] =
         'enableExperimentalWebPlatformFeatures';
-    optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes.MIXEDSCRIPT] =
-        'enableInsecureContentContentSetting';
-    optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes
-                                                .FILE_SYSTEM_WRITE] =
-        'enableFileSystemWriteContentSetting';
     optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes
                                                 .PAYMENT_HANDLER] =
         'enablePaymentHandlerContentSetting';
@@ -235,8 +233,6 @@ suite('SiteDetails', function() {
     const controlledSettingsCount = /** @type{string : int } */ ({});
 
     controlledSettingsCount['enableExperimentalWebPlatformFeatures'] = 2;
-    controlledSettingsCount['enableInsecureContentContentSetting'] = 1;
-    controlledSettingsCount['enableFileSystemWriteContentSetting'] = 1;
     controlledSettingsCount['enableFontAccessContentSetting'] = 1;
     controlledSettingsCount['enablePaymentHandlerContentSetting'] = 1;
     controlledSettingsCount['enableSafeBrowsingSubresourceFilter'] = 1;
@@ -367,7 +363,6 @@ suite('SiteDetails', function() {
     // Make sure all the possible content settings are shown for this test.
     loadTimeData.overrideValues({
       enableExperimentalWebPlatformFeatures: true,
-      enableInsecureContentContentSetting: true,
       enableFileSystemWriteContentSetting: true,
       enableFontAccessContentSetting: true,
       enablePaymentHandlerContentSetting: true,
@@ -476,8 +471,9 @@ suite('SiteDetails', function() {
     browserProxy.setPrefs(prefs);
     testElement = createSiteDetails('https://foo.com:443');
 
-    const siteDetailsPermission =
-        testElement.root.querySelector('#notifications');
+    const elems = testElement.root.querySelectorAll('site-details-permission');
+    const notificationPermission = Array.from(elems).find(
+        elem => elem.category === ContentSettingsTypes.NOTIFICATIONS);
 
     // Wait for all the permissions to be populated initially.
     return browserProxy.whenCalled('isOriginValid')
@@ -486,11 +482,11 @@ suite('SiteDetails', function() {
         })
         .then(() => {
           // Make sure initial state is as expected.
-          assertEquals(ContentSetting.ASK, siteDetailsPermission.site.setting);
+          assertEquals(ContentSetting.ASK, notificationPermission.site.setting);
           assertEquals(
-              SiteSettingSource.POLICY, siteDetailsPermission.site.source);
+              SiteSettingSource.POLICY, notificationPermission.site.source);
           assertEquals(
-              ContentSetting.ASK, siteDetailsPermission.$.permission.value);
+              ContentSetting.ASK, notificationPermission.$.permission.value);
 
           // Set new prefs and make sure only that permission is updated.
           const newException = {
@@ -509,13 +505,14 @@ suite('SiteDetails', function() {
           // getOriginPermissions was to check notifications.
           assertTrue(args[1].includes(ContentSettingsTypes.NOTIFICATIONS));
 
-          // Check |siteDetailsPermission| now shows the new permission value.
+          // Check |notificationPermission| now shows the new permission value.
           assertEquals(
-              ContentSetting.BLOCK, siteDetailsPermission.site.setting);
+              ContentSetting.BLOCK, notificationPermission.site.setting);
           assertEquals(
-              SiteSettingSource.DEFAULT, siteDetailsPermission.site.source);
+              SiteSettingSource.DEFAULT, notificationPermission.site.source);
           assertEquals(
-              ContentSetting.DEFAULT, siteDetailsPermission.$.permission.value);
+              ContentSetting.DEFAULT,
+              notificationPermission.$.permission.value);
         });
   });
 

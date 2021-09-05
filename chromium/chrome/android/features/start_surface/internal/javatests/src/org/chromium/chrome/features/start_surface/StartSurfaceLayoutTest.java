@@ -38,6 +38,7 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.e
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.finishActivity;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.getSwipeToDismissAction;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.leaveTabSwitcher;
+import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.mergeAllNormalTabsToAGroup;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.rotateDeviceToOrientation;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.switchTabModel;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.verifyTabModelTabCount;
@@ -164,6 +165,8 @@ import java.util.concurrent.atomic.AtomicReference;
         ChromeFeatureList.TAB_TO_GTS_ANIMATION + "<Study"})
 @Restriction(
         {UiRestriction.RESTRICTION_TYPE_PHONE, Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+@DisableIf.Build(message = "Flaky on emulators; see https://crbug.com/1130830",
+        supported_abis_includes = "x86")
 public class StartSurfaceLayoutTest {
     // clang-format on
     private static final String BASE_PARAMS = "force-fieldtrial-params="
@@ -1077,6 +1080,7 @@ public class StartSurfaceLayoutTest {
     @Test
     @MediumTest
     @CommandLineFlags.Add({BASE_PARAMS})
+    @DisabledTest(message = "https://crbug.com/1122657")
     public void testThumbnailAspectRatio_default() {
         prepareTabs(2, 0, mUrl);
         enterTabSwitcher(mActivityTestRule.getActivity());
@@ -1087,6 +1091,7 @@ public class StartSurfaceLayoutTest {
     @Test
     @MediumTest
     @CommandLineFlags.Add({BASE_PARAMS + "/thumbnail_aspect_ratio/0.75"})
+    @DisabledTest(message = "https://crbug.com/1122657")
     public void testThumbnailAspectRatio_point75() {
         prepareTabs(2, 0, mUrl);
         enterTabSwitcher(mActivityTestRule.getActivity());
@@ -1105,6 +1110,7 @@ public class StartSurfaceLayoutTest {
     @Test
     @MediumTest
     @CommandLineFlags.Add({BASE_PARAMS + "/thumbnail_aspect_ratio/2.0/allow_to_refetch/true"})
+    @DisabledTest(message = "Flaky - https://crbug.com/1124041")
     public void testThumbnailAspectRatio_fromTwoToPoint75() throws Exception {
         prepareTabs(2, 0, mUrl);
         enterTabSwitcher(mActivityTestRule.getActivity());
@@ -1204,6 +1210,7 @@ public class StartSurfaceLayoutTest {
     @Test
     @MediumTest
     @CommandLineFlags.Add({BASE_PARAMS + "/thumbnail_aspect_ratio/2.0/allow_to_refetch/true"})
+    @DisabledTest(message = "http://crbug/1119527 - Flaky on bots.")
     public void testThumbnailFetchingResult_changingAspectRatio() throws Exception {
         prepareTabs(2, 0, mUrl);
         int oldJpegCount = RecordHistogram.getHistogramValueCountForTesting(
@@ -1403,6 +1410,7 @@ public class StartSurfaceLayoutTest {
     @CommandLineFlags.Add({BASE_PARAMS})
     @EnableFeatures({ChromeFeatureList.TAB_GROUPS_ANDROID,
             ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID})
+    @DisabledTest
     public void testCloseTabViaCloseButton() throws Exception {
         // clang-format on
         mActivityTestRule.getActivity().getSnackbarManager().disableForTesting();
@@ -1418,6 +1426,7 @@ public class StartSurfaceLayoutTest {
     @MediumTest
     @CommandLineFlags.Add({BASE_PARAMS})
     @EnableFeatures({ChromeFeatureList.TAB_GROUPS_ANDROID})
+    @DisabledTest(message = "Flaky - https://crbug.com/1124041")
     public void testSwipeToDismiss_GTS() {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         // Create 3 tabs and merge the first two tabs into one group.
@@ -1580,6 +1589,7 @@ public class StartSurfaceLayoutTest {
     // Disable TAB_TO_GTS_ANIMATION to make it less flaky.
     @DisableFeatures(ChromeFeatureList.TAB_TO_GTS_ANIMATION + "<Study")
     @CommandLineFlags.Add({BASE_PARAMS + "/enable_search_term_chip/true"})
+    @DisabledTest(message = "http://crbug/1120822 - Flaky on bots.")
     public void testSearchTermChip_withChip() throws InterruptedException {
         assertTrue(TabUiFeatureUtilities.ENABLE_SEARCH_CHIP.getValue());
         // Make sure we support RTL and CJKV languages.
@@ -2071,6 +2081,14 @@ public class StartSurfaceLayoutTest {
         // closure.
         closeFirstTabInTabSwitcher();
         verifyTabSwitcherCardCount(cta, 0);
+
+        // Verify TabGroupModelFilter is correctly setup by checking if tab switcher changes with
+        // tab grouping.
+        createTabs(cta, false, 3);
+        enterTabSwitcher(cta);
+        verifyTabSwitcherCardCount(cta, 2);
+        mergeAllNormalTabsToAGroup(cta);
+        verifyTabSwitcherCardCount(cta, 1);
     }
 
     private void enterTabGroupManualSelection(ChromeTabbedActivity cta) {

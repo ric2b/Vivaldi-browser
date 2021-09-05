@@ -291,7 +291,7 @@ AccessibilityTreeFormatter::TestPass AccessibilityTreeFormatter::GetTestPass(
 }
 
 // static
-base::string16 AccessibilityTreeFormatterBase::DumpAccessibilityTreeFromManager(
+std::string AccessibilityTreeFormatterBase::DumpAccessibilityTreeFromManager(
     BrowserAccessibilityManager* ax_mgr,
     bool internal,
     std::vector<PropertyFilter> property_filters) {
@@ -300,13 +300,13 @@ base::string16 AccessibilityTreeFormatterBase::DumpAccessibilityTreeFromManager(
     formatter = std::make_unique<AccessibilityTreeFormatterBlink>();
   else
     formatter = Create();
-  base::string16 accessibility_contents_utf16;
+  std::string accessibility_contents;
   formatter->SetPropertyFilters(property_filters);
   std::unique_ptr<base::DictionaryValue> dict =
       static_cast<AccessibilityTreeFormatterBase*>(formatter.get())
           ->BuildAccessibilityTree(ax_mgr->GetRoot());
-  formatter->FormatAccessibilityTree(*dict, &accessibility_contents_utf16);
-  return accessibility_contents_utf16;
+  formatter->FormatAccessibilityTree(*dict, &accessibility_contents);
+  return accessibility_contents;
 }
 
 bool AccessibilityTreeFormatter::MatchesPropertyFilters(
@@ -345,7 +345,7 @@ bool AccessibilityTreeFormatter::MatchesNodeFilters(
     const std::vector<NodeFilter>& node_filters,
     const base::DictionaryValue& dict) {
   for (const auto& filter : node_filters) {
-    base::string16 value;
+    std::string value;
     if (!dict.GetString(filter.property, &value)) {
       continue;
     }
@@ -362,13 +362,13 @@ AccessibilityTreeFormatterBase::~AccessibilityTreeFormatterBase() = default;
 
 void AccessibilityTreeFormatterBase::FormatAccessibilityTree(
     const base::DictionaryValue& dict,
-    base::string16* contents) {
+    std::string* contents) {
   RecursiveFormatAccessibilityTree(dict, contents);
 }
 
 void AccessibilityTreeFormatterBase::FormatAccessibilityTreeForTesting(
     ui::AXPlatformNodeDelegate* root,
-    base::string16* contents) {
+    std::string* contents) {
   auto* node_internal = BrowserAccessibility::FromAXPlatformNodeDelegate(root);
   DCHECK(node_internal);
   FormatAccessibilityTree(*BuildAccessibilityTree(node_internal), contents);
@@ -395,28 +395,26 @@ AccessibilityTreeFormatterBase::FilterAccessibilityTree(
 
 void AccessibilityTreeFormatterBase::RecursiveFormatAccessibilityTree(
     const base::DictionaryValue& dict,
-    base::string16* contents,
+    std::string* contents,
     int depth) {
   // Check dictionary against node filters, may require us to skip this node
   // and its children.
   if (MatchesNodeFilters(dict))
     return;
 
-  base::string16 indent =
-      base::string16(depth * kIndentSymbolCount, kIndentSymbol);
-  base::string16 line = indent + ProcessTreeForOutput(dict);
-  if (line.find(base::ASCIIToUTF16(kSkipString)) != base::string16::npos)
+  std::string indent = std::string(depth * kIndentSymbolCount, kIndentSymbol);
+  std::string line = indent + ProcessTreeForOutput(dict);
+  if (line.find(kSkipString) != std::string::npos)
     return;
 
   // Normalize any Windows-style line endings by removing \r.
-  base::RemoveChars(line, base::ASCIIToUTF16("\r"), &line);
+  base::RemoveChars(line, "\r", &line);
 
   // Replace literal newlines with "<newline>"
-  base::ReplaceChars(line, base::ASCIIToUTF16("\n"),
-                     base::ASCIIToUTF16("<newline>"), &line);
+  base::ReplaceChars(line, "\n", "<newline>", &line);
 
-  *contents += line + base::ASCIIToUTF16("\n");
-  if (line.find(base::ASCIIToUTF16(kSkipChildren)) != base::string16::npos)
+  *contents += line + "\n";
+  if (line.find(kSkipChildren) != std::string::npos)
     return;
 
   const base::ListValue* children;
@@ -498,7 +496,7 @@ bool AccessibilityTreeFormatterBase::MatchesNodeFilters(
   return AccessibilityTreeFormatter::MatchesNodeFilters(node_filters_, dict);
 }
 
-base::string16 AccessibilityTreeFormatterBase::FormatCoordinates(
+std::string AccessibilityTreeFormatterBase::FormatCoordinates(
     const base::DictionaryValue& value,
     const std::string& name,
     const std::string& x_name,
@@ -506,12 +504,10 @@ base::string16 AccessibilityTreeFormatterBase::FormatCoordinates(
   int x, y;
   value.GetInteger(x_name, &x);
   value.GetInteger(y_name, &y);
-  std::string xy_str(base::StringPrintf("%s=(%d, %d)", name.c_str(), x, y));
-
-  return base::UTF8ToUTF16(xy_str);
+  return base::StringPrintf("%s=(%d, %d)", name.c_str(), x, y);
 }
 
-base::string16 AccessibilityTreeFormatterBase::FormatRectangle(
+std::string AccessibilityTreeFormatterBase::FormatRectangle(
     const base::DictionaryValue& value,
     const std::string& name,
     const std::string& left_name,
@@ -523,27 +519,19 @@ base::string16 AccessibilityTreeFormatterBase::FormatRectangle(
   value.GetInteger(top_name, &top);
   value.GetInteger(width_name, &width);
   value.GetInteger(height_name, &height);
-  std::string rect_str(base::StringPrintf("%s=(%d, %d, %d, %d)", name.c_str(),
-                                          left, top, width, height));
-
-  return base::UTF8ToUTF16(rect_str);
+  return base::StringPrintf("%s=(%d, %d, %d, %d)", name.c_str(), left, top,
+                            width, height);
 }
 
 bool AccessibilityTreeFormatterBase::WriteAttribute(bool include_by_default,
                                                     const std::string& attr,
-                                                    base::string16* line) {
-  return WriteAttribute(include_by_default, base::UTF8ToUTF16(attr), line);
-}
-
-bool AccessibilityTreeFormatterBase::WriteAttribute(bool include_by_default,
-                                                    const base::string16& attr,
-                                                    base::string16* line) {
+                                                    std::string* line) {
   if (attr.empty())
     return false;
-  if (!MatchesPropertyFilters(base::UTF16ToUTF8(attr), include_by_default))
+  if (!MatchesPropertyFilters(attr, include_by_default))
     return false;
   if (!line->empty())
-    *line += base::ASCIIToUTF16(" ");
+    *line += " ";
   *line += attr;
   return true;
 }

@@ -43,6 +43,10 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
 // Current display state of the check start item.
 @property(nonatomic, strong) TableViewItem* checkStartItem;
 
+// Footer with timestamp for the safety check page.
+@property(nonatomic, strong)
+    TableViewLinkHeaderFooterItem* safetyCheckFooterItem;
+
 @end
 
 @implementation SafetyCheckTableViewController
@@ -71,6 +75,11 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
   [self reloadData];
 }
 
+- (void)setTimestampFooterItem:(TableViewLinkHeaderFooterItem*)footer {
+  _safetyCheckFooterItem = footer;
+  [self reloadData];
+}
+
 #pragma mark - ChromeTableViewController
 
 - (void)loadModel {
@@ -82,6 +91,7 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
       [self.tableViewModel addItem:item
            toSectionWithIdentifier:SectionIdentifierCheckTypes];
     }
+
     if (self.safetyCheckHeaderItem) {
       [self.tableViewModel setHeader:self.safetyCheckHeaderItem
             forSectionWithIdentifier:SectionIdentifierCheckTypes];
@@ -92,6 +102,11 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
     [self.tableViewModel addSectionWithIdentifier:SectionIdentifierCheckStart];
     [self.tableViewModel addItem:self.checkStartItem
          toSectionWithIdentifier:SectionIdentifierCheckStart];
+
+    if (self.safetyCheckFooterItem) {
+      [self.tableViewModel setFooter:self.safetyCheckFooterItem
+            forSectionWithIdentifier:SectionIdentifierCheckStart];
+    }
   }
 }
 
@@ -112,6 +127,12 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
   TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
   [self.serviceDelegate didSelectItem:item];
   [tableView deselectRowAtIndexPath:indexPath animated:YES];
+}
+
+- (BOOL)tableView:(UITableView*)tableView
+    shouldHighlightRowAtIndexPath:(NSIndexPath*)indexPath {
+  TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
+  return [self.serviceDelegate isItemClickable:item];
 }
 
 #pragma mark - UITableViewDataSource

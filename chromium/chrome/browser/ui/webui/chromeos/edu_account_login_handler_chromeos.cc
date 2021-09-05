@@ -226,7 +226,7 @@ void EduAccountLoginHandler::FetchFamilyMembers() {
 
   family_fetcher_ = std::make_unique<FamilyInfoFetcher>(
       this, IdentityManagerFactory::GetForProfile(profile),
-      account_manager->GetUrlLoaderFactory());
+      profile->GetURLLoaderFactory());
   family_fetcher_->StartGetFamilyMembers();
 }
 
@@ -261,7 +261,8 @@ void EduAccountLoginHandler::FetchAccessToken(
               &EduAccountLoginHandler::CreateReAuthProofTokenForParent,
               base::Unretained(this), std::move(obfuscated_gaia_id),
               std::move(password)),
-          signin::PrimaryAccountAccessTokenFetcher::Mode::kImmediate);
+          signin::PrimaryAccountAccessTokenFetcher::Mode::kImmediate,
+          signin::ConsentLevel::kNotRequired);
 }
 
 void EduAccountLoginHandler::FetchReAuthProofTokenForParent(
@@ -277,7 +278,7 @@ void EduAccountLoginHandler::FetchReAuthProofTokenForParent(
   DCHECK(account_manager);
 
   gaia_auth_fetcher_ = std::make_unique<GaiaAuthFetcher>(
-      this, gaia::GaiaSource::kChrome, account_manager->GetUrlLoaderFactory());
+      this, gaia::GaiaSource::kChrome, profile->GetURLLoaderFactory());
   gaia_auth_fetcher_->StartCreateReAuthProofTokenForParent(
       child_oauth_access_token, parent_obfuscated_gaia_id, parent_credential);
 }

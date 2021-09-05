@@ -16,12 +16,12 @@ class CpuGraphPageView : public GraphPageViewBase {
  public:
   METADATA_HEADER(CpuGraphPageView);
 
-  CpuGraphPageView();
+  explicit CpuGraphPageView(const base::TimeDelta refresh_interval);
   CpuGraphPageView(const CpuGraphPageView&) = delete;
   CpuGraphPageView& operator=(const CpuGraphPageView&) = delete;
   ~CpuGraphPageView() override;
 
-  // view::
+  // views::View
   void OnPaint(gfx::Canvas* canvas) override;
 
   // Update page data from the new snapshot.

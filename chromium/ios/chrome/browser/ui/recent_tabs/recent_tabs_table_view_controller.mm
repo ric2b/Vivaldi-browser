@@ -16,6 +16,7 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
 #include "components/sync_sessions/session_sync_service.h"
+#import "ios/chrome/app/tests_hook.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/drag_and_drop/drag_and_drop_flag.h"
 #import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
@@ -113,6 +114,13 @@ const int kRecentlyClosedTabsSectionIndex = 0;
 
 }  // namespace
 
+API_AVAILABLE(ios(13.0))
+@interface ListModelCollapsedSceneSessionMediator : ListModelCollapsedMediator
+// Creates a collapsed section mediator that stores data in the session's
+// userInfo instead of NSUserDefaults, which allows different states per window.
+- (instancetype)initWithSession:(UISceneSession*)session;
+@end
+
 @interface RecentTabsTableViewController () <SigninPromoViewConsumer,
                                              SigninPresenter,
                                              SyncPresenter,
@@ -175,7 +183,11 @@ const int kRecentlyClosedTabsSectionIndex = 0;
     self.dragDropHandler.origin = WindowActivityRecentTabsOrigin;
     self.dragDropHandler.dragDataSource = self;
     self.tableView.dragDelegate = self.dragDropHandler;
-    self.tableView.dragInteractionEnabled = YES;
+
+    // TODO(crbug.com/1129058): Clean this up when EarlGrey allows interacting
+    // with context menus that can be dragged.
+    self.tableView.dragInteractionEnabled =
+        !tests_hook::DisableTableDragAndDrop();
   }
 }
 
@@ -227,6 +239,16 @@ const int kRecentlyClosedTabsSectionIndex = 0;
 
 - (void)loadModel {
   [super loadModel];
+
+  if (@available(iOS 13, *)) {
+    if (self.session) {
+      // Replace mediator to store collapsed keys in scene session.
+      self.tableViewModel.collapsableMediator =
+          [[ListModelCollapsedSceneSessionMediator alloc]
+              initWithSession:self.session];
+    }
+  }
+
   [self addRecentlyClosedSection];
 
   if (self.sessionState ==
@@ -1428,6 +1450,36 @@ const int kRecentlyClosedTabsSectionIndex = 0;
   } else if (ShouldShowSyncPassphraseSettings(syncState)) {
     [self showSyncPassphraseSettings];
   }
+}
+
+@end
+
+@implementation ListModelCollapsedSceneSessionMediator {
+  UISceneSession* _session;
+}
+
+- (instancetype)initWithSession:(UISceneSession*)session {
+  self = [super init];
+  if (self) {
+    _session = session;
+  }
+  return self;
+}
+
+- (void)setSectionKey:(NSString*)sectionKey collapsed:(BOOL)collapsed {
+  NSMutableDictionary* newUserInfo =
+      [NSMutableDictionary dictionaryWithDictionary:_session.userInfo];
+  NSMutableDictionary* newCollapsedSection = [NSMutableDictionary
+      dictionaryWithDictionary:newUserInfo[kListModelCollapsedKey]];
+  newUserInfo[kListModelCollapsedKey] = newCollapsedSection;
+  newCollapsedSection[sectionKey] = [NSNumber numberWithBool:collapsed];
+  _session.userInfo = newUserInfo;
+}
+
+- (BOOL)sectionKeyIsCollapsed:(NSString*)sectionKey {
+  NSDictionary* collapsedSections = _session.userInfo[kListModelCollapsedKey];
+  NSNumber* value = (NSNumber*)[collapsedSections valueForKey:sectionKey];
+  return [value boolValue];
 }
 
 @end

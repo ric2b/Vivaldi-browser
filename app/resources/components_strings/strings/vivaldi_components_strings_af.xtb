@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Gaan voort</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Netwerkdiagnose loop tans<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Kennisgewings</translation>
+<translation id="2501278716633472235">Gaan terug</translation>
 <translation id="2539524384386349900">Bespeur</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> het ’n ongeldige reaksie verstuur.</translation>
 <translation id="2586657967955657006">Knipbord</translation>
@@ -67,6 +68,7 @@
 <translation id="3226128629678568754">Klik op die herlaai-knop om die data benodig om die blad te laai, weer in te dien.</translation>
 <translation id="3227137524299004712">Mikrofoon</translation>
 <translation id="3234666976984236645">Bespeur altyd belangrike inhoud op hierdie werf</translation>
+<translation id="3308738399950580893">advertensies</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> is tans onbereikbaar.</translation>
 <translation id="3427092606871434483">Laat Toe (verstek)</translation>
 <translation id="3447661539832366887">Die eienaar van hierdie toestel het die dinosourusspel afgeskakel.</translation>
@@ -82,6 +84,7 @@
 <translation id="3681007416295224113">Sertifikaatinligting</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Gaan tans die instaanbediener, brandmuur en DNS-opstelling na<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Indien u ’n instaanbediener gebruik…</translation>
+<translation id="3894751534882749287">Indien u tog die blad wil sien kan u sy spoorderbeskermingsvlak in die Spoorderversperring-opwipvenster verander of deur die Staan Toe-knop te klik</translation>
 <translation id="3950820424414687140">Teken aan</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> is geblokkeer</translation>
 <translation id="3987940399970879459">Minder as 1MB</translation>
@@ -95,6 +98,7 @@
 <translation id="4235360514405112390">Geldig</translation>
 <translation id="4250431568374086873">U verbinding aan hierdie werf is nie heeltemal veilig nie</translation>
 <translation id="4265872034478892965">Deur u administrateur toegelaat</translation>
+<translation id="4305666528087210886">Kon nie toegang tot u lêer kry nie</translation>
 <translation id="4312866146174492540">Versper (verstek)</translation>
 <translation id="4356973930735388585">Aanvallers op hierdie werf kan moontlik probeer om gevaarlike programme op u rekenaar te installeer om sodoende u inligting (bv. foto’s, wagwoorde, boodskappe en kredietkaarte) te wis of te skrap.</translation>
 <translation id="4408413947728134509">Koekies <ph name="NUM_COOKIES" /></translation>
@@ -108,6 +112,7 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">U verbinding is onderbreek</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows Netwerkdiagnose loop tans<ph name="END_LINK" /></translation>
+<translation id="4736016046474602958">Spoorderversperring</translation>
 <translation id="4744603770635761495">Uitvoerbare Pad</translation>
 <translation id="4750917950439032686">U inligting (bv. wagwoorde of kredietkaarnommers) is privaat wanneer dit na hierdie werf verstuur word.</translation>
 <translation id="4764776831041365478">Die webblad by <ph name="URL" /> is dalk tydelik af of is permanent na ’n nuwe webadres verskuif.</translation>
@@ -148,6 +153,7 @@
 <translation id="6165508094623778733">Meer inligting</translation>
 <translation id="6177128806592000436">U verbinding aan hierdie werf is onveilig</translation>
 <translation id="6203231073485539293">Gaan u Internetverbinding na</translation>
+<translation id="6225522625585012689">Besoek &lt;strong&gt;vivaldi://policy&lt;/strong&gt; om die lys van versperde bronadresse en ander beleide wat u stelseladministrateur toepas, te sien.</translation>
 <translation id="625755898061068298">U het gekies om sekerheidswaarskuwings vir hierdie werf te deaktiveer.</translation>
 <translation id="6264485186158353794">Terug na veiligheid</translation>
 <translation id="6305205051461490394"><ph name="URL" /> is onbereikbaar.</translation>
@@ -168,10 +174,12 @@
 <translation id="7079718277001814089">Hierdie werf bevat skadelike programmatuur</translation>
 <translation id="7108819624672055576">Deur ’n uitbreiding toegelaat</translation>
 <translation id="7111012039238467737">(Geldig)</translation>
+<translation id="7113310725918019676">Laat <ph name="BLOCKED_TYPE" /> van <ph name="DOMAIN" /> toe</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> voldoen nie aan sekuriteitstandaarde nie.</translation>
 <translation id="7219179957768738017">Die verbinding gebruik <ph name="SSL_VERSION" />.</translation>
 <translation id="7260504762447901703">Herroep toegang</translation>
 <translation id="7353601530677266744">Opdragreël</translation>
+<translation id="7364115444476960850">Die blad wat u probeer besoek is versper deur Vivaldi se <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profielpad</translation>
 <translation id="7445762425076701745">Die identiteit van die bediener waaraan u verbind is, kan nie volledig bekragtig word nie. U is gekoppel aan ’n bediener met ’n naam wat slegs binne u netwerk geldig is en ’n eksterne sertifikaatowerheid kan glad nie eienaarskap bevestig nie. Aangesien sommige sertifikaatowerhede ongeag hiervan sertifikate sal uitreik, is daar geen manier om te verseker dat u aan die bedoelde webwerf en nie aan ’n aanvaller verbind is nie.</translation>
 <translation id="7455133967321480974">Gebruik globale verstek (Versper)</translation>
@@ -194,7 +202,7 @@
 <translation id="8037357227543935929">Vra (verstek)</translation>
 <translation id="8041940743680923270">Gebruik globale verstek (Vra)</translation>
 <translation id="808894953321890993">Verander wagwoord</translation>
-<translation id="8142868475871995937">Besoek &lt;strong&gt;vivaldi://policy&lt;/strong&gt; om die swartlys van bronadresse en ander beleide wat deur ons stelseladministrateur afgedwing word, te sien.</translation>
+<translation id="8119307142152921512">spoorders en advertensies</translation>
 <translation id="8149426793427495338">U rekenaar het gaan slaap.</translation>
 <translation id="8150722005171944719">Die lêer by <ph name="URL" /> is onleesbaar.  Dit is dalk verwyder of geskuif, of lêertoestemmings verhoed dalk toegang.</translation>
 <translation id="8184538546369750125">Gebruik globale verstek (Laat Toe)</translation>
@@ -211,13 +219,16 @@
 <translation id="8703575177326907206">U verbinding aan <ph name="DOMAIN" /> is nie geënkripteer nie.</translation>
 <translation id="8740359287975076522">Die &lt;abbr id="dnsDefinition"&gt;DNS-adres&lt;/abbr&gt; van <ph name="HOST_NAME" /> kan nie gevind word nie. ’n Diagnose van die probleem word uitgevoer.</translation>
 <translation id="8820817407110198400">Boekmerke</translation>
+<translation id="8940028675168378100">Versper deur <ph name="BLOCKER_NAME" /></translation>
 <translation id="9001074447101275817">Die instaanbediener <ph name="DOMAIN" /> vereis ’n gebruikernaam en wagwoord.</translation>
 <translation id="9008201768610948239">Ignoreer</translation>
 <translation id="9011424611726486705">Open werfinstellings</translation>
 <translation id="9025348182339809926">(Ongeldig)</translation>
 <translation id="9039213469156557790">Voorts sluit hierdie blad ander onbeveiligde hulpbronne in. Hierdie hulpbronne kan in transito deur ander gesien word en kan deur ’n aanvaller verander word om die blad se gedrag te verander.</translation>
+<translation id="9062620674789239642">Dit is dalk geskuif, gewysig of geskrap.</translation>
 <translation id="9069693763241529744">Deur ’n uitbreiding versper</translation>
 <translation id="9169664750068251925">Versper altyd hierdie werf</translation>
+<translation id="9180553614777056266">Advertensieversperring</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> gebruik ’n onondersteunde protokol.</translation>
 <translation id="9219103736887031265">Beelde</translation>
 <translation id="936602727769022409">U kan toegang tot u Google-rekening verloor. Chromium beveel aan dat u nou u wagwoord verander. U sal gevra word om aan te teken.</translation>

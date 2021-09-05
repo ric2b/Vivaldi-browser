@@ -24,6 +24,9 @@
 #error "This file requires ARC support."
 #endif
 
+using autofill::FieldRendererId;
+using autofill::FormRendererId;
+
 @implementation JsAutofillManager
 
 - (void)addJSDelayInFrame:(web::WebFrame*)frame {
@@ -67,10 +70,17 @@
                     inFrame:(web::WebFrame*)frame
           completionHandler:(void (^)(BOOL))completionHandler {
   DCHECK(data);
+
+  bool useRendererIDs = base::FeatureList::IsEnabled(
+      autofill::features::kAutofillUseUniqueRendererIDsOnIOS);
+  std::string fillingFunction =
+      useRendererIDs ? "autofill.fillActiveFormFieldUsingRendererIDs"
+                     : "autofill.fillActiveFormField";
+
   std::vector<base::Value> parameters;
   parameters.push_back(std::move(*data));
   autofill::ExecuteJavaScriptFunction(
-      "autofill.fillActiveFormField", parameters, frame,
+      fillingFunction, parameters, frame,
       autofill::CreateBoolCallback(completionHandler));
 }
 
@@ -93,31 +103,53 @@
 
 - (void)fillForm:(std::unique_ptr<base::Value>)data
     forceFillFieldIdentifier:(NSString*)forceFillFieldIdentifier
+      forceFillFieldUniqueID:(FieldRendererId)forceFillFieldUniqueID
                      inFrame:(web::WebFrame*)frame
            completionHandler:(void (^)(NSString*))completionHandler {
   DCHECK(data);
   DCHECK(completionHandler);
-  std::string fieldIdentifier =
+
+  bool useRendererIDs = base::FeatureList::IsEnabled(
+      autofill::features::kAutofillUseUniqueRendererIDsOnIOS);
+
+  std::string fieldStringID =
       forceFillFieldIdentifier
           ? base::SysNSStringToUTF8(forceFillFieldIdentifier)
           : "null";
+  int fieldNumericID = forceFillFieldUniqueID ? forceFillFieldUniqueID.value()
+                                              : autofill::kNotSetRendererID;
   std::vector<base::Value> parameters;
   parameters.push_back(std::move(*data));
-  parameters.push_back(base::Value(fieldIdentifier));
+  parameters.push_back(base::Value(fieldStringID));
+  parameters.push_back(base::Value(fieldNumericID));
+  parameters.push_back(base::Value(useRendererIDs));
   autofill::ExecuteJavaScriptFunction(
       "autofill.fillForm", parameters, frame,
       autofill::CreateStringCallback(completionHandler));
 }
 
 - (void)clearAutofilledFieldsForFormName:(NSString*)formName
+                            formUniqueID:(FormRendererId)formRendererID
                          fieldIdentifier:(NSString*)fieldIdentifier
+                           fieldUniqueID:(FieldRendererId)fieldRendererID
                                  inFrame:(web::WebFrame*)frame
                        completionHandler:
                            (void (^)(NSString*))completionHandler {
   DCHECK(completionHandler);
+
+  bool useRendererIDs = base::FeatureList::IsEnabled(
+      autofill::features::kAutofillUseUniqueRendererIDsOnIOS);
+  int formNumericID =
+      formRendererID ? formRendererID.value() : autofill::kNotSetRendererID;
+  int fieldNumericID =
+      fieldRendererID ? fieldRendererID.value() : autofill::kNotSetRendererID;
+
   std::vector<base::Value> parameters;
   parameters.push_back(base::Value(base::SysNSStringToUTF8(formName)));
+  parameters.push_back(base::Value(formNumericID));
   parameters.push_back(base::Value(base::SysNSStringToUTF8(fieldIdentifier)));
+  parameters.push_back(base::Value(fieldNumericID));
+  parameters.push_back(base::Value(useRendererIDs));
   autofill::ExecuteJavaScriptFunction(
       "autofill.clearAutofilledFields", parameters, frame,
       autofill::CreateStringCallback(completionHandler));

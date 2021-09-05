@@ -57,6 +57,7 @@ enum Setting {
   kPhoneHubNotificationsOnOff = 210,
   kPhoneHubNotificationBadgeOnOff = 211,
   kPhoneHubTaskContinuationOnOff = 212,
+  kWifiSyncOnOff = 213,
 
   // People section.
   kAddAccount = 300,
@@ -169,7 +170,7 @@ enum Setting {
   kShowInputOptionsInShelf = 1201,
   kShowPersonalInformationSuggestions = 1202,
   kShowEmojiSuggestions = 1203,
-  kChangeSystemLanguage = 1204,
+  kChangeDeviceLanguage = 1204,
   kOfferTranslation = 1205,
   kAddInputMethod = 1206,
   kSpellCheck = 1207,
@@ -197,7 +198,7 @@ enum Setting {
   kStickyKeys = 1511,
   kOnScreenKeyboard = 1512,
   kDictation = 1513,
-  kSpeakToType = 1514,
+  kHighlightKeyboardFocus = 1514,
   kHighlightTextCaret = 1515,
   kAutoClickWhenCursorStops = 1516,
   kLargeCursor = 1517,

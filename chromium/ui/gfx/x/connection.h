@@ -79,6 +79,12 @@ class COMPONENT_EXPORT(X11) Connection : public XProto,
     return *default_root_visual_;
   }
 
+  // Returns the underlying socket's FD if the connection is valid, or -1
+  // otherwise.
+  int GetFd();
+
+  const std::string& DisplayString() const;
+
   int DefaultScreenId() const;
 
   template <typename T>
@@ -96,8 +102,15 @@ class COMPONENT_EXPORT(X11) Connection : public XProto,
   // Flush and block until the server has responded to all requests.
   void Sync();
 
+  // If |synchronous| is true, this makes all requests Sync().
+  void SynchronizeForTest(bool synchronous);
+
+  bool synchronous() const { return synchronous_; }
+
   // Read all responses from the socket without blocking.
   void ReadResponses();
+
+  Event WaitForNextEvent();
 
   // Are there any events, errors, or replies already buffered?
   bool HasPendingResponses() const;
@@ -142,6 +155,8 @@ class COMPONENT_EXPORT(X11) Connection : public XProto,
     FutureBase::ResponseCallback callback;
   };
 
+  void InitRootDepthAndVisual();
+
   void AddRequest(unsigned int sequence, FutureBase::ResponseCallback callback);
 
   bool HasNextResponse() const;
@@ -158,8 +173,13 @@ class COMPONENT_EXPORT(X11) Connection : public XProto,
 
   XDisplay* const display_;
 
+  bool synchronous_ = false;
+  bool syncing_ = false;
+
   uint32_t extended_max_request_length_ = 0;
 
+  std::string display_string_;
+  int default_screen_id_ = 0;
   Setup setup_;
   Screen* default_screen_ = nullptr;
   Depth* default_root_depth_ = nullptr;

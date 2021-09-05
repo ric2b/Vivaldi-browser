@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/base64url.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
@@ -35,11 +36,8 @@ const char kDefaultNearbyShareV1HTTPHost[] =
 
 const char kNearbyShareV1Path[] = "v1/";
 
-const char kCheckContactsReachabilityPath[] = "contactsReachability:check";
-const char kListContactPeoplePathSeg1[] = "users/me/devices/";
-const char kListContactPeoplePathSeg2[] = "/contactRecords";
-const char kListPublicCertificatesPathSeg1[] = "users/me/devices/";
-const char kListPublicCertificatesPathSeg2[] = "/publicCertificates";
+const char kListContactPeoplePath[] = "contactRecords";
+const char kListPublicCertificatesPath[] = "publicCertificates";
 
 const char kPageSize[] = "page_size";
 const char kPageToken[] = "page_token";
@@ -84,8 +82,12 @@ ListPublicCertificatesRequestToQueryParameters(
   if (!request.page_token().empty()) {
     query_parameters.emplace_back(kPageToken, request.page_token());
   }
-  for (int i = 0; i < request.secret_ids_size(); ++i) {
-    query_parameters.emplace_back(kSecretIds, request.secret_ids(i));
+  for (const std::string& id : request.secret_ids()) {
+    // NOTE: One Platform requires that byte fields be URL-safe base64 encoded.
+    std::string encoded_id;
+    base::Base64UrlEncode(id, base::Base64UrlEncodePolicy::INCLUDE_PADDING,
+                          &encoded_id);
+    query_parameters.emplace_back(kSecretIds, encoded_id);
   }
   return query_parameters;
 }
@@ -242,27 +244,13 @@ void NearbyShareClientImpl::UpdateDevice(
               GetUpdateDeviceAnnotation());
 }
 
-void NearbyShareClientImpl::CheckContactsReachability(
-    const nearbyshare::proto::CheckContactsReachabilityRequest& request,
-    CheckContactsReachabilityCallback&& callback,
-    ErrorCallback&& error_callback) {
-  notifier_->NotifyOfRequest(request);
-  MakeApiCall(CreateV1RequestUrl(kCheckContactsReachabilityPath),
-              RequestType::kPost, request.SerializeAsString(),
-              /*request_as_query_parameters=*/base::nullopt,
-              std::move(callback), std::move(error_callback),
-              GetContactsAnnotation());
-}
-
 void NearbyShareClientImpl::ListContactPeople(
     const nearbyshare::proto::ListContactPeopleRequest& request,
     ListContactPeopleCallback&& callback,
     ErrorCallback&& error_callback) {
   notifier_->NotifyOfRequest(request);
-  // TODO(cclem): Use correct identifier in URL
-  MakeApiCall(CreateV1RequestUrl(kListContactPeoplePathSeg1 + request.parent() +
-                                 kListContactPeoplePathSeg2),
-              RequestType::kGet, /*serialized_request=*/base::nullopt,
+  MakeApiCall(CreateV1RequestUrl(kListContactPeoplePath), RequestType::kGet,
+              /*serialized_request=*/base::nullopt,
               ListContactPeopleRequestToQueryParameters(request),
               std::move(callback), std::move(error_callback),
               GetContactsAnnotation());
@@ -273,10 +261,8 @@ void NearbyShareClientImpl::ListPublicCertificates(
     ListPublicCertificatesCallback&& callback,
     ErrorCallback&& error_callback) {
   notifier_->NotifyOfRequest(request);
-  // TODO(cclem): Use correct identifier in URL
   MakeApiCall(
-      CreateV1RequestUrl(kListPublicCertificatesPathSeg1 + request.parent() +
-                         kListPublicCertificatesPathSeg2),
+      CreateV1RequestUrl(request.parent() + "/" + kListPublicCertificatesPath),
       RequestType::kGet, /*serialized_request=*/base::nullopt,
       ListPublicCertificatesRequestToQueryParameters(request),
       std::move(callback), std::move(error_callback),
@@ -385,13 +371,13 @@ void NearbyShareClientImpl::OnFlowSuccess(
     OnApiCallFailed(NearbyShareHttpError::kResponseMalformed);
     return;
   }
-  std::move(result_callback).Run(response);
   notifier_->NotifyOfResponse(response);
+  std::move(result_callback).Run(response);
 }
 
 void NearbyShareClientImpl::OnApiCallFailed(NearbyShareHttpError error) {
+  NS_LOG(ERROR) << "Nearby Share RPC call failed with error " << error;
   std::move(error_callback_).Run(error);
-  NS_LOG(ERROR) << error;
 }
 
 NearbyShareClientFactoryImpl::NearbyShareClientFactoryImpl(

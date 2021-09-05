@@ -413,12 +413,45 @@ std::unique_ptr<protocol::DictionaryValue> BuildGridHighlightConfigInfo(
     grid_config_info->setString("areaBorderColor",
                                 grid_config.area_border_color.Serialized());
   }
+  if (grid_config.grid_background_color != Color::kTransparent) {
+    grid_config_info->setString("gridBackgroundColor",
+                                grid_config.grid_background_color.Serialized());
+  }
   return grid_config_info;
 }
 
 // Swaps |left| and |top| of an offset.
 PhysicalOffset Transpose(PhysicalOffset& offset) {
   return PhysicalOffset(offset.top, offset.left);
+}
+
+size_t GetTrackCount(const LayoutGrid* layout_grid,
+                     GridTrackSizingDirection direction) {
+  return direction == kForRows ? layout_grid->RowPositions().size()
+                               : layout_grid->ColumnPositions().size();
+}
+
+LayoutUnit GetPositionForTrackAt(const LayoutGrid* layout_grid,
+                                 size_t index,
+                                 GridTrackSizingDirection direction) {
+  if (direction == kForRows)
+    return layout_grid->RowPositions().at(index);
+
+  LayoutUnit position = layout_grid->ColumnPositions().at(index);
+  return layout_grid->StyleRef().IsLeftToRightDirection()
+             ? position
+             : layout_grid->TranslateRTLCoordinate(position);
+}
+
+LayoutUnit GetPositionForFirstTrack(const LayoutGrid* layout_grid,
+                                    GridTrackSizingDirection direction) {
+  return GetPositionForTrackAt(layout_grid, 0, direction);
+}
+
+LayoutUnit GetPositionForLastTrack(const LayoutGrid* layout_grid,
+                                   GridTrackSizingDirection direction) {
+  size_t index = GetTrackCount(layout_grid, direction) - 1;
+  return GetPositionForTrackAt(layout_grid, index, direction);
 }
 
 PhysicalOffset LocalToAbsolutePoint(Node* node,
@@ -451,20 +484,26 @@ std::unique_ptr<protocol::ListValue> BuildGridTrackSizes(
     const Vector<String>* authored_values) {
   LayoutObject* layout_object = node->GetLayoutObject();
   LayoutGrid* layout_grid = ToLayoutGrid(layout_object);
+  bool is_rtl = direction == kForColumns &&
+                !layout_grid->StyleRef().IsLeftToRightDirection();
+
   std::unique_ptr<protocol::ListValue> sizes = protocol::ListValue::create();
-  const Vector<LayoutUnit>& positions = direction == kForRows
-                                            ? layout_grid->RowPositions()
-                                            : layout_grid->ColumnPositions();
-  const Vector<LayoutUnit>& alt_positions = direction == kForRows
-                                                ? layout_grid->ColumnPositions()
-                                                : layout_grid->RowPositions();
-  LayoutUnit alt_axis_pos = alt_positions.front();
-  for (unsigned i = 1; i < positions.size(); i++) {
-    LayoutUnit current_position = positions.at(i);
-    LayoutUnit prev_position = positions.at(i - 1);
-    LayoutUnit gap_offset = i < positions.size() - 1 ? gap : LayoutUnit();
+  size_t track_count = GetTrackCount(layout_grid, direction);
+  LayoutUnit alt_axis_pos = GetPositionForFirstTrack(
+      layout_grid, direction == kForRows ? kForColumns : kForRows);
+
+  for (size_t i = 1; i < track_count; i++) {
+    LayoutUnit current_position =
+        GetPositionForTrackAt(layout_grid, i, direction);
+    LayoutUnit prev_position =
+        GetPositionForTrackAt(layout_grid, i - 1, direction);
+    LayoutUnit gap_offset = i < track_count - 1 ? gap : LayoutUnit();
     LayoutUnit width = current_position - prev_position - gap_offset;
+    if (is_rtl)
+      width = prev_position - current_position - gap_offset;
     LayoutUnit main_axis_pos = prev_position + width / 2;
+    if (is_rtl)
+      main_axis_pos = prev_position - width / 2;
     auto adjusted_size = AdjustForAbsoluteZoom::AdjustFloat(
         width * scale, layout_grid->StyleRef());
     PhysicalOffset track_size_pos(main_axis_pos, alt_axis_pos);
@@ -484,20 +523,20 @@ std::unique_ptr<protocol::ListValue> BuildGridTrackSizes(
 
 std::unique_ptr<protocol::ListValue> BuildGridPositiveLineNumberPositions(
     Node* node,
-    const Vector<LayoutUnit>& track_positions,
     const LayoutUnit& grid_gap,
     GridTrackSizingDirection direction,
     float scale) {
   LayoutObject* layout_object = node->GetLayoutObject();
   LayoutGrid* layout_grid = ToLayoutGrid(layout_object);
+  bool is_rtl = direction == kForColumns &&
+                !layout_grid->StyleRef().IsLeftToRightDirection();
 
   std::unique_ptr<protocol::ListValue> number_positions =
       protocol::ListValue::create();
 
-  const Vector<LayoutUnit>& alt_positions = direction == kForRows
-                                                ? layout_grid->ColumnPositions()
-                                                : layout_grid->RowPositions();
-  LayoutUnit alt_axis_pos = alt_positions.front();
+  size_t track_count = GetTrackCount(layout_grid, direction);
+  LayoutUnit alt_axis_pos = GetPositionForFirstTrack(
+      layout_grid, direction == kForRows ? kForColumns : kForRows);
 
   // Find index of the first explicit Grid Line.
   size_t first_explicit_index =
@@ -505,15 +544,17 @@ std::unique_ptr<protocol::ListValue> BuildGridPositiveLineNumberPositions(
 
   // Go line by line, calculating the offset to fall in the middle of gaps
   // if needed.
-  for (size_t i = first_explicit_index; i < track_positions.size(); ++i) {
+  for (size_t i = first_explicit_index; i < track_count; ++i) {
     LayoutUnit gapOffset = grid_gap / 2;
+    if (is_rtl)
+      gapOffset *= -1;
     // No need for a gap offset if there is no gap, or the first line is
     // explicit, or this is the last line.
-    if (grid_gap == 0 || i == 0 || i == track_positions.size() - 1) {
+    if (grid_gap == 0 || i == 0 || i == track_count - 1) {
       gapOffset = LayoutUnit();
     }
-    PhysicalOffset number_position(track_positions.at(i) - gapOffset,
-                                   alt_axis_pos);
+    LayoutUnit offset = GetPositionForTrackAt(layout_grid, i, direction);
+    PhysicalOffset number_position(offset - gapOffset, alt_axis_pos);
     if (direction == kForRows)
       number_position = Transpose(number_position);
     number_positions->pushValue(
@@ -525,27 +566,27 @@ std::unique_ptr<protocol::ListValue> BuildGridPositiveLineNumberPositions(
 
 std::unique_ptr<protocol::ListValue> BuildGridNegativeLineNumberPositions(
     Node* node,
-    const Vector<LayoutUnit>& trackPositions,
     const LayoutUnit& grid_gap,
     GridTrackSizingDirection direction,
     float scale) {
   LayoutObject* layout_object = node->GetLayoutObject();
   LayoutGrid* layout_grid = ToLayoutGrid(layout_object);
+  bool is_rtl = direction == kForColumns &&
+                !layout_grid->StyleRef().IsLeftToRightDirection();
 
   std::unique_ptr<protocol::ListValue> number_positions =
       protocol::ListValue::create();
 
-  const Vector<LayoutUnit>& alt_positions = direction == kForRows
-                                                ? layout_grid->ColumnPositions()
-                                                : layout_grid->RowPositions();
-  LayoutUnit alt_axis_pos = alt_positions.back();
+  size_t track_count = GetTrackCount(layout_grid, direction);
+  LayoutUnit alt_axis_pos = GetPositionForLastTrack(
+      layout_grid, direction == kForRows ? kForColumns : kForRows);
 
   // This is the number of tracks from the start of the grid, to the end of the
   // explicit grid (including any leading implicit tracks).
   size_t explicit_grid_end_track_count =
       layout_grid->ExplicitGridEndForDirection(direction);
 
-  LayoutUnit first_offset = trackPositions.front();
+  LayoutUnit first_offset = GetPositionForFirstTrack(layout_grid, direction);
 
   // Always start negative numbers at the first line.
   std::unique_ptr<protocol::DictionaryValue> pos =
@@ -560,12 +601,14 @@ std::unique_ptr<protocol::ListValue> BuildGridNegativeLineNumberPositions(
   // if needed.
   for (size_t i = 1; i <= explicit_grid_end_track_count; i++) {
     LayoutUnit gapOffset = grid_gap / 2;
-    if (grid_gap == 0 || (i == explicit_grid_end_track_count &&
-                          i == trackPositions.size() - 1)) {
+    if (is_rtl)
+      gapOffset *= -1;
+    if (grid_gap == 0 ||
+        (i == explicit_grid_end_track_count && i == track_count - 1)) {
       gapOffset = LayoutUnit();
     }
-    PhysicalOffset number_position(trackPositions.at(i) - gapOffset,
-                                   alt_axis_pos);
+    LayoutUnit offset = GetPositionForTrackAt(layout_grid, i, direction);
+    PhysicalOffset number_position(offset - gapOffset, alt_axis_pos);
     if (direction == kForRows)
       number_position = Transpose(number_position);
     number_positions->pushValue(
@@ -580,6 +623,7 @@ std::unique_ptr<protocol::DictionaryValue> BuildAreaNamePaths(Node* node,
   LayoutObject* layout_object = node->GetLayoutObject();
   LayoutGrid* layout_grid = ToLayoutGrid(layout_object);
   LocalFrameView* containing_view = node->GetDocument().View();
+  bool is_rtl = !layout_grid->StyleRef().IsLeftToRightDirection();
 
   std::unique_ptr<protocol::DictionaryValue> area_paths =
       protocol::DictionaryValue::create();
@@ -594,10 +638,14 @@ std::unique_ptr<protocol::DictionaryValue> BuildAreaNamePaths(Node* node,
     const GridArea& area = item.value;
     const String& name = item.key;
 
-    LayoutUnit start_column = columns.at(area.columns.StartLine());
-    LayoutUnit end_column = columns.at(area.columns.EndLine());
-    LayoutUnit start_row = rows.at(area.rows.StartLine());
-    LayoutUnit end_row = rows.at(area.rows.EndLine());
+    LayoutUnit start_column = GetPositionForTrackAt(
+        layout_grid, area.columns.StartLine(), kForColumns);
+    LayoutUnit end_column =
+        GetPositionForTrackAt(layout_grid, area.columns.EndLine(), kForColumns);
+    LayoutUnit start_row =
+        GetPositionForTrackAt(layout_grid, area.rows.StartLine(), kForRows);
+    LayoutUnit end_row =
+        GetPositionForTrackAt(layout_grid, area.rows.EndLine(), kForRows);
 
     // Only subtract the gap size if the end line isn't the last line in the
     // container.
@@ -606,6 +654,8 @@ std::unique_ptr<protocol::DictionaryValue> BuildAreaNamePaths(Node* node,
     LayoutUnit column_gap_offset = area.columns.EndLine() == columns.size() - 1
                                        ? LayoutUnit()
                                        : column_gap;
+    if (is_rtl)
+      column_gap_offset *= -1;
 
     PhysicalOffset position(start_column, start_row);
     PhysicalSize size(end_column - start_column - column_gap_offset,
@@ -628,6 +678,8 @@ std::unique_ptr<protocol::ListValue> BuildGridLineNames(
     float scale) {
   LayoutObject* layout_object = node->GetLayoutObject();
   LayoutGrid* layout_grid = ToLayoutGrid(layout_object);
+  bool is_rtl = direction == kForColumns &&
+                !layout_grid->StyleRef().IsLeftToRightDirection();
 
   std::unique_ptr<protocol::ListValue> lines = protocol::ListValue::create();
 
@@ -638,19 +690,19 @@ std::unique_ptr<protocol::ListValue> BuildGridLineNames(
       direction == kForColumns ? layout_grid->StyleRef().NamedGridColumnLines()
                                : layout_grid->StyleRef().NamedGridRowLines();
   LayoutUnit gap = layout_grid->GridGap(direction);
-  const Vector<LayoutUnit>& alt_positions = direction == kForRows
-                                                ? layout_grid->ColumnPositions()
-                                                : layout_grid->RowPositions();
-  LayoutUnit alt_axis_pos = alt_positions.front();
+  LayoutUnit alt_axis_pos = GetPositionForFirstTrack(
+      layout_grid, direction == kForRows ? kForColumns : kForRows);
 
   for (const auto& item : named_lines_map) {
     const String& name = item.key;
 
     for (const size_t index : item.value) {
-      LayoutUnit track = tracks.at(index);
+      LayoutUnit track = GetPositionForTrackAt(layout_grid, index, direction);
 
       LayoutUnit gap_offset =
           index > 0 && index < tracks.size() - 1 ? gap / 2 : LayoutUnit();
+      if (is_rtl)
+        gap_offset *= -1;
 
       LayoutUnit main_axis_pos = track - gap_offset;
       PhysicalOffset line_name_pos(main_axis_pos, alt_axis_pos);
@@ -753,13 +805,6 @@ Vector<String> GetAuthoredGridTrackSizes(const CSSValue* value,
   return result;
 }
 
-LayoutUnit GetColumnPosition(const LayoutGrid* layout_grid, size_t index) {
-  LayoutUnit position = layout_grid->ColumnPositions().at(index);
-  return layout_grid->StyleRef().IsLeftToRightDirection()
-             ? position
-             : layout_grid->TranslateRTLCoordinate(position);
-}
-
 std::unique_ptr<protocol::DictionaryValue> BuildGridInfo(
     Node* node,
     const InspectorGridHighlightConfig& grid_highlight_config,
@@ -850,8 +895,9 @@ std::unique_ptr<protocol::DictionaryValue> BuildGridInfo(
     if (i != columns.size() - 1)
       size.width -= column_gap;
     LayoutUnit line_left =
-        is_ltr ? GetColumnPosition(layout_grid, i - 1)
-               : GetColumnPosition(layout_grid, i - 1) - size.width;
+        GetPositionForTrackAt(layout_grid, i - 1, kForColumns);
+    if (!is_ltr)
+      line_left -= size.width;
     PhysicalOffset position(line_left, column_top);
     PhysicalRect column(position, size);
     FloatQuad column_quad = layout_grid->LocalRectToAbsoluteQuad(column);
@@ -861,9 +907,9 @@ std::unique_ptr<protocol::DictionaryValue> BuildGridInfo(
         ColumnQuadToPath(column_quad, draw_end_line || column_gap > 0), scale);
     // Column Gaps
     if (i != columns.size() - 1) {
-      LayoutUnit gap_left = is_ltr
-                                ? GetColumnPosition(layout_grid, i) - column_gap
-                                : GetColumnPosition(layout_grid, i);
+      LayoutUnit gap_left = GetPositionForTrackAt(layout_grid, i, kForColumns);
+      if (is_ltr)
+        gap_left -= column_gap;
       PhysicalOffset gap_position(gap_left, column_top);
       PhysicalSize gap_size(column_gap, column_height);
       PhysicalRect gap(gap_position, gap_size);
@@ -877,22 +923,22 @@ std::unique_ptr<protocol::DictionaryValue> BuildGridInfo(
 
   // Positive Row and column Line positions
   if (grid_highlight_config.show_positive_line_numbers) {
-    grid_info->setValue("positiveRowLineNumberPositions",
-                        BuildGridPositiveLineNumberPositions(
-                            node, rows, row_gap, kForRows, scale));
+    grid_info->setValue(
+        "positiveRowLineNumberPositions",
+        BuildGridPositiveLineNumberPositions(node, row_gap, kForRows, scale));
     grid_info->setValue("positiveColumnLineNumberPositions",
                         BuildGridPositiveLineNumberPositions(
-                            node, columns, column_gap, kForColumns, scale));
+                            node, column_gap, kForColumns, scale));
   }
 
   // Negative Row and column Line positions
   if (grid_highlight_config.show_negative_line_numbers) {
-    grid_info->setValue("negativeRowLineNumberPositions",
-                        BuildGridNegativeLineNumberPositions(
-                            node, rows, row_gap, kForRows, scale));
+    grid_info->setValue(
+        "negativeRowLineNumberPositions",
+        BuildGridNegativeLineNumberPositions(node, row_gap, kForRows, scale));
     grid_info->setValue("negativeColumnLineNumberPositions",
                         BuildGridNegativeLineNumberPositions(
-                            node, columns, column_gap, kForColumns, scale));
+                            node, column_gap, kForColumns, scale));
   }
 
   // Area names
@@ -1078,20 +1124,15 @@ bool InspectorHighlightBase::BuildNodeQuads(Node* node,
     margin_box = text_rect;
   } else if (layout_object->IsBox()) {
     LayoutBox* layout_box = ToLayoutBox(layout_object);
-
-    // LayoutBox returns the "pure" content area box, exclusive of the
-    // scrollbars (if present), which also count towards the content area in
-    // CSS.
-    const int vertical_scrollbar_width = layout_box->VerticalScrollbarWidth();
-    const int horizontal_scrollbar_height =
-        layout_box->HorizontalScrollbarHeight();
     content_box = layout_box->PhysicalContentBoxRect();
-    content_box.SetWidth(content_box.Width() + vertical_scrollbar_width);
-    content_box.SetHeight(content_box.Height() + horizontal_scrollbar_height);
 
+    // Include scrollbars and gutters in the padding highlight.
     padding_box = layout_box->PhysicalPaddingBoxRect();
-    padding_box.SetWidth(padding_box.Width() + vertical_scrollbar_width);
-    padding_box.SetHeight(padding_box.Height() + horizontal_scrollbar_height);
+    NGPhysicalBoxStrut scrollbars = layout_box->ComputeScrollbars();
+    padding_box.SetX(padding_box.X() - scrollbars.left);
+    padding_box.SetY(padding_box.Y() - scrollbars.top);
+    padding_box.SetWidth(padding_box.Width() + scrollbars.HorizontalSum());
+    padding_box.SetHeight(padding_box.Height() + scrollbars.VerticalSum());
 
     border_box = layout_box->PhysicalBorderBoxRect();
 
@@ -1612,6 +1653,7 @@ InspectorGridHighlightConfig InspectorHighlight::DefaultGridConfig() {
   config.row_hatch_color = Color(255, 255, 255, 0);
   config.column_hatch_color = Color(128, 128, 128, 0);
   config.area_border_color = Color(255, 0, 0, 0);
+  config.grid_background_color = Color(255, 0, 0, 0);
   config.show_grid_extension_lines = true;
   config.show_positive_line_numbers = true;
   config.show_negative_line_numbers = true;

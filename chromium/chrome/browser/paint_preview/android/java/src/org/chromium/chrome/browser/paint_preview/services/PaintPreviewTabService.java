@@ -11,12 +11,14 @@ import org.chromium.base.StrictModeContext;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabHidingType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.components.paintpreview.browser.NativePaintPreviewServiceProvider;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
 
 import java.io.File;
@@ -30,6 +32,9 @@ import java.util.HashSet;
  */
 @JNINamespace("paint_preview")
 public class PaintPreviewTabService implements NativePaintPreviewServiceProvider {
+    private static final long AUDIT_START_DELAY_MS = 2 * 60 * 1000; // Two minutes;
+
+    private Runnable mAuditRunnable;
     private long mNativePaintPreviewTabService;
     private TabModelSelectorTabObserver mTabModelSelectorTabObserver;
     @VisibleForTesting
@@ -38,16 +43,19 @@ public class PaintPreviewTabService implements NativePaintPreviewServiceProvider
     private class PaintPreviewTabServiceTabModelSelectorTabObserver
             extends TabModelSelectorTabObserver {
         private PaintPreviewTabService mTabService;
+        private boolean mCaptureOnSwitch;
 
-        private PaintPreviewTabServiceTabModelSelectorTabObserver(
-                PaintPreviewTabService tabService, TabModelSelector tabModelSelector) {
+        private PaintPreviewTabServiceTabModelSelectorTabObserver(PaintPreviewTabService tabService,
+                TabModelSelector tabModelSelector, boolean captureOnSwitch) {
             super(tabModelSelector);
             mTabService = tabService;
+            mCaptureOnSwitch = captureOnSwitch;
         }
 
         @Override
         public void onHidden(Tab tab, @TabHidingType int reason) {
-            if (qualifiesForCapture(tab)) {
+            if (qualifiesForCapture(tab)
+                    && (reason == TabHidingType.ACTIVITY_HIDDEN || mCaptureOnSwitch)) {
                 mTabService.captureTab(tab, success -> {
                     if (!success) {
                         // Treat the tab as if it was closed to cleanup any partial capture data.
@@ -63,8 +71,10 @@ public class PaintPreviewTabService implements NativePaintPreviewServiceProvider
         }
 
         private boolean qualifiesForCapture(Tab tab) {
+            String scheme = tab.getUrl().getScheme();
+            boolean schemeAllowed = scheme.equals("http") || scheme.equals("https");
             return !tab.isIncognito() && !tab.isNativePage() && !tab.isShowingErrorPage()
-                    && tab.getWebContents() != null;
+                    && tab.getWebContents() != null && schemeAllowed;
         }
     }
 
@@ -111,12 +121,29 @@ public class PaintPreviewTabService implements NativePaintPreviewServiceProvider
      * remove any failed deletions.
      * @param tabModelSelector the TabModelSelector for the activity.
      * @param runAudit whether to delete tabs not in the tabModelSelector.
+     * @param captureOnSwitch whether to capture tabs on tab switch in addition to on activity
+     *   stopped.
      */
-    public void onRestoreCompleted(TabModelSelector tabModelSelector, boolean runAudit) {
-        mTabModelSelectorTabObserver =
-                new PaintPreviewTabServiceTabModelSelectorTabObserver(this, tabModelSelector);
-        TabModel regularTabModel = tabModelSelector.getModel(/*incognito*/ false);
+    public void onRestoreCompleted(
+            TabModelSelector tabModelSelector, boolean runAudit, boolean captureOnSwitch) {
+        mTabModelSelectorTabObserver = new PaintPreviewTabServiceTabModelSelectorTabObserver(
+                this, tabModelSelector, captureOnSwitch);
 
+        if (!runAudit || mAuditRunnable != null) return;
+
+        // Delay actually performing the audit by a bit to avoid contention with the native task
+        // runner that handles IO when showing at startup.
+        mAuditRunnable = () -> auditOnStart(tabModelSelector.getModel(/*incognito*/ false));
+        PostTask.postDelayedTask(UiThreadTaskTraits.DEFAULT,
+                () -> {
+                    mAuditRunnable.run();
+                    mAuditRunnable = null;
+                },
+                AUDIT_START_DELAY_MS);
+    }
+
+    @VisibleForTesting
+    void auditOnStart(TabModel regularTabModel) {
         int tabCount = regularTabModel.getCount();
         int[] tabIds = new int[tabCount];
         for (int i = 0; i < tabCount; i++) {
@@ -124,7 +151,7 @@ public class PaintPreviewTabService implements NativePaintPreviewServiceProvider
             tabIds[i] = tab.getId();
         }
 
-        if (runAudit) auditArtifacts(tabIds);
+        auditArtifacts(tabIds);
     }
 
     private boolean isNativeCacheInitialized() {
@@ -166,7 +193,7 @@ public class PaintPreviewTabService implements NativePaintPreviewServiceProvider
         }
     }
 
-    private void captureTab(Tab tab, Callback<Boolean> successCallback) {
+    public void captureTab(Tab tab, Callback<Boolean> successCallback) {
         if (mNativePaintPreviewTabService == 0) {
             successCallback.onResult(false);
             return;

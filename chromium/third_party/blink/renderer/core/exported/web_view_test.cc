@@ -54,8 +54,8 @@
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
+#include "third_party/blink/public/common/page/drag_operation.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
-#include "third_party/blink/public/common/page/web_drag_operation.h"
 #include "third_party/blink/public/common/widget/device_emulation_params.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/tree_scope_type.mojom-blink.h"
@@ -101,8 +101,8 @@
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
-#include "third_party/blink/renderer/core/frame/web_frame_widget_base.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
+#include "third_party/blink/renderer/core/frame/web_view_frame_widget.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/html/forms/external_date_time_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
@@ -234,7 +234,7 @@ class WebViewTest : public testing::Test {
     cc::LayerTreeHost* layer_tree_host = web_view_helper_.GetLayerTreeHost();
     layer_tree_host->SetViewportRectAndScale(
         gfx::Rect(static_cast<gfx::Size>(size)), /*device_scale_factor=*/1.f,
-        layer_tree_host->local_surface_id_allocation_from_parent());
+        layer_tree_host->local_surface_id_from_parent());
   }
 
   std::string RegisterMockedHttpURLLoad(const std::string& file_name) {
@@ -505,7 +505,7 @@ TEST_F(WebViewTest, SetBaseBackgroundColorBeforeMainFrame) {
     cc::LayerTreeSettings layer_tree_settings =
         frame_test_helpers::GetSynchronousSingleThreadLayerTreeSettings();
     web_widget_client.set_layer_tree_host(widget->InitializeCompositing(
-        false, web_widget_client.main_thread_scheduler(),
+        web_widget_client.main_thread_scheduler(),
         web_widget_client.task_graph_runner(), true, ScreenInfo(),
         std::make_unique<cc::TestUkmRecorderFactory>(), &layer_tree_settings));
     widget->SetCompositorVisible(true);
@@ -597,7 +597,7 @@ TEST_F(WebViewTest, SetBaseBackgroundColorWithColorScheme) {
   UpdateAllLifecyclePhases();
 
   Color system_background_color = LayoutTheme::GetTheme().SystemColor(
-      CSSValueID::kCanvas, WebColorScheme::kLight);
+      CSSValueID::kCanvas, ColorScheme::kLight);
   EXPECT_EQ(system_background_color, frame_view->BaseBackgroundColor());
 
   color_scheme_helper.SetForcedColors(*(web_view->GetPage()),
@@ -2623,7 +2623,7 @@ static void DragAndDropURL(WebViewImpl* web_view, const std::string& url) {
   const gfx::PointF screen_point;
   WebFrameWidget* widget = web_view->MainFrameImpl()->FrameWidget();
   widget->DragTargetDragEnter(drag_data, client_point, screen_point,
-                              kWebDragOperationCopy, 0);
+                              kDragOperationCopy, 0);
   widget->DragTargetDrop(drag_data, client_point, screen_point, 0);
   frame_test_helpers::PumpPendingRequestsForFrameToLoad(
       web_view->MainFrameImpl());
@@ -2852,9 +2852,8 @@ TEST_F(WebViewTest, LongPressImage) {
             web_view->MainFrameWidget()->HandleInputEvent(
                 WebCoalescedInputEvent(event, ui::LatencyInfo())));
   EXPECT_TRUE(
-      web_view->AsView()
-          .page->GetContextMenuController()
-          .ContextMenuNodeForFrame(web_view->MainFrameImpl()->GetFrame()));
+      web_view->GetPage()->GetContextMenuController().ContextMenuNodeForFrame(
+          web_view->MainFrameImpl()->GetFrame()));
 }
 
 TEST_F(WebViewTest, LongPressVideo) {
@@ -2973,8 +2972,8 @@ TEST_F(WebViewTest, TouchDragContextMenuWithoutDrag) {
 
   // Simulate the end of a non-moving drag.
   const gfx::PointF dragend_point(250, 8);
-  web_view->MainFrameWidgetBase()->DragSourceEndedAt(
-      dragend_point, dragend_point, kWebDragOperationNone);
+  web_view->MainFrameViewWidget()->DragSourceEndedAt(
+      dragend_point, dragend_point, kDragOperationNone);
   EXPECT_TRUE(
       web_view->GetPage()->GetContextMenuController().ContextMenuNodeForFrame(
           web_view->MainFrameImpl()->GetFrame()));
@@ -3012,8 +3011,8 @@ TEST_F(WebViewTest, TouchDragContextMenuWithDrag) {
 
   // Simulate the end of a drag.
   const gfx::PointF dragend_point(270, 28);
-  web_view->MainFrameWidgetBase()->DragSourceEndedAt(
-      dragend_point, dragend_point, kWebDragOperationNone);
+  web_view->MainFrameViewWidget()->DragSourceEndedAt(
+      dragend_point, dragend_point, kDragOperationNone);
   EXPECT_FALSE(
       web_view->GetPage()->GetContextMenuController().ContextMenuNodeForFrame(
           web_view->MainFrameImpl()->GetFrame()));
@@ -4116,8 +4115,7 @@ class FakeFrameWidgetHost : public mojom::blink::FrameWidgetHost {
   mojo::PendingAssociatedRemote<mojom::blink::FrameWidgetHost>
   BindNewFrameWidgetInterfaces() {
     frame_widget_host_receiver_.reset();
-    return frame_widget_host_receiver_
-        .BindNewEndpointAndPassDedicatedRemoteForTesting();
+    return frame_widget_host_receiver_.BindNewEndpointAndPassDedicatedRemote();
   }
 
   int GetAndResetHasTouchEventHandlerCallCount(bool state) {
@@ -4147,6 +4145,12 @@ class FakeFrameWidgetHost : public mojom::blink::FrameWidgetHost {
   void AutoscrollFling(const gfx::Vector2dF& position) override {}
   void AutoscrollEnd() override {}
   void DidFirstVisuallyNonEmptyPaint() override {}
+  void StartDragging(const blink::WebDragData& drag_data,
+                     blink::DragOperationsMask operations_allowed,
+                     const SkBitmap& bitmap,
+                     const gfx::Vector2d& bitmap_offset_in_dip,
+                     mojom::blink::DragEventSourceInfoPtr event_info) override {
+  }
 
  private:
   mojo::AssociatedReceiver<mojom::blink::FrameWidgetHost>
@@ -4191,7 +4195,7 @@ TEST_F(WebViewTest, SetHasTouchEventConsumers) {
     cc::LayerTreeSettings layer_tree_settings =
         frame_test_helpers::GetSynchronousSingleThreadLayerTreeSettings();
     web_widget_client.set_layer_tree_host(widget->InitializeCompositing(
-        false, web_widget_client.main_thread_scheduler(),
+        web_widget_client.main_thread_scheduler(),
         web_widget_client.task_graph_runner(), true, ScreenInfo(),
         std::make_unique<cc::TestUkmRecorderFactory>(), &layer_tree_settings));
     widget->SetCompositorVisible(true);
@@ -6048,9 +6052,8 @@ TEST_F(WebViewTest, LongPressImageAndThenLongTapImage) {
             web_view->MainFrameWidget()->HandleInputEvent(
                 WebCoalescedInputEvent(event, ui::LatencyInfo())));
   EXPECT_TRUE(
-      web_view->AsView()
-          .page->GetContextMenuController()
-          .ContextMenuNodeForFrame(web_view->MainFrameImpl()->GetFrame()));
+      web_view->GetPage()->GetContextMenuController().ContextMenuNodeForFrame(
+          web_view->MainFrameImpl()->GetFrame()));
 
   WebGestureEvent tap_event(WebInputEvent::Type::kGestureLongTap,
                             WebInputEvent::kNoModifiers,
@@ -6062,9 +6065,64 @@ TEST_F(WebViewTest, LongPressImageAndThenLongTapImage) {
             web_view->MainFrameWidget()->HandleInputEvent(
                 WebCoalescedInputEvent(tap_event, ui::LatencyInfo())));
   EXPECT_TRUE(
-      web_view->AsView()
-          .page->GetContextMenuController()
-          .ContextMenuNodeForFrame(web_view->MainFrameImpl()->GetFrame()));
+      web_view->GetPage()->GetContextMenuController().ContextMenuNodeForFrame(
+          web_view->MainFrameImpl()->GetFrame()));
+}
+
+// Regression test for http://crbug.com/41562
+TEST_F(WebViewTest, UpdateTargetURLWithInvalidURL) {
+  WebViewImpl* web_view = web_view_helper_.Initialize();
+  const KURL invalid_kurl("http://");
+  web_view->UpdateTargetURL(blink::WebURL(invalid_kurl),
+                            /* fallback_url=*/blink::WebURL());
+  EXPECT_EQ(invalid_kurl, web_view->target_url_);
+}
+
+// Regression test for https://crbug.com/1112987
+TEST_F(WebViewTest, LongPressAndThenLongTapLinkInIframeShouldShowContextMenu) {
+  RegisterMockedHttpURLLoad("long_press_link_in_iframe.html");
+
+  WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
+      base_url_ + "long_press_link_in_iframe.html");
+  web_view->SettingsImpl()->SetTouchDragDropEnabled(true);
+  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  UpdateAllLifecyclePhases();
+  RunPendingTasks();
+
+  WebLocalFrameImpl* frame = web_view->MainFrameImpl();
+  Document* document = frame->GetFrame()->GetDocument();
+  Element* child_frame = document->getElementById("childframe");
+  DCHECK(child_frame);
+  Document* child_document =
+      To<HTMLIFrameElement>(child_frame)->contentDocument();
+  Element* anchor = child_document->getElementById("anchorTag");
+  IntPoint center =
+      To<WebLocalFrameImpl>(
+          web_view->MainFrame()->FirstChild()->ToWebLocalFrame())
+          ->GetFrameView()
+          ->FrameToScreen(anchor->GetLayoutObject()->AbsoluteBoundingBoxRect())
+          .Center();
+  WebGestureEvent event(WebInputEvent::Type::kGestureLongPress,
+                        WebInputEvent::kNoModifiers,
+                        WebInputEvent::GetStaticTimeStampForTests(),
+                        WebGestureDevice::kTouchscreen);
+  event.SetPositionInWidget(gfx::PointF(center.X(), center.X()));
+
+  EXPECT_EQ(WebInputEventResult::kHandledSystem,
+            web_view->MainFrameWidget()->HandleInputEvent(
+                WebCoalescedInputEvent(event, ui::LatencyInfo())));
+
+  WebGestureEvent tap_event(WebInputEvent::Type::kGestureLongTap,
+                            WebInputEvent::kNoModifiers,
+                            WebInputEvent::GetStaticTimeStampForTests(),
+                            WebGestureDevice::kTouchscreen);
+  tap_event.SetPositionInWidget(gfx::PointF(center.X(), center.X()));
+
+  EXPECT_EQ(WebInputEventResult::kNotHandled,
+            web_view->MainFrameWidget()->HandleInputEvent(
+                WebCoalescedInputEvent(tap_event, ui::LatencyInfo())));
+  EXPECT_EQ("anchor contextmenu",
+            web_view->MainFrameImpl()->GetDocument().Title());
 }
 
 }  // namespace blink

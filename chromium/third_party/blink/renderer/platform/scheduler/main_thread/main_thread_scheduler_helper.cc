@@ -16,8 +16,6 @@ MainThreadSchedulerHelper::MainThreadSchedulerHelper(
     MainThreadSchedulerImpl* main_thread_scheduler)
     : SchedulerHelper(sequence_manager),
       main_thread_scheduler_(main_thread_scheduler),
-      // TODO(hajimehoshi): Forbid V8 execution at |default_task_queue_|
-      // (crbug.com/870606).
       default_task_queue_(
           NewTaskQueue(MainThreadTaskQueue::QueueCreationParams(
                            MainThreadTaskQueue::QueueType::kDefault)
@@ -80,8 +78,6 @@ scoped_refptr<MainThreadTaskQueue> MainThreadSchedulerHelper::NewTaskQueue(
   scoped_refptr<MainThreadTaskQueue> task_queue =
       sequence_manager_->CreateTaskQueueWithType<MainThreadTaskQueue>(
           params.spec, params, main_thread_scheduler_);
-  if (params.fixed_priority)
-    task_queue->SetQueuePriority(params.fixed_priority.value());
   return task_queue;
 }
 

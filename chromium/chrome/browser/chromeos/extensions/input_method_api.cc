@@ -68,6 +68,8 @@ namespace GetSettings = extensions::api::input_method_private::GetSettings;
 namespace SetSettings = extensions::api::input_method_private::SetSettings;
 namespace SetCompositionRange =
     extensions::api::input_method_private::SetCompositionRange;
+namespace SetComposingRange =
+    extensions::api::input_method_private::SetComposingRange;
 namespace GetAutocorrectRange =
     extensions::api::input_method_private::GetAutocorrectRange;
 namespace GetAutocorrectCharacterBounds =
@@ -76,8 +78,8 @@ namespace SetAutocorrectRange =
     extensions::api::input_method_private::SetAutocorrectRange;
 namespace SetSelectionRange =
     extensions::api::input_method_private::SetSelectionRange;
-namespace OnSettingsChanged =
-    extensions::api::input_method_private::OnSettingsChanged;
+namespace OnInputMethodOptionsChanged =
+    extensions::api::input_method_private::OnInputMethodOptionsChanged;
 
 using chromeos::InputMethodEngineBase;
 
@@ -392,11 +394,11 @@ ExtensionFunction::ResponseAction InputMethodPrivateSetSettingsFunction::Run() {
   // The router will only send the event to extensions that are listening.
   extensions::EventRouter* router =
       extensions::EventRouter::Get(browser_context());
-  if (router->HasEventListener(OnSettingsChanged::kEventName)) {
+  if (router->HasEventListener(OnInputMethodOptionsChanged::kEventName)) {
     auto event = std::make_unique<extensions::Event>(
-        extensions::events::INPUT_METHOD_PRIVATE_ON_SETTINGS_CHANGED,
-        OnSettingsChanged::kEventName,
-        OnSettingsChanged::Create(params->engine_id, params->settings),
+        extensions::events::INPUT_IME_ON_INPUT_METHOD_OPTIONS_CHANGED,
+        OnInputMethodOptionsChanged::kEventName,
+        OnInputMethodOptionsChanged::Create(params->engine_id),
         browser_context());
     router->BroadcastEvent(std::move(event));
   }
@@ -449,6 +451,56 @@ InputMethodPrivateSetCompositionRangeFunction::Run() {
 
   if (!engine->SetCompositionRange(params.context_id, params.selection_before,
                                    params.selection_after, segments, &error)) {
+    return RespondNow(Error(InformativeError(error, function_name())));
+  }
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+InputMethodPrivateSetComposingRangeFunction::Run() {
+  std::string error;
+  InputMethodEngineBase* engine =
+      GetEngineIfActive(browser_context(), extension_id(), &error);
+  if (!engine)
+    return RespondNow(Error(InformativeError(error, function_name())));
+
+  const auto parent_params = SetComposingRange::Params::Create(*args_);
+  const auto& params = parent_params->parameters;
+  std::vector<InputMethodEngineBase::SegmentInfo> segments;
+  if (params.segments) {
+    for (const auto& segments_arg : *params.segments) {
+      InputMethodEngineBase::SegmentInfo segment_info;
+      segment_info.start = segments_arg.start;
+      segment_info.end = segments_arg.end;
+      switch (segments_arg.style) {
+        case input_method_private::UNDERLINE_STYLE_UNDERLINE:
+          segment_info.style = InputMethodEngineBase::SEGMENT_STYLE_UNDERLINE;
+          break;
+        case input_method_private::UNDERLINE_STYLE_DOUBLEUNDERLINE:
+          segment_info.style =
+              InputMethodEngineBase::SEGMENT_STYLE_DOUBLE_UNDERLINE;
+          break;
+        case input_method_private::UNDERLINE_STYLE_NOUNDERLINE:
+          segment_info.style =
+              InputMethodEngineBase::SEGMENT_STYLE_NO_UNDERLINE;
+          break;
+        case input_method_private::UNDERLINE_STYLE_NONE:
+          EXTENSION_FUNCTION_VALIDATE(false);
+          break;
+      }
+      segments.push_back(segment_info);
+    }
+  } else {
+    // Default to a single segment that spans the entire composing range.
+    InputMethodEngineBase::SegmentInfo segment_info;
+    segment_info.start = 0;
+    segment_info.end = params.end - params.start;
+    segment_info.style = InputMethodEngineBase::SEGMENT_STYLE_UNDERLINE;
+    segments.push_back(segment_info);
+  }
+
+  if (!engine->SetComposingRange(params.context_id, params.start, params.end,
+                                 segments, &error)) {
     return RespondNow(Error(InformativeError(error, function_name())));
   }
   return RespondNow(NoArguments());

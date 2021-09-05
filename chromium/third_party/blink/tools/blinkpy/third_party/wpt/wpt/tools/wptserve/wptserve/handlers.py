@@ -197,7 +197,7 @@ class FileHandler(object):
             raise HTTPException(404)
 
     def get_headers(self, request, path):
-        rv = (self.load_headers(request, os.path.join(os.path.split(path)[0], "__dir__")) +
+        rv = (self.load_headers(request, os.path.join(os.path.dirname(path), "__dir__")) +
               self.load_headers(request, path))
 
         if not any(key.lower() == b"content-type" for (key, _) in rv):
@@ -407,7 +407,7 @@ class AsIsHandler(object):
         path = filesystem_path(self.base_path, request, self.url_base)
 
         try:
-            with open(path) as f:
+            with open(path, 'rb') as f:
                 response.writer.write_raw_content(f.read())
             wrap_pipeline(path, request, response)
             response.close_connection = True

@@ -52,6 +52,7 @@
 <translation id="1291286136605998134">ប៊ូតុងបិទ/បើក</translation>
 <translation id="1299774449519412690">ផ្ទៃមេឃ</translation>
 <translation id="1303806948938513162">ចុចដោយ​ប្រើ​ម្រាមដៃ 4 ដើម្បី​ចូលទៅ​ម៉ឺនុយ ChromeVox</translation>
+<translation id="1313373992684326101">ទៅ​កាន់​ផ្នែក​មុន។ ឧទាហរណ៍រួមបញ្ចូលកម្មវិធី​ចាប់ផ្ដើម និងរបារស្ថានភាព។</translation>
 <translation id="1325363694295259631"><ph name="NAME" />, បានដក​ការ​ជ្រើសរើសប៊ូតុង​មូលរបស់ធាតុម៉ឺនុយ</translation>
 <translation id="1325946044405407859">ទង់ដែង​ស្រាល</translation>
 <translation id="1331702245475014624"><ph name="INDEX" /> នៃ <ph name="TOTAL" /></translation>
@@ -79,6 +80,7 @@
 <translation id="1506187449813838456">បង្កើនកម្រិតសម្លេង</translation>
 <translation id="151784044608172266">ឃ្លាបន្ទាប់</translation>
 <translation id="1524531499102321782">បន្ទាត់ប្រែលបន្ទាប់</translation>
+<translation id="1542513807034338907">រំកិលទៅទំព័រមុន</translation>
 <translation id="1546370775711804143">របាទាញ</translation>
 <translation id="1555130319947370107">ខៀវ</translation>
 <translation id="1559739829547075274">រុករកថយក្រោយ</translation>
@@ -280,6 +282,7 @@
 <translation id="3103579948980282461">ស្វាយ​ខ្ចី</translation>
 <translation id="3104705064753753826">alrt dlg</translation>
 <translation id="3109724472072898302">បានបង្រួមចូល</translation>
+<translation id="311015743332597320">អូសម្រាមដៃ​បួនទៅស្ដាំ</translation>
 <translation id="3112457281078985179">ដើម្បីបើក ឬបិទ ChromeVox សូមប្រើ Control+Alt+Z ។</translation>
 <translation id="3131002934070407451">អាន​លេខ​ជា៖</translation>
 <translation id="3134461040845705080">rdonly</translation>
@@ -345,6 +348,7 @@
 <translation id="3549141990712742152">កាត់ <ph name="TEXT" /> ។</translation>
 <translation id="3549680091535286226">ចុច​ដោយប្រើ​ម្រាមដៃ 2 ដើម្បី​បញ្ឈប់​ការនិយាយ​ជាបណ្តោះអាសន្ន</translation>
 <translation id="3564729643041517261">រចនាប័ទ្មផ្ទាំងអេក្រង់បច្ចុប្បន្នមានទម្រង់នៅជាប់គ្នា</translation>
+<translation id="3587482841069643663">ទាំងអស់</translation>
 <translation id="3589661172894441357">សទ្ទានុក្រម</translation>
 <translation id="3591784666823501596">ខៀវចាស់</translation>
 <translation id="3594207934078151302">បៃតង​ស្រាល</translation>
@@ -436,6 +440,7 @@
 <translation id="4278486392851938658">គ្មានតំណដែលបានចូលទៅកាន់មុនទេ</translation>
 <translation id="4281245629646759298">លឿងខ្ចី</translation>
 <translation id="4289540628985791613">ទិដ្ឋភាពទូទៅ</translation>
+<translation id="4294967782363273192">ការតម្រៀបតាម​លំដាប់ឡើងលើ</translation>
 <translation id="4300318234632215983">ប្រកាស URL ដែលនៅក្រោយតំណ</translation>
 <translation id="4322625298640984693">ត្នោតចាស់</translation>
 <translation id="4342180618051828363">{COUNT,plural, =1{ចំណុច}=3{សញ្ញាអ៊ីលីបស៊ីស}other{# ចំណុច}}</translation>
@@ -447,6 +452,7 @@
 <translation id="4384583879834880242">សំណួរ​ចម្លើយ</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="4402014469255336455">ស៊ីលៀប</translation>
+<translation id="4406249099130339147">ការនិយាយ​តាមសញ្ញាវណ្ណយុត្ត៖</translation>
 <translation id="4432457053224379116">ឈាមជ្រូក​ចាស់</translation>
 <translation id="4437615272777527928">វាយបញ្ចូល ដើម្បីស្វែងរកម៉ឺនុយ។ ប្រើ​ព្រួញ​ឡើងលើ និង​ចុះក្រោម ដើម្បី​រុករកលទ្ធផល។ ប្រើព្រួញទៅឆ្វេង និងទៅស្ដាំ ដើម្បីកែតម្រូវទស្សន៍ទ្រនិច​អក្សរ និងដើម្បីផ្លាស់ទីរវាងម៉ឺនុយនានា។</translation>
 <translation id="4457472090507035117">ជ្រើសរើស​សំឡេង​បច្ចុប្បន្ន៖</translation>
@@ -481,6 +487,7 @@
 <translation id="4763480195061959176">វីដេអូ</translation>
 <translation id="4764692524839457597">លំនាំដើម</translation>
 <translation id="4772771694153161212">មិន​គូស​បន្ទាត់ពី​ក្រោម</translation>
+<translation id="4780458943471935919">រំកិលទៅ​ទំព័រ​បន្ទាប់</translation>
 <translation id="4784215347943747396">គ្រប់គ្រង​ឧបករណ៍​ដោយប្រើ​ប៊ូតុងបិទបើក 1 ឬ 2 ប៉ុណ្ណោះ</translation>
 <translation id="4786285211967466855">គ្មានផ្នែកក្បាលកម្រិតទី 1 មុនទេ</translation>
 <translation id="4787577491510559358">ប្រកាស​ទម្រង់​សម្រាប់​ធាតុ​បច្ចុប្បន្ន</translation>
@@ -644,6 +651,7 @@
 <translation id="5999630716831179808">សម្លេង</translation>
 <translation id="6006050241733874051">បែបបទ</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{សញ្ញាទ្រេតថយក្រោយ}other{# សញ្ញាទ្រេតថយក្រោយ}}</translation>
+<translation id="6010616110396250088">ការតម្រៀបតាម​លំដាប់ចុះក្រោម</translation>
 <translation id="6017514345406065928">បៃតង</translation>
 <translation id="602001110135236999">រំកិលទៅ​ឆ្វេង</translation>
 <translation id="6034000775414344507">ប្រផេះ​ខ្ចី</translation>
@@ -815,6 +823,7 @@
 <translation id="744163271241493234">pwded</translation>
 <translation id="7484805699335881122">ប្ដូរកម្រិតសំឡេង នៅពេលអានប្រភេទធាតុ និងអត្ថបទដែលសរសេរជាអក្សរធំ ក្នុងវង់ក្រចក ដិត លុប ឬនៅក្នុងអព្ភន្តរសញ្ញា។</translation>
 <translation id="7491962110804786152">ផ្ទាំង</translation>
+<translation id="7492497529767769458">ទៅ​កាន់​ផ្នែក​បន្ទាប់។ ឧទាហរណ៍រួមបញ្ចូលកម្មវិធី​ចាប់ផ្ដើម និងរបារស្ថានភាព។</translation>
 <translation id="7505149250476994901">និយាយថា "អក្សរធំ" បន្ទាប់ពី​អក្សរ</translation>
 <translation id="7518543783849163354">ដើម្បីបញ្ឈប់ ChromeVox ពីការនិយាយជាបណ្តោះអាសន្ន សូមចុចគ្រាប់ចុច Control ។</translation>
 <translation id="7533226154149229506">លឿងខ្ចី</translation>
@@ -822,6 +831,7 @@
 <translation id="7552432549459840808">ផ្លូវកាត់ Chrome ដែលមានប្រយោជន៍</translation>
 <translation id="7569983096843329377">ខ្មៅ</translation>
 <translation id="7579911500627256166">ចំណុច <ph name="DOT" /></translation>
+<translation id="7592060599656252486">មួយ​ចំនួន</translation>
 <translation id="7595446402663080101">គ្មានតារាងមុនទេ</translation>
 <translation id="7596131838331109045">ទឹកក្រូច​ស្រាល</translation>
 <translation id="7604026522577407655">ទៅកាន់ផ្នែកចាប់ផ្តើមនៃជួរឈរបច្ចុប្បន្ន</translation>
@@ -841,6 +851,7 @@
 <translation id="7684431668231950609">កែប្រែអត្ថបទ ធាតុបញ្ចូល URL</translation>
 <translation id="7685589220304187312">tlbar</translation>
 <translation id="7693840228159394336">ប៊ូតុងវិទ្យុពីមុន</translation>
+<translation id="7701040980221191251">គ្មាន</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7714340021005120797">គ្មានប្រអប់បន្សំបន្ទាប់ទេ</translation>
 <translation id="772146615414628379">សូមអបអរសាទរ អ្នកបានស្វែងយល់អំពីចំណុចសំខាន់ៗក្នុងការប្រើប្រាស់ ChromeVox ដោយជោគជ័យហើយ។ សូមចងចាំថា អ្នកអាចបើកម៉ឺនុយបញ្ជា ChromeVox បានគ្រប់ពេល ដោយចុច Search+សញ្ញាចុច។ ដើម្បីស្វែងយល់បន្ថែមអំពី ChromeVox និង Chrome OS សូមចូលមើលអត្ថបទខាងក្រោម។
@@ -899,7 +910,9 @@
 <translation id="812886159861361726">បាន​បញ្ឈប់​ការទាញយក <ph name="FILE_NAME" /></translation>
 <translation id="8129445297241948503">គ្មានក្រឡាខាងលើទេ</translation>
 <translation id="8138880386467279117">ប៉ះ</translation>
+<translation id="8173092779156526980">អូសម្រាមដៃ​បួនទៅឆ្វេង</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{សញ្ញាគូសបន្ទាត់ពីក្រោម}other{# សញ្ញាគូសបន្ទាត់ពីក្រោម}}</translation>
+<translation id="8179976553408161302">បញ្ចូល</translation>
 <translation id="8184828902145951186">ជួរដេក</translation>
 <translation id="8186185314313222077">បិទ/បើកពេញអេក្រង់</translation>
 <translation id="8199231515320852133">ប្រកាសផ្នែកក្បាលនៃក្រឡាបច្ចុប្បន្ន</translation>
@@ -985,6 +998,7 @@
 <translation id="8946628535652548639">ជួរដេកទី <ph name="TABLECELLROWINDEX" />ជួរឈរទី<ph name="TABLECELLCOLUMNINDEX" /></translation>
 <translation id="8952400011684167587">គ្មានប៊ូតុងមូលមុនទេ</translation>
 <translation id="8970172509886453271">គ្មានផ្នែកមុនទេ</translation>
+<translation id="89720367119469899">គេច</translation>
 <translation id="8978496506222343566">tltip</translation>
 <translation id="8986362086234534611">បំភ្លេច</translation>
 <translation id="9040132695316389094">ផ្នែកក្បាល 1</translation>

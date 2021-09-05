@@ -71,6 +71,15 @@ GFX_EXPORT bool IOSurfaceCanSetColorSpace(const gfx::ColorSpace& color_space);
 GFX_EXPORT void IOSurfaceSetColorSpace(IOSurfaceRef io_surface,
                                        const gfx::ColorSpace& color_space);
 
+// Return the expected four character code pixel format for an IOSurface with
+// the specified gfx::BufferFormat.
+GFX_EXPORT uint32_t
+BufferFormatToIOSurfacePixelFormat(gfx::BufferFormat format);
+
+// Return an IOSurface consuming |io_surface_mach_port|.
+GFX_EXPORT base::ScopedCFTypeRef<IOSurfaceRef> IOSurfaceMachPortToIOSurface(
+    ScopedRefCountedIOSurfaceMachPort io_surface_mach_port);
+
 }  // namespace gfx
 
 #endif  // UI_GFX_MAC_IO_SURFACE_H_

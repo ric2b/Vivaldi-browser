@@ -2918,6 +2918,18 @@
   <message desc="Describes an option for ChromeVox to read numbers as digits." name="IDS_CHROMEVOX_OPTIONS_NUMBER_READING_STYLE_DIGITS">
     Digits
   </message>
+  <message desc="Labels the select for choosing how ChromeVox reads punctuation." name="IDS_CHROMEVOX_OPTIONS_PUNCTUATION_ECHO_SELECT_LABEL">
+    Punctuation echo:
+  </message>
+  <message desc="Describes an option for ChromeVox to echo (speak) no punctuation." name="IDS_CHROMEVOX_OPTIONS_PUNCTUATION_ECHO_NONE">
+    None
+  </message>
+  <message desc="Describes an option for ChromeVox to echo (speak) some punctuation." name="IDS_CHROMEVOX_OPTIONS_PUNCTUATION_ECHO_SOME">
+    Some
+  </message>
+  <message desc="Describes an option for ChromeVox to echo (speak) all punctuation." name="IDS_CHROMEVOX_OPTIONS_PUNCTUATION_ECHO_ALL">
+    All
+  </message>
   <message desc="Labels the checkbox on the options page that enables displaying Perkins Brailler commands in the ChromeVox menus." name="IDS_CHROMEVOX_OPTIONS_MENU_BRAILLE_COMMANDS">
     Show braille commands in the ChromeVox menus
   </message>
@@ -2969,6 +2981,12 @@
   <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_SWIPERIGHT3_GESTURE">
     Swipe three fingers right
   </message>
+  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_SWIPELEFT4_GESTURE" is_accessibility_with_no_ui="true">
+    Swipe four fingers left
+  </message>
+  <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_SWIPERIGHT4_GESTURE" is_accessibility_with_no_ui="true">
+    Swipe four fingers right
+  </message>
   <message desc="Describes a gesture to be performed on a touch screen." name="IDS_CHROMEVOX_TAP2_GESTURE">
     Tap with two fingers
   </message>
@@ -2989,6 +3007,30 @@
   </message>
   <message desc="Describes the media play/pause key on a Chromebook. No associated UI with this string which is spoken using text-to-speech." name="IDS_CHROMEVOX_MEDIA_PLAY_PAUSE" is_accessibility_with_no_ui="true">
     Media Play/Pause
+  </message>
+  <message desc="Describes a table header sorted in ascending order. No associated UI with this string which is spoken using text-to-speech." name="IDS_CHROMEVOX_SORT_ASCENDING" is_accessibility_with_no_ui="true">
+    Ascending sort
+  </message>
+  <message desc="Describes a table header sorted in descending order. No associated UI with this string which is spoken using text-to-speech." name="IDS_CHROMEVOX_SORT_DESCENDING" is_accessibility_with_no_ui="true">
+    Descending sort
+  </message>
+  <message desc="Describes scrolling up by a page using a gesture. No associated UI with this string which is spoken using text-to-speech." name="IDS_CHROMEVOX_PREVIOUS_PAGE_GESTURE_DESCRIPTION" is_accessibility_with_no_ui="true">
+    Scroll to previous page
+  </message>
+  <message desc="Describes scrolling down by a page using a gesture. No associated UI with this string which is spoken using text-to-speech." name="IDS_CHROMEVOX_NEXT_PAGE_GESTURE_DESCRIPTION" is_accessibility_with_no_ui="true">
+    Scroll to next page
+  </message>
+  <message desc="Describes gesture that simulates pressing the escape key. No associated UI with this string which is spoken using text-to-speech." name="IDS_CHROMEVOX_ESCAPE_GESTURE_DESCRIPTION" is_accessibility_with_no_ui="true">
+    Escape
+  </message>
+  <message desc="Describes gesture that simulates pressing the enter key. No associated UI with this string which is spoken using text-to-speech." name="IDS_CHROMEVOX_ENTER_GESTURE_DESCRIPTION" is_accessibility_with_no_ui="true">
+    Enter
+  </message>
+  <message desc="Describes gesture that movees to the previous important section on the screen (e.g. the Launcher, Status Tray, etc). No associated UI with this string which is spoken using text-to-speech." name="IDS_CHROMEVOX_PREVIOUS_PANE_GESTURE_DESCRIPTION" is_accessibility_with_no_ui="true">
+    Move to previous section. Examples include the Status Tray and Launcher.
+  </message>
+  <message desc="Describes gesture that movees to the next important section on the screen (e.g. the Launcher, Status Tray, etc). No associated UI with this string which is spoken using text-to-speech." name="IDS_CHROMEVOX_NEXT_PANE_GESTURE_DESCRIPTION" is_accessibility_with_no_ui="true">
+    Move to next section. Examples include the Status Tray and Launcher.
   </message>
 
 </grit-part>

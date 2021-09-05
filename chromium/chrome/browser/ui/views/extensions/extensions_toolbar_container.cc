@@ -276,13 +276,13 @@ extensions::ExtensionContextMenuModel::ButtonVisibility
 ExtensionsToolbarContainer::GetActionVisibility(
     const ToolbarActionViewController* action) const {
   extensions::ExtensionContextMenuModel::ButtonVisibility visibility =
-      extensions::ExtensionContextMenuModel::VISIBLE;
+      extensions::ExtensionContextMenuModel::PINNED;
 
   if (ShouldForceVisibility(action->GetId()) &&
       !model_->IsActionPinned(action->GetId())) {
     visibility = extensions::ExtensionContextMenuModel::TRANSITIVELY_VISIBLE;
   } else if (!IsActionVisibleOnToolbar(action)) {
-    visibility = extensions::ExtensionContextMenuModel::OVERFLOWED;
+    visibility = extensions::ExtensionContextMenuModel::UNPINNED;
   }
   return visibility;
 }
@@ -349,7 +349,7 @@ void ExtensionsToolbarContainer::ShowToolbarActionBubble(
   views::View* const anchor_view = GetViewForId(extension_id);
 
   views::Widget* const widget = views::BubbleDialogDelegateView::CreateBubble(
-      new ToolbarActionsBarBubbleViews(
+      std::make_unique<ToolbarActionsBarBubbleViews>(
           anchor_view ? anchor_view : extensions_button_,
           anchor_view != nullptr, std::move(controller)));
 

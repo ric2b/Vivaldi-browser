@@ -13,6 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "build/build_config.h"
+#include "weblayer/browser/browser_list_observer.h"
 #include "weblayer/browser/i18n_util.h"
 #include "weblayer/browser/profile_disk_operations.h"
 #include "weblayer/public/profile.h"
@@ -30,6 +31,7 @@ class WebContents;
 namespace weblayer {
 class BrowserContextImpl;
 class CookieManagerImpl;
+class PrerenderControllerImpl;
 
 class ProfileImpl : public Profile {
  public:
@@ -44,7 +46,7 @@ class ProfileImpl : public Profile {
       std::unique_ptr<ProfileImpl> profile,
       base::OnceClosure done_callback);
 
-  explicit ProfileImpl(const std::string& name);
+  ProfileImpl(const std::string& name, bool is_incognito);
   ~ProfileImpl() override;
 
   // Returns the ProfileImpl from the specified BrowserContext.
@@ -83,6 +85,8 @@ class ProfileImpl : public Profile {
   const std::string& name() const { return info_.name; }
   DownloadDelegate* download_delegate() { return download_delegate_; }
 
+  void MarkAsDeleted();
+
   // Profile implementation:
   void ClearBrowsingData(const std::vector<BrowsingDataType>& data_types,
                          base::Time from_time,
@@ -91,6 +95,7 @@ class ProfileImpl : public Profile {
   void SetDownloadDirectory(const base::FilePath& directory) override;
   void SetDownloadDelegate(DownloadDelegate* delegate) override;
   CookieManager* GetCookieManager() override;
+  PrerenderController* GetPrerenderController() override;
   void GetBrowserPersistenceIds(
       base::OnceCallback<void(base::flat_set<std::string>)> callback) override;
   void RemoveBrowserPersistenceStorage(
@@ -106,7 +111,8 @@ class ProfileImpl : public Profile {
 #if defined(OS_ANDROID)
   ProfileImpl(JNIEnv* env,
               const base::android::JavaParamRef<jstring>& path,
-              const base::android::JavaParamRef<jobject>& java_profile);
+              const base::android::JavaParamRef<jobject>& java_profile,
+              bool is_incognito);
 
   jint GetNumBrowserImpl(JNIEnv* env);
   jlong GetBrowserContext(JNIEnv* env);
@@ -123,6 +129,7 @@ class ProfileImpl : public Profile {
       JNIEnv* env,
       const base::android::JavaParamRef<jstring>& directory);
   jlong GetCookieManager(JNIEnv* env);
+  jlong GetPrerenderController(JNIEnv* env);
   void EnsureBrowserContextInitialized(JNIEnv* env);
   void SetBooleanSetting(JNIEnv* env, jint j_type, jboolean j_value);
   jboolean GetBooleanSetting(JNIEnv* env, jint j_type);
@@ -138,6 +145,7 @@ class ProfileImpl : public Profile {
       JNIEnv* env,
       const base::android::JavaRef<jstring>& j_page_url,
       const base::android::JavaRef<jobject>& j_callback);
+  void MarkAsDeleted(JNIEnv* env) { MarkAsDeleted(); }
 #endif
 
   const base::FilePath& download_directory() { return download_directory_; }
@@ -176,6 +184,7 @@ class ProfileImpl : public Profile {
   std::unique_ptr<i18n::LocaleChangeSubscription> locale_change_subscription_;
 
   std::unique_ptr<CookieManagerImpl> cookie_manager_;
+  std::unique_ptr<PrerenderControllerImpl> prerender_controller_;
 
 #if defined(OS_ANDROID)
   base::android::ScopedJavaGlobalRef<jobject> java_profile_;

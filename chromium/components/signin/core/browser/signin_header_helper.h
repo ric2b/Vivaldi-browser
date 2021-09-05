@@ -67,19 +67,19 @@ enum class DiceAction {
 // Struct describing the parameters received in the manage account header.
 struct ManageAccountsParams {
   // The requested service type such as "ADDSESSION".
-  GAIAServiceType service_type;
+  GAIAServiceType service_type = GAIA_SERVICE_TYPE_NONE;
   // The prefilled email.
   std::string email;
   // Whether |email| is a saml account.
-  bool is_saml;
+  bool is_saml = false;
   // The continue URL after the requested service is completed successfully.
   // Defaults to the current URL if empty.
   std::string continue_url;
   // Whether the continue URL should be loaded in the same tab.
-  bool is_same_tab;
-#if defined(OS_ANDROID)
+  bool is_same_tab = false;
+#if defined(OS_ANDROID) || defined(OS_IOS)
   // Whether to show consistency promo.
-  bool show_consistency_promo;
+  bool show_consistency_promo = false;
 #endif
 
   ManageAccountsParams();
@@ -114,6 +114,9 @@ struct DiceResponseParams {
     AccountInfo account_info;
     // Authorization code to fetch a refresh token.
     std::string authorization_code;
+    // Whether Dice response contains the 'no_authorization_code' header value.
+    // If true then LSO was unavailable for provision of auth code.
+    bool no_authorization_code = false;
   };
 
   // Parameters for the SIGNOUT action.

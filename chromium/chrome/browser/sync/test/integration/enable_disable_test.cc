@@ -195,7 +195,13 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, MAYBE_EnableOneAtATime) {
   }
 }
 
-IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, DisableOneAtATime) {
+// Flakiness spike on Windows, see crbug.com/1111227.
+#if defined(OS_WIN)
+#define MAYBE_DisableOneAtATime DISABLED_DisableOneAtATime
+#else
+#define MAYBE_DisableOneAtATime DisableOneAtATime
+#endif
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, MAYBE_DisableOneAtATime) {
   // Setup sync with no disabled types.
   SetupTest(/*all_types_enabled=*/true);
 
@@ -222,8 +228,14 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, DisableOneAtATime) {
   }
 }
 
+// Flakiness spike on Windows, see crbug.com/1111227.
+#if defined(OS_WIN)
+#define MAYBE_FastEnableDisableOneAtATime DISABLED_FastEnableDisableOneAtATime
+#else
+#define MAYBE_FastEnableDisableOneAtATime FastEnableDisableOneAtATime
+#endif
 IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
-                       FastEnableDisableOneAtATime) {
+                       MAYBE_FastEnableDisableOneAtATime) {
   // Setup sync with no enabled types.
   SetupTest(/*all_types_enabled=*/false);
 
@@ -284,8 +296,16 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
   }
 }
 
+// Flakiness spike on Windows, see crbug.com/1111227.
+#if defined(OS_WIN)
+#define MAYBE_FastEnableDisableEnableOneAtATime \
+  DISABLED_FastEnableDisableEnableOneAtATime
+#else
+#define MAYBE_FastEnableDisableEnableOneAtATime \
+  FastEnableDisableEnableOneAtATime
+#endif
 IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
-                       FastEnableDisableEnableOneAtATime) {
+                       MAYBE_FastEnableDisableEnableOneAtATime) {
   // Setup sync with no enabled types.
   SetupTest(/*all_types_enabled=*/false);
 
@@ -344,7 +364,15 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, EnableAndRestart) {
   }
 }
 
-IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, FastEnableDisableEnable) {
+// Flakiness spike on Windows, see crbug.com/1111227.
+#if defined(OS_WIN)
+#define MAYBE_FastEnableDisableEnable DISABLED_FastEnableDisableEnable
+#else
+#define MAYBE_FastEnableDisableEnable FastEnableDisableEnable
+#endif
+
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
+                       MAYBE_FastEnableDisableEnable) {
   SetupTest(/*all_types_enabled=*/false);
 
   // Enable all, and then disable+reenable immediately afterwards, before
@@ -396,8 +424,15 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
   EXPECT_EQ(GetNumUpdatesDownloadedInLastCycle(), initial_updates_downloaded);
 }
 
+// Flakiness spike on Windows, see crbug.com/1111227.
+#if defined(OS_WIN)
+#define MAYBE_DoesNotRedownloadAfterKeepData \
+  DISABLED_DoesNotRedownloadAfterKeepData
+#else
+#define MAYBE_DoesNotRedownloadAfterKeepData DoesNotRedownloadAfterKeepData
+#endif
 IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
-                       DoesNotRedownloadAfterKeepData) {
+                       MAYBE_DoesNotRedownloadAfterKeepData) {
   ASSERT_TRUE(SetupClients());
   ASSERT_FALSE(bookmarks_helper::GetBookmarkModel(0)->IsBookmarked(
       GURL(kSyncedBookmarkURL)));

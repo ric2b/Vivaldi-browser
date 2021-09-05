@@ -54,12 +54,11 @@ import org.chromium.base.BuildConfig;
  *   - Only visible MenuItems are shown.
  *   - Disabled items are grayed out.
  */
-class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuAdapter.OnClickHandler {
+class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler {
     private static final float LAST_ITEM_SHOW_FRACTION = 0.5f;
 
     private final Menu mMenu;
     private final int mItemRowHeight;
-    private final int mItemDividerHeight;
     private final int mVerticalFadeDistance;
     private final int mNegativeSoftwareVerticalOffset;
     private final int mNegativeVerticalOffsetNotTopAnchored;
@@ -81,22 +80,18 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuAdapter.OnCl
      * Creates and sets up the App Menu.
      * @param menu Original menu created by the framework.
      * @param itemRowHeight Desired height for each app menu row.
-     * @param itemDividerHeight Desired height for the divider between app menu items.
      * @param handler AppMenuHandlerImpl receives callbacks from AppMenu.
      * @param res Resources object used to get dimensions and style attributes.
      * @param iconBeforeItem Whether icon is shown before the text.
      */
-    AppMenu(Menu menu, int itemRowHeight, int itemDividerHeight, AppMenuHandlerImpl handler,
-            Resources res, boolean iconBeforeItem) {
+    AppMenu(Menu menu, int itemRowHeight, AppMenuHandlerImpl handler, Resources res,
+            boolean iconBeforeItem) {
         mMenu = menu;
 
         mItemRowHeight = itemRowHeight;
         assert mItemRowHeight > 0;
 
         mHandler = handler;
-
-        mItemDividerHeight = itemDividerHeight;
-        assert mItemDividerHeight >= 0;
 
         mNegativeSoftwareVerticalOffset =
                 res.getDimensionPixelSize(R.dimen.menu_negative_software_vertical_offset);
@@ -172,15 +167,13 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuAdapter.OnCl
      *         determine the number of dividers that appear in the menu.
      * @param circleHighlightItem   Whether the highlighted item should use a circle highlight or
      *                              not.
-     * @param showFromBottom        Whether the appearance animation should run from the bottom up.
      * @param customViewBinders     See {@link AppMenuPropertiesDelegate#getCustomViewBinders()}.
      */
     void show(Context context, final View anchorView, boolean isByPermanentButton,
             int screenRotation, Rect visibleDisplayFrame, int screenHeight,
             @IdRes int footerResourceId, @IdRes int headerResourceId,
             @IdRes int groupDividerResourceId, Integer highlightedItemId,
-            boolean circleHighlightItem, boolean showFromBottom,
-            @Nullable List<CustomViewBinder> customViewBinders) {
+            boolean circleHighlightItem, @Nullable List<CustomViewBinder> customViewBinders) {
         mPopup = new PopupWindow(context);
         mPopup.setFocusable(true);
         mPopup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);
@@ -217,10 +210,7 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuAdapter.OnCl
         // an incorrectly drawn background.
         mPopup.setBackgroundDrawable(ApiCompatibilityUtils.getDrawable(
                 context.getResources(), R.drawable.popup_bg_tinted));
-        if (!isByPermanentButton) {
-            mPopup.setAnimationStyle(
-                    showFromBottom ? R.style.OverflowMenuAnimBottom : R.style.OverflowMenuAnim);
-        }
+        if (!isByPermanentButton) mPopup.setAnimationStyle(R.style.OverflowMenuAnim);
 
         // Turn off window animations for low end devices.
         if (SysUtils.isLowEndDevice()) mPopup.setAnimationStyle(0);
@@ -281,7 +271,7 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuAdapter.OnCl
         int[] popupPosition = getPopupPosition(mTempLocation, mIsByPermanentButton,
                 mNegativeSoftwareVerticalOffset, mNegativeVerticalOffsetNotTopAnchored,
                 mCurrentScreenRotation, visibleDisplayFrame, sizingPadding, anchorView, popupWidth,
-                popupHeight, showFromBottom, anchorView.getRootView().getLayoutDirection());
+                popupHeight, anchorView.getRootView().getLayoutDirection());
 
         mPopup.setContentView(contentView);
         // Note(david@vivaldi.com): In Android 7 there is a bug with NO GRAVITY. In Vivaldi we can
@@ -323,7 +313,7 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuAdapter.OnCl
     static int[] getPopupPosition(int[] tempLocation, boolean isByPermanentButton,
             int negativeSoftwareVerticalOffset, int negativeVerticalOffsetNotTopAnchored,
             int screenRotation, Rect appRect, Rect padding, View anchorView, int popupWidth,
-            int popupHeight, boolean isAnchorAtBottom, int viewLayoutDirection) {
+            int popupHeight, int viewLayoutDirection) {
         anchorView.getLocationInWindow(tempLocation);
         int anchorViewX = tempLocation[0];
         int anchorViewY = tempLocation[1];
@@ -353,19 +343,6 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuAdapter.OnCl
             offsets[1] = -padding.bottom;
         } else {
             offsets[1] = -negativeSoftwareVerticalOffset;
-
-            // If the anchor is at the bottom of the screen, align the popup with the bottom of the
-            // anchor. The anchor may not be fully visible, so
-            // (appRect.bottom - anchorViewLocationOnScreenY) is used to determine the visible
-            // bottom edge of the anchor view.
-            if (isAnchorAtBottom) {
-                anchorView.getLocationOnScreen(tempLocation);
-                int anchorViewLocationOnScreenY = tempLocation[1];
-                offsets[1] += appRect.bottom - anchorViewLocationOnScreenY - popupHeight;
-                offsets[1] -= negativeVerticalOffsetNotTopAnchored;
-                offsets[1] += padding.bottom;
-            }
-
             if (viewLayoutDirection != View.LAYOUT_DIRECTION_RTL) {
                 offsets[0] = anchorView.getWidth() - popupWidth;
             }

@@ -5,28 +5,48 @@
 package org.chromium.chrome.browser.share.share_sheet;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.drawable.Drawable;
+import android.net.Uri;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
 import android.widget.ImageView;
+import android.widget.ImageView.ScaleType;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
+import androidx.annotation.ColorInt;
+import androidx.annotation.Nullable;
+import androidx.appcompat.content.res.AppCompatResources;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.share.share_sheet.ShareSheetPropertyModelBuilder.ContentType;
+import org.chromium.chrome.browser.ui.favicon.IconType;
+import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
+import org.chromium.components.browser_ui.share.ShareParams;
+import org.chromium.components.browser_ui.widget.RoundedCornerImageView;
+import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.ui.modelutil.LayoutViewBuilder;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.SimpleRecyclerViewAdapter;
+import org.chromium.url.GURL;
 
+import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Bottom sheet content to display a 2-row custom share sheet.
@@ -34,57 +54,69 @@ import java.util.List;
 class ShareSheetBottomSheetContent implements BottomSheetContent, OnItemClickListener {
     private static final int SHARE_SHEET_ITEM = 0;
     private final Context mContext;
+    private final LargeIconBridge mIconBridge;
     private final ShareSheetCoordinator mShareSheetCoordinator;
-    private ViewGroup mToolbarView;
     private ViewGroup mContentView;
+    private ShareParams mParams;
+    private String mUrl;
+    private ScrollView mContentScrollableView;
 
     /**
      * Creates a ShareSheetBottomSheetContent (custom share sheet) opened from the given activity.
      *
      * @param context The context the share sheet was launched from.
-     * @param shareSheetCoordinator The Cooredinator that instatiated this BottomSheetContent.
+     * @param iconBridge The {@link LargeIconBridge} to generate the icon in the preview.
+     * @param shareSheetCoordinator The Coordinator that instantiated this BottomSheetContent.
+     * @param params The {@link ShareParams} for the current share.
      */
-    ShareSheetBottomSheetContent(Context context, ShareSheetCoordinator shareSheetCoordinator) {
+    ShareSheetBottomSheetContent(Context context, LargeIconBridge iconBridge,
+            ShareSheetCoordinator shareSheetCoordinator, ShareParams params) {
         mContext = context;
+        mIconBridge = iconBridge;
         mShareSheetCoordinator = shareSheetCoordinator;
+        mParams = params;
         createContentView();
     }
 
     private void createContentView() {
         mContentView = (ViewGroup) LayoutInflater.from(mContext).inflate(
                 R.layout.share_sheet_content, null);
+        mContentScrollableView = mContentView.findViewById(R.id.share_sheet_scrollview);
     }
 
     /*
      * Creates a new share sheet view with two rows based on the provided PropertyModels.
      *
      * @param activity The activity the share sheet belongs to.
-     * @param topRowModels The PropertyModels used to build the top row.
-     * @param bottomRowModels The PropertyModels used to build the bottom row.
-     * @param message The message to show on top of the share sheet.
+     * @param firstPartyModels The PropertyModels used to build the top row.
+     * @param thirdPartyModels The PropertyModels used to build the bottom row.
+     * @param contentTypes The {@link Set} of {@link ContentType}s to build the preview.
+     * @param fileContentType The MIME type of the file(s) being shared.
      */
-    void createRecyclerViews(
-            List<PropertyModel> topRowModels, List<PropertyModel> bottomRowModels, String message) {
-        if (!message.isEmpty()) {
-            TextView messageView = this.getContentView().findViewById(R.id.message);
-            messageView.setVisibility(View.VISIBLE);
-            messageView.setText(message);
-        }
+    void createRecyclerViews(List<PropertyModel> firstPartyModels,
+            List<PropertyModel> thirdPartyModels, Set<Integer> contentTypes,
+            String fileContentType) {
+        createPreview(contentTypes, fileContentType);
+        createFirstPartyRecyclerViews(firstPartyModels);
 
-        RecyclerView topRow = this.getContentView().findViewById(R.id.share_sheet_chrome_apps);
-        if (topRowModels != null && topRowModels.size() > 0) {
+        RecyclerView thirdParty = this.getContentView().findViewById(R.id.share_sheet_other_apps);
+        populateView(
+                thirdPartyModels, this.getContentView().findViewById(R.id.share_sheet_other_apps));
+        thirdParty.addOnScrollListener(
+                new ScrollEventReporter("SharingHubAndroid.ThirdPartyAppsScrolled"));
+    }
+
+    void createFirstPartyRecyclerViews(List<PropertyModel> firstPartyModels) {
+        RecyclerView firstPartyRow =
+                this.getContentView().findViewById(R.id.share_sheet_chrome_apps);
+        if (firstPartyModels != null && firstPartyModels.size() > 0) {
             View divider = this.getContentView().findViewById(R.id.share_sheet_divider);
             divider.setVisibility(View.VISIBLE);
-            topRow.setVisibility(View.VISIBLE);
-            populateView(topRowModels, topRow);
-            topRow.addOnScrollListener(new ScrollEventReporter("SharingHubAndroid.TopRowScrolled"));
+            firstPartyRow.setVisibility(View.VISIBLE);
+            populateView(firstPartyModels, firstPartyRow);
+            firstPartyRow.addOnScrollListener(
+                    new ScrollEventReporter("SharingHubAndroid.FirstPartyAppsScrolled"));
         }
-
-        RecyclerView bottomRow = this.getContentView().findViewById(R.id.share_sheet_other_apps);
-        populateView(
-                bottomRowModels, this.getContentView().findViewById(R.id.share_sheet_other_apps));
-        bottomRow.addOnScrollListener(
-                new ScrollEventReporter("SharingHubAndroid.BottomRowScrolled"));
     }
 
     private void populateView(List<PropertyModel> models, RecyclerView view) {
@@ -114,6 +146,161 @@ class ShareSheetBottomSheetContent implements BottomSheetContent, OnItemClickLis
         }
     }
 
+    private void createPreview(Set<Integer> contentTypes, String fileContentType) {
+        // Default preview is to show title + url.
+        String title = mParams.getTitle();
+        String subtitle =
+                UrlFormatter.formatUrlForDisplayOmitSchemeOmitTrivialSubdomains(mParams.getUrl());
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_SHARING_HUB_V15)) {
+            fetchFavicon(mParams.getUrl());
+            setTitleStyle(R.style.TextAppearance_TextMediumThick_Primary);
+            setTextForPreview(title, subtitle);
+            return;
+        }
+
+        if (contentTypes.contains(ContentType.IMAGE)) {
+            setImageForPreviewFromUri(mParams.getFileUris().get(0));
+            if (TextUtils.isEmpty(subtitle)) {
+                subtitle = getFileType(fileContentType);
+            }
+        } else if (contentTypes.contains(ContentType.OTHER_FILE_TYPE)) {
+            setDefaultIconForPreview(
+                    AppCompatResources.getDrawable(mContext, R.drawable.generic_file));
+            if (TextUtils.isEmpty(subtitle)) {
+                subtitle = getFileType(fileContentType);
+            }
+        } else if (contentTypes.size() == 1
+                && (contentTypes.contains(ContentType.HIGHLIGHTED_TEXT)
+                        || contentTypes.contains(ContentType.TEXT))) {
+            setDefaultIconForPreview(
+                    AppCompatResources.getDrawable(mContext, R.drawable.text_icon));
+            title = "";
+            subtitle = mParams.getText();
+            setSubtitleMaxLines(2);
+        } else {
+            fetchFavicon(mParams.getUrl());
+        }
+
+        if (contentTypes.contains(ContentType.TEXT)
+                && contentTypes.contains(ContentType.LINK_PAGE_NOT_VISIBLE)) {
+            title = mParams.getText();
+            setTitleStyle(R.style.TextAppearance_TextMedium_Primary);
+        } else {
+            setTitleStyle(R.style.TextAppearance_TextMediumThick_Primary);
+        }
+
+        setTextForPreview(title, subtitle);
+    }
+
+    private void setImageForPreviewFromUri(Uri imageUri) {
+        try {
+            Bitmap bitmap =
+                    ApiCompatibilityUtils.getBitmapByUri(mContext.getContentResolver(), imageUri);
+            RoundedCornerImageView imageView =
+                    this.getContentView().findViewById(R.id.image_preview);
+            imageView.setImageBitmap(bitmap);
+            imageView.setRoundedFillColor(ApiCompatibilityUtils.getColor(
+                    mContext.getResources(), R.color.default_icon_color));
+            imageView.setScaleType(ScaleType.FIT_CENTER);
+        } catch (IOException e) {
+            // If no image preview available, don't show a preview.
+        }
+    }
+
+    private void setTitleStyle(int resId) {
+        TextView titleView = this.getContentView().findViewById(R.id.title_preview);
+        ApiCompatibilityUtils.setTextAppearance(titleView, resId);
+    }
+
+    private void setTextForPreview(String title, String subtitle) {
+        TextView titleView = this.getContentView().findViewById(R.id.title_preview);
+        titleView.setText(title);
+        TextView subtitleView = this.getContentView().findViewById(R.id.subtitle_preview);
+        subtitleView.setText(subtitle);
+
+        // If there is no title, have subtitleView take up the whole area.
+        if (TextUtils.isEmpty(title)) {
+            titleView.setVisibility(View.GONE);
+        }
+    }
+
+    private void setSubtitleMaxLines(int maxLines) {
+        TextView subtitleView = this.getContentView().findViewById(R.id.subtitle_preview);
+        subtitleView.setMaxLines(maxLines);
+    }
+
+    private void setDefaultIconForPreview(Drawable drawable) {
+        ImageView imageView = this.getContentView().findViewById(R.id.image_preview);
+        imageView.setImageDrawable(drawable);
+        centerIcon(imageView);
+    }
+
+    private void centerIcon(ImageView imageView) {
+        imageView.setScaleType(ScaleType.FIT_XY);
+        int padding = mContext.getResources().getDimensionPixelSize(
+                R.dimen.sharing_hub_preview_icon_padding);
+        imageView.setPadding(padding, padding, padding, padding);
+    }
+
+    /**
+     * Fetches the favicon for the given url.
+     **/
+    private void fetchFavicon(String url) {
+        if (!url.isEmpty()) {
+            mUrl = url;
+            mIconBridge.getLargeIconForUrl(new GURL(url),
+                    mContext.getResources().getDimensionPixelSize(R.dimen.default_favicon_min_size),
+                    this::onFaviconAvailable);
+        }
+    }
+
+    /**
+     * Passed as the callback to {@link LargeIconBridge#getLargeIconForStringUrl}
+     * by showShareSheetWithMessage.
+     */
+    private void onFaviconAvailable(@Nullable Bitmap icon, @ColorInt int fallbackColor,
+            boolean isColorDefault, @IconType int iconType) {
+        // If we didn't get a favicon, use the generic favicon instead.
+        if (icon == null) {
+            setDefaultIconForPreview(
+                    AppCompatResources.getDrawable(mContext, R.drawable.generic_favicon));
+            RecordUserAction.record("SharingHubAndroid.GenericFaviconShown");
+        } else {
+            int size = mContext.getResources().getDimensionPixelSize(
+                    R.dimen.sharing_hub_preview_inner_icon_size);
+            Bitmap scaledIcon = Bitmap.createScaledBitmap(icon, size, size, true);
+            ImageView imageView = this.getContentView().findViewById(R.id.image_preview);
+            imageView.setImageBitmap(scaledIcon);
+            centerIcon(imageView);
+            RecordUserAction.record("SharingHubAndroid.LinkFaviconShown");
+        }
+    }
+
+    private String getFileType(String mimeType) {
+        if (!mimeType.contains("/")) {
+            return "";
+        }
+        String supertype = mimeType.split("/", 2)[0];
+        // Accepted MIME types are drawn from
+        // //chrome/browser/webshare/share_service_impl.cc
+        switch (supertype) {
+            case "audio":
+                return mContext.getResources().getString(
+                        R.string.sharing_hub_audio_preview_subtitle);
+            case "image":
+                return mContext.getResources().getString(
+                        R.string.sharing_hub_image_preview_subtitle);
+            case "text":
+                return mContext.getResources().getString(
+                        R.string.sharing_hub_text_preview_subtitle);
+            case "video":
+                return mContext.getResources().getString(
+                        R.string.sharing_hub_video_preview_subtitle);
+            default:
+                return "";
+        }
+    }
+
     /**
      * One-shot reporter that records the first time the user scrolls a {@link RecyclerView}.
      */
@@ -140,11 +327,11 @@ class ShareSheetBottomSheetContent implements BottomSheetContent, OnItemClickLis
         return mContentView;
     }
 
-    protected View getTopRowView() {
+    protected View getFirstPartyView() {
         return mContentView.findViewById(R.id.share_sheet_chrome_apps);
     }
 
-    protected View getBottomRowView() {
+    protected View getThirdPartyView() {
         return mContentView.findViewById(R.id.share_sheet_other_apps);
     }
 
@@ -155,6 +342,10 @@ class ShareSheetBottomSheetContent implements BottomSheetContent, OnItemClickLis
 
     @Override
     public int getVerticalScrollOffset() {
+        if (mContentScrollableView != null) {
+            return mContentScrollableView.getScrollY();
+        }
+
         return 0;
     }
 

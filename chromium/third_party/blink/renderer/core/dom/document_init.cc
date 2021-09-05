@@ -29,6 +29,7 @@
 
 #include "third_party/blink/renderer/core/dom/document_init.h"
 
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_implementation.h"
@@ -102,6 +103,11 @@ DocumentInit& DocumentInit::WithWindow(LocalDOMWindow* window,
   window_ = window;
   execution_context_ = window;
   owner_document_ = owner_document;
+  return *this;
+}
+
+DocumentInit& DocumentInit::ForInitialEmptyDocument(bool empty) {
+  is_initial_empty_document_ = empty;
   return *this;
 }
 
@@ -246,6 +252,11 @@ V0CustomElementRegistrationContext* DocumentInit::RegistrationContext(
 DocumentInit& DocumentInit::WithWebBundleClaimedUrl(
     const KURL& web_bundle_claimed_url) {
   web_bundle_claimed_url_ = web_bundle_claimed_url;
+  return *this;
+}
+
+DocumentInit& DocumentInit::WithUkmSourceId(ukm::SourceId ukm_source_id) {
+  ukm_source_id_ = ukm_source_id;
   return *this;
 }
 

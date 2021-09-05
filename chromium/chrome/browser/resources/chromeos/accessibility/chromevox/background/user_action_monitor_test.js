@@ -4,20 +4,11 @@
 
 // Include test fixture.
 GEN_INCLUDE(['../testing/chromevox_next_e2e_test_base.js']);
-GEN_INCLUDE(['../testing/mock_feedback.js']);
 
 /**
  * Test fixture for UserActionMonitor.
  */
 ChromeVoxUserActionMonitorTest = class extends ChromeVoxNextE2ETest {
-  /** @return {!MockFeedback} */
-  createMockFeedback() {
-    const mockFeedback =
-        new MockFeedback(this.newCallback(), this.newCallback.bind(this));
-    mockFeedback.install();
-    return mockFeedback;
-  }
-
   /**
    * Create mock event object.
    * @param {number} keyCode
@@ -72,7 +63,7 @@ TEST_F('ChromeVoxUserActionMonitorTest', 'UnitTest', function() {
     const actions = [
       {
         type: 'key_sequence',
-        value: {'keys': {'keyCode': [32 /* Space */]}},
+        value: {'keys': {'keyCode': [KeyCode.SPACE]}},
       },
       {type: 'braille', value: 'jumpToTop'},
       {type: 'gesture', value: 'swipeUp1'}
@@ -102,7 +93,7 @@ TEST_F('ChromeVoxUserActionMonitorTest', 'UnitTest', function() {
 TEST_F('ChromeVoxUserActionMonitorTest', 'ActionUnitTest', function() {
   this.runWithLoadedTree(this.simpleDoc, function() {
     const keySequenceActionOne = UserActionMonitor.Action.fromActionInfo(
-        {type: 'key_sequence', value: {keys: {keyCode: [32 /* Space */]}}});
+        {type: 'key_sequence', value: {keys: {keyCode: [KeyCode.SPACE]}}});
     const keySequenceActionTwo = new UserActionMonitor.Action(
         'key_sequence', new KeySequence(this.createMockKeyDownEvent(65)));
     const gestureActionOne = UserActionMonitor.Action.fromActionInfo(
@@ -118,7 +109,7 @@ TEST_F('ChromeVoxUserActionMonitorTest', 'ActionUnitTest', function() {
     assertFalse(gestureActionOne.equals(gestureActionTwo));
 
     const cloneKeySequenceActionOne = UserActionMonitor.Action.fromActionInfo(
-        {type: 'key_sequence', value: {keys: {keyCode: [32 /* Space */]}}});
+        {type: 'key_sequence', value: {keys: {keyCode: [KeyCode.SPACE]}}});
     const cloneGestureActionOne =
         new UserActionMonitor.Action('gesture', 'swipeUp1');
     assertTrue(keySequenceActionOne.equals(cloneKeySequenceActionOne));
@@ -134,7 +125,7 @@ TEST_F('ChromeVoxUserActionMonitorTest', 'Errors', function() {
     const actions = [
       {
         type: 'key_sequence',
-        value: {'keys': {'keyCode': [32 /* Space */]}},
+        value: {'keys': {'keyCode': [KeyCode.SPACE]}},
       },
     ];
     const onFinished = () => finished = true;
@@ -256,20 +247,19 @@ TEST_F('ChromeVoxUserActionMonitorTest', 'SingleKey', function() {
   this.runWithLoadedTree(this.simpleDoc, function() {
     const keyboardHandler = new BackgroundKeyboardHandler();
     let finished = false;
-    const actions = [
-      {type: 'key_sequence', value: {'keys': {'keyCode': [32 /* Space */]}}}
-    ];
+    const actions =
+        [{type: 'key_sequence', value: {'keys': {'keyCode': [KeyCode.SPACE]}}}];
     const onFinished = () => finished = true;
 
     ChromeVoxState.instance.createUserActionMonitor(actions, onFinished);
-    keyboardHandler.onKeyDown(this.createMockKeyDownEvent(37 /* ArrowLeft */));
-    keyboardHandler.onKeyUp(this.createMockKeyDownEvent(37 /* ArrowLeft */));
+    keyboardHandler.onKeyDown(this.createMockKeyDownEvent(KeyCode.LEFT));
+    keyboardHandler.onKeyUp(this.createMockKeyDownEvent(KeyCode.LEFT));
     assertFalse(finished);
-    keyboardHandler.onKeyDown(this.createMockKeyDownEvent(39 /* ArrowRight */));
-    keyboardHandler.onKeyUp(this.createMockKeyDownEvent(39 /* ArrowRight */));
+    keyboardHandler.onKeyDown(this.createMockKeyDownEvent(KeyCode.RIGHT));
+    keyboardHandler.onKeyUp(this.createMockKeyDownEvent(KeyCode.RIGHT));
     assertFalse(finished);
-    keyboardHandler.onKeyDown(this.createMockKeyDownEvent(32 /* Space */));
-    keyboardHandler.onKeyUp(this.createMockKeyDownEvent(32 /* Space */));
+    keyboardHandler.onKeyDown(this.createMockKeyDownEvent(KeyCode.SPACE));
+    keyboardHandler.onKeyUp(this.createMockKeyDownEvent(KeyCode.SPACE));
     assertTrue(finished);
   });
 });
@@ -282,26 +272,26 @@ TEST_F('ChromeVoxUserActionMonitorTest', 'MultipleKeys', function() {
     let finished = false;
     const actions = [{
       type: 'key_sequence',
-      value: {'cvoxModifier': true, 'keys': {'keyCode': [79, 66]}}
+      value: {'cvoxModifier': true, 'keys': {'keyCode': [KeyCode.O, KeyCode.B]}}
     }];
     const onFinished = () => finished = true;
 
     ChromeVoxState.instance.createUserActionMonitor(actions, onFinished);
-    keyboardHandler.onKeyDown(this.createMockKeyDownEvent(79 /* O */));
-    keyboardHandler.onKeyUp(this.createMockKeyDownEvent(79 /* O */));
+    keyboardHandler.onKeyDown(this.createMockKeyDownEvent(KeyCode.O));
+    keyboardHandler.onKeyUp(this.createMockKeyDownEvent(KeyCode.O));
     assertFalse(finished);
-    keyboardHandler.onKeyDown(this.createMockKeyDownEvent(66 /* B */));
-    keyboardHandler.onKeyUp(this.createMockKeyDownEvent(66 /* B */));
+    keyboardHandler.onKeyDown(this.createMockKeyDownEvent(KeyCode.B));
+    keyboardHandler.onKeyUp(this.createMockKeyDownEvent(KeyCode.B));
     assertFalse(finished);
-    keyboardHandler.onKeyDown(this.createMockKeyDownEvent(91 /* Search */));
-    keyboardHandler.onKeyUp(this.createMockKeyDownEvent(91 /* Search */));
+    keyboardHandler.onKeyDown(this.createMockKeyDownEvent(KeyCode.SEARCH));
+    keyboardHandler.onKeyUp(this.createMockKeyDownEvent(KeyCode.SEARCH));
     assertFalse(finished);
-    keyboardHandler.onKeyDown(this.createMockKeyDownEvent(
-        79, {searchKeyHeld: true} /* Search + O */));
+    keyboardHandler.onKeyDown(
+        this.createMockKeyDownEvent(KeyCode.O, {searchKeyHeld: true}));
     assertFalse(finished);
-    keyboardHandler.onKeyUp(this.createMockKeyDownEvent(
-        79, {searchKeyHeld: true} /* Search + O */));
-    keyboardHandler.onKeyDown(this.createMockKeyDownEvent(66 /* B */));
+    keyboardHandler.onKeyUp(
+        this.createMockKeyDownEvent(KeyCode.O, {searchKeyHeld: true}));
+    keyboardHandler.onKeyDown(this.createMockKeyDownEvent(KeyCode.B));
     assertTrue(finished);
   });
 });
@@ -315,16 +305,14 @@ TEST_F('ChromeVoxUserActionMonitorTest', 'MultipleKeySequences', function() {
       {
         type: 'key_sequence',
         value: {
-          'keys':
-              {'altKey': [true], 'shiftKey': [true], 'keyCode': [76 /* L */]}
+          'keys': {'altKey': [true], 'shiftKey': [true], 'keyCode': [KeyCode.L]}
         },
         afterActionMsg: 'You pressed the first sequence!'
       },
       {
         type: 'key_sequence',
         value: {
-          'keys':
-              {'altKey': [true], 'shiftKey': [true], 'keyCode': [83 /* S */]}
+          'keys': {'altKey': [true], 'shiftKey': [true], 'keyCode': [KeyCode.S]}
         },
         afterActionMsg: 'You pressed the second sequence!'
       }
@@ -367,22 +355,21 @@ TEST_F('ChromeVoxUserActionMonitorTest', 'BlockCommands', function() {
     const actions = [
       {
         type: 'key_sequence',
-        value:
-            {'cvoxModifier': true, 'keys': {'keyCode': [39 /* ArrowRight */]}}
+        value: {'cvoxModifier': true, 'keys': {'keyCode': [KeyCode.RIGHT]}}
       },
       {
         type: 'key_sequence',
-        value: {'cvoxModifier': true, 'keys': {'keyCode': [37 /* ArrowLeft */]}}
+        value: {'cvoxModifier': true, 'keys': {'keyCode': [KeyCode.LEFT]}}
       }
     ];
     const onFinished = () => finished = true;
 
     const nextObject =
-        this.createMockKeyDownEvent(39 /* ArrowRight */, {searchKeyHeld: true});
+        this.createMockKeyDownEvent(KeyCode.RIGHT, {searchKeyHeld: true});
     const nextLine =
         this.createMockKeyDownEvent(40 /* ArrowDown */, {searchKeyHeld: true});
     const previousObject =
-        this.createMockKeyDownEvent(37 /* ArrowLeft */, {searchKeyHeld: true});
+        this.createMockKeyDownEvent(KeyCode.LEFT, {searchKeyHeld: true});
     const previousLine =
         this.createMockKeyDownEvent(38 /* ArrowUp */, {searchKeyHeld: true});
 
@@ -418,5 +405,39 @@ TEST_F('ChromeVoxUserActionMonitorTest', 'BlockCommands', function() {
         })
         .expectSpeech('Start')
         .replay();
+  });
+});
+
+// Tests that a user can close ChromeVox (Ctrl + Alt + Z) when UserActionMonitor
+// is active.
+TEST_F('ChromeVoxUserActionMonitorTest', 'CloseChromeVox', function() {
+  this.runWithLoadedTree(this.simpleDoc, function() {
+    const keyboardHandler = new BackgroundKeyboardHandler();
+    let finished = false;
+    let closed = false;
+    const actions =
+        [{type: 'key_sequence', value: {'keys': {'keyCode': [KeyCode.A]}}}];
+    const onFinished = () => finished = true;
+    ChromeVoxState.instance.createUserActionMonitor(actions, onFinished);
+    // Swap in the below function so we don't actually close ChromeVox.
+    UserActionMonitor.closeChromeVox_ = () => {
+      closed = true;
+    };
+
+    assertFalse(closed);
+    assertFalse(finished);
+    keyboardHandler.onKeyDown(
+        this.createMockKeyDownEvent(KeyCode.CONTROL, {ctrlKey: true}));
+    assertFalse(closed);
+    assertFalse(finished);
+    keyboardHandler.onKeyDown(this.createMockKeyDownEvent(
+        KeyCode.ALT, {ctrlKey: true, altKey: true}));
+    assertFalse(closed);
+    assertFalse(finished);
+    keyboardHandler.onKeyDown(
+        this.createMockKeyDownEvent(KeyCode.Z, {ctrlKey: true, altKey: true}));
+    assertTrue(closed);
+    // |finished| remains false since we didn't press the expected key sequence.
+    assertFalse(finished);
   });
 });

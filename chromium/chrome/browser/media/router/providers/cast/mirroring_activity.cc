@@ -20,12 +20,12 @@
 #include "chrome/browser/media/router/data_decoder_util.h"
 #include "chrome/browser/media/router/providers/cast/cast_activity_manager.h"
 #include "chrome/browser/media/router/providers/cast/cast_internal_message_util.h"
-#include "chrome/common/media_router/discovery/media_sink_internal.h"
-#include "chrome/common/media_router/mojom/media_router.mojom.h"
-#include "chrome/common/media_router/route_request_result.h"
 #include "components/cast_channel/cast_message_util.h"
 #include "components/cast_channel/cast_socket.h"
 #include "components/cast_channel/enum_table.h"
+#include "components/media_router/common/discovery/media_sink_internal.h"
+#include "components/media_router/common/mojom/media_router.mojom.h"
+#include "components/media_router/common/route_request_result.h"
 #include "components/mirroring/mojom/session_parameters.mojom-forward.h"
 #include "components/mirroring/mojom/session_parameters.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -280,12 +280,7 @@ void MirroringActivity::OnInternalMessage(
   DVLOG(2) << "Relaying internal message from receiver: " << message.message;
   mirroring::mojom::CastMessagePtr ptr = mirroring::mojom::CastMessage::New();
   ptr->message_namespace = message.message_namespace;
-
-  // TODO(jrw): This line re-serializes a JSON string that was parsed by the
-  // caller of this method.  Yuck!  This is probably a necessary evil as long as
-  // the extension needs to communicate with the mirroring service.
   CHECK(base::JSONWriter::Write(message.message, &ptr->json_format_data));
-
   channel_to_service_->Send(std::move(ptr));
 }
 
@@ -308,8 +303,6 @@ void MirroringActivity::HandleParseJsonResult(
 
   const std::string message_namespace = GetMirroringNamespace(*result.value);
 
-  // TODO(jrw): Can some of this logic be shared with
-  // AppActivity::SendAppMessageToReceiver?
   cast::channel::CastMessage cast_message = cast_channel::CreateCastMessage(
       message_namespace, std::move(*result.value),
       message_handler_->sender_id(), session->transport_id());
@@ -323,13 +316,16 @@ void MirroringActivity::OnSessionSet(const CastSession& session) {
   auto cast_source = CastMediaSource::FromMediaSource(route_.media_source());
   DCHECK(cast_source);
 
-  // Derive session type from capabilities and media source.
+  // Derive session type by intersecting the sink capabilities with what the
+  // media source can provide.
   const bool has_audio = (cast_data_.capabilities &
                           static_cast<uint8_t>(cast_channel::AUDIO_OUT)) != 0 &&
-                         cast_source->allow_audio_capture();
+                         cast_source->ProvidesStreamingAudioCapture();
   const bool has_video = (cast_data_.capabilities &
                           static_cast<uint8_t>(cast_channel::VIDEO_OUT)) != 0;
-  DCHECK(has_audio || has_video);
+  if (!has_audio && !has_video) {
+    return;
+  }
   const SessionType session_type =
       has_audio && has_video
           ? SessionType::AUDIO_AND_VIDEO

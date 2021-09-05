@@ -102,7 +102,6 @@ class CONTENT_EXPORT PassthroughTouchEventQueue {
                        const ui::LatencyInfo& latency_info,
                        const uint32_t unique_touch_event_id,
                        bool should_stop_timeout_monitor);
-  void OnGestureScrollEvent(const GestureEventWithLatencyInfo& gesture_event);
 
   void OnGestureEventAck(const GestureEventWithLatencyInfo& event,
                          blink::mojom::InputEventResultState ack_result);
@@ -236,7 +235,8 @@ class CONTENT_EXPORT PassthroughTouchEventQueue {
   // Handles touch event forwarding and ack'ed event dispatch.
   PassthroughTouchEventQueueClient* client_;
 
-  // Whether the renderer has at least one touch handler.
+  // Whether the renderer has at least one consumer of touch events, e.g. a JS
+  // event handler or hit-testable scrollbars
   bool has_handlers_;
 
   // Whether any pointer in the touch sequence may have having a consumer.

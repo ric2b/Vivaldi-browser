@@ -131,6 +131,23 @@ bool AppRegistrar::HasExternalAppWithInstallSource(
       profile()->GetPrefs(), app_id, install_source);
 }
 
+GURL AppRegistrar::GetAppLaunchUrl(const AppId& app_id) const {
+  const GURL& start_url = GetAppStartUrl(app_id);
+  const std::string* launch_query_params = GetAppLaunchQueryParams(app_id);
+  if (!start_url.is_valid() || !launch_query_params)
+    return start_url;
+
+  GURL::Replacements replacements;
+  if (start_url.query_piece().empty()) {
+    replacements.SetQueryStr(*launch_query_params);
+    return start_url.ReplaceComponents(replacements);
+  }
+
+  std::string query_params = start_url.query() + "&" + *launch_query_params;
+  replacements.SetQueryStr(query_params);
+  return start_url.ReplaceComponents(replacements);
+}
+
 extensions::BookmarkAppRegistrar* AppRegistrar::AsBookmarkAppRegistrar() {
   return nullptr;
 }
@@ -142,9 +159,9 @@ GURL AppRegistrar::GetAppScope(const AppId& app_id) const {
   if (base::FeatureList::IsEnabled(
           features::kDesktopPWAsTabStripLinkCapturing) &&
       IsInExperimentalTabbedWindowMode(app_id)) {
-    return GetAppLaunchURL(app_id).GetOrigin();
+    return GetAppStartUrl(app_id).GetOrigin();
   }
-  return GetAppLaunchURL(app_id).GetWithoutFilename();
+  return GetAppStartUrl(app_id).GetWithoutFilename();
 }
 
 base::Optional<AppId> AppRegistrar::FindAppWithUrlInScope(

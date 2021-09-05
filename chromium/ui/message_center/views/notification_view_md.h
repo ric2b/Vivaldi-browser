@@ -48,6 +48,7 @@ class MESSAGE_CENTER_EXPORT NotificationMdTextButton
 
   // views::MdTextButton:
   void UpdateBackgroundColor() override;
+  void OnThemeChanged() override;
 
   const base::Optional<base::string16>& placeholder() const {
     return placeholder_;
@@ -59,8 +60,11 @@ class MESSAGE_CENTER_EXPORT NotificationMdTextButton
     return label()->GetEnabledColor();
   }
 
+  void OverrideTextColor(base::Optional<SkColor> text_color);
+
  private:
   base::Optional<base::string16> placeholder_;
+  base::Optional<SkColor> text_color_;
 };
 
 // CompactTitleMessageView shows notification title and message in a single
@@ -87,7 +91,7 @@ class CompactTitleMessageView : public views::View {
 
 class LargeImageView : public views::View {
  public:
-  LargeImageView();
+  explicit LargeImageView(const gfx::Size& max_size);
   ~LargeImageView() override;
 
   void SetImage(const gfx::ImageSkia& image);
@@ -99,6 +103,8 @@ class LargeImageView : public views::View {
  private:
   gfx::Size GetResizedImageSize();
 
+  gfx::Size max_size_;
+  gfx::Size min_size_;
   gfx::ImageSkia image_;
 
   DISALLOW_COPY_AND_ASSIGN(LargeImageView);
@@ -126,6 +132,7 @@ class NotificationInputContainerMD : public views::InkDropHostView,
   std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
   SkColor GetInkDropBaseColor() const override;
   void OnThemeChanged() override;
+  void Layout() override;
 
   // Overridden from views::TextfieldController:
   bool HandleKeyEvent(views::Textfield* sender,
@@ -208,6 +215,7 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
   FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, AppNameWebNotification);
   FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, CreateOrUpdateTest);
   FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, ExpandLongMessage);
+  FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, InkDropClipRect);
   FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, InlineSettings);
   FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest,
                            InlineSettingsInkDropAnimation);
@@ -262,6 +270,9 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
   void ToggleExpanded();
   void UpdateViewForExpandedState(bool expanded);
   void ToggleInlineSettings(const ui::Event& event);
+  void UpdateHeaderViewBackgroundColor();
+  SkColor GetNotificationHeaderViewBackgroundColor() const;
+  void UpdateActionButtonsRowBackground();
 
   // Returns the list of children which need to have their layers created or
   // destroyed when the ink drop is visible.

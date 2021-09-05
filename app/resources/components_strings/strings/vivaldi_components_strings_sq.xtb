@@ -98,6 +98,7 @@
 <translation id="4235360514405112390">E vlefshme</translation>
 <translation id="4250431568374086873">Nuk është tërësisht e sigurt lidhja me faqen</translation>
 <translation id="4265872034478892965">Autorizohet nga administratori</translation>
+<translation id="4305666528087210886">Nuk hapet skedari</translation>
 <translation id="4312866146174492540">Bllokoj (standarde)</translation>
 <translation id="4356973930735388585">Te kjo faqja, piratët e internetit mund të tentojnë të instalojnë në kompjuter programe të rrezikshme që vjedhin ose fshijnë informacionet (për shembull, fotot, fjalëkalimet, mesazhet dhe kartat e kreditit).</translation>
 <translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
@@ -152,8 +153,9 @@
 <translation id="6165508094623778733">Mësoj më shumë</translation>
 <translation id="6177128806592000436">Nuk është e sigurt lidhja me faqen</translation>
 <translation id="6203231073485539293">Kontrolloni linjën e internetit</translation>
+<translation id="6225522625585012689">Vizitoni &lt;strong&gt;vivaldi://policy&lt;/strong&gt; për të parë listën e adresave URL të bllokuara dhe rregullat e tjera që aplikon administratori i sistemit.</translation>
 <translation id="625755898061068298">Zgjodhët t'i çaktivizoni vërejtjet për faqen.</translation>
-<translation id="6264485186158353794">Kthehem te faqja e sigurt</translation>
+<translation id="6264485186158353794">Mënjanoj rrezikun</translation>
 <translation id="6305205051461490394"><ph name="URL" /> është e paarritshme.</translation>
 <translation id="6321917430147971392">Kontrolloni parametrat DNS</translation>
 <translation id="6328639280570009161">Provoni të çaktivizoni parashikimin me rrjetin kompjuterik</translation>
@@ -201,7 +203,6 @@
 <translation id="8041940743680923270">Përdor standardin e përgjithshëm (Pyes)</translation>
 <translation id="808894953321890993">Ndryshoj fjalëkalimin</translation>
 <translation id="8119307142152921512">gjurmuesit dhe reklamat</translation>
-<translation id="8142868475871995937">Vizitoni &lt;strong&gt;vivaldi://policy&lt;/strong&gt; për të parë listën e zezë të URL-ve dhe normat e tjera që aplikon administratori i sistemit.</translation>
 <translation id="8149426793427495338">Kompjuteri hyri në gjendje mosgatishmërie.</translation>
 <translation id="8150722005171944719">Është i palexueshëm skedari në <ph name="URL" />. Mund të jetë fshirë, zhvendosur ose aksesi po pengohet nga autorizimet e skedarit.</translation>
 <translation id="8184538546369750125">Përdor standardin e përgjithshëm (Autorizoj)</translation>
@@ -224,6 +225,7 @@
 <translation id="9011424611726486705">Hap parametrat e faqes</translation>
 <translation id="9025348182339809926">(E pavlefshme)</translation>
 <translation id="9039213469156557790">Për më tepër, faqja nuk përmban resurse të pasigurta. Këto resurse mund të shihen nga të tjerët kalimthi dhe mund të modifikohen nga piratët e internetit për ndryshimin e funksioneve të faqes.</translation>
+<translation id="9062620674789239642">Mund të jetë zhvendosur, modifikuar ose fshirë.</translation>
 <translation id="9069693763241529744">E bllokuar nga shtesa</translation>
 <translation id="9169664750068251925">Gjithmonë bllokoj te kjo faqja</translation>
 <translation id="9180553614777056266">Bllokuesi i reklamave</translation>

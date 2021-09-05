@@ -28,15 +28,13 @@ x11::Future<x11::GetPropertyReply> GetWorkspace() {
 }  // namespace
 
 X11WorkspaceHandler::X11WorkspaceHandler(Delegate* delegate)
-    : xdisplay_(gfx::GetXDisplay()),
-      x_root_window_(ui::GetX11RootWindow()),
-      delegate_(delegate) {
+    : x_root_window_(ui::GetX11RootWindow()), delegate_(delegate) {
   DCHECK(delegate_);
   if (ui::X11EventSource::HasInstance())
     ui::X11EventSource::GetInstance()->AddXEventDispatcher(this);
 
   x_root_window_events_ = std::make_unique<ui::XScopedEventSelector>(
-      x_root_window_, PropertyChangeMask);
+      x_root_window_, x11::EventMask::PropertyChange);
 }
 
 X11WorkspaceHandler::~X11WorkspaceHandler() {

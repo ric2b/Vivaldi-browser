@@ -5,19 +5,19 @@
 package org.chromium.chrome.browser.privacy.settings;
 
 import android.os.Bundle;
+import android.text.SpannableString;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 
-import androidx.preference.CheckBoxPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 
 import org.chromium.base.BuildInfo;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.privacy.secure_dns.SecureDnsSettings;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -26,19 +26,24 @@ import org.chromium.chrome.browser.safe_browsing.settings.SecuritySettingsFragme
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
 import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
+import org.chromium.chrome.browser.signin.IdentityServicesProvider;
+import org.chromium.chrome.browser.sync.settings.GoogleServicesSettings;
+import org.chromium.chrome.browser.sync.settings.ManageSyncSettings;
 import org.chromium.chrome.browser.sync.settings.SyncAndServicesSettings;
 import org.chromium.chrome.browser.usage_stats.UsageStatsConsentDialog;
-import org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference;
+import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.prefs.PrefService;
+import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
 
-
+// Vivaldi
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * Fragment to keep track of the all the privacy related preferences.
@@ -48,19 +53,33 @@ public class PrivacySettings
     private static final String PREF_CAN_MAKE_PAYMENT = "can_make_payment";
     private static final String PREF_NETWORK_PREDICTIONS = "preload_pages";
     private static final String PREF_SECURE_DNS = "secure_dns";
-    // Vivaldi
-    private static final String PREF_CONTEXTUAL_SEARCH = "contextual_search";
     private static final String PREF_USAGE_STATS = "usage_stats_reporting";
     private static final String PREF_DO_NOT_TRACK = "do_not_track";
     private static final String PREF_SAFE_BROWSING = "safe_browsing";
     private static final String PREF_SYNC_AND_SERVICES_LINK = "sync_and_services_link";
     private static final String PREF_CLEAR_BROWSING_DATA = "clear_browsing_data";
+    // Vivaldi
+    private static final String PREF_CLEAR_SESSION_BROWSING_DATA = "clear_session_browsing_data";
+    private static final String PREF_CONTEXTUAL_SEARCH = "contextual_search";
+    private static final String PREF_WEBRTC_BROADCAST_IP = "webrtc_broadcast_ip";
+
     private static final String[] NEW_PRIVACY_PREFERENCE_ORDER = {PREF_CLEAR_BROWSING_DATA,
+            // Vivaldi
+            PREF_CLEAR_SESSION_BROWSING_DATA, PREF_CONTEXTUAL_SEARCH, PREF_WEBRTC_BROADCAST_IP,
             PREF_SAFE_BROWSING, PREF_CAN_MAKE_PAYMENT, PREF_NETWORK_PREDICTIONS, PREF_USAGE_STATS,
-            PREF_SECURE_DNS, PREF_CONTEXTUAL_SEARCH, PREF_DO_NOT_TRACK,
-            PREF_SYNC_AND_SERVICES_LINK};
+            PREF_SECURE_DNS, PREF_DO_NOT_TRACK, PREF_SYNC_AND_SERVICES_LINK};
 
     private ManagedPreferenceDelegate mManagedPreferenceDelegate;
+
+    /**
+     * Vivaldi
+     * Strings here must match what is defined in
+     * third_party/blink/public/common/peerconnection/webrtc_ip_handling_policy.cc
+     */
+    private static final String WEBRTC_IP_HANDLING_POLICY_DEFAULT =
+            "default";
+    private static final String WEBRTC_IP_HANDLING_POLICY_DISABLE_NON_PROXIED_UDP =
+            "disable_non_proxied_udp";
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -100,34 +119,76 @@ public class PrivacySettings
 
         mManagedPreferenceDelegate = createManagedPreferenceDelegate();
 
-        ChromeBaseCheckBoxPreference canMakePaymentPref =
-                (ChromeBaseCheckBoxPreference) findPreference(PREF_CAN_MAKE_PAYMENT);
+        ChromeSwitchPreference canMakePaymentPref =
+                (ChromeSwitchPreference) findPreference(PREF_CAN_MAKE_PAYMENT);
         canMakePaymentPref.setOnPreferenceChangeListener(this);
 
-        ChromeBaseCheckBoxPreference networkPredictionPref =
-                (ChromeBaseCheckBoxPreference) findPreference(PREF_NETWORK_PREDICTIONS);
+        ChromeSwitchPreference networkPredictionPref =
+                (ChromeSwitchPreference) findPreference(PREF_NETWORK_PREDICTIONS);
         networkPredictionPref.setChecked(
                 PrivacyPreferencesManager.getInstance().getNetworkPredictionEnabled());
         networkPredictionPref.setOnPreferenceChangeListener(this);
         networkPredictionPref.setManagedPreferenceDelegate(mManagedPreferenceDelegate);
 
         Preference secureDnsPref = findPreference(PREF_SECURE_DNS);
+        if (ChromeApplication.isVivaldi())
+            secureDnsPref.setVisible(true);
+        else
         secureDnsPref.setVisible(SecureDnsSettings.isUiEnabled());
 
         if (ChromeApplication.isVivaldi())
             getPreferenceScreen().removePreference(findPreference(PREF_SYNC_AND_SERVICES_LINK));
         else {
         Preference syncAndServicesLink = findPreference(PREF_SYNC_AND_SERVICES_LINK);
-        NoUnderlineClickableSpan linkSpan = new NoUnderlineClickableSpan(getResources(), view -> {
-            SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
-            settingsLauncher.launchSettingsActivity(getActivity(), SyncAndServicesSettings.class,
-                    SyncAndServicesSettings.createArguments(false));
-        });
-        syncAndServicesLink.setSummary(
-                SpanApplier.applySpans(getString(R.string.privacy_sync_and_services_link),
-                        new SpanApplier.SpanInfo("<link>", "</link>", linkSpan)));
+        syncAndServicesLink.setSummary(buildSyncAndServicesLink());
         }
+
+        // Vivaldi
+        ChromeSwitchPreference webRtcBroadcastIpPref =
+                (ChromeSwitchPreference) findPreference(PREF_WEBRTC_BROADCAST_IP);
+        if (webRtcBroadcastIpPref != null) {
+            webRtcBroadcastIpPref.setOnPreferenceChangeListener(this);
+            String policy = UserPrefs.get(Profile.getLastUsedRegularProfile()).getString(
+                    Pref.WEB_RTCIP_HANDLING_POLICY);
+            webRtcBroadcastIpPref.setChecked(policy.equals(WEBRTC_IP_HANDLING_POLICY_DEFAULT));
+        }
+
         updateSummaries();
+    }
+
+    private SpannableString buildSyncAndServicesLink() {
+        SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)) {
+            NoUnderlineClickableSpan syncAndServicesLink =
+                    new NoUnderlineClickableSpan(getResources(), v -> {
+                        settingsLauncher.launchSettingsActivity(getActivity(),
+                                SyncAndServicesSettings.class,
+                                SyncAndServicesSettings.createArguments(false));
+                    });
+            return SpanApplier.applySpans(getString(R.string.privacy_sync_and_services_link_legacy),
+                    new SpanApplier.SpanInfo("<link>", "</link>", syncAndServicesLink));
+        }
+
+        NoUnderlineClickableSpan servicesLink = new NoUnderlineClickableSpan(getResources(), v -> {
+            settingsLauncher.launchSettingsActivity(getActivity(), GoogleServicesSettings.class);
+        });
+        if (IdentityServicesProvider.get()
+                        .getIdentityManager(Profile.getLastUsedRegularProfile())
+                        .getPrimaryAccountInfo(ConsentLevel.SYNC)
+                == null) {
+            // Sync is off, show the string with one link to "Google Services".
+            return SpanApplier.applySpans(
+                    getString(R.string.privacy_sync_and_services_link_sync_off),
+                    new SpanApplier.SpanInfo("<link>", "</link>", servicesLink));
+        }
+        // Otherwise, show the string with both links to "Sync" and "Google Services".
+        NoUnderlineClickableSpan syncLink = new NoUnderlineClickableSpan(getResources(), v -> {
+            settingsLauncher.launchSettingsActivity(getActivity(), ManageSyncSettings.class,
+                    ManageSyncSettings.createArguments(false));
+        });
+        return SpanApplier.applySpans(getString(R.string.privacy_sync_and_services_link_sync_on),
+                new SpanApplier.SpanInfo("<link1>", "</link1>", syncLink),
+                new SpanApplier.SpanInfo("<link2>", "</link2>", servicesLink));
     }
 
     @Override
@@ -139,7 +200,13 @@ public class PrivacySettings
         } else if (PREF_NETWORK_PREDICTIONS.equals(key)) {
             PrivacyPreferencesManager.getInstance().setNetworkPredictionEnabled((boolean) newValue);
         }
-
+        // Vivaldi
+        else if (PREF_WEBRTC_BROADCAST_IP.equals(key)) {
+            UserPrefs.get(Profile.getLastUsedRegularProfile()).setString(
+                    Pref.WEB_RTCIP_HANDLING_POLICY, ((boolean) newValue)
+                        ? WEBRTC_IP_HANDLING_POLICY_DEFAULT
+                        : WEBRTC_IP_HANDLING_POLICY_DISABLE_NON_PROXIED_UDP);
+        }
         return true;
     }
 
@@ -155,8 +222,8 @@ public class PrivacySettings
     public void updateSummaries() {
         PrefService prefService = UserPrefs.get(Profile.getLastUsedRegularProfile());
 
-        CheckBoxPreference canMakePaymentPref =
-                (CheckBoxPreference) findPreference(PREF_CAN_MAKE_PAYMENT);
+        ChromeSwitchPreference canMakePaymentPref =
+                (ChromeSwitchPreference) findPreference(PREF_CAN_MAKE_PAYMENT);
         if (canMakePaymentPref != null) {
             canMakePaymentPref.setChecked(prefService.getBoolean(Pref.CAN_MAKE_PAYMENT_ENABLED));
         }
@@ -203,6 +270,14 @@ public class PrivacySettings
             contextualPref.setSummary(
                     ContextualSearchManager.isContextualSearchDisabled() ?
                             R.string.text_off : R.string.text_on);
+
+        Preference clearSessionBrowsingDataPref = findPreference(PREF_CLEAR_SESSION_BROWSING_DATA);
+        if (clearSessionBrowsingDataPref != null)
+            // check if the option is enabled or not
+            clearSessionBrowsingDataPref.setSummary(
+                    VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                            VivaldiPreferences.CLEAR_SESSION_BROWSING_DATA, false) ?
+                            R.string.text_on : R.string.text_off);
     }
 
     private ChromeManagedPreferenceDelegate createManagedPreferenceDelegate() {
@@ -227,7 +302,7 @@ public class PrivacySettings
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == R.id.menu_id_targeted_help) {
-            HelpAndFeedback.getInstance().show(getActivity(),
+            HelpAndFeedbackLauncherImpl.getInstance().show(getActivity(),
                     getString(R.string.help_context_privacy), Profile.getLastUsedRegularProfile(),
                     null);
             return true;

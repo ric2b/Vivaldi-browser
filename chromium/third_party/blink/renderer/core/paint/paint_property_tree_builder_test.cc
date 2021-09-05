@@ -299,8 +299,6 @@ TEST_P(PaintPropertyTreeBuilderTest, OverlapNoPaintOffsetTranslation) {
     <div id=target style='margin-top: -50px; position: relative; opacity: 0.5'></div>
   )HTML");
   CHECK(GetDocument().GetPage()->GetScrollbarTheme().UsesOverlayScrollbars());
-  Element* abs_pos = GetDocument().getElementById("target");
-  LOG(ERROR) << "obj: " << abs_pos->GetLayoutObject();
   const auto* properties = PaintPropertiesForElement("target");
   EXPECT_EQ(nullptr, properties->PaintOffsetTranslation());
 }
@@ -315,8 +313,6 @@ TEST_P(PaintPropertyTreeBuilderTest, AssumeOverlapNoPaintOffsetTranslation) {
     <div style="height: 1000px"></div>
   )HTML");
   CHECK(GetDocument().GetPage()->GetScrollbarTheme().UsesOverlayScrollbars());
-  Element* abs_pos = GetDocument().getElementById("target");
-  LOG(ERROR) << "obj: " << abs_pos->GetLayoutObject();
   const auto* properties = PaintPropertiesForElement("target");
   EXPECT_EQ(nullptr, properties->PaintOffsetTranslation());
 }
@@ -2059,7 +2055,11 @@ TEST_P(PaintPropertyTreeBuilderTest, TreeContextClipByNonStackingContext) {
   // property tree context for a (pseudo) stacking context that is scrolled by a
   // containing block that is not one of the painting ancestors.
   SetBodyInnerHTML(R"HTML(
-    <style>body { margin: 0; }</style>
+    <style>
+      body { margin: 0; }
+      /* to prevent the mock overlay scrollbar from affecting compositing. */
+      #scroller::-webkit-scrollbar { display: none; }
+    </style>
     <div id='scroller' style='overflow:scroll; width:400px; height:300px;'>
       <div id='child'
           style='position:relative; width:100px; height: 200px;'></div>
@@ -2337,6 +2337,10 @@ TEST_P(PaintPropertyTreeBuilderTest, CSSClipFixedPositionDescendantNonShared) {
     <style>
       body {
         margin: 0;
+      }
+      /* to prevent the mock overlay scrollbar from affecting compositing. */
+      #overflow::-webkit-scrollbar {
+        display: none;
       }
       #overflow {
         position: relative;
@@ -2653,6 +2657,101 @@ TEST_P(PaintPropertyTreeBuilderTest,
 }
 
 TEST_P(PaintPropertyTreeBuilderTest,
+       WillChangeTransformShouldResetSubpixelPaintOffset) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      * { margin: 0; }
+      div { position: relative; }
+      #a {
+        width: 70px;
+        height: 70px;
+        left: 0.9px;
+        top: 0.9px;
+      }
+      #b {
+        width: 40px;
+        height: 40px;
+        will-change: transform;
+      }
+      #c {
+        width: 40px;
+        height: 40px;
+        left: 0.6px;
+        top: 0.6px;
+      }
+    </style>
+    <div id='a'>
+      <div id='b'>
+        <div id='c'></div>
+      </div>
+    </div>
+  )HTML");
+
+  auto* b = GetLayoutObjectByElementId("b");
+  const auto* b_properties = b->FirstFragment().PaintProperties();
+  EXPECT_TRUE(
+      b_properties->Transform()->RequiresCompositingForWillChangeTransform());
+  // The paint offset transform should not be snapped.
+  EXPECT_EQ(FloatSize(1, 1),
+            ToUnaliased(*b_properties->Transform()->Parent()).Translation2D());
+  EXPECT_EQ(PhysicalOffset(), b->FirstFragment().PaintOffset());
+  // c's painting should start at c_offset.
+  auto* c = GetLayoutObjectByElementId("c");
+  LayoutUnit c_offset = LayoutUnit(0.6);
+  EXPECT_EQ(PhysicalOffset(c_offset, c_offset),
+            c->FirstFragment().PaintOffset());
+}
+
+TEST_P(PaintPropertyTreeBuilderTest,
+       TransformAnimationShouldResetSubpixelPaintOffset) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      * { margin: 0; }
+      div { position: relative; }
+      #a {
+        width: 70px;
+        height: 70px;
+        left: 0.9px;
+        top: 0.9px;
+      }
+      #b {
+        width: 40px;
+        height: 40px;
+        animation: spin 2s infinite;
+      }
+      @keyframes spin {
+        from { transform: rotate(0deg) }
+        to { transform: rotate(360deg) }
+      }
+      #c {
+        width: 40px;
+        height: 40px;
+        left: 0.6px;
+        top: 0.6px;
+      }
+    </style>
+    <div id='a'>
+      <div id='b'>
+        <div id='c'></div>
+      </div>
+    </div>
+  )HTML");
+
+  auto* b = GetLayoutObjectByElementId("b");
+  const auto* b_properties = b->FirstFragment().PaintProperties();
+  EXPECT_TRUE(b_properties->Transform()->HasActiveTransformAnimation());
+  // The paint offset transform should not be snapped.
+  EXPECT_EQ(FloatSize(1, 1),
+            ToUnaliased(*b_properties->Transform()->Parent()).Translation2D());
+  EXPECT_EQ(PhysicalOffset(), b->FirstFragment().PaintOffset());
+  // c's painting should start at c_offset.
+  auto* c = GetLayoutObjectByElementId("c");
+  LayoutUnit c_offset = LayoutUnit(0.6);
+  EXPECT_EQ(PhysicalOffset(c_offset, c_offset),
+            c->FirstFragment().PaintOffset());
+}
+
+TEST_P(PaintPropertyTreeBuilderTest,
        PaintOffsetWithPixelSnappingThroughMultipleTransforms) {
   SetBodyInnerHTML(R"HTML(
     <style>
@@ -2867,14 +2966,14 @@ TEST_P(PaintPropertyTreeBuilderTest, SvgRootAndForeignObjectPixelSnapping) {
       foreign_object->FirstFragment().PaintProperties();
   EXPECT_EQ(nullptr, foreign_object_properties->PaintOffsetTranslation());
 
-  EXPECT_EQ(PhysicalOffset(4, 5),
-            foreign_object->FirstFragment().PaintOffset());
+  PhysicalOffset fo_translation(LayoutUnit(3.5f), LayoutUnit(5.4f));
+  EXPECT_EQ(fo_translation, foreign_object->FirstFragment().PaintOffset());
 
   const auto* div = GetLayoutObjectByElementId("div");
   // Paint offset of descendant of foreignObject accumulates on paint offset
   // of foreignObject.
-  EXPECT_EQ(PhysicalOffset(LayoutUnit(4 + 5.6), LayoutUnit(5 + 7.3)),
-            div->FirstFragment().PaintOffset());
+  PhysicalOffset div_offset(LayoutUnit(5.6f), LayoutUnit(7.3f));
+  EXPECT_EQ(fo_translation + div_offset, div->FirstFragment().PaintOffset());
 }
 
 TEST_P(PaintPropertyTreeBuilderTest, NoRenderingContextByDefault) {
@@ -3606,7 +3705,11 @@ TEST_P(PaintPropertyTreeBuilderTest, OverflowScrollContentsTreeState) {
   // property tree context for a (pseudo) stacking context that is scrolled by a
   // containing block that is not one of the painting ancestors.
   SetBodyInnerHTML(R"HTML(
-    <style>body { margin: 20px 30px; }</style>
+    <style>
+      body { margin: 20px 30px; }
+      /* to prevent the mock overlay scrollbar from affecting compositing. */
+      #clipper::-webkit-scrollbar { display: none; }
+    </style>
     <div id='clipper' style='overflow:scroll; width:400px; height:300px;'>
       <div id='child'
           style='position:relative; width:500px; height: 600px;'></div>
@@ -6863,6 +6966,55 @@ TEST_P(PaintPropertyTreeBuilderTest, OutOfFlowContainedInMulticol) {
     EXPECT_EQ(relative_transform, &absolute_properties.Transform());
     EXPECT_EQ(relative_transform, &fixed_properties.Transform());
   }
+}
+
+TEST_P(PaintPropertyTreeBuilderTest, SVGChildBackdropFilter) {
+  SetBodyInnerHTML(R"HTML(
+    <svg id="svg">
+      <text id="text" style="backdrop-filter: blur(5px)">Text</text>
+    </svg>
+  )HTML");
+
+  auto* svg_properties = PaintPropertiesForElement("svg");
+  ASSERT_TRUE(svg_properties);
+  ASSERT_TRUE(svg_properties->PaintOffsetTranslation());
+  EXPECT_TRUE(
+      svg_properties->PaintOffsetTranslation()->HasDirectCompositingReasons());
+
+  auto* svg_text_properties = PaintPropertiesForElement("text");
+  ASSERT_TRUE(svg_text_properties);
+  ASSERT_TRUE(svg_text_properties->Effect());
+  EXPECT_TRUE(svg_text_properties->Effect()->HasDirectCompositingReasons());
+  // TODO(crbug.com/1131987): Backdrop-filter doesn't work in SVG yet.
+  EXPECT_TRUE(svg_text_properties->Effect()->BackdropFilter().IsEmpty());
+  EXPECT_FALSE(svg_text_properties->Transform());
+  EXPECT_FALSE(GetLayoutObjectByElementId("text")
+                   ->SlowFirstChild()
+                   ->FirstFragment()
+                   .PaintProperties());
+}
+
+TEST_P(PaintPropertyTreeBuilderTest, SVGTransformAnimationAndOrigin) {
+  SetBodyInnerHTML(R"HTML(
+    <svg width="200" height="200">
+      <rect id="rect"
+            style="animation: 2s infinite spin; transform-origin: 50% 50%">
+    </svg>
+    <style>
+      @keyframes spin {
+        0% { transform: rotate(0); }
+        100% { transform: rotate(360deg); }
+      }
+    </style>
+  )HTML");
+
+  auto* properties = PaintPropertiesForElement("rect");
+  ASSERT_TRUE(properties);
+  auto* transform_node = properties->Transform();
+  ASSERT_TRUE(transform_node);
+  EXPECT_TRUE(transform_node->HasActiveTransformAnimation());
+  EXPECT_EQ(TransformationMatrix(), transform_node->Matrix());
+  EXPECT_EQ(FloatPoint3D(100, 100, 0), transform_node->Origin());
 }
 
 }  // namespace blink

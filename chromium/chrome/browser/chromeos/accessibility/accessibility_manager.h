@@ -208,7 +208,7 @@ class AccessibilityManager
   void RequestSelectToSpeakStateChange();
 
   // Called when the Select-to-Speak extension state has changed.
-  void OnSelectToSpeakStateChanged(ash::SelectToSpeakState state);
+  void SetSelectToSpeakState(ash::SelectToSpeakState state);
 
   // Invoked to enable or disable Switch Access.
   void SetSwitchAccessEnabled(bool enabled);
@@ -253,8 +253,8 @@ class AccessibilityManager
   // Play tick sound indicating spoken feedback will be toggled after countdown.
   bool PlaySpokenFeedbackToggleCountdown(int tick_count);
 
-  // Notify that a view is focused in arc.
-  void OnViewFocusedInArc(const gfx::Rect& bounds_in_screen);
+  // Update when a view is focused in ARC++.
+  void OnViewFocusedInArc(const gfx::Rect& bounds_in_screen, bool is_editable);
 
   // Plays an earcon. Earcons are brief and distinctive sounds that indicate
   // the their mapped event has occurred. The |sound_key| enums can be found in
@@ -489,10 +489,14 @@ class AccessibilityManager
   // Used to set the audio focus enforcement type for ChromeVox.
   mojo::Remote<media_session::mojom::AudioFocusManager> audio_focus_manager_;
 
+  // Whether the virtual keyboard was enabled before Switch Access loaded.
+  bool was_vk_enabled_before_switch_access_ = false;
+
   base::WeakPtrFactory<AccessibilityManager> weak_ptr_factory_{this};
 
   friend class DictationTest;
   friend class SwitchAccessTest;
+
   DISALLOW_COPY_AND_ASSIGN(AccessibilityManager);
 };
 

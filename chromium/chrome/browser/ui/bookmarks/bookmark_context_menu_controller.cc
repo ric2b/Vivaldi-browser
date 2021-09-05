@@ -123,7 +123,7 @@ BookmarkContextMenuController::~BookmarkContextMenuController() {
 
 void BookmarkContextMenuController::BuildMenu() {
   if (vivaldi::IsVivaldiRunning()) {
-    vivaldi::BuildBookmarkContextMenu(menu_model_.get());
+    vivaldi::BuildBookmarkContextMenu(profile_, menu_model_.get());
     return;
   }
   if (selection_.size() == 1 && selection_[0]->is_url()) {

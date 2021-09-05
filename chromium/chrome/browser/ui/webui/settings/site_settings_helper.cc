@@ -148,6 +148,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::STORAGE_ACCESS, nullptr},
     {ContentSettingsType::CAMERA_PAN_TILT_ZOOM, nullptr},
     {ContentSettingsType::INSECURE_PRIVATE_NETWORK, nullptr},
+    {ContentSettingsType::PERMISSION_AUTOREVOCATION_DATA, nullptr},
 };
 static_assert(base::size(kContentSettingsTypeGroupNames) ==
                   // ContentSettingsType starts at -1, so add 1 here.
@@ -285,10 +286,9 @@ bool PatternAppliesToSingleOrigin(const ContentSettingPatternSource& pattern) {
   // Default settings and other patterns apply to multiple origins.
   if (url::Origin::Create(url).opaque())
     return false;
-  // Embedded content settings only when |url| is embedded in another origin, so
-  // ignore non-wildcard secondary patterns that are different to the primary.
-  if (pattern.primary_pattern != pattern.secondary_pattern &&
-      pattern.secondary_pattern != ContentSettingsPattern::Wildcard()) {
+  // Embedded content settings only match when |url| is embedded in another
+  // origin, so ignore non-wildcard secondary patterns.
+  if (pattern.secondary_pattern != ContentSettingsPattern::Wildcard()) {
     return false;
   }
   return true;

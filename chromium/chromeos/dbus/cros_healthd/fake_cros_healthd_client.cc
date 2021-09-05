@@ -67,6 +67,10 @@ void FakeCrosHealthdClient::SetProbeProcessInfoResponseForTesting(
   fake_service_.SetProbeProcessInfoResponseForTesting(result);
 }
 
+void FakeCrosHealthdClient::SetCallbackDelay(base::TimeDelta delay) {
+  fake_service_.SetCallbackDelay(delay);
+}
+
 void FakeCrosHealthdClient::EmitAcInsertedEventForTesting() {
   // Flush the receiver, so any pending observers are registered before the
   // event is emitted.
@@ -86,6 +90,13 @@ void FakeCrosHealthdClient::EmitLidClosedEventForTesting() {
   // event is emitted.
   receiver_.FlushForTesting();
   fake_service_.EmitLidClosedEventForTesting();
+}
+
+void FakeCrosHealthdClient::EmitLidOpenedEventForTesting() {
+  // Flush the receiver, so any pending observers are registered before the
+  // event is emitted.
+  receiver_.FlushForTesting();
+  fake_service_.EmitLidOpenedEventForTesting();
 }
 
 void FakeCrosHealthdClient::RequestNetworkHealthForTesting(

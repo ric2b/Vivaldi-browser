@@ -84,6 +84,11 @@ std::string BluetoothDeviceCast::GetAddress() const {
   return address_;
 }
 
+BluetoothDevice::AddressType BluetoothDeviceCast::GetAddressType() const {
+  NOTIMPLEMENTED();
+  return ADDR_TYPE_UNKNOWN;
+}
+
 BluetoothDevice::VendorIDSource BluetoothDeviceCast::GetVendorIDSource() const {
   return VENDOR_ID_UNKNOWN;
 }
@@ -356,11 +361,15 @@ void BluetoothDeviceCast::DisconnectGatt() {
   // The device is intentionally not disconnected.
 }
 
-void BluetoothDeviceCast::OnConnect(bool success) {
+void BluetoothDeviceCast::OnConnect(
+    chromecast::bluetooth::RemoteDevice::ConnectStatus status) {
+  bool success =
+      (status == chromecast::bluetooth::RemoteDevice::ConnectStatus::kSuccess);
   DVLOG(2) << __func__ << " success:" << success;
   pending_connect_ = false;
-  if (!success)
+  if (!success) {
     DidFailToConnectGatt(ERROR_FAILED);
+  }
 }
 
 }  // namespace device

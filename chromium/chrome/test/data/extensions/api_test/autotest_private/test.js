@@ -184,6 +184,11 @@ var defaultTests = [
             });
         });
   },
+  function waitForSystemWebAppsInstall() {
+    chrome.autotestPrivate.waitForSystemWebAppsInstall(
+      chrome.test.callbackPass()
+    );
+  },
   // This launches and closes Chrome.
   function launchCloseApp() {
     chrome.autotestPrivate.launchApp('mgndgikekgjfcpckkfioiadnlibdjbkf',
@@ -471,6 +476,7 @@ var defaultTests = [
         chrome.test.assertEq(chromium.showInLauncher, true);
         chrome.test.assertEq(chromium.showInSearch, true);
         chrome.test.assertEq(chromium.type, 'Extension');
+        chrome.test.assertEq(chromium.installSource, 'System');
     }));
   },
   // This test verifies that only Chromium is available by default.
@@ -1249,6 +1255,19 @@ var shelfTests = [function fetchShelfUIInfo() {
       }));
 }];
 
+// Tests that requires a concrete system web app installation.
+var systemWebAppsTests = [
+  function getRegisteredSystemWebApps() {
+    chrome.autotestPrivate.getRegisteredSystemWebApps(
+      chrome.test.callbackPass(apps => {
+        chrome.test.assertEq(1, apps.length)
+        chrome.test.assertEq('OSSettings', apps[0].internalName);
+        chrome.test.assertEq('chrome://test-system-app/', apps[0].url);
+      })
+    );
+  },
+]
+
 var test_suites = {
   'default': defaultTests,
   'arcEnabled': arcEnabledTests,
@@ -1260,6 +1279,7 @@ var test_suites = {
   'startStopTracing': startStopTracingTests,
   'scrollableShelf': scrollableShelfTests,
   'shelf': shelfTests,
+  'systemWebApps': systemWebAppsTests,
 };
 
 chrome.test.getConfig(function(config) {

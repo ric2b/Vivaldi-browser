@@ -123,7 +123,7 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
   // is considered as "findable" when the registration is stored or in the
   // installing state.
   void FindRegistrationForId(int64_t registration_id,
-                             const GURL& origin,
+                             const url::Origin& origin,
                              FindRegistrationCallback callback);
   // Generally |FindRegistrationForId| should be used to look up a registration
   // by |registration_id| since it's more efficient. But if a |registration_id|
@@ -213,7 +213,7 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
                                      GetUserKeysAndDataCallback callback);
   void StoreUserData(
       int64_t registration_id,
-      const GURL& origin,
+      const url::Origin& origin,
       const std::vector<std::pair<std::string, std::string>>& key_value_pairs,
       StatusCallback callback);
   void ClearUserData(int64_t registration_id,
@@ -303,17 +303,13 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
       uint64_t stored_resources_total_size_bytes,
       const GURL& stored_scope,
       StatusCallback callback,
-      storage::mojom::ServiceWorkerDatabaseStatus database_status,
-      int64_t deleted_version_id,
-      const std::vector<int64_t>& newly_purgeable_resources);
+      storage::mojom::ServiceWorkerDatabaseStatus database_status);
   void DidDeleteRegistration(
       int64_t registration_id,
       const GURL& origin,
       StatusCallback callback,
       storage::mojom::ServiceWorkerDatabaseStatus database_status,
-      ServiceWorkerStorage::OriginState origin_state,
-      int64_t deleted_version_id,
-      const std::vector<int64_t>& newly_purgeable_resources);
+      ServiceWorkerStorage::OriginState origin_state);
 
   void DidUpdateToActiveState(
       const GURL& origin,

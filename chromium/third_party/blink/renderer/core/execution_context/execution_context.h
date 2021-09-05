@@ -49,7 +49,7 @@
 #include "third_party/blink/renderer/core/frame/dom_timer_coordinator.h"
 #include "third_party/blink/renderer/platform/context_lifecycle_notifier.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/heap_observer_list.h"
+#include "third_party/blink/renderer/platform/heap_observer_set.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/console_logger.h"
 #include "third_party/blink/renderer/platform/loader/fetch/https_state.h"
@@ -61,7 +61,7 @@
 namespace base {
 class SingleThreadTaskRunner;
 class UnguessableToken;
-}
+}  // namespace base
 
 namespace ukm {
 class UkmRecorder;
@@ -87,6 +87,7 @@ class PublicURLManager;
 class ResourceFetcher;
 class SecurityOrigin;
 class ScriptState;
+class ScriptWrappable;
 class TrustedTypePolicyFactory;
 
 enum class TaskType : unsigned char;
@@ -368,13 +369,14 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
 
   void AddContextLifecycleObserver(ContextLifecycleObserver*) override;
   void RemoveContextLifecycleObserver(ContextLifecycleObserver*) override;
-  HeapObserverList<ContextLifecycleObserver>& ContextLifecycleObserverList() {
-    return context_lifecycle_observer_list_;
+  HeapObserverSet<ContextLifecycleObserver>& ContextLifecycleObserverSet() {
+    return context_lifecycle_observer_set_;
   }
   unsigned ContextLifecycleStateObserverCountForTesting() const;
 
   // Implementation of WindowOrWorkerGlobalScope.crossOriginIsolated.
-  bool IsCrossOriginIsolated() const;
+  // https://html.spec.whatwg.org/C/webappapis.html#concept-settings-object-cross-origin-isolated-capability
+  virtual bool CrossOriginIsolatedCapability() const = 0;
 
   virtual ukm::UkmRecorder* UkmRecorder() { return nullptr; }
   virtual ukm::SourceId UkmSourceID() const { return ukm::kInvalidSourceId; }
@@ -391,6 +393,14 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   virtual base::Optional<ExecutionContextToken> GetParentExecutionContextToken()
       const {
     return base::nullopt;
+  }
+
+  // ExecutionContext subclasses are usually the V8 global object, which means
+  // they are also a ScriptWrappable. This casts the ExecutionContext to a
+  // ScriptWrappable if possible.
+  virtual ScriptWrappable* ToScriptWrappable() {
+    NOTREACHED();
+    return nullptr;
   }
 
  protected:
@@ -439,7 +449,7 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
 
   DOMTimerCoordinator timers_;
 
-  HeapObserverList<ContextLifecycleObserver> context_lifecycle_observer_list_;
+  HeapObserverSet<ContextLifecycleObserver> context_lifecycle_observer_set_;
 
   // Counter that keeps track of how many window interaction calls are allowed
   // for this ExecutionContext. Callers are expected to call

@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">maelezo ya mwisho wa kitabu</translation>
 <translation id="1281252709823657822">kidirisha</translation>
 <translation id="1306460908038601864">Imezimwa</translation>
+<translation id="1311894908970423688">Ni lazima thamani iwe <ph name="VALUE_DATE_OR_TIME" />.</translation>
 <translation id="1335095011850992622">walioshiriki</translation>
 <translation id="1342835525016946179">makala</translation>
 <translation id="1359897965706325498">bango</translation>
+<translation id="145015347812617860">Vipengee <ph name="COUNT" /></translation>
 <translation id="1480676835519562650">unaweza kuchagua wengi, umechagua <ph name="SELECTED" /> kati ya <ph name="COUNT" />.</translation>
 <translation id="1589122976691792535">eneo</translation>
 <translation id="1591562245178063882">Mwezi huu</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033">Wiki <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">Wimbo wa <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">kisanduku cha kuteua</translation>
+<translation id="2307576640803031502">kwenye orodha, kipengee cha <ph name="INDEX" /> kati ya <ph name="COUNT" /></translation>
 <translation id="2311842470354187719">nafasi ya kugawa kurasa</translation>
 <translation id="2335594187091864976">mchumaji tarehe na wakati</translation>
 <translation id="2393030564806080191">Nambari ya rangi ya heksadesimali</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">chaguo zaidi</translation>
 <translation id="576709008726043716">utangulizi</translation>
 <translation id="57838592816432529">Zima sauti</translation>
+<translation id="5860033963881614850">Kimezimwa</translation>
 <translation id="588258955323874662">Skrini nzima</translation>
 <translation id="5888666972993069672">Sasa inatuma kwenye <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">kisanduku cha kutafutia</translation>
+<translation id="5916664084637901428">Imewashwa</translation>
 <translation id="5939518447894949180">Weka upya</translation>
 <translation id="5966707198760109579">Juma</translation>
 <translation id="5987525920412732405">kitufe cha kubadilishia</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">Futa</translation>
 <translation id="668171684555832681">Mengine...</translation>
 <translation id="6692633176391053278">stepper</translation>
+<translation id="6709093583001123835">Ni lazima thamani iwe <ph name="VALUE" />.</translation>
 <translation id="6709570249143506788">Ubora wa chini wa kucheza video</translation>
 <translation id="6755330956360078551">kidirisha cha vidokezo</translation>
 <translation id="6790428901817661496">Cheza</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, itaanza tarehe <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Picha ndani ya Picha</translation>
 <translation id="9168329111483466115">tanbihi</translation>
+<translation id="945780513535800434">Umechagua Baadhi</translation>
 <translation id="954003015749068518">washa hali ya picha ndani ya picha</translation>
 <translation id="966787709310836684">menyu</translation>
 </translationbundle>

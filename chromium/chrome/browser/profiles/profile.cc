@@ -9,6 +9,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/net/profile_network_context_service.h"
@@ -22,6 +23,7 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/language/core/browser/pref_names.h"
+#include "components/media_router/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
@@ -29,6 +31,8 @@
 #include "components/sync/base/sync_prefs.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/driver/sync_service.h"
+#include "components/variations/proto/study.pb.h"
+#include "components/variations/variations.mojom.h"
 #include "components/variations/variations_client.h"
 #include "components/variations/variations_ids_provider.h"
 #include "content/public/browser/notification_service.h"
@@ -59,6 +63,10 @@
 #include "extensions/browser/extension_pref_store.h"
 #include "extensions/browser/extension_pref_value_map_factory.h"
 #include "extensions/browser/pref_names.h"
+#endif
+
+#if BUILDFLAG(IS_LACROS)
+#include "chromeos/lacros/lacros_chrome_service_impl.h"
 #endif
 
 #if DCHECK_IS_ON()
@@ -92,9 +100,10 @@ class ChromeVariationsClient : public variations::VariationsClient {
     return browser_context_->IsOffTheRecord();
   }
 
-  std::string GetVariationsHeader() const override {
+  variations::mojom::VariationsHeadersPtr GetVariationsHeaders()
+      const override {
     return variations::VariationsIdsProvider::GetInstance()
-        ->GetClientDataHeader(IsSignedIn());
+        ->GetClientDataHeaders(IsSignedIn());
   }
 
  private:
@@ -328,20 +337,18 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
                                std::string());
 #endif
 
+#if !defined(OS_ANDROID)
   registry->RegisterBooleanPref(
-      prefs::kMediaRouterCloudServicesPrefSet,
-      false,
+      media_router::prefs::kMediaRouterCloudServicesPrefSet, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
-      prefs::kMediaRouterEnableCloudServices,
-      false,
+      media_router::prefs::kMediaRouterEnableCloudServices, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
-      prefs::kMediaRouterFirstRunFlowAcknowledged,
-      false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  registry->RegisterBooleanPref(prefs::kMediaRouterMediaRemotingEnabled, true);
-  registry->RegisterListPref(prefs::kMediaRouterTabMirroringSources);
+      media_router::prefs::kMediaRouterMediaRemotingEnabled, true);
+  registry->RegisterListPref(
+      media_router::prefs::kMediaRouterTabMirroringSources);
+#endif
 
   registry->RegisterDictionaryPref(prefs::kWebShareVisitedTargets);
   registry->RegisterDictionaryPref(
@@ -374,8 +381,17 @@ bool Profile::IsGuestSession() const {
           chromeos::switches::kGuestSession);
   return is_guest_session;
 #else
+#if BUILDFLAG(IS_LACROS)
+  DCHECK(chromeos::LacrosChromeServiceImpl::Get());
+  if (chromeos::LacrosChromeServiceImpl::Get()->init_params()->session_type !=
+      crosapi::mojom::SessionType::kUnknown) {
+    return chromeos::LacrosChromeServiceImpl::Get()
+               ->init_params()
+               ->session_type == crosapi::mojom::SessionType::kGuestSession;
+  }
+#endif  // BUILDFLAG(IS_LACROS)
   return is_guest_profile_;
-#endif
+#endif  // defined(OS_CHROMEOS)
 }
 
 bool Profile::IsSystemProfile() const {

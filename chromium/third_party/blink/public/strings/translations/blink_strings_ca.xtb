@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">nota final</translation>
 <translation id="1281252709823657822">quadre de diàleg</translation>
 <translation id="1306460908038601864">Desactivat</translation>
+<translation id="1311894908970423688">El valor ha de ser <ph name="VALUE_DATE_OR_TIME" />.</translation>
 <translation id="1335095011850992622">crèdits</translation>
 <translation id="1342835525016946179">article</translation>
 <translation id="1359897965706325498">bàner</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> elements</translation>
 <translation id="1480676835519562650">multiseleccionable; se n'han seleccionat <ph name="SELECTED" /> de <ph name="COUNT" /></translation>
 <translation id="1589122976691792535">regió</translation>
 <translation id="1591562245178063882">Aquest mes</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033">Setmana <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">Pista <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">casella de selecció</translation>
+<translation id="2307576640803031502">a la llista; element <ph name="INDEX" /> de <ph name="COUNT" /></translation>
 <translation id="2311842470354187719">salt de pàgina</translation>
 <translation id="2335594187091864976">selector de data i hora</translation>
 <translation id="2393030564806080191">Valor hexadecimal del color</translation>
@@ -52,7 +55,7 @@
 <translation id="248395913932153421">Dia</translation>
 <translation id="2507943997699731163">Empleneu aquest camp.</translation>
 <translation id="2508569020611168319">llista de pestanyes</translation>
-<translation id="2530182415807757784">multiseleccionable; no se n'ha seleccionat cap</translation>
+<translation id="2530182415807757784">multiseleccionable; no s'ha seleccionat res</translation>
 <translation id="2561842179657104141">mostra més controls multimèdia</translation>
 <translation id="2572483411312390101">reprodueix</translation>
 <translation id="2613802280814924224">Introduïu un valor vàlid. El valor vàlid més proper és <ph name="VALID_VALUE" />.</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">més opcions</translation>
 <translation id="576709008726043716">introducció</translation>
 <translation id="57838592816432529">Silencia</translation>
+<translation id="5860033963881614850">Desactivat</translation>
 <translation id="588258955323874662">Pantalla completa</translation>
 <translation id="5888666972993069672">S'està emetent a <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">quadre de cerca</translation>
+<translation id="5916664084637901428">Activat</translation>
 <translation id="5939518447894949180">Restableix</translation>
 <translation id="5966707198760109579">Setmana</translation>
 <translation id="5987525920412732405">botó de selecció de valors</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">Esborra</translation>
 <translation id="668171684555832681">Altres...</translation>
 <translation id="6692633176391053278">desplaçador</translation>
+<translation id="6709093583001123835">El valor ha de ser <ph name="VALUE" />.</translation>
 <translation id="6709570249143506788">Qualitat de reproducció deficient</translation>
 <translation id="6755330956360078551">descripció emergent</translation>
 <translation id="6790428901817661496">Reprodueix</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, a partir del dia <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Pantalla en pantalla</translation>
 <translation id="9168329111483466115">nota al peu</translation>
+<translation id="945780513535800434">Marcada parcialment</translation>
 <translation id="954003015749068518">entra a pantalla en pantalla</translation>
 <translation id="966787709310836684">menú</translation>
 </translationbundle>

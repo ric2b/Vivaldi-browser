@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Visa ramkälla</translation>
 <translation id="1165039591588034296">Fel</translation>
 <translation id="1175364870820465910">Skriv &amp;ut...</translation>
-<translation id="1177863135347784049">Anpassade</translation>
 <translation id="1181037720776840403">Ta bort</translation>
 <translation id="1187722533808055681">Uppvakningar ur vila</translation>
 <translation id="119944043368869598">Töm alla</translation>
 <translation id="1221825588892235038">Endast markering</translation>
 <translation id="1244303850296295656">Fel i tillägg</translation>
+<translation id="125220115284141797">Förval</translation>
 <translation id="1274977772557788323">Lagringsinställningar för Adobe Flash Player</translation>
 <translation id="1297175357211070620">Destination</translation>
 <translation id="1303101771013849280">HTML-fil med bokmärken</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Nytt fönster</translation>
 <translation id="1725149567830788547">Visa &amp;kontroller</translation>
 <translation id="1729533290416704613">Det styr också vilken sida som visas när du söker i adressfältet.</translation>
+<translation id="174123615272205933">Anpassade</translation>
 <translation id="1744108098763830590">bakgrundssida</translation>
 <translation id="176587472219019965">&amp;Nytt fönster</translation>
 <translation id="1769104665586091481">Öppna länk i nytt f&amp;önster</translation>
+<translation id="1779468444204342338">Minimala</translation>
 <translation id="1815083418640426271">Klistra in som oformaterad text</translation>
 <translation id="1828901632669367785">Skriv ut via systemdialog...</translation>
 <translation id="1850508293116537636">Rotera &amp;medurs</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Fråga innan något skickas (rekommenderas)</translation>
 <translation id="241082044617551207">Okänt insticksprogram</translation>
 <translation id="2423578206845792524">S&amp;para bild som...</translation>
-<translation id="2436707352762155834">Minimala</translation>
 <translation id="2439110203301358333">Ett annat program i datorn har lagt till ett tillägg som kan ändra hur Vivaldi fungerar.</translation>
 <translation id="2445081178310039857">Tilläggets rotkatalog måste anges.</translation>
 <translation id="2470702053775288986">Tillägg som inte stöds har inaktiverats</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">För-renderare <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Välj rotkatalogen för tillägget som ska packas. Om du vill uppdatera ett tillägg väljer du också den privata nyckel som ska återanvändas.</translation>
+<translation id="3266179261140759675">Förhindra att en webbplats skickar eller tar emot data efter att den stängts</translation>
 <translation id="3280237271814976245">Spara so&amp;m...</translation>
 <translation id="3285322247471302225">&amp;Ny flik</translation>
 <translation id="3288047731229977326">Tillägg som körs i utvecklarläge kan skada datorn. Om du inte är en utvecklare bör du inaktivera tillägg som körs i utvecklarläge för att skydda dig.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Tillåt</translation>
 <translation id="5057110919553308744">När du klickar på tillägget</translation>
 <translation id="5063480226653192405">Förbrukning</translation>
-<translation id="5068918910148307423">Tillåt inte att webbplatser som nyligen har stängts får slutföra överföringen av data som skickas och tas emot</translation>
 <translation id="5116628073786783676">S&amp;para ljud som...</translation>
 <translation id="5143374789336132547">Tillägget <ph name="EXTENSION_NAME" /> har ändrat vilken sida som visas när du klickar på knappen Startsida.</translation>
 <translation id="5154108062446123722">Avancerade inställningar för <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">Tillägget <ph name="EXTENSION_NAME" /> har ändrat vilken sida som visas när du söker i adressfältet.</translation>
 <translation id="5360150013186312835">Visa i verktygsfältet</translation>
 <translation id="5362741141255528695">Välj privat nyckelfil.</translation>
+<translation id="536638840841140142">Inga</translation>
 <translation id="5370819323174483825">&amp;Läs in igen</translation>
 <translation id="5398572795982417028">Sidreferensen faller utanför intervallet, gränsen är <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Fortsätt ladda ner</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Mottagare: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installerades av din administratör</translation>
 <translation id="7685049629764448582">JavaScript-minne</translation>
-<translation id="7701040980221191251">Inga</translation>
 <translation id="7701869757853594372">ANVÄNDAR-handtag</translation>
 <translation id="7704305437604973648">Åtgärd</translation>
 <translation id="7710568461918838723">&amp;Casta...</translation>

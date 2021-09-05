@@ -40,6 +40,7 @@
 #include "sandbox/linux/services/thread_helpers.h"
 #include "sandbox/linux/services/yama.h"
 #include "sandbox/linux/suid/client/setuid_sandbox_client.h"
+#include "sandbox/linux/syscall_broker/broker_client.h"
 #include "sandbox/linux/syscall_broker/broker_command.h"
 #include "sandbox/linux/syscall_broker/broker_process.h"
 #include "sandbox/policy/linux/bpf_broker_policy_linux.h"
@@ -61,7 +62,7 @@ namespace {
 void LogSandboxStarted(const std::string& sandbox_name) {
   const std::string process_type =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          service_manager::switches::kProcessType);
+          switches::kProcessType);
   const std::string activated_sandbox =
       "Activated " + sandbox_name +
       " sandbox for process type: " + process_type + ".";
@@ -106,8 +107,8 @@ bool UpdateProcessTypeAndEnableSandbox(
   base::CommandLine::ForCurrentProcess()->InitFromArgv(exec);
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  std::string new_process_type = command_line->GetSwitchValueASCII(
-      service_manager::switches::kProcessType);
+  std::string new_process_type =
+      command_line->GetSwitchValueASCII(switches::kProcessType);
   if (!new_process_type.empty()) {
     new_process_type.append("-broker");
   } else {
@@ -116,8 +117,7 @@ bool UpdateProcessTypeAndEnableSandbox(
 
   VLOG(3) << "UpdateProcessTypeAndEnableSandbox: Updating process type to "
           << new_process_type;
-  command_line->AppendSwitchASCII(service_manager::switches::kProcessType,
-                                  new_process_type);
+  command_line->AppendSwitchASCII(switches::kProcessType, new_process_type);
 
   if (broker_side_hook)
     CHECK(std::move(broker_side_hook).Run(options));
@@ -323,8 +323,8 @@ bool SandboxLinux::InitializeSandbox(SandboxType sandbox_type,
   initialize_sandbox_ran_ = true;
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  const std::string process_type = command_line->GetSwitchValueASCII(
-      service_manager::switches::kProcessType);
+  const std::string process_type =
+      command_line->GetSwitchValueASCII(switches::kProcessType);
 
   // We need to make absolutely sure that our sandbox is "sealed" before
   // returning.
@@ -491,13 +491,24 @@ void SandboxLinux::StartBrokerProcess(
     const Options& options) {
   // Leaked at shutdown, so use bare |new|.
   broker_process_ = new syscall_broker::BrokerProcess(
-      BPFBasePolicy::GetFSDeniedErrno(), allowed_command_set, permissions);
+      BPFBasePolicy::GetFSDeniedErrno(), allowed_command_set, permissions,
+      syscall_broker::BrokerProcess::BrokerType::SIGNAL_BASED);
 
   // The initialization callback will perform generic initialization and then
   // call broker_sandboxer_callback.
   CHECK(broker_process_->Init(base::BindOnce(&UpdateProcessTypeAndEnableSandbox,
                                              std::move(broker_side_hook),
                                              options, allowed_command_set)));
+}
+
+bool SandboxLinux::ShouldBrokerHandleSyscall(int sysno) const {
+  return broker_process_->IsSyscallAllowed(sysno);
+}
+
+sandbox::bpf_dsl::ResultExpr SandboxLinux::HandleViaBroker() const {
+  return sandbox::bpf_dsl::Trap(
+      sandbox::syscall_broker::BrokerClient::SIGSYS_Handler,
+      broker_process_->GetBrokerClientSignalBased());
 }
 
 bool SandboxLinux::HasOpenDirectories() const {

@@ -31,7 +31,6 @@
 #include "content/shell/utility/shell_content_utility_client.h"
 #include "ipc/ipc_buildflags.h"
 #include "net/cookies/cookie_monster.h"
-#include "services/service_manager/embedder/switches.h"
 #include "ui/base/resource/resource_bundle.h"
 
 #if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
@@ -42,9 +41,9 @@
 #endif
 
 #if !defined(OS_ANDROID)
-#include "content/shell/browser/web_test/web_test_browser_main_runner.h"  // nogncheck
-#include "content/shell/browser/web_test/web_test_content_browser_client.h"  // nogncheck
-#include "content/shell/renderer/web_test/web_test_content_renderer_client.h"  // nogncheck
+#include "content/web_test/browser/web_test_browser_main_runner.h"  // nogncheck
+#include "content/web_test/browser/web_test_content_browser_client.h"  // nogncheck
+#include "content/web_test/renderer/web_test_content_renderer_client.h"  // nogncheck
 #endif
 
 #if defined(OS_ANDROID)
@@ -186,7 +185,8 @@ bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
 }
 
 void ShellMainDelegate::PreSandboxStartup() {
-#if defined(ARCH_CPU_ARM_FAMILY) && (defined(OS_ANDROID) || defined(OS_LINUX))
+#if defined(ARCH_CPU_ARM_FAMILY) && \
+    (defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_CHROMEOS))
   // Create an instance of the CPU class to parse /proc/cpuinfo and cache
   // cpu_brand info.
   base::CPU cpu_info;
@@ -203,9 +203,9 @@ void ShellMainDelegate::PreSandboxStartup() {
             switches::kProcessType);
     crash_reporter::SetCrashReporterClient(g_shell_crash_client.Pointer());
     // Reporting for sub-processes will be initialized in ZygoteForked.
-    if (process_type != service_manager::switches::kZygoteProcess) {
+    if (process_type != switches::kZygoteProcess) {
       crash_reporter::InitializeCrashpad(process_type.empty(), process_type);
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
       crash_reporter::SetFirstChanceExceptionHandler(
           v8::TryHandleWebAssemblyTrapPosix);
 #endif
@@ -263,7 +263,7 @@ int ShellMainDelegate::RunProcess(
 #endif
 }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 void ShellMainDelegate::ZygoteForked() {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableCrashReporter)) {
@@ -275,7 +275,7 @@ void ShellMainDelegate::ZygoteForked() {
         v8::TryHandleWebAssemblyTrapPosix);
   }
 }
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 void ShellMainDelegate::InitializeResourceBundle() {
 #if defined(OS_ANDROID)

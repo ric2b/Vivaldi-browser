@@ -70,7 +70,7 @@ class MediaVideoTaskWrapper {
       WTF::CrossThreadOnceFunction<void(media::Status status,
                                         base::Optional<DecoderDetails>)>;
   using CrossThreadOnceDecodeCB =
-      WTF::CrossThreadOnceFunction<void(media::DecodeStatus)>;
+      WTF::CrossThreadOnceFunction<void(const media::Status&)>;
   using CrossThreadOnceResetCB = WTF::CrossThreadOnceClosure;
 
   MediaVideoTaskWrapper(
@@ -190,18 +190,26 @@ class MediaVideoTaskWrapper {
         std::move(external_decoder_factory));
   }
 
+  void OnRequestOverlayInfo(bool decoder_requires_restart_for_overlay,
+                            media::ProvideOverlayInfoCB overlay_info_cb) {
+    DVLOG(2) << __func__;
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+    // Android overlays are not supported.
+    if (overlay_info_cb)
+      std::move(overlay_info_cb).Run(media::OverlayInfo());
+  }
+
   std::vector<std::unique_ptr<media::VideoDecoder>> OnCreateDecoders() {
     DVLOG(2) << __func__;
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-    // TODO(chcunningham): Add plumbing to enable overlays on Android. See
-    // handling in WebMediaPlayerImpl.
-    media::RequestOverlayInfoCB request_overlay_info_cb;
-
     std::vector<std::unique_ptr<media::VideoDecoder>> video_decoders;
     decoder_factory_->CreateVideoDecoders(
         media_task_runner_, gpu_factories_, &null_media_log_,
-        request_overlay_info_cb, target_color_space_, &video_decoders);
+        WTF::BindRepeating(&MediaVideoTaskWrapper::OnRequestOverlayInfo,
+                           weak_factory_.GetWeakPtr()),
+        target_color_space_, &video_decoders);
 
     return video_decoders;
   }
@@ -244,14 +252,14 @@ class MediaVideoTaskWrapper {
                                  decoder_->CanReadWithoutStalling()));
   }
 
-  void OnDecodeDone(int cb_id, media::DecodeStatus status) {
+  void OnDecodeDone(int cb_id, media::Status status) {
     DVLOG(2) << __func__;
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
     PostCrossThreadTask(
         *main_task_runner_, FROM_HERE,
         WTF::CrossThreadBindOnce(&CrossThreadVideoDecoderClient::OnDecodeDone,
-                                 weak_client_, cb_id, status));
+                                 weak_client_, cb_id, std::move(status)));
   }
 
   void OnReset(int cb_id) {
@@ -390,7 +398,7 @@ void VideoDecoderBroker::Decode(scoped_refptr<media::DecoderBuffer> buffer,
                                buffer, callback_id));
 }
 
-void VideoDecoderBroker::OnDecodeDone(int cb_id, media::DecodeStatus status) {
+void VideoDecoderBroker::OnDecodeDone(int cb_id, media::Status status) {
   DVLOG(2) << __func__;
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(pending_decode_cb_map_.Contains(cb_id));
@@ -401,7 +409,7 @@ void VideoDecoderBroker::OnDecodeDone(int cb_id, media::DecodeStatus status) {
 
   // Do this last. Caller may destruct |this| in response to the callback while
   // this method is still on the stack.
-  std::move(decode_cb).Run(status);
+  std::move(decode_cb).Run(std::move(status));
 }
 
 void VideoDecoderBroker::Reset(base::OnceClosure reset_cb) {

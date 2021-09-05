@@ -2915,15 +2915,16 @@
     },
     {
       "id": 304,
-      "cr_bugs": [911349],
-      "description": "Video processor blit to swap chain results in column of black pixels on older NVIDIA drivers at certain scaling factors",
+      "cr_bugs": [911349, 1113893],
+      "description": "Per NVIDIA, software and hardware overlays don't work properly prior to this driver.",
       "os": {
         "type": "win"
       },
       "vendor_id": "0x10de",
       "driver_version": {
+        "schema": "nvidia_driver",
         "op": "<",
-        "value": "25.21.14.1900"
+        "value": "456.38"
       },
       "features": [
         "disable_direct_composition_video_overlays"
@@ -3534,6 +3535,18 @@
     },
     {
       "id": 350,
+      "cr_bugs": [1121061],
+      "description": "Intel GPUs need reset VP when colorspace changes",
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x8086",
+      "features": [
+        "reset_vp_when_colorspace_changes"
+      ]
+    },
+    {
+      "id": 352,
       "cr_bugs": [1038006],
       "description": "Intel device 0x1066 can't use d3d11 video decoder",
       "os": {
@@ -3546,7 +3559,7 @@
       ]
     },
     {
-      "id": 351,
+      "id": 353,
       "cr_bugs": [1038006],
       "description": "Intel device 0x8a56 with specific drivers can't use d3d11 video decoder",
       "os": {
@@ -3564,7 +3577,7 @@
       }
     },
     {
-      "id": 352,
+      "id": 354,
       "cr_bugs": [1126834],
       "description": "AMD devices 98e4 and 15d8 with specific drivers can't use d3d11 video decoder",
       "os": {
@@ -3580,6 +3593,53 @@
         "value": "24",
         "value2": "27"
       }
+    },
+    {
+      "id": 355,
+      "cr_bugs": [1127387],
+      "description": "Always assume float formats are renderable on Mac Intel",
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x8086",
+      "features": [
+        "force_enable_color_buffer_float"
+      ]
+    },
+    {
+      "id": 356,
+      "cr_bugs": [1127387],
+      "description": "Always assume float formats are renderable on Mac AMD",
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x1002",
+      "features": [
+        "force_enable_color_buffer_float"
+      ]
+    },
+    {
+      "id": 357,
+      "cr_bugs": [1127387],
+      "description": "Always assume float formats are renderable on Mac Nvidia",
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x10de",
+      "features": [
+        "force_enable_color_buffer_float"
+      ]
+    },
+    {
+      "id": 358,
+      "cr_bugs": [1127387],
+      "description": "Always assume float formats are renderable on Android except RGB32F",
+      "os": {
+        "type": "android"
+      },
+      "features": [
+        "force_enable_color_buffer_float_except_rgb32f"
+      ]
     }
   ]
 }

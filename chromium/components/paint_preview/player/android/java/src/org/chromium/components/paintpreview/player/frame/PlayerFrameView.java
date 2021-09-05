@@ -5,7 +5,6 @@
 package org.chromium.components.paintpreview.player.frame;
 
 import android.content.Context;
-import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Matrix;
 import android.graphics.Rect;
@@ -15,6 +14,7 @@ import android.view.View;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.List;
 
@@ -39,11 +39,12 @@ class PlayerFrameView extends FrameLayout {
      */
     PlayerFrameView(@NonNull Context context, boolean canDetectZoom,
             PlayerFrameViewDelegate playerFrameViewDelegate,
-            PlayerFrameGestureDetectorDelegate gestureDetectorDelegate) {
+            PlayerFrameGestureDetectorDelegate gestureDetectorDelegate,
+            @Nullable Runnable firstPaintListener) {
         super(context);
         setWillNotDraw(false);
         mDelegate = playerFrameViewDelegate;
-        mBitmapPainter = new PlayerFrameBitmapPainter(this::invalidate);
+        mBitmapPainter = new PlayerFrameBitmapPainter(this::postInvalidate, firstPaintListener);
         mGestureDetector =
                 new PlayerFrameGestureDetector(context, canDetectZoom, gestureDetectorDelegate);
     }
@@ -78,7 +79,7 @@ class PlayerFrameView extends FrameLayout {
         layoutSubFrames();
     }
 
-    void updateBitmapMatrix(Bitmap[][] bitmapMatrix) {
+    void updateBitmapMatrix(CompressibleBitmap[][] bitmapMatrix) {
         mBitmapPainter.updateBitmapMatrix(bitmapMatrix);
     }
 
@@ -97,7 +98,7 @@ class PlayerFrameView extends FrameLayout {
     @Override
     protected void onDraw(Canvas canvas) {
         canvas.save();
-        canvas.setMatrix(mScaleMatrix);
+        canvas.concat(mScaleMatrix);
         mBitmapPainter.onDraw(canvas);
         canvas.restore();
     }

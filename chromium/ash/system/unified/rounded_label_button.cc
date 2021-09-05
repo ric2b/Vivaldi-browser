@@ -5,7 +5,6 @@
 #include "ash/system/unified/rounded_label_button.h"
 
 #include "ash/style/ash_color_provider.h"
-#include "ash/style/default_color_constants.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/unified/unified_system_tray_view.h"
 #include "ui/gfx/canvas.h"
@@ -21,8 +20,7 @@ RoundedLabelButton::RoundedLabelButton(views::ButtonListener* listener,
                                        const base::string16& text)
     : views::LabelButton(listener, text) {
   SetEnabledTextColors(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kTextColorPrimary,
-      AshColorProvider::AshColorMode::kDark));
+      AshColorProvider::ContentLayerType::kTextColorPrimary));
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
   SetBorder(views::CreateEmptyBorder(gfx::Insets()));
   label()->SetElideBehavior(gfx::NO_ELIDE);
@@ -51,9 +49,8 @@ void RoundedLabelButton::PaintButtonContents(gfx::Canvas* canvas) {
   gfx::RectF rect(GetContentsBounds());
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
-  flags.setColor(AshColorProvider::Get()->DeprecatedGetControlsLayerColor(
-      AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive,
-      kUnifiedMenuButtonColor));
+  flags.setColor(AshColorProvider::Get()->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive));
   flags.setStyle(cc::PaintFlags::kFill_Style);
   canvas->DrawRoundRect(rect, kTrayItemCornerRadius, flags);
 
@@ -68,15 +65,12 @@ std::unique_ptr<views::InkDropRipple> RoundedLabelButton::CreateInkDropRipple()
     const {
   return TrayPopupUtils::CreateInkDropRipple(
       TrayPopupInkDropStyle::FILL_BOUNDS, this,
-      GetInkDropCenterBasedOnLastEvent(),
-      UnifiedSystemTrayView::GetBackgroundColor());
+      GetInkDropCenterBasedOnLastEvent());
 }
 
 std::unique_ptr<views::InkDropHighlight>
 RoundedLabelButton::CreateInkDropHighlight() const {
-  return TrayPopupUtils::CreateInkDropHighlight(
-      TrayPopupInkDropStyle::FILL_BOUNDS, this,
-      UnifiedSystemTrayView::GetBackgroundColor());
+  return TrayPopupUtils::CreateInkDropHighlight(this);
 }
 
 const char* RoundedLabelButton::GetClassName() const {

@@ -302,10 +302,7 @@ TEST(SecurityStateTest, MixedContentWithPolicyCertificate) {
   // Verify that passive mixed content downgrades the security level.
   helper.set_contained_mixed_form(false);
   helper.set_displayed_mixed_content(true);
-  SecurityLevel expected_passive_level =
-      base::FeatureList::IsEnabled(features::kPassiveMixedContentWarning)
-          ? WARNING
-          : NONE;
+  SecurityLevel expected_passive_level = WARNING;
   EXPECT_EQ(expected_passive_level, helper.GetSecurityLevel());
 
   // Ensure that active mixed content downgrades the security level.
@@ -316,13 +313,17 @@ TEST(SecurityStateTest, MixedContentWithPolicyCertificate) {
 }
 
 // Tests that WARNING is set on normal http pages but DANGEROUS on
-// form edits with default feature enabled.
+// form edits when kMarkHttpAsFeature is set to lower security state on form
+// edits.
 TEST(SecurityStateTest, WarningAndDangerousOnFormEditsWhenFeatureEnabled) {
   TestSecurityStateHelper helper;
   helper.SetUrl(GURL(kHttpUrl));
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      security_state::features::kMarkHttpAsFeature);
+  scoped_feature_list.InitAndEnableFeatureWithParameters(
+      security_state::features::kMarkHttpAsFeature,
+      {{security_state::features::kMarkHttpAsFeatureParameterName,
+        security_state::features::
+            kMarkHttpAsParameterWarningAndDangerousOnFormEdits}});
 
   EXPECT_EQ(security_state::WARNING, helper.GetSecurityLevel());
 
@@ -330,32 +331,31 @@ TEST(SecurityStateTest, WarningAndDangerousOnFormEditsWhenFeatureEnabled) {
   EXPECT_EQ(DANGEROUS, helper.GetSecurityLevel());
 }
 
-// Tests that WARNING is set on normal http pages but DANGEROUS on
-// form edits with default feature disabled.
-TEST(SecurityStateTest, WarningAndDangerousOnFormEditsWhenFeatureDisabled) {
+// Tests that WARNING is set on normal http pages regardless of form edits with
+// default feature enabled.
+TEST(SecurityStateTest,
+     AlwaysWarningWhenFeatureMarksWithTriangleWarningAndFeatureEnabled) {
   TestSecurityStateHelper helper;
   helper.SetUrl(GURL(kHttpUrl));
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(
+  scoped_feature_list.InitAndEnableFeature(
       security_state::features::kMarkHttpAsFeature);
 
   EXPECT_EQ(WARNING, helper.GetSecurityLevel());
 
   helper.set_insecure_field_edit(true);
-  EXPECT_EQ(DANGEROUS, helper.GetSecurityLevel());
+  EXPECT_EQ(WARNING, helper.GetSecurityLevel());
 }
 
-// Tests that WARNING is set on normal http pages regardless of form edits
-// when kMarkHttpAsFeature is set to mark non-secure connections with grey
-// triangle icon.
-TEST(SecurityStateTest, AlwaysWarningWhenFeatureMarksWithTriangleWarning) {
+// Tests that WARNING is set on normal http pages regardless of form edits with
+// default feature disabled.
+TEST(SecurityStateTest,
+     AlwaysWarningWhenFeatureMarksWithTriangleWarningAndFeatureDisabled) {
   TestSecurityStateHelper helper;
   helper.SetUrl(GURL(kHttpUrl));
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeatureWithParameters(
-      security_state::features::kMarkHttpAsFeature,
-      {{security_state::features::kMarkHttpAsFeatureParameterName,
-        security_state::features::kMarkHttpAsParameterDangerWarning}});
+  scoped_feature_list.InitAndDisableFeature(
+      security_state::features::kMarkHttpAsFeature);
 
   EXPECT_EQ(WARNING, helper.GetSecurityLevel());
 

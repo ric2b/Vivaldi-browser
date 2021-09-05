@@ -7,7 +7,6 @@
 #include "base/run_loop.h"
 #include "base/scoped_observer.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
@@ -29,7 +28,6 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/page_info/page_info.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
-#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/safe_browsing/content/password_protection/metrics_util.h"
 #include "components/safe_browsing/core/features.h"
 #include "components/strings/grit/components_strings.h"
@@ -130,11 +128,7 @@ const GURL OpenSiteSettingsForUrl(Browser* browser, const GURL& url) {
 
 class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
  public:
-  PageInfoBubbleViewBrowserTest() {
-    feature_list_.InitAndEnableFeature(
-        password_manager::features::kPasswordCheck);
-  }
-
+  PageInfoBubbleViewBrowserTest() = default;
   // DialogBrowserTest:
   void ShowUi(const std::string& name) override {
     // Bubble dialogs' bounds may exceed the display's work area.
@@ -257,7 +251,7 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
       PermissionInfoList permissions_list;
       for (ContentSettingsType content_type :
            PageInfo::GetAllPermissionsForTesting()) {
-        PageInfoUI::PermissionInfo info;
+        PageInfo::PermissionInfo info;
         info.type = content_type;
         info.setting = (name == kAllowAllPermissions) ? CONTENT_SETTING_ALLOW
                                                       : CONTENT_SETTING_BLOCK;
@@ -345,7 +339,7 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
 
     // Set some dummy non-default permissions. This will trigger a reload prompt
     // when the bubble is closed.
-    PageInfoUI::PermissionInfo permission;
+    PageInfo::PermissionInfo permission;
     permission.type = ContentSettingsType::NOTIFICATIONS;
     permission.setting = ContentSetting::CONTENT_SETTING_BLOCK;
     permission.default_setting = ContentSetting::CONTENT_SETTING_ASK;
@@ -386,7 +380,6 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
 
  private:
   std::vector<PageInfoBubbleView::PageInfoBubbleViewID> expected_identifiers_;
-  base::test::ScopedFeatureList feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(PageInfoBubbleViewBrowserTest);
 };

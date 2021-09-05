@@ -9,8 +9,10 @@
 
 #import "base/ios/block_types.h"
 #import "ios/chrome/browser/ui/find_bar/find_bar_coordinator.h"
+#import "ios/chrome/browser/ui/gestures/view_revealing_vertical_pan_handler.h"
 #import "ios/chrome/browser/ui/page_info/requirements/page_info_presentation.h"
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_presenter.h"
+#import "ios/chrome/browser/ui/thumb_strip/thumb_strip_attacher.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_coordinator_delegate.h"
 #import "ios/public/provider/chrome/browser/voice/logo_animation_controller.h"
 
@@ -27,6 +29,7 @@ class Browser;
                         FindBarPresentationDelegate,
                         PageInfoPresentation,
                         SyncPresenter,
+                        ThumbStripAttacher,
                         ToolbarCoordinatorDelegate>
 
 // Initializes a new BVC from its nib. |model| must not be nil. The

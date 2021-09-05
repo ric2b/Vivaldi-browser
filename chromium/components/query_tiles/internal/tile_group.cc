@@ -7,9 +7,13 @@
 #include <sstream>
 #include <utility>
 
+#include "components/query_tiles/internal/tile_utils.h"
+
 namespace query_tiles {
 
 namespace {
+// Score to be received by a tile when it is clicked.
+constexpr double kTileClickScore = 1.0;
 
 void DeepCopyGroup(const TileGroup& input, TileGroup* output) {
   DCHECK(output);
@@ -20,6 +24,7 @@ void DeepCopyGroup(const TileGroup& input, TileGroup* output) {
   output->tiles.clear();
   for (const auto& tile : input.tiles)
     output->tiles.emplace_back(std::make_unique<Tile>(*tile.get()));
+  output->tile_stats = input.tile_stats;
 }
 
 }  // namespace
@@ -36,6 +41,16 @@ bool TileGroup::operator==(const TileGroup& other) const {
 
 bool TileGroup::operator!=(const TileGroup& other) const {
   return !(*this == other);
+}
+
+void TileGroup::OnTileClicked(const std::string& tile_id) {
+  base::Time now_time = base::Time::Now();
+  auto iter = tile_stats.find(tile_id);
+  double score =
+      (iter == tile_stats.end())
+          ? kTileClickScore
+          : kTileClickScore + CalculateTileScore(iter->second, now_time);
+  tile_stats[tile_id] = TileStats(now_time, score);
 }
 
 TileGroup::TileGroup(const TileGroup& other) {

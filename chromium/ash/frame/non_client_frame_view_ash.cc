@@ -203,7 +203,7 @@ const char NonClientFrameViewAsh::kViewClassName[] = "NonClientFrameViewAsh";
 
 NonClientFrameViewAsh::NonClientFrameViewAsh(views::Widget* frame)
     : frame_(frame),
-      header_view_(new HeaderView(frame)),
+      header_view_(new HeaderView(frame, this)),
       overlay_view_(new OverlayView(header_view_)) {
   DCHECK(frame_);
 
@@ -410,8 +410,7 @@ NonClientFrameViewAsh::GetFrameCaptionButtonContainerViewForTest() {
 }
 
 void NonClientFrameViewAsh::PaintAsActiveChanged() {
-  // The icons differ between active and inactive.
-  header_view_->SchedulePaint();
+  header_view_->GetFrameHeader()->SetPaintAsActive(ShouldPaintAsActive());
   frame_->non_client_view()->Layout();
 }
 

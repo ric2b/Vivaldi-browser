@@ -137,7 +137,7 @@ def ReplaceGoogleInString(element):
   element = matcher.sub("https://bugs.vivaldi.com/", element)
   return element
 
-def update_resources(res, input_file, params={}, whitelist_support=None, active_only=True):
+def update_resources(res, input_file, params={}, allowlist_support=None, active_only=True):
 
   ReplaceGoogle(res, exceptions=REPLACE_GOOGLE_EXCEPTIONS)
 
@@ -149,7 +149,7 @@ def update_resources(res, input_file, params={}, whitelist_support=None, active_
     ])
 
   new_resources.SetOutputLanguage('en')
-  new_resources.SetWhitelistSupportEnabled(whitelist_support)
+  new_resources.SetAllowlistSupportEnabled(allowlist_support)
   new_resources.UberClique().keep_additional_translations_ = True
   new_resources.RunGatherers()
 

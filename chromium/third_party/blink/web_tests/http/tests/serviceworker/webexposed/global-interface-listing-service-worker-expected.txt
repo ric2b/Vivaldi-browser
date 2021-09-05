@@ -592,9 +592,12 @@ interface FileSystemWritableFileStream : WritableStream
     method write
 interface FontFace
     attribute @@toStringTag
+    getter ascentOverride
+    getter descentOverride
     getter display
     getter family
     getter featureSettings
+    getter lineGapOverride
     getter loaded
     getter status
     getter stretch
@@ -604,9 +607,12 @@ interface FontFace
     getter weight
     method constructor
     method load
+    setter ascentOverride
+    setter descentOverride
     setter display
     setter family
     setter featureSettings
+    setter lineGapOverride
     setter stretch
     setter style
     setter unicodeRange
@@ -807,7 +813,6 @@ interface ImageBitmapRenderingContext
 interface ImageData
     attribute @@toStringTag
     getter data
-    getter dataUnion
     getter height
     getter width
     method constructor
@@ -1060,9 +1065,11 @@ interface OffscreenCanvasRenderingContext2D
     method putImageData
     method quadraticCurveTo
     method rect
+    method reset
     method resetTransform
     method restore
     method rotate
+    method roundRect
     method save
     method scale
     method setLineDash
@@ -1105,6 +1112,7 @@ interface Path2D
     method moveTo
     method quadraticCurveTo
     method rect
+    method roundRect
 interface PaymentInstruments
     attribute @@toStringTag
     method clear
@@ -3794,6 +3802,18 @@ interface WebSocketStream
     getter url
     method close
     method constructor
+interface WebTransport
+    attribute @@toStringTag
+    getter closed
+    getter datagramReadable
+    getter datagramWritable
+    getter incomingBidirectionalStreams
+    getter incomingUnidirectionalStreams
+    getter ready
+    method close
+    method constructor
+    method createBidirectionalStream
+    method createUnidirectionalStream
 interface WindowClient : Client
     attribute @@toStringTag
     getter focused
@@ -3925,7 +3945,6 @@ interface WritableStreamDefaultWriter
     getter serviceWorker
     method gc
     method skipWaiting
-    setter cookieStore
     setter onabortpayment
     setter onactivate
     setter onbackgroundfetchabort

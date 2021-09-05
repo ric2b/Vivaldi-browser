@@ -4,6 +4,7 @@
 
 #include "content/public/test/browser_test_base.h"
 
+#include <fcntl.h>
 #include <stddef.h>
 
 #include <iostream>
@@ -16,6 +17,8 @@
 #include "base/command_line.h"
 #include "base/debug/stack_trace.h"
 #include "base/feature_list.h"
+#include "base/files/file_path.h"
+#include "base/files/scoped_file.h"
 #include "base/i18n/icu_util.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -33,6 +36,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/network_service_instance_impl.h"
@@ -62,11 +66,12 @@
 #include "media/base/media_switches.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
+#include "mojo/public/cpp/platform/named_platform_channel.h"
+#include "mojo/public/cpp/platform/platform_channel.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/network_service_test.mojom.h"
-#include "services/service_manager/embedder/switches.h"
 #include "services/tracing/public/cpp/trace_startup.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/compositor/compositor_switches.h"
@@ -109,6 +114,15 @@
 #include "ui/aura/test/event_generator_delegate_aura.h"  // nogncheck
 #endif
 
+#if BUILDFLAG(IS_LACROS)
+#include "base/files/file_path.h"
+#include "base/files/scoped_file.h"
+#include "chromeos/lacros/lacros_chrome_service_impl.h"
+#include "mojo/public/cpp/platform/named_platform_channel.h"
+#include "mojo/public/cpp/platform/platform_channel.h"
+#include "mojo/public/cpp/platform/socket_utils_posix.h"
+#endif
+
 namespace content {
 namespace {
 
@@ -127,7 +141,7 @@ int g_browser_process_pid;
 
 void DumpStackTraceSignalHandler(int signal) {
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          service_manager::switches::kDisableInProcessStackTraces) &&
+          switches::kDisableInProcessStackTraces) &&
       g_browser_process_pid == base::GetCurrentProcId()) {
     std::string message("BrowserTestBase received signal: ");
     message += strsignal(signal);
@@ -336,6 +350,47 @@ void BrowserTestBase::SetUp() {
   // device or vm bots), we use hardware GL.
   if (base::SysInfo::IsRunningOnChromeOS())
     use_software_gl = false;
+#endif
+
+#if BUILDFLAG(IS_LACROS)
+  // If the test is running on the lacros environment, a file descriptor needs
+  // to be obtained and used to launch lacros-chrome so that a mojo connection
+  // between lacros-chrome and ash-chrome can be established.
+  // For more details, please see:
+  // //chrome/browser/chromeos/crosapi/test_mojo_connection_manager.h.
+  {
+    // TODO(crbug.com/1127581): Switch to use |kLacrosMojoSocketForTesting| in
+    // //chromeos/constants/chromeos_switches.h.
+    // Please refer to the CL comments for why it can't be done now:
+    // http://crrev.com/c/2402580/2/content/public/test/browser_test_base.cc
+    std::string socket_path =
+        command_line->GetSwitchValueASCII("lacros-mojo-socket-for-testing");
+    if (socket_path.empty()) {
+      chromeos::LacrosChromeServiceImpl::Get()->DisableCrosapiForTests();
+    } else {
+      auto channel = mojo::NamedPlatformChannel::ConnectToServer(socket_path);
+      base::ScopedFD socket_fd = channel.TakePlatformHandle().TakeFD();
+
+      // Mark the channel as blocking.
+      int flags = fcntl(socket_fd.get(), F_GETFL);
+      PCHECK(flags != -1);
+      fcntl(socket_fd.get(), F_SETFL, flags & ~O_NONBLOCK);
+
+      uint8_t buf[32];
+      std::vector<base::ScopedFD> descriptors;
+      auto size = mojo::SocketRecvmsg(socket_fd.get(), buf, sizeof(buf),
+                                      &descriptors, true /*block*/);
+      if (size < 0)
+        PLOG(ERROR) << "Error receiving message from the socket";
+      ASSERT_EQ(1, size);
+      EXPECT_EQ(0u, buf[0]);
+      ASSERT_EQ(1u, descriptors.size());
+      // It's OK to release the FD because lacros-chrome's code will consume it.
+      command_line->AppendSwitchASCII(
+          mojo::PlatformChannel::kHandleSwitch,
+          base::NumberToString(descriptors[0].release()));
+    }
+  }
 #endif
 
   if (use_software_gl && !use_software_compositing_)

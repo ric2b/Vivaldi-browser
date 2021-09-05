@@ -14,6 +14,7 @@
 #include "chromeos/services/device_sync/public/cpp/fake_device_sync_client.h"
 #include "chromeos/services/multidevice_setup/fake_feature_state_manager.h"
 #include "chromeos/services/multidevice_setup/fake_host_status_provider.h"
+#include "chromeos/services/multidevice_setup/fake_wifi_sync_feature_manager.h"
 #include "chromeos/services/multidevice_setup/public/cpp/fake_android_sms_pairing_state_tracker.h"
 #include "chromeos/services/multidevice_setup/public/cpp/prefs.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
@@ -46,6 +47,8 @@ multidevice::RemoteDeviceRef CreateTestLocalDevice() {
       multidevice::SoftwareFeatureState::kNotSupported;
   raw_device->software_features[multidevice::SoftwareFeature::kPhoneHubClient] =
       multidevice::SoftwareFeatureState::kNotSupported;
+  raw_device->software_features[multidevice::SoftwareFeature::kWifiSyncClient] =
+      multidevice::SoftwareFeatureState::kNotSupported;
 
   return local_device;
 }
@@ -69,6 +72,8 @@ multidevice::RemoteDeviceRef CreateTestHostDevice() {
       ->software_features[multidevice::SoftwareFeature::kMessagesForWebHost] =
       multidevice::SoftwareFeatureState::kSupported;
   raw_device->software_features[multidevice::SoftwareFeature::kPhoneHubHost] =
+      multidevice::SoftwareFeatureState::kSupported;
+  raw_device->software_features[multidevice::SoftwareFeature::kWifiSyncHost] =
       multidevice::SoftwareFeatureState::kSupported;
 
   return host_device;
@@ -103,10 +108,14 @@ class MultiDeviceSetupFeatureStateManagerImplTest : public testing::Test {
         std::make_unique<FakeAndroidSmsPairingStateTracker>();
     fake_android_sms_pairing_state_tracker_->SetPairingComplete(true);
 
+    fake_wifi_sync_feature_manager_ =
+        std::make_unique<FakeWifiSyncFeatureManager>();
+
     manager_ = FeatureStateManagerImpl::Factory::Create(
         test_pref_service_.get(), fake_host_status_provider_.get(),
         fake_device_sync_client_.get(),
-        fake_android_sms_pairing_state_tracker_.get());
+        fake_android_sms_pairing_state_tracker_.get(),
+        fake_wifi_sync_feature_manager_.get());
 
     fake_observer_ = std::make_unique<FakeFeatureStateManagerObserver>();
     manager_->AddObserver(fake_observer_.get());
@@ -222,6 +231,9 @@ class MultiDeviceSetupFeatureStateManagerImplTest : public testing::Test {
   }
 
   FeatureStateManager* manager() { return manager_.get(); }
+  FakeWifiSyncFeatureManager* wifi_sync_manager() {
+    return fake_wifi_sync_feature_manager_.get();
+  }
 
  private:
   multidevice::RemoteDeviceRef test_local_device_;
@@ -233,6 +245,7 @@ class MultiDeviceSetupFeatureStateManagerImplTest : public testing::Test {
   std::unique_ptr<device_sync::FakeDeviceSyncClient> fake_device_sync_client_;
   std::unique_ptr<FakeAndroidSmsPairingStateTracker>
       fake_android_sms_pairing_state_tracker_;
+  std::unique_ptr<FakeWifiSyncFeatureManager> fake_wifi_sync_feature_manager_;
 
   std::unique_ptr<FakeFeatureStateManagerObserver> fake_observer_;
 
@@ -270,18 +283,21 @@ TEST_F(MultiDeviceSetupFeatureStateManagerImplTest, BetterTogetherSuite) {
   SetSoftwareFeatureState(true /* use_local_device */,
                           multidevice::SoftwareFeature::kPhoneHubClient,
                           multidevice::SoftwareFeatureState::kSupported);
+  SetSoftwareFeatureState(true /* use_local_device */,
+                          multidevice::SoftwareFeature::kWifiSyncClient,
+                          multidevice::SoftwareFeatureState::kSupported);
 
   // Now, the suite should be considered enabled.
   VerifyFeatureState(mojom::FeatureState::kEnabledByUser,
                      mojom::Feature::kBetterTogetherSuite);
-  VerifyFeatureStateChange(4u /* expected_index */,
+  VerifyFeatureStateChange(5u /* expected_index */,
                            mojom::Feature::kBetterTogetherSuite,
                            mojom::FeatureState::kEnabledByUser);
 
   test_pref_service()->SetBoolean(kBetterTogetherSuiteEnabledPrefName, false);
   VerifyFeatureState(mojom::FeatureState::kDisabledByUser,
                      mojom::Feature::kBetterTogetherSuite);
-  VerifyFeatureStateChange(5u /* expected_index */,
+  VerifyFeatureStateChange(6u /* expected_index */,
                            mojom::Feature::kBetterTogetherSuite,
                            mojom::FeatureState::kDisabledByUser);
 
@@ -291,9 +307,10 @@ TEST_F(MultiDeviceSetupFeatureStateManagerImplTest, BetterTogetherSuite) {
   test_pref_service()->SetBoolean(kMessagesAllowedPrefName, false);
   test_pref_service()->SetBoolean(kSmartLockAllowedPrefName, false);
   test_pref_service()->SetBoolean(kPhoneHubAllowedPrefName, false);
+  test_pref_service()->SetBoolean(kWifiSyncAllowedPrefName, false);
   VerifyFeatureState(mojom::FeatureState::kProhibitedByPolicy,
                      mojom::Feature::kBetterTogetherSuite);
-  VerifyFeatureStateChange(9u /* expected_index */,
+  VerifyFeatureStateChange(11u /* expected_index */,
                            mojom::Feature::kBetterTogetherSuite,
                            mojom::FeatureState::kProhibitedByPolicy);
 }
@@ -534,6 +551,56 @@ TEST_F(MultiDeviceSetupFeatureStateManagerImplTest, PhoneHub) {
                        phone_hub_feature);
   }
   VerifyFeatureStateChange(9u /* expected_index */, mojom::Feature::kPhoneHub,
+                           mojom::FeatureState::kProhibitedByPolicy);
+}
+
+TEST_F(MultiDeviceSetupFeatureStateManagerImplTest, WifiSync) {
+  TryAllUnverifiedHostStatesAndVerifyFeatureState(mojom::Feature::kWifiSync);
+
+  SetVerifiedHost();
+  VerifyFeatureState(mojom::FeatureState::kNotSupportedByChromebook,
+                     mojom::Feature::kWifiSync);
+
+  SetSoftwareFeatureState(true /* use_local_device */,
+                          multidevice::SoftwareFeature::kWifiSyncClient,
+                          multidevice::SoftwareFeatureState::kSupported);
+  wifi_sync_manager()->SetIsWifiSyncEnabled(true);
+  VerifyFeatureState(mojom::FeatureState::kDisabledByUser,
+                     mojom::Feature::kWifiSync);
+  VerifyFeatureStateChange(1u /* expected_index */, mojom::Feature::kWifiSync,
+                           mojom::FeatureState::kDisabledByUser);
+
+  SetSoftwareFeatureState(false /* use_local_device */,
+                          multidevice::SoftwareFeature::kWifiSyncHost,
+                          multidevice::SoftwareFeatureState::kEnabled);
+  wifi_sync_manager()->SetIsWifiSyncEnabled(false);
+  VerifyFeatureState(mojom::FeatureState::kEnabledByUser,
+                     mojom::Feature::kWifiSync);
+  VerifyFeatureStateChange(2u /* expected_index */, mojom::Feature::kWifiSync,
+                           mojom::FeatureState::kEnabledByUser);
+
+  manager()->SetFeatureEnabledState(mojom::Feature::kWifiSync, false);
+  VerifyFeatureState(mojom::FeatureState::kDisabledByUser,
+                     mojom::Feature::kWifiSync);
+  VerifyFeatureStateChange(3u /* expected_index */, mojom::Feature::kWifiSync,
+                           mojom::FeatureState::kDisabledByUser);
+
+  manager()->SetFeatureEnabledState(mojom::Feature::kWifiSync, true);
+  VerifyFeatureState(mojom::FeatureState::kEnabledByUser,
+                     mojom::Feature::kWifiSync);
+  VerifyFeatureStateChange(4u /* expected_index */, mojom::Feature::kWifiSync,
+                           mojom::FeatureState::kEnabledByUser);
+
+  MakeBetterTogetherSuiteDisabledByUser();
+  VerifyFeatureState(mojom::FeatureState::kUnavailableSuiteDisabled,
+                     mojom::Feature::kWifiSync);
+  VerifyFeatureStateChange(6u /* expected_index */, mojom::Feature::kWifiSync,
+                           mojom::FeatureState::kUnavailableSuiteDisabled);
+
+  test_pref_service()->SetBoolean(kWifiSyncAllowedPrefName, false);
+  VerifyFeatureState(mojom::FeatureState::kProhibitedByPolicy,
+                     mojom::Feature::kWifiSync);
+  VerifyFeatureStateChange(7u /* expected_index */, mojom::Feature::kWifiSync,
                            mojom::FeatureState::kProhibitedByPolicy);
 }
 

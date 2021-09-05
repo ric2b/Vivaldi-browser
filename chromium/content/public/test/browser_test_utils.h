@@ -39,6 +39,7 @@
 #include "content/public/common/isolated_world_ids.h"
 #include "content/public/common/page_type.h"
 #include "content/public/common/untrustworthy_context_menu_params.h"
+#include "content/public/test/fake_frame_widget.h"
 #include "ipc/message_filter.h"
 #include "net/base/load_flags.h"
 #include "services/network/public/mojom/network_service.mojom.h"
@@ -98,10 +99,13 @@ typedef int PROPERTYID;
 // If it only works with content_browsertests, it should be in
 // content\test\content_browser_test_utils.h.
 
+namespace blink {
+struct FrameVisualProperties;
+}
+
 namespace content {
 
 class BrowserContext;
-struct FrameVisualProperties;
 class FrameTreeNode;
 class NavigationHandle;
 class NavigationRequest;
@@ -140,6 +144,12 @@ void NavigateToURLBlockUntilNavigationsComplete(WebContents* web_contents,
 bool NavigateIframeToURL(WebContents* web_contents,
                          const std::string& iframe_id,
                          const GURL& url);
+
+// Similar to |NavigateIframeToURL()| but returns as soon as the navigation is
+// initiated.
+bool BeginNavigateIframeToURL(WebContents* web_contents,
+                              const std::string& iframe_id,
+                              const GURL& url);
 
 // Generate a URL for a file path including a query string.
 GURL GetFileUrlWithQuery(const base::FilePath& path,
@@ -346,6 +356,15 @@ void RunUntilInputProcessed(RenderWidgetHost* host);
 // tests. The value `no-meta` indicates no tag should be created.
 std::string ReferrerPolicyToString(
     network::mojom::ReferrerPolicy referrer_policy);
+
+// For testing, bind FakeFrameWidget to a RenderWidgetHost associated
+// with a given RenderFrameHost
+mojo::PendingAssociatedReceiver<blink::mojom::FrameWidget>
+BindFakeFrameWidgetInterfaces(RenderFrameHost* frame);
+
+// Set |active| state for a RenderWidgetHost associated with a given
+// RenderFrameHost
+void SimulateActiveStateForWidget(RenderFrameHost* frame, bool active);
 
 // Holds down modifier keys for the duration of its lifetime and releases them
 // upon destruction. This allows simulating multiple input events without
@@ -952,10 +971,6 @@ void UiaGetPropertyValueVtArrayVtUnknownValidate(
     ui::AXPlatformNodeDelegate* target_node,
     const std::vector<std::string>& expected_names);
 #endif
-
-// Find out if the BrowserPlugin for a guest WebContents is focused. Returns
-// false if the WebContents isn't a guest with a BrowserPlugin.
-bool IsWebContentsBrowserPluginFocused(content::WebContents* web_contents);
 
 // Returns the RenderWidgetHost that holds the mouse lock.
 RenderWidgetHost* GetMouseLockWidget(WebContents* web_contents);
@@ -1631,11 +1646,11 @@ class WebContentsConsoleObserver : public WebContentsObserver {
   std::vector<Message> messages_;
 };
 
-// Static methods that inject particular IPCs into the message pipe as if they
-// came from |process|. Used to simulate a compromised renderer.
+// Static methods that simulates Mojo methods as if they were called by a
+// renderer. Used to simulate a compromised renderer.
 class PwnMessageHelper {
  public:
-  // Sends FileSystemHostMsg_Create
+  // Calls Create method in FileSystemHost Mojo interface.
   static void FileSystemCreate(RenderProcessHost* process,
                                int request_id,
                                GURL path,
@@ -1643,12 +1658,15 @@ class PwnMessageHelper {
                                bool is_directory,
                                bool recursive);
 
-  // Sends FileSystemHostMsg_Write
+  // Calls Write method in FileSystemHost Mojo interface.
   static void FileSystemWrite(RenderProcessHost* process,
                               int request_id,
                               GURL file_path,
                               std::string blob_uuid,
                               int64_t position);
+
+  // Calls OpenURL method in FrameHost Mojo interface.
+  static void OpenURL(RenderFrameHost* render_frame_host, const GURL& url);
 
  private:
   PwnMessageHelper();  // Not instantiable.
@@ -1757,11 +1775,6 @@ class SynchronizeVisualPropertiesMessageFilter
   void WaitForRect();
   void ResetRectRunLoop();
 
-  // Returns the new viz::FrameSinkId immediately if the IPC has been received.
-  // Otherwise this will block the UI thread until it has been received, then it
-  // will return the new viz::FrameSinkId.
-  viz::FrameSinkId GetOrWaitForId();
-
   // Waits for the next viz::LocalSurfaceId be received and returns it.
   viz::LocalSurfaceId WaitForSurfaceId();
 
@@ -1775,11 +1788,9 @@ class SynchronizeVisualPropertiesMessageFilter
 
  private:
   void OnSynchronizeFrameHostVisualProperties(
-      const viz::FrameSinkId& frame_sink_id,
-      const FrameVisualProperties& visual_properties);
+      const blink::FrameVisualProperties& visual_properties);
   void OnSynchronizeVisualProperties(
-      const viz::FrameSinkId& frame_sink_id,
-      const FrameVisualProperties& visual_properties);
+      const blink::FrameVisualProperties& visual_properties);
   // |rect| is in DIPs.
   void OnUpdatedFrameRectOnUI(const gfx::Rect& rect);
   void OnUpdatedFrameSinkIdOnUI();
@@ -1787,8 +1798,7 @@ class SynchronizeVisualPropertiesMessageFilter
 
   bool OnMessageReceived(const IPC::Message& message) override;
 
-  viz::FrameSinkId frame_sink_id_;
-  base::RunLoop frame_sink_id_run_loop_;
+  base::RunLoop run_loop_;
 
   std::unique_ptr<base::RunLoop> screen_space_rect_run_loop_;
   bool screen_space_rect_received_;

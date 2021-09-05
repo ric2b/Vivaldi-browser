@@ -30,6 +30,7 @@
 <translation id="1208421848177517699">లిప్యంతరీకరణ (namaste → નમસ્તે)</translation>
 <translation id="1243314992276662751">అప్‌లోడ్ చేయి</translation>
 <translation id="1249250836236328755">కళా ప్రక్రియ</translation>
+<translation id="1276362640455948667">US అంతర్జాతీయ కీబోర్డ్‌తో పోర్చుగీస్</translation>
 <translation id="1278813325885878377">హంగేరియన్ QWERTY కీబోర్డ్</translation>
 <translation id="1293556467332435079">Files</translation>
 <translation id="1297922636971898492">Google డిస్క్ ప్రస్తుతం అందుబాటులో లేదు. Google డిస్క్ అందుబాటులోకి వచ్చిన తర్వాత అప్‌లోడ్ ఆటోమేటిక్‌గా మళ్లీ ప్రారంభమవుతుంది.</translation>
@@ -63,6 +64,7 @@
 <translation id="1572585716423026576">వాల్‌పేపర్‌గా సెట్ చేయి</translation>
 <translation id="158809615184981282">ఫారోస్ కీబోర్డ్</translation>
 <translation id="1589128298353575783"><ph name="NUMBER_OF_PB" /> PB</translation>
+<translation id="1620510694547887537">కెమెరా</translation>
 <translation id="1646136617204068573">హంగేరియన్ కీబోర్డ్</translation>
 <translation id="164729547906544836">తమిళ కీబోర్డ్ (ఐట్రాన్స్)</translation>
 <translation id="164969095109328410">Chrome పరికరం</translation>
@@ -70,6 +72,7 @@
 <translation id="1673103856845176271">భద్రతా కారణాల దృష్ట్యా ఫైల్‌ను ప్రాప్యత చేయడం సాధ్యపడదు.</translation>
 <translation id="169515659049020177">Shift</translation>
 <translation id="1722487484194605434"><ph name="NUMBER_OF_ITEMS" /> అంశాలను జిప్ చేస్తోంది...</translation>
+<translation id="1731889557567069540"><ph name="NUMBER_OF_ITEMS" /> ఐటమ్‌లు కాపీ చేయబడ్డాయి.</translation>
 <translation id="174173592514158117">అన్ని ప్లే ఫోల్డర్‌లను చూపు</translation>
 <translation id="174937106936716857">మొత్తం ఫైల్‌ల సంఖ్య</translation>
 <translation id="1775381402323441512">వీడియో సమాచారం</translation>
@@ -114,7 +117,9 @@
 <translation id="2208158072373999562">జిప్ ఆర్కైవ్</translation>
 <translation id="2225536596944493418">మీరు <ph name="NUMBER_OF_ITEMS" /> అంశాలను ఖచ్చితంగా తొలగించాలనుకుంటున్నారా?</translation>
 <translation id="2230062665678605299">"<ph name="FOLDER_NAME" />" ఫోల్డర్‌ను సృష్టించడం సాధ్యపడలేదు. <ph name="ERROR_MESSAGE" /></translation>
+<translation id="2275059641601412272">తరలించబడింది.</translation>
 <translation id="2278988676849463018">కన్నడ కీబోర్డ్ (ఫొనెటిక్)</translation>
+<translation id="2287742181953707290">US అంతర్జాతీయ PC కీబోర్డ్‌తో పోర్చుగీస్</translation>
 <translation id="2288278176040912387">రికార్డ్ ప్లేయర్</translation>
 <translation id="2291538123825441971"><ph name="NUMBER_OF_FILES" /> ఫైల్‌లను తెరుస్తోంది.</translation>
 <translation id="2303301624314357662"><ph name="FILE_NAME" /> ఫైల్‌ని తెరుస్తోంది.</translation>
@@ -185,7 +190,6 @@
 <translation id="3064388234319122767">లిప్యంతరీకరణ (zdravo → здраво)</translation>
 <translation id="3067790092342515856">Windows ఫైల్‌లు</translation>
 <translation id="3078461028045006476"><ph name="EXTENSION_NAME" />తో భాగస్వామ్యం చేయండి</translation>
-<translation id="3088034400796962477">లిప్యంతరీకరణ (salam ← سلام)</translation>
 <translation id="3116361045094675131">UK కీబోర్డ్</translation>
 <translation id="3126026824346185272">Ctrl</translation>
 <translation id="3144126448740580210">పూర్తయింది</translation>
@@ -219,6 +223,7 @@
 <translation id="3473378059788601120"><ph name="FOLDER_NAME" />లోకి కాపీ చేయబడింది.</translation>
 <translation id="3475447146579922140">Google స్ప్రెడ్‌షీట్</translation>
 <translation id="3495304270784461826"><ph name="COUNT" /> లోపాలు.</translation>
+<translation id="349603508045926994">పర్షియన్ ట్రాన్స్‌లిటరేషన్</translation>
 <translation id="3519867315646775981">లిప్యంతరీకరణ (shalom ← שלום)</translation>
 <translation id="3522708245912499433">పోర్చుగీస్</translation>
 <translation id="3524311639100184459">హెచ్చరిక: ఈ ఫైల్స్ తాత్కాలికమైనవి, డిస్క్ స్పేస్‌ను ఖాళీ చేయడం కోసం ఆటోమేటిక్‌గా ఇవి తొలగించబడవచ్చు.  <ph name="BEGIN_LINK" />మరింత తెలుసుకోండి<ph name="END_LINK" /></translation>
@@ -235,6 +240,7 @@
 <translation id="3620292326130836921">అన్నీ బ్యాకప్ చేయబడ్డాయి!</translation>
 <translation id="3626281679859535460">ప్రకాశం</translation>
 <translation id="3644896802912593514">వెడల్పు</translation>
+<translation id="3645233063072417428"><ph name="NUMBER_OF_ITEMS" /> ఐటెమ్‌లు తరలించబడ్డాయి.</translation>
 <translation id="3645531960514756307">ఫోల్డర్‌ను అన్‌పిన్ చేయి</translation>
 <translation id="3678559383040232393">మాల్టెసె కీబోర్డ్</translation>
 <translation id="3685122418104378273">మొబైల్ డేటాను ఉపయోగిస్తున్నప్పుడు Google డిస్క్ సింక్ డిఫాల్ట్‌గా నిలిపివేయబడుతుంది.</translation>
@@ -276,6 +282,7 @@
 <translation id="4072248638558688893">తమిళ కీబోర్డ్ (ఫొనెటిక్)</translation>
 <translation id="4124935795427217608">యునికార్న్</translation>
 <translation id="4158739975813877944">ప్లే జాబితాను తెరువు</translation>
+<translation id="4159731583141908892"><ph name="FILE_NAME" /> తరలించబడింది.</translation>
 <translation id="418179967336296930">రష్యన్ ఫొనెటిక్ (YaZHert) కీబోర్డ్</translation>
 <translation id="4193154014135846272">Google పత్రం</translation>
 <translation id="4195249722193633765">Linux (బీటా)తో అప్లికేషన్‌ని ఇన్‌స్టాల్ చేయండి</translation>
@@ -289,6 +296,7 @@
 <translation id="4298972503445160211">డానిష్ కీబోర్డ్</translation>
 <translation id="4299729908419173967">బ్రెజిలియన్</translation>
 <translation id="4309915981827077375">సాధారణ సమాచారం</translation>
+<translation id="4315949787858895817">డచ్ (బెల్జియం)</translation>
 <translation id="4326192123064055915">కాఫీ</translation>
 <translation id="4336032328163998280">కాపీ ఆపరేషన్ విఫలమైంది. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">ఖర్బూజాపండు</translation>
@@ -300,7 +308,6 @@
 <translation id="4477219268485577442">బల్గేరియన్ ఫోనెటిక్</translation>
 <translation id="4479812471636796472">US డ్వొరక్ కీబోర్డ్</translation>
 <translation id="4481711095103932593">ఈ ఫోల్డర్ Windowsతో షేర్ చేయబడింది</translation>
-<translation id="4487088045714738411">బెల్జియన్ కీబోర్డ్</translation>
 <translation id="4522570452068850558">వివరాలు</translation>
 <translation id="4542387084127299777">"<ph name="PATH" />"ను తెరవడం సాధ్యం కాలేదు</translation>
 <translation id="4552678318981539154">మరింత నిల్వను కొనుగోలు చేయండి</translation>
@@ -311,6 +318,7 @@
 <translation id="4582497162516204941">Linux (బీటా)తో ఇన్‌స్టాల్ చేయండి</translation>
 <translation id="4594543368593301662"><ph name="SEARCH_TERM" /> ఫలితాలను చూపుతోంది.</translation>
 <translation id="4603392156942865207"><ph name="FILE_NAME" />ను <ph name="FOLDER_NAME" />కు కాపీ చేస్తోంది</translation>
+<translation id="4627439232948440198">సంస్కృతం</translation>
 <translation id="4631887759990505102">చిత్రకారుడు</translation>
 <translation id="4656293982926141856">ఈ కంప్యూటర్</translation>
 <translation id="4669606053856530811">'<ph name="SOURCE_NAME" />' యొక్క సభ్యులతో ఈ అంశాలను షేర్ చేస్తే మినహా వారు యాక్సెస్‌ను కోల్పోతారు.</translation>
@@ -336,6 +344,7 @@
 <translation id="4804827417948292437">వెన్నపండు</translation>
 <translation id="4823651846660089135">పరికరం చదవడానికి మాత్రమే</translation>
 <translation id="4839847978919684242"><ph name="SELCTED_FILES_COUNT" /> అంశాలు ఎంచుకోబడ్డాయి</translation>
+<translation id="4849981557599196363">జర్మన్ (బెల్జియం)</translation>
 <translation id="4850886885716139402">వీక్షణ</translation>
 <translation id="485316830061041779">జర్మన్</translation>
 <translation id="4867079195717347957">నిలువు వరుసను అవరోహణ క్రమంలో వర్గీకరించడానికి క్లిక్ చేయండి.</translation>
@@ -361,6 +370,7 @@
 <translation id="5010406651457630570">కంప్యూటర్‌లు</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">ఈ చర్య పూర్తి చేయడానికి అనుకున్నదాని కంటే ఎక్కువ సమయం పడుతోంది. మీరు దీనిని రద్దు చేయాలనుకుంటున్నారా?</translation>
+<translation id="5026887030745057099">హిందీ</translation>
 <translation id="5036159836254554629">Parallels Desktop షేరింగ్‌ను మేనేజ్ చేయండి</translation>
 <translation id="5038625366300922036">మరింత చూడండి...</translation>
 <translation id="5061708541166515394">వ్యత్యాసం</translation>
@@ -371,6 +381,7 @@
 <translation id="5098629044894065541">హిబ్రూ</translation>
 <translation id="5123433949759960244">బాస్కెట్‌బాల్</translation>
 <translation id="5129662217315786329">పోలిష్</translation>
+<translation id="5132435854979302863">ఫిలిప్పినో</translation>
 <translation id="5144820558584035333">హాంగుల్ 3 సెట్ (390)</translation>
 <translation id="5145331109270917438">సవరించబడిన తేదీ</translation>
 <translation id="515594325917491223">చదరంగం</translation>
@@ -395,7 +406,9 @@
     మీ పరికరానికి ఏ విధమైన ఆపద సంభవించినా ఫర్వాలేదు, మీ ఫైల్‌లు Google డిస్క్‌లో సురక్షితంగా నిల్వ చేయబడి ఉంటాయి.<ph name="MARKUP_6" />
     అన్ని ఫైల్‌లు ఒకే చోట ఉంటాయి, కాబట్టి <ph name="MARKUP_7" />షేర్ చేయండి, సృష్టించండి,
     వాటిపై ఇతరులతో కలిసి పని చేయండి<ph name="MARKUP_8" />.<ph name="MARKUP_9" /></translation>
+<translation id="5274350207900771082">కాపీ చేయబడింది.</translation>
 <translation id="5275973617553375938">Google డిస్క్ నుండి పునరుద్ధరించబడిన ఫైల్‌లు</translation>
+<translation id="5283140566205748520">ఫ్రెంచ్ (బెల్జియం)</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
 <translation id="5317780077021120954">సేవ్ చేయి</translation>
 <translation id="5318819489018851358">Linuxతో షేర్ చేయి</translation>
@@ -412,16 +425,17 @@
 <translation id="5418923334382419584">మయన్మార్ కీబోర్డ్</translation>
 <translation id="5428105026674456456">స్పానిష్</translation>
 <translation id="5438282218546237410"><ph name="SEARCH_TERM" />కు సంబంధించిన శోధన ఫలితాలేవీ లేవు.</translation>
+<translation id="5449551289610225147">పాస్‌వర్డ్ చెల్లదు</translation>
 <translation id="5464696796438641524">పోలిష్ కీబోర్డ్</translation>
 <translation id="5465122519792752163">నేపాలీ కీబోర్డ్ (ఇన్‌స్క్రిప్ట్)</translation>
 <translation id="5469868506864199649">ఇటాలియన్</translation>
+<translation id="5484429245813572665">ఇండోనేషియన్</translation>
 <translation id="5494920125229734069">అన్నీ ఎంచుకోండి</translation>
 <translation id="5500122897333236901">ఐస్‌లాండిక్</translation>
 <translation id="5508696409934741614">చుక్కలు</translation>
 <translation id="5522908512596376669">ఫైల్ జాబితా, "జాబితా వీక్షణ"కు మార్చబడింది.</translation>
 <translation id="5524517123096967210">ఫైల్‌ను చదవడం సాధ్యపడదు.</translation>
 <translation id="5533102081734025921"><ph name="IMAGE_TYPE" /> చిత్రం</translation>
-<translation id="5533555070048896610">లిప్యంతరీకరణ (namaste → नमस्ते)</translation>
 <translation id="5534520101572674276">పరిమాణాన్ని లెక్కిస్తోంది</translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5605830556594064952">యుఎస్ డ్వోరక్</translation>
@@ -593,6 +607,7 @@
 <translation id="751507702149411736">బెలారుషియన్</translation>
 <translation id="7544853251252956727">షఫుల్ చేయి</translation>
 <translation id="7547811415869834682">డచ్</translation>
+<translation id="7551643184018910560">అరకు పిన్ చేయండి</translation>
 <translation id="7576032389798113292">6x4</translation>
 <translation id="7589661784326793847">ఒక క్షణం వేచి ఉండండి</translation>
 <translation id="7603724359189955920">గ్రిడ్‌లు</translation>
@@ -601,8 +616,10 @@
 <translation id="7649070708921625228">సహాయం</translation>
 <translation id="7654209398114106148"><ph name="NUMBER_OF_ITEMS" /> అంశాలను తరలిస్తోంది...</translation>
 <translation id="7658239707568436148">రద్దు చేయి</translation>
+<translation id="7693909743393669729">డ్రైవ్‌ను ఫార్మాట్ చేయడం వలన దానిలో స్టోర్ చేసిన మొత్తం డేటా తొలగించబడుతుంది, కనపడకుండా ఉండే కొన్ని విభజనలతో సహా విభజనలు అన్నీ తీసివేయబడతాయి. ఈ చర్యను రద్దు చేయలేరు.</translation>
 <translation id="7695430100978772476"><ph name="DRIVE_NAME" />ను ఫార్మాట్ చేయడం సాధ్యపడలేదు</translation>
 <translation id="770015031906360009">గ్రీక్</translation>
+<translation id="7705251383879779343"><ph name="FILE_NAME" /> కాపీ చేయబడింది.</translation>
 <translation id="7706319470528945664">పోర్చ్‌గీస్ కీబోర్డ్</translation>
 <translation id="7711920809702896782">చిత్రం సమాచారం</translation>
 <translation id="7724603315864178912">కత్తిరించు</translation>
@@ -632,6 +649,7 @@
 <translation id="78946041517601018">షేర్ చేసిన డ్రైవ్‌లు</translation>
 <translation id="7896906914454843592">US విస్తారిత కీబోర్డ్</translation>
 <translation id="7898607018410277265">గుజరాతీ కీబోర్డ్ (కొత్త ఫొనెటిక్)</translation>
+<translation id="7908793776359722643">విభజనను ఫార్మాట్ చేయడం వలన దానిలో స్టోర్ చేయబడిన మొత్తం డేటా తొలగించబడుతుంది. ఈ చర్యను రద్దు చేయలేరు.</translation>
 <translation id="7917972308273378936">లిథ్వెనియన్ కీబోర్డ్</translation>
 <translation id="7925686952655276919">సింక్ కోసం మొబైల్ డేటాను ఉపయోగించవద్దు</translation>
 <translation id="7928710562641958568">పరికరాన్ని తీసివేయండి</translation>
@@ -676,7 +694,9 @@
 <translation id="8299269255470343364">జపనీస్</translation>
 <translation id="8312871300878166382">ఫోల్డర్‌లోకి అతికించు</translation>
 <translation id="8329978297633540474">సాదా వచనం</translation>
+<translation id="8335587457941836791">అర నుండి అన్‌పిన్ చేయండి</translation>
 <translation id="8336153091935557858">నిన్న <ph name="YESTERDAY_DAYTIME" /></translation>
+<translation id="8336524887811696057">నేపాలీ ట్రాన్స్‌లిటరేషన్</translation>
 <translation id="8336579025507394412">ఐస్‌ల్యాండిక్ కీబోర్డ్</translation>
 <translation id="8342318071240498787">ఫైల్ లేదా డైరెక్టరీ అదే పేరుతో ఇప్పటికే ఉనికిలో ఉంది.</translation>
 <translation id="8382450452152102026"><ph name="FOLDER_NAME" />లోకి</translation>
@@ -702,12 +722,14 @@
 <translation id="8600173386174225982">ఫైల్ జాబితా, "సూక్ష్మచిత్ర వీక్షణ"కు మార్చబడింది.</translation>
 <translation id="8601932370724196034">Crostini చిత్రం ఫైల్</translation>
 <translation id="8669949407341943408">తరలించబడుతున్నాయి...</translation>
+<translation id="8694836330346852143">ఉర్దూ</translation>
 <translation id="8698464937041809063">Google డ్రాయింగ్</translation>
 <translation id="8714406895390098252">సైకిల్</translation>
 <translation id="8719721339511222681"><ph name="ENTRY_NAME" /> ఎంపిక చేయబడింది.</translation>
 <translation id="8722421161699219904">US అంతర్జాతీయ కీబోర్డ్</translation>
 <translation id="872537912056138402">క్రోవేషియన్</translation>
 <translation id="874420130893181774">సంప్రదాయ Pinyin ఇన్‌పుట్ పద్ధతి</translation>
+<translation id="8770002329960263418">US అంతర్జాతీయ PC కీబోర్డ్‌తో డచ్ (నెదర్లాండ్స్)</translation>
 <translation id="8775404590947523323">మీ సవరణలు ఆటోమేటిక్‌గా సేవ్ చేయబడతాయి.<ph name="BREAKS" />అసలు చిత్రం యొక్క నకలును ఉంచడానికి, "అసలును భర్తీ చేయి" ఎంపికను తీసివేయండి</translation>
 <translation id="8803496343472038847">రష్యన్ ఫొనెటిక్ కీబోర్డ్</translation>
 <translation id="8808686172382650546">పిల్లి</translation>
@@ -718,6 +740,7 @@
 <translation id="8900820606136623064">హంగేరియన్</translation>
 <translation id="8901822611024316615">చెక్ QWERTY కీబోర్డ్</translation>
 <translation id="8919081441417203123">డేనిష్</translation>
+<translation id="8941776146379310519">మలయ్</translation>
 <translation id="8960999352790021682">బెంగాలీ కీబోర్డ్ (ఫొనెటిక్)</translation>
 <translation id="8965697826696209160">తగినంత ఖాళీ లేదు.</translation>
 <translation id="9017798300203431059">రష్యన్ ఫోనెటిక్</translation>

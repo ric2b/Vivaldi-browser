@@ -132,18 +132,6 @@ bool NodeSemanticsMatch(const vivaldi::NoteNode* local_node,
          local_node->GetContent() == base::UTF8ToUTF16(specifics.content());
 }
 
-NotesGUIDDuplicates MatchNotesGUIDDuplicates(
-    const UpdateResponseData& update,
-    const UpdateResponseData& duplicate_update) {
-  if (update.entity.is_folder != duplicate_update.entity.is_folder) {
-    return NotesGUIDDuplicates::kDifferentTypes;
-  }
-  if (update.entity.is_folder) {
-    return NotesGUIDDuplicates::kBothFolders;
-  }
-  return NotesGUIDDuplicates::kBothNotes;
-}
-
 void ReparentAllChildren(const std::string& from_parent_id,
                          const std::string& to_parent_id,
                          UpdatesPerParentId* updates_per_parent_id) {
@@ -167,6 +155,25 @@ void ReparentAllChildren(const std::string& from_parent_id,
   updates_per_parent_id->erase(from_parent_id);
 
   // No need to update iterators since splice doesn't invalidate them.
+}
+
+// Returns true the |next_update| is selected to keep and the |previous_update|
+// should be removed. False is returned otherwise. |next_update| and
+// |previous_update| must have the same GUID.
+bool CompareDuplicateUpdates(const UpdateResponseData& next_update,
+                             const UpdateResponseData& previous_update) {
+  DCHECK_EQ(next_update.entity.specifics.notes().guid(),
+            previous_update.entity.specifics.notes().guid());
+  DCHECK_NE(next_update.entity.id, previous_update.entity.id);
+
+  if (next_update.entity.is_folder != previous_update.entity.is_folder) {
+    // There are two entities, one of them is a folder and another one is a
+    // regular note. Prefer to save the folder as it may contain many notes.
+    return next_update.entity.is_folder;
+  }
+  // Choose the latest element to keep if both updates have the same type.
+  return next_update.entity.creation_time >
+         previous_update.entity.creation_time;
 }
 
 void DeduplicateValidUpdatesByGUID(UpdatesPerParentId* updates_per_parent_id) {
@@ -200,18 +207,14 @@ void DeduplicateValidUpdatesByGUID(UpdatesPerParentId* updates_per_parent_id) {
                 duplicate_update.entity.specifics.notes().guid());
       DLOG(ERROR) << "Duplicate guid for new sync ID " << update.entity.id
                   << " and original sync ID " << duplicate_update.entity.id;
-      const NotesGUIDDuplicates match_result =
-          MatchNotesGUIDDuplicates(update, duplicate_update);
-      if (match_result == NotesGUIDDuplicates::kDifferentTypes ||
-          !base::FeatureList::IsEnabled(
+      if (!base::FeatureList::IsEnabled(
               switches::kSyncDeduplicateAllBookmarksWithSameGUID)) {
-        // There shouldn't be cases with different types for duplicate
-        // entities.
         continue;
       }
 
       // Choose the latest element to keep.
-      if (update.entity.creation_time > duplicate_update.entity.creation_time) {
+      if (CompareDuplicateUpdates(/*next_update=*/update,
+                                  /*previous_update=*/duplicate_update)) {
         updates_to_remove.push_back(it_and_success.first->second);
         // Update |guid_to_update| to find a duplicate folder and merge them.
         guid_to_update[guid_in_specifics] = updates_iter;
@@ -227,6 +230,10 @@ void DeduplicateValidUpdatesByGUID(UpdatesPerParentId* updates_per_parent_id) {
       const std::string& guid = updates_iter->entity.specifics.notes().guid();
       DCHECK_EQ(1U, guid_to_update.count(guid));
       DCHECK(guid_to_update[guid] != updates_iter);
+
+      // Never remove a folder if its duplicate is a URL.
+      DCHECK(guid_to_update[guid]->entity.is_folder);
+
       // Merge doesn't affect iterators.
       ReparentAllChildren(
           /*from_parent_id=*/updates_iter->entity.id,
@@ -498,14 +505,9 @@ NoteModelMerger::FindGuidMatchesOrReassignLocal(
              sync_pb::NotesSpecifics::SEPARATOR) ||
         (node->is_note() &&
          node->GetContent() !=
-             base::UTF8ToUTF16(remote_entity.specifics.notes().content())) ||
-        !base::FeatureList::IsEnabled(switches::kMergeBookmarksUsingGUIDs)) {
+             base::UTF8ToUTF16(remote_entity.specifics.notes().content()))) {
       // If local node and its remote node match are conflicting in node type or
-      // content, replace local GUID with a random GUID. The logic is applied
-      // unconditionally if kMergeBookmarksUsingGUIDs is disabled, since no
-      // GUID-based matches take place and GUIDs need to be reassigned to avoid
-      // collisions (they will be reassigned once again if there is a semantic
-      // match).
+      // content, replace local GUID with a random GUID.
       nodes_to_replace_guid.push_back(node);
       continue;
     }

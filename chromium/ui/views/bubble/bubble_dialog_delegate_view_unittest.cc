@@ -24,6 +24,7 @@
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/styled_label.h"
+#include "ui/views/test/ax_event_counter.h"
 #include "ui/views/test/test_views.h"
 #include "ui/views/test/test_widget_observer.h"
 #include "ui/views/test/views_test_base.h"
@@ -52,6 +53,9 @@ class TestBubbleDialogDelegateView : public BubbleDialogDelegateView {
     AddChildView(view_);
   }
   ~TestBubbleDialogDelegateView() override = default;
+  TestBubbleDialogDelegateView(const TestBubbleDialogDelegateView&) = delete;
+  TestBubbleDialogDelegateView& operator=(const TestBubbleDialogDelegateView&) =
+      delete;
 
   using BubbleDialogDelegateView::SetAnchorView;
 
@@ -75,7 +79,12 @@ class TestBubbleDialogDelegateView : public BubbleDialogDelegateView {
     return should_show_close_button_;
   }
 
-  void set_title_view(View* title_view) { title_view_.reset(title_view); }
+  template <typename T>
+  T* set_title_view(std::unique_ptr<T> title_view) {
+    T* const ret = title_view.get();
+    title_view_ = std::move(title_view);
+    return ret;
+  }
   void show_close_button() { should_show_close_button_ = true; }
   void hide_buttons() {
     should_show_close_button_ = false;
@@ -94,8 +103,18 @@ class TestBubbleDialogDelegateView : public BubbleDialogDelegateView {
   std::unique_ptr<View> title_view_;
   bool should_show_close_button_ = false;
   bool should_show_window_title_ = true;
+};
 
-  DISALLOW_COPY_AND_ASSIGN(TestBubbleDialogDelegateView);
+class TestAlertBubbleDialogDelegateView : public TestBubbleDialogDelegateView {
+ public:
+  explicit TestAlertBubbleDialogDelegateView(View* anchor_view)
+      : TestBubbleDialogDelegateView(anchor_view) {}
+  ~TestAlertBubbleDialogDelegateView() override = default;
+
+  // BubbleDialogDelegateView overrides:
+  ax::mojom::Role GetAccessibleWindowRole() override {
+    return ax::mojom::Role::kAlertDialog;
+  }
 };
 
 // A Widget that returns something other than null as its ThemeProvider.  This
@@ -147,6 +166,7 @@ TEST_F(BubbleDialogDelegateViewTest, CreateDelegate) {
 
   BubbleBorder* border = bubble_delegate->GetBubbleFrameView()->bubble_border_;
   EXPECT_EQ(bubble_delegate->color(), border->background_color());
+  EXPECT_EQ(anchor_widget.get(), bubble_widget->parent());
 
   EXPECT_FALSE(bubble_observer.widget_closed());
   bubble_widget->CloseNow();
@@ -250,6 +270,7 @@ TEST_F(BubbleDialogDelegateViewTest, ResetAnchorWidget) {
   EXPECT_EQ(bubble_delegate, bubble_widget->widget_delegate());
   EXPECT_EQ(bubble_widget, bubble_delegate->GetWidget());
   EXPECT_EQ(anchor_widget.get(), bubble_delegate->anchor_widget());
+  EXPECT_EQ(parent_widget.get(), bubble_widget->parent());
   test::TestWidgetObserver bubble_observer(bubble_widget);
   EXPECT_FALSE(bubble_observer.widget_closed());
 
@@ -404,8 +425,8 @@ TEST_F(BubbleDialogDelegateViewTest, CustomTitle) {
   TestBubbleDialogDelegateView* bubble_delegate =
       new TestBubbleDialogDelegateView(anchor_widget->GetContentsView());
   constexpr int kTitleHeight = 20;
-  View* title_view = new StaticSizedView(gfx::Size(10, kTitleHeight));
-  bubble_delegate->set_title_view(title_view);
+  View* title_view = bubble_delegate->set_title_view(
+      std::make_unique<StaticSizedView>(gfx::Size(10, kTitleHeight)));
   Widget* bubble_widget =
       BubbleDialogDelegateView::CreateBubble(bubble_delegate);
   bubble_widget->Show();
@@ -480,8 +501,9 @@ TEST_F(BubbleDialogDelegateViewTest, StyledLabelTitle) {
       CreateTestWidget(Widget::InitParams::TYPE_WINDOW);
   TestBubbleDialogDelegateView* bubble_delegate =
       new TestBubbleDialogDelegateView(anchor_widget->GetContentsView());
-  StyledLabel* title_view = new StyledLabel(base::ASCIIToUTF16("123"), nullptr);
-  bubble_delegate->set_title_view(title_view);
+  StyledLabel* title_view =
+      bubble_delegate->set_title_view(std::make_unique<StyledLabel>());
+  title_view->SetText(base::ASCIIToUTF16("123"));
 
   Widget* bubble_widget =
       BubbleDialogDelegateView::CreateBubble(bubble_delegate);
@@ -628,7 +650,7 @@ TEST_F(BubbleDialogDelegateClientLayerTest, WithClientLayerTest) {
   bubble_delegate->set_parent_window(anchor_widget->GetNativeView());
 
   WidgetAutoclosePtr bubble_widget(
-      BubbleDialogDelegateView::CreateBubble(bubble_delegate.release()));
+      BubbleDialogDelegateView::CreateBubble(std::move(bubble_delegate)));
 
   EXPECT_NE(nullptr, bubble_widget->client_view()->layer());
 }
@@ -642,10 +664,37 @@ TEST_F(BubbleDialogDelegateClientLayerTest, WithoutClientLayerTest) {
   bubble_delegate->set_parent_window(anchor_widget->GetNativeView());
 
   WidgetAutoclosePtr bubble_widget(
-      BubbleDialogDelegateView::CreateBubble(bubble_delegate.release()));
+      BubbleDialogDelegateView::CreateBubble(std::move(bubble_delegate)));
 
   EXPECT_EQ(nullptr, bubble_widget->client_view()->layer());
 }
+
+// TODO(crbug.com/1123933): Investigate why BubbleDialogDelegate is explicitly
+// not firing this event on Windows.
+#if !defined(OS_WIN)
+TEST_F(BubbleDialogDelegateViewTest, AlertAccessibleEvent) {
+  views::test::AXEventCounter counter(views::AXEventManager::Get());
+  std::unique_ptr<Widget> anchor_widget =
+      CreateTestWidget(Widget::InitParams::TYPE_WINDOW);
+  auto bubble_delegate = std::make_unique<TestBubbleDialogDelegateView>(
+      anchor_widget->GetContentsView());
+
+  EXPECT_EQ(0, counter.GetCount(ax::mojom::Event::kAlert));
+  Widget* bubble_widget =
+      BubbleDialogDelegateView::CreateBubble(std::move(bubble_delegate));
+  bubble_widget->Show();
+  // Bubbles with kDialog accessible role don't produce this event
+  EXPECT_EQ(0, counter.GetCount(ax::mojom::Event::kAlert));
+
+  auto alert_bubble_delegate =
+      std::make_unique<TestAlertBubbleDialogDelegateView>(
+          anchor_widget->GetContentsView());
+  Widget* alert_bubble_widget =
+      BubbleDialogDelegateView::CreateBubble(std::move(alert_bubble_delegate));
+  alert_bubble_widget->Show();
+  EXPECT_EQ(1, counter.GetCount(ax::mojom::Event::kAlert));
+}
+#endif
 
 // Anchoring Tests -------------------------------------------------------------
 

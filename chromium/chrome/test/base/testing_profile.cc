@@ -9,7 +9,6 @@
 #include "base/base_paths.h"
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -71,6 +70,7 @@
 #include "components/keyed_service/core/simple_dependency_manager.h"
 #include "components/keyed_service/core/simple_factory_key.h"
 #include "components/keyed_service/core/simple_key_map.h"
+#include "components/leveldb_proto/public/proto_database_provider.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/history_index_restore_observer.h"
 #include "components/omnibox/browser/in_memory_url_index.h"
@@ -105,7 +105,6 @@
 #include "extensions/buildflags/buildflags.h"
 #include "extensions/common/constants.h"
 #include "net/cookies/cookie_store.h"
-#include "services/network/public/cpp/features.h"
 #include "services/network/test/test_network_connection_tracker.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -130,6 +129,7 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/arc/session/arc_service_launcher.h"
 #include "chrome/browser/chromeos/net/delay_network_call.h"
+#include "chrome/browser/chromeos/policy/user_cloud_policy_manager_chromeos.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chromeos/components/account_manager/account_manager.h"
 #include "chromeos/components/account_manager/account_manager_factory.h"
@@ -231,7 +231,11 @@ TestingProfile::TestingProfile(
     bool allows_browser_windows,
     base::Optional<bool> is_new_profile,
     const std::string& supervised_user_id,
+#if defined(OS_CHROMEOS)
+    std::unique_ptr<policy::UserCloudPolicyManagerChromeOS> policy_manager,
+#else
     std::unique_ptr<policy::UserCloudPolicyManager> policy_manager,
+#endif  // defined(OS_CHROMEOS)
     std::unique_ptr<policy::PolicyService> policy_service,
     TestingFactories testing_factories,
     const std::string& profile_name,
@@ -494,6 +498,16 @@ TestingProfile::~TestingProfile() {
 
   if (host_content_settings_map_.get())
     host_content_settings_map_->ShutdownOnUIThread();
+
+  // Make sure SharedProtoDatabase doesn't post delayed tasks anymore.
+  ForEachStoragePartition(
+      this,
+      base::BindRepeating([](content::StoragePartition* storage_partition) {
+        if (auto* provider =
+                storage_partition->GetProtoDatabaseProviderForTesting()) {
+          provider->SetSharedDBDeleteObsoleteDelayForTesting(base::TimeDelta());
+        }
+      }));
 
   // Shutdown storage partitions before we post a task to delete
   // the resource context.
@@ -823,7 +837,7 @@ TestingProfile::GetPolicySchemaRegistryService() {
 #if defined(OS_CHROMEOS)
 policy::UserCloudPolicyManagerChromeOS*
 TestingProfile::GetUserCloudPolicyManagerChromeOS() {
-  return nullptr;
+  return user_cloud_policy_manager_.get();
 }
 
 policy::ActiveDirectoryPolicyManager*
@@ -879,10 +893,6 @@ GURL TestingProfile::GetHomePage() {
 
 void TestingProfile::SetCreationTimeForTesting(base::Time creation_time) {
   start_time_ = creation_time;
-}
-
-bool TestingProfile::ShouldEnableOutOfBlinkCors() {
-  return network::features::ShouldEnableOutOfBlinkCorsForTesting();
 }
 
 PrefService* TestingProfile::GetOffTheRecordPrefs() {
@@ -1017,10 +1027,18 @@ void TestingProfile::Builder::SetSupervisedUserId(
   supervised_user_id_ = supervised_user_id;
 }
 
+#if defined(OS_CHROMEOS)
+void TestingProfile::Builder::SetUserCloudPolicyManagerChromeOS(
+    std::unique_ptr<policy::UserCloudPolicyManagerChromeOS>
+        user_cloud_policy_manager) {
+  user_cloud_policy_manager_ = std::move(user_cloud_policy_manager);
+}
+#else
 void TestingProfile::Builder::SetUserCloudPolicyManager(
     std::unique_ptr<policy::UserCloudPolicyManager> user_cloud_policy_manager) {
   user_cloud_policy_manager_ = std::move(user_cloud_policy_manager);
 }
+#endif
 
 void TestingProfile::Builder::SetPolicyService(
     std::unique_ptr<policy::PolicyService> policy_service) {

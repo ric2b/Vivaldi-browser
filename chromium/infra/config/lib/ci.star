@@ -112,6 +112,7 @@ def set_defaults(milestone_vars, **kwargs):
         service_account = "chromium-ci-builder@chops-service-accounts.iam.gserviceaccount.com",
         swarming_tags = ["vpython:native-python-wrapper"],
         triggered_by = [milestone_vars.ci_poller],
+        # TODO(crbug.com/1129723): set default goma_backend here.
     )
     default_values.update(kwargs)
     for k, v in default_values.items():
@@ -719,12 +720,16 @@ def fyi_ios_builder(
         *,
         name,
         caches = None,
-        executable = "recipe:ios/unified_builder_tester",
+        executable = "recipe:chromium",
         goma_backend = builders.goma.backend.RBE_PROD,
         os = builders.os.MAC_10_15,
+        properties = None,
         **kwargs):
-    if not caches:
-        caches = [builders.xcode_cache.x12a7209]
+    # Default cache and properties sync
+    caches = caches or [builders.xcode_cache.x12a7209]
+
+    properties = properties or {}
+    properties.setdefault("xcode_build_version", "12a7209")
 
     return fyi_builder(
         name = name,
@@ -732,6 +737,7 @@ def fyi_ios_builder(
         cores = None,
         executable = executable,
         os = os,
+        properties = properties,
         **kwargs
     )
 
@@ -766,6 +772,9 @@ def gpu_fyi_builder(*, name, **kwargs):
         builder_group = "chromium.gpu.fyi",
         service_account =
             "chromium-ci-gpu-builder@chops-service-accounts.iam.gserviceaccount.com",
+        properties = {
+            "perf_dashboard_machine_group": "ChromiumGPUFYI",
+        },
         **kwargs
     )
 
@@ -924,12 +933,10 @@ def mac_ios_builder(
         goma_backend = builders.goma.backend.RBE_PROD,
         properties = None,
         **kwargs):
-    if not caches:
-        caches = [builders.xcode_cache.x12a7209]
-    if not properties:
-        properties = {
-            "xcode_build_version": "12a7209",
-        }
+    caches = caches or [builders.xcode_cache.x12a7209]
+
+    properties = properties or {}
+    properties.setdefault("xcode_build_version", "12a7209")
 
     return mac_builder(
         name = name,
@@ -958,6 +965,20 @@ def memory_builder(
         goma_jobs = goma_jobs,
         notifies = notifies,
         tree_closing = tree_closing,
+        **kwargs
+    )
+
+def mojo_builder(
+        *,
+        name,
+        execution_timeout = 10 * time.hour,
+        goma_backend = builders.goma.backend.RBE_PROD,
+        **kwargs):
+    return ci.builder(
+        name = name,
+        builder_group = "chromium.mojo",
+        execution_timeout = execution_timeout,
+        goma_backend = goma_backend,
         **kwargs
     )
 
@@ -1078,6 +1099,7 @@ ci = struct(
     mac_builder = mac_builder,
     mac_ios_builder = mac_ios_builder,
     memory_builder = memory_builder,
+    mojo_builder = mojo_builder,
     swangle_linux_builder = swangle_linux_builder,
     swangle_mac_builder = swangle_mac_builder,
     swangle_windows_builder = swangle_windows_builder,

@@ -53,6 +53,21 @@ Polymer({
      * @private
      */
     displayString_: String,
+
+    /**
+     * A set of statuses that the entire row is clickable.
+     * @type {!Set<!SafetyCheckPasswordsStatus>}
+     * @private
+     */
+    rowClickableStatuses: {
+      readOnly: true,
+      type: Object,
+      value: () => new Set([
+        SafetyCheckPasswordsStatus.SAFE,
+        SafetyCheckPasswordsStatus.QUOTA_LIMIT,
+        SafetyCheckPasswordsStatus.ERROR,
+      ]),
+    },
   },
 
   /** @private {?MetricsBrowserProxy} */
@@ -121,7 +136,32 @@ Polymer({
         SafetyCheckInteractions.SAFETY_CHECK_PASSWORDS_MANAGE);
     this.metricsBrowserProxy_.recordAction(
         'Settings.SafetyCheck.ManagePasswords');
+    this.openPasswordCheckPage_();
+  },
 
+  /**
+   * @private
+   * @return {?boolean}
+   */
+  isRowClickable_: function() {
+    return this.rowClickableStatuses.has(this.status_);
+  },
+
+  /** @private */
+  onRowClick_: function() {
+    if (this.isRowClickable_()) {
+      // Log click both in action and histogram.
+      this.metricsBrowserProxy_.recordSafetyCheckInteractionHistogram(
+          SafetyCheckInteractions
+              .SAFETY_CHECK_PASSWORDS_MANAGE_THROUGH_CARET_NAVIGATION);
+      this.metricsBrowserProxy_.recordAction(
+          'Settings.SafetyCheck.ManagePasswordsThroughCaretNavigation');
+      this.openPasswordCheckPage_();
+    }
+  },
+
+  /** @private */
+  openPasswordCheckPage_: function() {
     Router.getInstance().navigateTo(
         routes.CHECK_PASSWORDS,
         /* dynamicParams= */ null, /* removeSearch= */ true);

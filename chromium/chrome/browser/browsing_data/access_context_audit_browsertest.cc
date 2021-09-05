@@ -6,6 +6,7 @@
 
 #include "base/path_service.h"
 #include "base/test/bind_test_util.h"
+#include "base/test/simple_test_clock.h"
 #include "base/test/test_timeouts.h"
 #include "chrome/browser/browsing_data/access_context_audit_service.h"
 #include "chrome/browser/browsing_data/access_context_audit_service_factory.h"
@@ -467,6 +468,79 @@ IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, TreeModelDeletion) {
 
   EXPECT_EQ(records.size(), 0u);
   EXPECT_EQ(cookies.size(), 0u);
+}
+
+IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, MultipleAccesses) {
+  // Ensure that renavigating to a page in the same tab correctly re-records
+  // accesses.
+  base::SimpleTestClock clock;
+  clock.SetNow(base::Time::Now());
+  AccessContextAuditServiceFactory::GetForProfile(browser()->profile())
+      ->SetClockForTesting(&clock);
+
+  NavigateToTopLevelPage();
+  NavigateToEmbeddedPage();
+
+  // Check all records have the initial access time.
+  auto records = GetAllAccessRecords();
+  for (const auto& record : records)
+    EXPECT_EQ(record.last_access_time, clock.Now());
+
+  // Renavigate to the same pages, this should update the access times on all
+  // records.
+  clock.Advance(base::TimeDelta::FromHours(1));
+  NavigateToTopLevelPage();
+  NavigateToEmbeddedPage();
+
+  // All records should now have the updated time.
+  records = GetAllAccessRecords();
+  for (const auto& record : records)
+    EXPECT_EQ(record.last_access_time, clock.Now());
+}
+
+IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, TabClosed) {
+  // Ensure closing a tab correctly flushes access records.
+  NavigateToTopLevelPage();
+  NavigateToEmbeddedPage();
+
+  // Close the previous tab, but keep the browser active to ensure the profile
+  // does not begin destruction.
+  AddTabAtIndex(1, GURL("about:blank"), ui::PAGE_TRANSITION_TYPED);
+  browser()->tab_strip_model()->CloseWebContentsAt(0,
+                                                   TabStripModel::CLOSE_NONE);
+
+  auto records = GetAllAccessRecords();
+  auto cookies = GetAllCookies();
+  unsigned expected_cookie_records =
+      2 * kEmbeddedPageCookieCount + kTopLevelPageCookieCount;
+  unsigned expected_origin_storage_records = 3 * kOriginStorageTypes.size();
+  EXPECT_EQ(records.size(),
+            expected_cookie_records + expected_origin_storage_records);
+
+  CheckContainsCookieAndRecord(cookies, records, top_level_origin(), "embedder",
+                               kTopLevelHost, "/",
+                               /*compare_host_only*/ true);
+  CheckContainsCookieAndRecord(cookies, records, top_level_origin(),
+                               "session_only", kEmbeddedHost, "/",
+                               /*compare_host_only*/ true);
+  CheckContainsCookieAndRecord(cookies, records, top_level_origin(),
+                               "persistent", kEmbeddedHost, "/",
+                               /*compare_host_only*/ true);
+  CheckContainsCookieAndRecord(cookies, records, embedded_origin(),
+                               "persistent", kEmbeddedHost, "/",
+                               /*compare_host_only*/ true);
+  CheckContainsCookieAndRecord(cookies, records, embedded_origin(),
+                               "session_only", kEmbeddedHost, "/",
+                               /*compare_host_only*/ true);
+  CheckContainsOriginStorageRecords(records, kOriginStorageTypes,
+                                    top_level_origin(), top_level_origin(),
+                                    /* compare__host_only */ true);
+  CheckContainsOriginStorageRecords(records, kOriginStorageTypes,
+                                    embedded_origin(), top_level_origin(),
+                                    /* compare__host_only */ true);
+  CheckContainsOriginStorageRecords(records, kOriginStorageTypes,
+                                    embedded_origin(), embedded_origin(),
+                                    /* compare_host_only */ true);
 }
 
 class AccessContextAuditSessionRestoreBrowserTest

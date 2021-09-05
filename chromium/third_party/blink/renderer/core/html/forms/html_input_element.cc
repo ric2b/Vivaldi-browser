@@ -447,6 +447,9 @@ void HTMLInputElement::UpdateType() {
     PseudoStateChanged(CSSSelector::kPseudoInRange);
     PseudoStateChanged(CSSSelector::kPseudoOutOfRange);
   }
+  if (input_type_->ShouldRespectListAttribute() !=
+      new_type->ShouldRespectListAttribute())
+    PseudoStateChanged(CSSSelector::kPseudoHasDatalist);
 
   bool placeholder_changed =
       input_type_->SupportsPlaceholder() != new_type->SupportsPlaceholder();
@@ -882,6 +885,7 @@ void HTMLInputElement::ParseAttribute(
       ResetListAttributeTargetObserver();
       ListAttributeTargetChanged();
     }
+    PseudoStateChanged(CSSSelector::kPseudoHasDatalist);
     UseCounter::Count(GetDocument(), WebFeature::kListAttribute);
   } else if (name == html_names::kWebkitdirectoryAttr) {
     TextControlElement::ParseAttribute(params);
@@ -1025,8 +1029,7 @@ void HTMLInputElement::setChecked(bool now_checked,
 
   if (RadioButtonGroupScope* scope = GetRadioButtonGroupScope())
     scope->UpdateCheckedState(this);
-  if (LayoutObject* o = GetLayoutObject())
-    o->InvalidateIfControlStateChanged(kCheckedControlState);
+  InvalidateIfHasEffectiveAppearance();
   SetNeedsValidityCheck();
 
   // Ideally we'd do this from the layout tree (matching
@@ -1060,8 +1063,7 @@ void HTMLInputElement::setIndeterminate(bool new_value) {
 
   PseudoStateChanged(CSSSelector::kPseudoIndeterminate);
 
-  if (LayoutObject* o = GetLayoutObject())
-    o->InvalidateIfControlStateChanged(kCheckedControlState);
+  InvalidateIfHasEffectiveAppearance();
 
   if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
     cache->CheckedStateChanged(this);
@@ -1108,10 +1110,6 @@ String HTMLInputElement::value() const {
   }
   NOTREACHED();
   return g_empty_string;
-}
-
-String HTMLInputElement::rawValue() const {
-  return input_type_view_->RawValue();
 }
 
 String HTMLInputElement::ValueOrDefaultLabel() const {
@@ -1264,6 +1262,14 @@ void HTMLInputElement::setValueAsNumber(double new_value,
     return;
   }
   input_type_->SetValueAsDouble(new_value, event_behavior, exception_state);
+}
+
+Decimal HTMLInputElement::RatioValue() const {
+  DCHECK_EQ(type(), input_type_names::kRange);
+  const StepRange step_range(CreateStepRange(kRejectAny));
+  const Decimal old_value =
+      ParseToDecimalForNumberType(value(), step_range.DefaultValue());
+  return step_range.ProportionFromValue(step_range.ClampValue(old_value));
 }
 
 void HTMLInputElement::SetValueFromRenderer(const String& value) {
@@ -1754,6 +1760,7 @@ void HTMLInputElement::ResetListAttributeTargetObserver() {
 
 void HTMLInputElement::ListAttributeTargetChanged() {
   input_type_view_->ListAttributeTargetChanged();
+  PseudoStateChanged(CSSSelector::kPseudoHasDatalist);
 }
 
 bool HTMLInputElement::IsSteppable() const {
@@ -1931,6 +1938,7 @@ bool HTMLInputElement::SetupDateTimeChooserParameters(
   parameters.anchor_rect_in_screen =
       GetDocument().View()->FrameToScreen(PixelSnappedBoundingBox());
   parameters.double_value = input_type_->ValueAsDouble();
+  parameters.focused_field_index = input_type_view_->FocusedFieldIndex();
   parameters.is_anchor_element_rtl =
       input_type_view_->ComputedTextDirection() == TextDirection::kRtl;
   if (HTMLDataListElement* data_list = DataList()) {
@@ -1956,6 +1964,14 @@ bool HTMLInputElement::SetupDateTimeChooserParameters(
 
 bool HTMLInputElement::SupportsInputModeAttribute() const {
   return input_type_->SupportsInputModeAttribute();
+}
+
+void HTMLInputElement::CapsLockStateMayHaveChanged() {
+  input_type_view_->CapsLockStateMayHaveChanged();
+}
+
+bool HTMLInputElement::ShouldDrawCapsLockIndicator() const {
+  return input_type_view_->ShouldDrawCapsLockIndicator();
 }
 
 void HTMLInputElement::SetShouldRevealPassword(bool value) {
@@ -2018,23 +2034,15 @@ void HTMLInputElement::ChildrenChanged(const ChildrenChange& change) {
   ContainerNode::ChildrenChanged(change);
 }
 
-PaintLayerScrollableArea* HTMLInputElement::GetScrollableArea() const {
-  // If it's LayoutTextControlSingleLine, return InnerEditorElement's scrollable
-  // area.
+LayoutBox* HTMLInputElement::GetLayoutBoxForScrolling() const {
+  // If it's LayoutTextControlSingleLine, return InnerEditorElement's LayoutBox.
   if (IsTextField() && InnerEditorElement())
-    return InnerEditorElement()->GetScrollableArea();
-
-  return Element::GetScrollableArea();
+    return InnerEditorElement()->GetLayoutBox();
+  return Element::GetLayoutBoxForScrolling();
 }
 
 bool HTMLInputElement::IsDraggedSlider() const {
   return input_type_view_->IsDraggedSlider();
-}
-
-ScriptRegexp& HTMLInputElement::EnsureEmailRegexp() const {
-  if (!email_regexp_)
-    email_regexp_ = EmailInputType::CreateEmailRegexp();
-  return *email_regexp_;
 }
 
 void HTMLInputElement::MaybeReportPiiMetrics() {
@@ -2062,7 +2070,8 @@ void HTMLInputElement::MaybeReportPiiMetrics() {
   // https://www.rfc-editor.org/errata_search.php?rfc=3696) in addition to
   // matching with the pattern given by the HTML standard.
   if (value().length() <= kMaxEmailFieldLength &&
-      EmailInputType::IsValidEmailAddress(EnsureEmailRegexp(), value())) {
+      EmailInputType::IsValidEmailAddress(GetDocument().EnsureEmailRegexp(),
+                                          value())) {
     UseCounter::Count(GetDocument(),
                       WebFeature::kEmailFieldDetected_PatternMatch);
   }

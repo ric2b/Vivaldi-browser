@@ -16,7 +16,8 @@
 
 #include "base/stl_util.h"
 
-#if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_AIX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID) || \
+    defined(OS_AIX)
 #include "base/containers/flat_set.h"
 #include "base/files/file_util.h"
 #include "base/no_destructor.h"
@@ -29,7 +30,8 @@
 #include "base/threading/thread_restrictions.h"
 #endif
 
-#if defined(ARCH_CPU_ARM_FAMILY) && (defined(OS_ANDROID) || defined(OS_LINUX))
+#if defined(ARCH_CPU_ARM_FAMILY) && \
+    (defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_CHROMEOS))
 #include "base/files/file_util.h"
 #endif
 
@@ -150,7 +152,8 @@ uint64_t xgetbv(uint32_t xcr) {
 
 #endif  // ARCH_CPU_X86_FAMILY
 
-#if defined(ARCH_CPU_ARM_FAMILY) && (defined(OS_ANDROID) || defined(OS_LINUX))
+#if defined(ARCH_CPU_ARM_FAMILY) && \
+    (defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_CHROMEOS))
 std::string* CpuInfoBrand() {
   static std::string* brand = []() {
     // This function finds the value from /proc/cpuinfo under the key "model
@@ -180,7 +183,7 @@ std::string* CpuInfoBrand() {
   return brand;
 }
 #endif  // defined(ARCH_CPU_ARM_FAMILY) && (defined(OS_ANDROID) ||
-        // defined(OS_LINUX))
+        // defined(OS_LINUX) || defined(OS_CHROMEOS))
 
 }  // namespace
 
@@ -302,7 +305,7 @@ void CPU::Initialize() {
     }
   }
 #elif defined(ARCH_CPU_ARM_FAMILY)
-#if (defined(OS_ANDROID) || defined(OS_LINUX))
+#if defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_CHROMEOS)
   cpu_brand_ = *CpuInfoBrand();
 #elif defined(OS_WIN)
   // Windows makes high-resolution thread timing information available in
@@ -324,13 +327,16 @@ CPU::IntelMicroArchitecture CPU::GetIntelMicroArchitecture() const {
   return PENTIUM;
 }
 
-#if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_AIX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID) || \
+  defined(OS_AIX)
 namespace {
 
 constexpr char kTimeInStatePath[] =
     "/sys/devices/system/cpu/cpu%d/cpufreq/stats/time_in_state";
 constexpr char kPhysicalPackageIdPath[] =
     "/sys/devices/system/cpu/cpu%d/topology/physical_package_id";
+constexpr char kCoreIdleStateTimePath[] =
+    "/sys/devices/system/cpu/cpu%d/cpuidle/state%d/time";
 
 bool SupportsTimeInState() {
   // Reading from time_in_state doesn't block (it amounts to reading a struct
@@ -384,16 +390,24 @@ bool ParseTimeInState(const std::string& content,
   return true;
 }
 
-}  // namespace
+bool SupportsCoreIdleTimes() {
+  // Reading from the cpuidle driver doesn't block.
+  ThreadRestrictions::ScopedAllowIO allow_io;
+  // Check if the path for the idle time in state 0 for core 0 is readable.
+  FilePath idle_state0_path(
+      StringPrintf(kCoreIdleStateTimePath, /*core_index=*/0, /*idle_state=*/0));
+  ScopedFILE file_stream(OpenFile(idle_state0_path, "rb"));
+  return static_cast<bool>(file_stream);
+}
 
-// static
-std::vector<CPU::CoreType> CPU::GuessCoreTypes() {
+std::vector<CPU::CoreType> GuessCoreTypes() {
   // Try to guess the CPU architecture and cores of each cluster by comparing
   // the maximum frequencies of the available (online and offline) cores.
   const char kCPUMaxFreqPath[] =
       "/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_max_freq";
   int num_cpus = SysInfo::NumberOfProcessors();
-  std::vector<CPU::CoreType> core_index_to_type(num_cpus, CoreType::kUnknown);
+  std::vector<CPU::CoreType> core_index_to_type(num_cpus,
+                                                CPU::CoreType::kUnknown);
 
   std::vector<uint32_t> max_core_frequencies_mhz(num_cpus, 0);
   flat_set<uint32_t> frequencies_mhz;
@@ -420,9 +434,9 @@ std::vector<CPU::CoreType> CPU::GuessCoreTypes() {
   for (int core_index = 0; core_index < num_cpus; ++core_index) {
     uint32_t core_frequency_mhz = max_core_frequencies_mhz[core_index];
 
-    CoreType core_type = CoreType::kOther;
+    CPU::CoreType core_type = CPU::CoreType::kOther;
     if (num_frequencies == 1u) {
-      core_type = CoreType::kSymmetric;
+      core_type = CPU::CoreType::kSymmetric;
     } else if (num_frequencies == 2u || num_frequencies == 3u) {
       auto it = frequencies_mhz.find(core_frequency_mhz);
       if (it != frequencies_mhz.end()) {
@@ -431,16 +445,17 @@ std::vector<CPU::CoreType> CPU::GuessCoreTypes() {
         switch (frequency_index) {
           case 0:
             core_type = num_frequencies == 2u
-                            ? CoreType::kBigLittle_Little
-                            : CoreType::kBigLittleBigger_Little;
+                            ? CPU::CoreType::kBigLittle_Little
+                            : CPU::CoreType::kBigLittleBigger_Little;
             break;
           case 1:
-            core_type = num_frequencies == 2u ? CoreType::kBigLittle_Big
-                                              : CoreType::kBigLittleBigger_Big;
+            core_type = num_frequencies == 2u
+                            ? CPU::CoreType::kBigLittle_Big
+                            : CPU::CoreType::kBigLittleBigger_Big;
             break;
           case 2:
             DCHECK_EQ(num_frequencies, 3u);
-            core_type = CoreType::kBigLittleBigger_Bigger;
+            core_type = CPU::CoreType::kBigLittleBigger_Bigger;
             break;
           default:
             NOTREACHED();
@@ -454,6 +469,14 @@ std::vector<CPU::CoreType> CPU::GuessCoreTypes() {
   return core_index_to_type;
 }
 
+}  // namespace
+
+// static
+const std::vector<CPU::CoreType>& CPU::GetGuessedCoreTypes() {
+  static NoDestructor<std::vector<CoreType>> kCoreTypes(GuessCoreTypes());
+  return *kCoreTypes.get();
+}
+
 // static
 bool CPU::GetTimeInState(TimeInState& time_in_state) {
   time_in_state.clear();
@@ -463,7 +486,7 @@ bool CPU::GetTimeInState(TimeInState& time_in_state) {
   if (!kSupportsTimeInState)
     return false;
 
-  static NoDestructor<std::vector<CoreType>> kCoreTypes(GuessCoreTypes());
+  static const std::vector<CoreType>& kCoreTypes = GetGuessedCoreTypes();
 
   // time_in_state is reported per cluster. Identify the first cores of each
   // cluster.
@@ -512,7 +535,7 @@ bool CPU::GetTimeInState(TimeInState& time_in_state) {
     if (!ReadFileToString(time_in_state_path, &buffer))
       return false;
 
-    if (!ParseTimeInState(buffer, (*kCoreTypes)[cluster_core_index],
+    if (!ParseTimeInState(buffer, kCoreTypes[cluster_core_index],
                           cluster_core_index, time_in_state)) {
       return false;
     }
@@ -520,6 +543,47 @@ bool CPU::GetTimeInState(TimeInState& time_in_state) {
 
   return true;
 }
-#endif  // defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_AIX)
+
+// static
+bool CPU::GetCumulativeCoreIdleTimes(CoreIdleTimes& idle_times) {
+  idle_times.clear();
+
+  // The kernel may not support the cpufreq-stats driver.
+  static const bool kSupportsIdleTimes = SupportsCoreIdleTimes();
+  if (!kSupportsIdleTimes)
+    return false;
+
+  // Reading from the cpuidle driver doesn't block.
+  ThreadRestrictions::ScopedAllowIO allow_io;
+
+  int num_cpus = SysInfo::NumberOfProcessors();
+
+  bool success = false;
+  for (int core_index = 0; core_index < num_cpus; ++core_index) {
+    std::string content;
+    TimeDelta idle_time;
+
+    // The number of idle states is system/CPU dependent, so we increment and
+    // try to read each state until we fail.
+    for (int state_index = 0;; ++state_index) {
+      auto path = StringPrintf(kCoreIdleStateTimePath, core_index, state_index);
+      uint64_t idle_state_time = 0;
+      if (!ReadFileToString(FilePath(path), &content))
+        break;
+      StringToUint64(content, &idle_state_time);
+      idle_time += TimeDelta::FromMicroseconds(idle_state_time);
+    }
+
+    idle_times.push_back(idle_time);
+
+    // At least one of the cores should have some idle time, otherwise we report
+    // a failure.
+    success |= idle_time > base::TimeDelta();
+  }
+
+  return success;
+}
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID) ||
+        // defined(OS_AIX)
 
 }  // namespace base

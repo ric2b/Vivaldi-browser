@@ -10,12 +10,16 @@
 #include <memory>
 
 #include "base/containers/ring_buffer.h"
+#include "cc/cc_export.h"
 
 namespace cc {
 
+class TotalFrameCounter;
+struct UkmSmoothnessDataShared;
+
 // This class maintains a counter for produced/dropped frames, and can be used
 // to estimate the recent throughput.
-class DroppedFrameCounter {
+class CC_EXPORT DroppedFrameCounter {
  public:
   enum FrameState {
     kFrameStateDropped,
@@ -32,6 +36,7 @@ class DroppedFrameCounter {
   size_t total_frames() const { return total_frames_; }
   size_t total_compositor_dropped() const { return total_dropped_; }
   size_t total_main_dropped() const { return total_partial_; }
+  size_t total_smoothness_dropped() const { return total_smoothness_dropped_; }
 
   uint32_t GetAverageThroughput() const;
 
@@ -43,11 +48,29 @@ class DroppedFrameCounter {
   void AddPartialFrame();
   void AddDroppedFrame();
 
+  void AddDroppedFrameAffectingSmoothness();
+  void ReportFrames();
+
+  void SetUkmSmoothnessDestination(UkmSmoothnessDataShared* smoothness_data);
+
+  void Reset();
+  void OnFcpReceived();
+
+  void set_total_counter(TotalFrameCounter* total_counter) {
+    total_counter_ = total_counter;
+  }
+
  private:
   RingBufferType ring_buffer_;
   size_t total_frames_ = 0;
   size_t total_partial_ = 0;
   size_t total_dropped_ = 0;
+  size_t total_smoothness_dropped_ = 0;
+  bool fcp_received_ = false;
+
+  UkmSmoothnessDataShared* ukm_smoothness_data_ = nullptr;
+
+  TotalFrameCounter* total_counter_ = nullptr;
 };
 
 }  // namespace cc

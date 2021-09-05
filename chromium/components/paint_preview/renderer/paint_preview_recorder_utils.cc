@@ -46,7 +46,7 @@ void ParseGlyphsAndLinks(const cc::PaintOpBuffer* buffer,
       }
       case cc::PaintOpType::CustomData: {
         auto* custom_op = static_cast<cc::CustomDataOp*>(*it);
-        custom_op->id = tracker->TransformContentForRemoteFrame(custom_op->id);
+        tracker->TransformClipForFrame(custom_op->id);
         break;
       }
       case cc::PaintOpType::Save: {
@@ -119,19 +119,29 @@ sk_sp<const SkPicture> PaintRecordToSkPicture(
 }
 
 void BuildResponse(PaintPreviewTracker* tracker,
-                   mojom::PaintPreviewCaptureResponse* response) {
+                   mojom::PaintPreviewCaptureResponse* response,
+                   bool log) {
+  // Ensure these always exist.
+  DCHECK(tracker);
+  DCHECK(response);
+
+  // paint_preview::BuildResponse has been showing in a large number of crashes
+  // under stack scans. In order to determine if these entries are "real" we
+  // should log the calls and check the log output.
+  if (log)
+    LOG(WARNING) << "paint_preview::BuildResponse() called";
+
   response->embedding_token = tracker->EmbeddingToken();
+  tracker->MoveLinks(&response->links);
 
   PictureSerializationContext* picture_context =
       tracker->GetPictureSerializationContext();
-  if (picture_context) {
-    for (const auto& id_pair : *picture_context) {
-      response->content_id_to_embedding_token.insert(
-          {id_pair.first, id_pair.second});
-    }
-  }
+  if (!picture_context)
+    return;
 
-  tracker->MoveLinks(&response->links);
+  for (const auto& id_pair : picture_context->content_id_to_embedding_token) {
+    response->content_id_to_embedding_token.insert(id_pair);
+  }
 }
 
 }  // namespace paint_preview

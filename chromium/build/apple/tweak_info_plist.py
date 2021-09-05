@@ -43,22 +43,8 @@ def _GetOutput(args):
   """Runs a subprocess and waits for termination. Returns (stdout, returncode)
   of the process. stderr is attached to the parent."""
   proc = subprocess.Popen(args, stdout=subprocess.PIPE)
-  (stdout, stderr) = proc.communicate()
-  return (stdout, proc.returncode)
-
-
-def _GetOutputNoError(args):
-  """Similar to _GetOutput() but ignores stderr. If there's an error launching
-  the child (like file not found), the exception will be caught and (None, 1)
-  will be returned to mimic quiet failure."""
-  try:
-    proc = subprocess.Popen(args,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE)
-  except OSError:
-    return (None, 1)
-  (stdout, stderr) = proc.communicate()
-  return (stdout, proc.returncode)
+  stdout, _ = proc.communicate()
+  return stdout.decode('UTF-8'), proc.returncode
 
 
 def _RemoveKeys(plist, *keys):
@@ -197,16 +183,16 @@ def _TagSuffixes():
   components_len = len(components)
   combinations = 1 << components_len
   tag_suffixes = []
-  for combination in xrange(0, combinations):
+  for combination in range(0, combinations):
     tag_suffix = ''
-    for component_index in xrange(0, components_len):
+    for component_index in range(0, components_len):
       if combination & (1 << component_index):
         tag_suffix += '-' + components[component_index]
     tag_suffixes.append(tag_suffix)
   return tag_suffixes
 
 
-def _AddKeystoneKeys(plist, bundle_identifier):
+def _AddKeystoneKeys(plist, bundle_identifier, base_tag):
   """Adds the Keystone keys. This must be called AFTER _AddVersionKeys() and
   also requires the |bundle_identifier| argument (com.example.product)."""
   plist['KSVersion'] = plist['CFBundleShortVersionString']
@@ -214,16 +200,18 @@ def _AddKeystoneKeys(plist, bundle_identifier):
   plist['KSUpdateURL'] = 'https://tools.google.com/service/update2'
 
   _RemoveKeys(plist, 'KSChannelID')
+  if base_tag != '':
+    plist['KSChannelID'] = base_tag
   for tag_suffix in _TagSuffixes():
     if tag_suffix:
-      plist['KSChannelID' + tag_suffix] = tag_suffix
+      plist['KSChannelID' + tag_suffix] = base_tag + tag_suffix
 
 
 def _RemoveKeystoneKeys(plist):
   """Removes any set Keystone keys."""
   _RemoveKeys(plist, 'KSVersion', 'KSProductID', 'KSUpdateURL')
 
-  tag_keys = []
+  tag_keys = ['KSChannelID']
   for tag_suffix in _TagSuffixes():
     tag_keys.append('KSChannelID' + tag_suffix)
   _RemoveKeys(plist, *tag_keys)
@@ -278,6 +266,9 @@ def Main(argv):
                     type='int',
                     default=False,
                     help='Enable Keystone [1 or 0]')
+  parser.add_option('--keystone-base-tag',
+                    default='',
+                    help='Base Keystone tag to set')
   parser.add_option('--scm',
                     dest='add_scm_info',
                     action='store',
@@ -300,6 +291,9 @@ def Main(argv):
                     choices=('ios', 'mac'),
                     default='mac',
                     help='The target platform of the bundle')
+  # TODO(crbug.com/1140474): Remove once iOS 14.2 reaches mass adoption.
+  parser.add_option('--lock-to-version',
+                    help='Set CFBundleVersion to given value + @MAJOR@@PATH@')
   parser.add_option(
       '--version-overrides',
       action='append',
@@ -369,10 +363,25 @@ def Main(argv):
         'CFBundleVersion': '@MAJOR@.@MINOR@.@BUILD@.@PATCH@',
     }
   else:
-    version_format_for_key = {
-        'CFBundleShortVersionString': '@MAJOR@.@BUILD@.@PATCH@',
-        'CFBundleVersion': '@MAJOR@.@MINOR@.@BUILD@.@PATCH@'
-    }
+    # TODO(crbug.com/1140474): Remove once iOS 14.2 reaches mass adoption.
+    if options.lock_to_version:
+      # Pull in the PATCH number and format it to 3 digits.
+      VERSION_TOOL = os.path.join(TOP, 'build/util/version.py')
+      VERSION_FILE = os.path.join(TOP, 'chrome/VERSION')
+      (stdout,
+       retval) = _GetOutput([VERSION_TOOL, '-f', VERSION_FILE, '-t', '@PATCH@'])
+      if retval != 0:
+        return 2
+      patch = '{:03d}'.format(int(stdout))
+      version_format_for_key = {
+          'CFBundleShortVersionString': '@MAJOR@.@BUILD@.@PATCH@',
+          'CFBundleVersion': options.lock_to_version + '.@MAJOR@' + patch
+      }
+    else:
+      version_format_for_key = {
+          'CFBundleShortVersionString': '@MAJOR@.@BUILD@.@PATCH@',
+          'CFBundleVersion': '@MAJOR@.@MINOR@.@BUILD@.@PATCH@'
+      }
 
   if options.use_breakpad:
     version_format_for_key['BreakpadVersion'] = \
@@ -404,7 +413,8 @@ def Main(argv):
     if options.bundle_identifier is None:
       print('Use of Keystone requires the bundle id.', file=sys.stderr)
       return 1
-    _AddKeystoneKeys(plist, options.bundle_identifier)
+    _AddKeystoneKeys(plist, options.bundle_identifier,
+                     options.keystone_base_tag)
   else:
     _RemoveKeystoneKeys(plist)
 

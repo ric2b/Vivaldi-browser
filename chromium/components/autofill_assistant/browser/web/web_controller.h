@@ -27,13 +27,13 @@
 #include "components/autofill_assistant/browser/web/element_position_getter.h"
 #include "components/autofill_assistant/browser/web/element_rect_getter.h"
 #include "components/autofill_assistant/browser/web/web_controller_worker.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "third_party/icu/source/common/unicode/umachine.h"
 #include "url/gurl.h"
 
 namespace autofill {
 class AutofillProfile;
 class CreditCard;
-class ContentAutofillDriver;
 struct FormData;
 struct FormFieldData;
 }  // namespace autofill
@@ -125,7 +125,7 @@ class WebController {
   // Select the option given by |selector| and the value of the option to be
   // picked.
   virtual void SelectOption(
-      const Selector& selector,
+      const ElementFinder::Result& element,
       const std::string& value,
       DropdownSelectStrategy select_strategy,
       base::OnceCallback<void(const ClientStatus&)> callback);
@@ -162,10 +162,10 @@ class WebController {
       int key_press_delay_in_millisecond,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
-  // Set the |value| of the |attribute| of the element given by |selector|.
+  // Set the |value| of all the |attributes| of the |element|.
   virtual void SetAttribute(
-      const Selector& selector,
-      const std::vector<std::string>& attribute,
+      const ElementFinder::Result& element,
+      const std::vector<std::string>& attributes,
       const std::string& value,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
@@ -185,9 +185,10 @@ class WebController {
       base::OnceCallback<void(const ClientStatus&, const std::string&)>
           callback);
 
-  // Return the tag of |selector|.
+  // Return the tag of the |element|. In case of an error, will return an empty
+  // string.
   virtual void GetElementTag(
-      const Selector& selector,
+      const ElementFinder::Result& element,
       base::OnceCallback<void(const ClientStatus&, const std::string&)>
           callback);
 
@@ -254,11 +255,13 @@ class WebController {
 
   // RAII object that sets the action state to "running" when the object is
   // allocated and to "not running" when it gets deallocated.
-  class ScopedAssistantActionStateRunning {
+  class ScopedAssistantActionStateRunning
+      : private content::WebContentsObserver {
    public:
     explicit ScopedAssistantActionStateRunning(
-        autofill::ContentAutofillDriver* content_autofill_driver);
-    ~ScopedAssistantActionStateRunning();
+        content::WebContents* web_contents,
+        content::RenderFrameHost* render_frame_host);
+    ~ScopedAssistantActionStateRunning() override;
 
     ScopedAssistantActionStateRunning(
         const ScopedAssistantActionStateRunning&) = delete;
@@ -268,7 +271,11 @@ class WebController {
    private:
     void SetAssistantActionState(bool running);
 
-    autofill::ContentAutofillDriver* content_autofill_driver_;
+    // Overrides content::WebContentsObserver:
+    void RenderFrameDeleted(
+        content::RenderFrameHost* render_frame_host) override;
+
+    content::RenderFrameHost* render_frame_host_;
   };
 
   void OnJavaScriptResult(
@@ -359,12 +366,6 @@ class WebController {
   void OnFocusElement(base::OnceCallback<void(const ClientStatus&)> callback,
                       const DevtoolsClient::ReplyStatus& reply_status,
                       std::unique_ptr<runtime::CallFunctionOnResult> result);
-  void OnFindElementForSelectOption(
-      const std::string& value,
-      DropdownSelectStrategy select_strategy,
-      base::OnceCallback<void(const ClientStatus&)> callback,
-      const ClientStatus& status,
-      std::unique_ptr<ElementFinder::Result> element_result);
   void OnSelectOption(base::OnceCallback<void(const ClientStatus&)> callback,
                       const DevtoolsClient::ReplyStatus& reply_status,
                       std::unique_ptr<runtime::CallFunctionOnResult> result);
@@ -441,15 +442,6 @@ class WebController {
       const ElementFinder::Result& element,
       const std::string& value,
       base::OnceCallback<void(const ClientStatus&)> callback);
-  void OnFindElementForSetAttribute(
-      const std::vector<std::string>& attribute,
-      const std::string& value,
-      base::OnceCallback<void(const ClientStatus&)> callback,
-      const ClientStatus& status,
-      std::unique_ptr<ElementFinder::Result> element_result);
-  void OnSetAttribute(base::OnceCallback<void(const ClientStatus&)> callback,
-                      const DevtoolsClient::ReplyStatus& reply_status,
-                      std::unique_ptr<runtime::CallFunctionOnResult> result);
   void OnFindElementForGetOuterHtml(
       base::OnceCallback<void(const ClientStatus&, const std::string&)>
           callback,
@@ -459,11 +451,6 @@ class WebController {
                                               const std::string&)> callback,
                       const DevtoolsClient::ReplyStatus& reply_status,
                       std::unique_ptr<runtime::CallFunctionOnResult> result);
-  void OnFindElementForGetElementTag(
-      base::OnceCallback<void(const ClientStatus&, const std::string&)>
-          callback,
-      const ClientStatus& status,
-      std::unique_ptr<ElementFinder::Result> element_result);
   void OnGetElementTag(base::OnceCallback<void(const ClientStatus&,
                                                const std::string&)> callback,
                        const DevtoolsClient::ReplyStatus& reply_status,

@@ -37,20 +37,18 @@ void VivaldiRenderFrameObserver::OnResumeParser() {
 
 void VivaldiRenderFrameObserver::FocusedElementChanged(
     const blink::WebElement& element) {
-  // We get an extra focus message when the Document gets changed, e.g. by
-  // clicking a new iframe. In this case |element| is null and we should
-  // ignore it so that we don't lose focus of the actual element. See VB-72174.
-  if (element.IsNull()) {
-    return;
+  std::string tagname = "";
+  std::string type = "";
+  std::string role = "";
+  bool editable = false;
+  if (!element.IsNull()) {
+    tagname = element.TagName().Utf8();
+    type =
+        element.HasAttribute("type") ? element.GetAttribute("type").Utf8() : "";
+    editable = element.IsEditable();
+    role =
+        element.HasAttribute("role") ? element.GetAttribute("role").Utf8() : "";
   }
-
-  std::string tagname = element.TagName().Utf8();
-  std::string type =
-      element.HasAttribute("type") ? element.GetAttribute("type").Utf8() : "";
-  bool editable = element.IsEditable();
-  std::string role =
-      element.HasAttribute("role") ? element.GetAttribute("role").Utf8() : "";
-
   Send(new VivaldiMsg_DidUpdateFocusedElementInfo(routing_id(), tagname, type,
                                                   editable, role));
 }

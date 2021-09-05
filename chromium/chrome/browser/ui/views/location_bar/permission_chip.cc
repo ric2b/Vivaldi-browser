@@ -81,7 +81,9 @@ PermissionChip::PermissionChip(Browser* browser)
   SetLayoutManager(std::make_unique<views::FillLayout>());
   SetVisible(false);
 
-  chip_button_ = AddChildView(std::make_unique<views::MdTextButton>(this));
+  chip_button_ =
+      AddChildView(std::make_unique<views::MdTextButton>(base::BindRepeating(
+          &PermissionChip::ChipButtonPressed, base::Unretained(this))));
   chip_button_->SetProminent(true);
   chip_button_->SetCornerRadius(GetIconSize());
   chip_button_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -131,8 +133,12 @@ void PermissionChip::Show(permissions::PermissionPrompt::Delegate* delegate) {
   UpdatePermissionIconAndTextColor();
 
   SetVisible(true);
-  animation_->Show();
+  // TODO(olesiamarukhno): Add tests for animation logic.
+  animation_->Reset();
+  if (!delegate_->WasCurrentRequestAlreadyDisplayed())
+    animation_->Show();
   requested_time_ = base::TimeTicks::Now();
+  PreferredSizeChanged();
 }
 
 void PermissionChip::Hide() {
@@ -165,27 +171,6 @@ void PermissionChip::OnThemeChanged() {
   UpdatePermissionIconAndTextColor();
 }
 
-void PermissionChip::ButtonPressed(views::Button* sender,
-                                   const ui::Event& event) {
-  DCHECK_EQ(chip_button_, sender);
-
-  // The prompt bubble is either not opened yet or already closed on
-  // deactivation.
-  DCHECK(!prompt_bubble_);
-
-  prompt_bubble_ =
-      new PermissionPromptBubbleView(browser_, delegate_, requested_time_);
-  prompt_bubble_->Show();
-  prompt_bubble_->GetWidget()->AddObserver(this);
-  // Restart the timer after user clicks on the chip to open the bubble.
-  StartCollapseTimer();
-  if (!already_recorded_interaction_) {
-    base::UmaHistogramLongTimes("Permissions.Chip.TimeToInteraction",
-                                base::TimeTicks::Now() - requested_time_);
-    already_recorded_interaction_ = true;
-  }
-}
-
 void PermissionChip::AnimationEnded(const gfx::Animation* animation) {
   DCHECK_EQ(animation, animation_.get());
   if (animation->GetCurrentValue() == 1.0)
@@ -206,6 +191,24 @@ void PermissionChip::OnWidgetDestroying(views::Widget* widget) {
 
 bool PermissionChip::IsBubbleShowing() const {
   return prompt_bubble_ != nullptr;
+}
+
+void PermissionChip::ChipButtonPressed() {
+  // The prompt bubble is either not opened yet or already closed on
+  // deactivation.
+  DCHECK(!prompt_bubble_);
+
+  prompt_bubble_ =
+      new PermissionPromptBubbleView(browser_, delegate_, requested_time_);
+  prompt_bubble_->Show();
+  prompt_bubble_->GetWidget()->AddObserver(this);
+  // Restart the timer after user clicks on the chip to open the bubble.
+  StartCollapseTimer();
+  if (!already_recorded_interaction_) {
+    base::UmaHistogramLongTimes("Permissions.Chip.TimeToInteraction",
+                                base::TimeTicks::Now() - requested_time_);
+    already_recorded_interaction_ = true;
+  }
 }
 
 void PermissionChip::Collapse() {
@@ -237,10 +240,10 @@ void PermissionChip::UpdatePermissionIconAndTextColor() {
                              views::style::STYLE_DIALOG_BUTTON_DEFAULT);
 
   chip_button_->SetEnabledTextColors(enabled_text_color);
-  chip_button_->SetImage(
+  chip_button_->SetImageModel(
       views::Button::STATE_NORMAL,
-      gfx::CreateVectorIcon(GetPermissionIconId(), GetIconSize(),
-                            enabled_text_color));
+      ui::ImageModel::FromVectorIcon(GetPermissionIconId(), enabled_text_color,
+                                     GetIconSize()));
 }
 
 const gfx::VectorIcon& PermissionChip::GetPermissionIconId() {
@@ -259,7 +262,7 @@ base::string16 PermissionChip::GetPermissionMessage() {
   auto requests = delegate_->Requests();
 
   return requests.size() == 1
-             ? requests[0]->GetChipText()
+             ? requests[0]->GetChipText().value()
              : l10n_util::GetStringUTF16(
                    IDS_MEDIA_CAPTURE_VIDEO_AND_AUDIO_PERMISSION_CHIP);
 }

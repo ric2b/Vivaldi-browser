@@ -61,7 +61,6 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/web_preferences.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -83,7 +82,7 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
-#include "third_party/blink/public/common/service_worker/service_worker_utils.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/loader/code_cache.mojom-test-utils.h"
 
 using blink::mojom::CacheStorageError;
@@ -193,16 +192,12 @@ std::unique_ptr<net::test_server::HttpResponse> VerifySaveDataHeaderInRequest(
 std::unique_ptr<net::test_server::HttpResponse>
 VerifySaveDataNotInAccessControlRequestHeader(
     const net::test_server::HttpRequest& request) {
-  if (request.method == net::test_server::METHOD_OPTIONS &&
-      network::features::ShouldEnableOutOfBlinkCorsForTesting()) {
-    // In OOR-CORS mode, 'Save-Data' is not added to the CORS preflight request.
-    // This is the desired behavior.
+  if (request.method == net::test_server::METHOD_OPTIONS) {
+    // 'Save-Data' is not added to the CORS preflight request.
     auto it = request.headers.find("Save-Data");
     EXPECT_EQ(request.headers.end(), it);
   } else {
-    // In the legacy code path, 'Save-Data' is (undesirably) added to the
-    // preflight request. And in both code paths, 'Save-Data' is added to the
-    // actual request, as expected.
+    // 'Save-Data' is added to the actual request, as expected.
     auto it = request.headers.find("Save-Data");
     EXPECT_NE(request.headers.end(), it);
     EXPECT_EQ("on", it->second);
@@ -442,7 +437,7 @@ class MockContentBrowserClient : public TestContentBrowserClient {
   }
 
   void OverrideWebkitPrefs(RenderViewHost* render_view_host,
-                           WebPreferences* prefs) override {
+                           blink::web_pref::WebPreferences* prefs) override {
     prefs->data_saver_enabled = data_saver_enabled_;
   }
 
@@ -2972,6 +2967,7 @@ class ServiceWorkerThrottlingTest : public ServiceWorkerBrowserTest {
           "Connection: close\r\n"
           "Content-Length: 32\r\n"
           "Content-Type: text/html\r\n"
+          "Cache-Control: no-store\r\n"
           "\r\n"
           "<title>ERROR</title>Hello world.";
       std::move(send_).Run(kPageResponse, std::move(done_));
@@ -3029,6 +3025,45 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerThrottlingTest, ThrottleInstalling) {
   RegisterServiceWorkerAndWaitForState(
       "/service_worker/throttling_non_blocking_sw.js",
       "/service_worker/throttling_non_blocking",
+      ServiceWorkerVersion::ACTIVATED);
+
+  // If throttling worked correctly then there should only be 2 outstanding
+  // requests blocked by the test server.
+  EXPECT_EQ(2, GetBlockingResponseCount());
+
+  auto observer = base::MakeRefCounted<WorkerStateObserver>(
+      wrapper(), ServiceWorkerVersion::ACTIVATED);
+  observer->Init();
+
+  // Stop blocking the resources loaded by the first service worker.
+  StopBlocking();
+
+  // Verify that throttling correctly notes when resources can load and
+  // the first service worker fully activates.
+  observer->Wait();
+}
+
+IN_PROC_BROWSER_TEST_F(ServiceWorkerThrottlingTest,
+                       ThrottleInstallingWithCacheAddAll) {
+  // Register a service worker that loads 3 resources in its install
+  // handler via cache.addAll().  The test server will cause these loads
+  // to block which should trigger throttling on the third request.
+  RegisterServiceWorkerAndWaitForState(
+      "/service_worker/throttling_blocking_cache_addall_sw.js",
+      "/service_worker/throttling_blocking_cache_addall",
+      ServiceWorkerVersion::INSTALLING);
+
+  // Register a second service worker that also loads 3 resources in
+  // its install handler using cache.addAll().  The test server will not
+  // block these loads and the worker should progress to the activated state.
+  //
+  // This second service worker is used to wait for the first worker
+  // to potentially request its resources.  By the time the second worker
+  // activates the first worker should have requested its resources and
+  // triggered throttling.  This avoids the need for an arbitrary timeout.
+  RegisterServiceWorkerAndWaitForState(
+      "/service_worker/throttling_non_blocking_cache_addall_sw.js",
+      "/service_worker/throttling_non_blocking_cache_addall",
       ServiceWorkerVersion::ACTIVATED);
 
   // If throttling worked correctly then there should only be 2 outstanding

@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "ash/public/cpp/login_types.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/view.h"
 
@@ -39,11 +40,19 @@ class AuthDialogContentsView : public views::View,
   AuthDialogContentsView& operator=(const AuthDialogContentsView&) = delete;
   ~AuthDialogContentsView() override;
 
+  // views::Views:
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
+  uint32_t auth_methods() const { return auth_methods_; }
+
  private:
   class FingerprintView;
+
+  // views::View:
+  void AddedToWidget() override;
 
   // Add a view for dialog title.
   void AddTitleView();
@@ -74,8 +83,12 @@ class AuthDialogContentsView : public views::View,
   // Called when the user submits password or PIN.
   void OnAuthSubmit(const base::string16& password);
 
-  // Called when authentication of the user completes.
-  void OnAuthComplete(base::Optional<bool> success);
+  // Called when password/PIN authentication of the user completes.
+  void OnPasswordOrPinAuthComplete(base::Optional<bool> success);
+
+  // Called when fingerprint authentication completes.
+  void OnFingerprintAuthComplete(bool success,
+                                 FingerprintState fingerprint_state);
 
   // Debug container which holds the entire debug UI.
   views::View* container_ = nullptr;
@@ -99,9 +112,6 @@ class AuthDialogContentsView : public views::View,
 
   // Flags of auth methods that should be visible.
   uint32_t auth_methods_ = 0u;
-
-  // Show other authentication mechanisms if more than one.
-  views::LabelButton* more_options_button_ = nullptr;
 
   // Cancel all operations and close th dialog.
   views::LabelButton* cancel_button_ = nullptr;

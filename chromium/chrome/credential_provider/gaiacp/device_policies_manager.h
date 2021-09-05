@@ -5,12 +5,13 @@
 #ifndef CHROME_CREDENTIAL_PROVIDER_GAIACP_DEVICE_POLICIES_MANAGER_H_
 #define CHROME_CREDENTIAL_PROVIDER_GAIACP_DEVICE_POLICIES_MANAGER_H_
 
+#include "base/component_export.h"
 #include "chrome/credential_provider/gaiacp/device_policies.h"
 
 namespace credential_provider {
 
 // Manager used to fetch user policies from GCPW backends.
-class DevicePoliciesManager {
+class COMPONENT_EXPORT(GCPW_POLICIES) DevicePoliciesManager {
  public:
   // Get the user policies manager instance.
   static DevicePoliciesManager* Get();
@@ -21,6 +22,14 @@ class DevicePoliciesManager {
   // Returns the effective policy to follow on the device by combining the
   // policies of all the existing users on the device.
   virtual void GetDevicePolicies(DevicePolicies* device_policies);
+
+  // Make sure GCPW update is set up correctly.
+  void EnforceGcpwUpdatePolicy();
+
+  // Creates an Omaha policy with the list of allowed |domains| for GCPW to be
+  // used in tests.
+  bool SetAllowedDomainsOmahaPolicyForTesting(
+      const std::vector<base::string16>& domains);
 
  protected:
   // Returns the storage used for the instance pointer.

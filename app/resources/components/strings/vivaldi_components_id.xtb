@@ -1,4 +1,36 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="id">
+<translation id="3830627370375585318">Izinkan Vivaldi mengakses jaringan di pengaturan firewall atau antivirus
+          Anda.</translation>
+<translation id="4200102020577305737">Buka
+          menu Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Pengaturan LAN
+          dan batalkan pilihan "Gunakan server proxy untuk LAN".</translation>
+<translation id="4932161901409251843">Go to
+          menu Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          dan pastikan konfigurasi Anda diatur ke "tanpa proxy" atau "langsung."</translation>
+<translation id="5248344925342018662">Anda melihat halaman Vivaldi yang aman</translation>
+<translation id="7023871570427738255">Buka
+          menu Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          dan batalkan pilihan "<ph name="NO_PREFETCH_DESCRIPTION" />."
+          Jika hal ini tidak menyelesaikan masalah, sebaiknya pilih lagi opsi ini
+          untuk meningkatkan kinerja.</translation>
+<translation id="8187289872471304532">Buka
+          Aplikasi &gt; Preferensi Sistem &gt; Jaringan &gt; Lanjutan &gt; Proxy
+          dan batalkan proxy apapun yang telah dipilih.</translation>
 </translationbundle>

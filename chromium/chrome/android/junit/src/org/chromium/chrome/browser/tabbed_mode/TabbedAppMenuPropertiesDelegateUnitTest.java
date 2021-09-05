@@ -27,10 +27,12 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
+import org.chromium.chrome.browser.banners.AppBannerManager;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.enterprise.util.ManagedBrowserUtils;
@@ -46,6 +48,9 @@ import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuDelegate;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.content.browser.ContentFeatureListImpl;
+import org.chromium.content.browser.ContentFeatureListImplJni;
+import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.WebContents;
 
@@ -91,9 +96,11 @@ public class TabbedAppMenuPropertiesDelegateUnitTest {
     Profile.Natives mProfileJniMock;
     @Mock
     Profile mProfileMock;
+    @Mock
+    private ContentFeatureListImpl.Natives mContentFeatureListJniMock;
 
-    private ObservableSupplierImpl<OverviewModeBehavior> mOverviewModeSupplier =
-            new ObservableSupplierImpl<>();
+    private OneshotSupplierImpl<OverviewModeBehavior> mOverviewModeSupplier =
+            new OneshotSupplierImpl<>();
     private ObservableSupplierImpl<BookmarkBridge> mBookmarkBridgeSupplier =
             new ObservableSupplierImpl<>();
 
@@ -107,7 +114,6 @@ public class TabbedAppMenuPropertiesDelegateUnitTest {
         when(mTab.getWebContents()).thenReturn(mWebContents);
         when(mWebContents.getNavigationController()).thenReturn(mNavigationController);
         when(mNavigationController.getUseDesktopUserAgent()).thenReturn(false);
-        when(mToolbarManager.isMenuFromBottom()).thenReturn(false);
         when(mTabModelSelector.getCurrentModel()).thenReturn(mTabModel);
         when(mTabModelSelector.getModel(false)).thenReturn((mTabModel));
         when(mTabModel.isIncognito()).thenReturn(false);
@@ -115,6 +121,10 @@ public class TabbedAppMenuPropertiesDelegateUnitTest {
         when(mProfileJniMock.fromWebContents(any(WebContents.class))).thenReturn(mProfileMock);
         jniMocker.mock(ManagedBrowserUtilsJni.TEST_HOOKS, mManagedBrowserUtilsJniMock);
         Profile.setLastUsedProfileForTesting(mProfile);
+        jniMocker.mock(ContentFeatureListImplJni.TEST_HOOKS, mContentFeatureListJniMock);
+        when(mContentFeatureListJniMock.isEnabled(
+                     ContentFeatureList.EXPERIMENTAL_ACCESSIBILITY_LABELS))
+                .thenReturn(false);
 
         mTabbedAppMenuPropertiesDelegate = Mockito.spy(new TabbedAppMenuPropertiesDelegate(
                 ContextUtils.getApplicationContext(), mActivityTabProvider,
@@ -133,9 +143,10 @@ public class TabbedAppMenuPropertiesDelegateUnitTest {
                 .when(mTabbedAppMenuPropertiesDelegate)
                 .shouldShowPaintPreview(anyBoolean(), any(Tab.class), anyBoolean());
         doReturn(true).when(mTabbedAppMenuPropertiesDelegate).shouldShowTranslateMenuItem(any());
-        doReturn(R.string.menu_add_to_homescreen)
+        doReturn(new AppBannerManager.InstallStringPair(
+                         R.string.menu_add_to_homescreen, R.string.add))
                 .when(mTabbedAppMenuPropertiesDelegate)
-                .getAddToHomeScreenTitle();
+                .getAddToHomeScreenTitle(mTab);
         when(mManagedBrowserUtilsJniMock.hasBrowserPoliciesApplied(any())).thenReturn(true);
 
         Menu menu = createTestMenu();

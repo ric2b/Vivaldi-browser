@@ -6,8 +6,10 @@
 
 enum GPUExtensionName {
     "texture-compression-bc",
+    "timestamp-query",
     // Non-standard extension name string. Remove after a transition period.
-    "textureCompressionBC"
+    "textureCompressionBC",
+    "shader-float16"
 };
 
 [

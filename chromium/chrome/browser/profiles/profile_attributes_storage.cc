@@ -19,7 +19,6 @@
 #include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "base/threading/scoped_blocking_call.h"
-#include "build/build_config.h"
 #include "chrome/browser/profiles/profile_avatar_downloader.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_metrics.h"
@@ -31,6 +30,10 @@
 #include "third_party/icu/source/i18n/unicode/coll.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image.h"
+
+#if !defined(OS_ANDROID)
+#include "chrome/browser/ui/browser_list.h"
+#endif
 
 namespace {
 
@@ -216,6 +219,10 @@ void RecordProfileState(ProfileAttributesEntry* entry,
   profile_metrics::LogProfileName(GetNameState(entry), suffix);
   profile_metrics::LogProfileAccountType(
       GetUnconsentedPrimaryAccountType(entry), suffix);
+  profile_metrics::LogProfileSyncEnabled(
+      entry->GetSigninState() ==
+          SigninState::kSignedInWithConsentedPrimaryAccount,
+      suffix);
   profile_metrics::LogProfileDaysSinceLastUse(
       (base::Time::Now() - entry->GetActiveTime()).InDays(), suffix);
 }
@@ -382,6 +389,20 @@ void ProfileAttributesStorage::AddObserver(Observer* obs) {
 void ProfileAttributesStorage::RemoveObserver(Observer* obs) {
   observer_list_.RemoveObserver(obs);
 }
+
+#if !defined(OS_ANDROID)
+void ProfileAttributesStorage::RecordDeletedProfileState(
+    ProfileAttributesEntry* entry) {
+  DCHECK(entry);
+  RecordProfileState(entry, profile_metrics::StateSuffix::kUponDeletion);
+  bool is_last_profile = GetNumberOfProfiles() <= 1u;
+  // If the profile has windows opened, they are still open at this moment.
+  // Thus, this really means that only the profile manager is open.
+  bool no_browser_windows = BrowserList::GetInstance()->empty();
+  profile_metrics::LogProfileDeletionContext(is_last_profile,
+                                             no_browser_windows);
+}
+#endif
 
 void ProfileAttributesStorage::RecordProfilesState() {
   std::vector<ProfileAttributesEntry*> entries = GetAllProfilesAttributes();

@@ -51,7 +51,19 @@ class RuleService : public KeyedService {
     virtual void OnExceptionListChanged(RuleGroup group, ExceptionsList list) {}
   };
 
+  class Delegate {
+   public:
+    virtual ~Delegate();
+    virtual std::string GetLocaleForDefaultLists() = 0;
+    // The delegate isn't expected to be called after this.
+    virtual void RuleServiceDeleted() = 0;
+  };
+
   ~RuleService() override;
+
+  // Allows the service to query state from outside its world. The delegate
+  // should only be set once.
+  virtual void SetDelegate(Delegate* delegate) = 0;
 
   virtual bool IsLoaded() const = 0;
 
@@ -91,8 +103,9 @@ class RuleService : public KeyedService {
                                         ExceptionsList list,
                                         const std::string& domain) = 0;
   virtual void RemoveAllExceptions(RuleGroup group, ExceptionsList list) = 0;
-  virtual std::vector<std::string> GetExceptions(RuleGroup group,
-                                                 ExceptionsList list) const = 0;
+  virtual const std::set<std::string>& GetExceptions(
+      RuleGroup group,
+      ExceptionsList list) const = 0;
 
   // This returns whether a given origin will be subject to filtering in a given
   // group or not, based on the active exception list.

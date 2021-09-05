@@ -104,9 +104,9 @@ class CORE_EXPORT WebPagePopupImpl final : public WebPagePopup,
   LocalDOMWindow* Window();
 
   // WebPagePopup implementation.
-  gfx::Point PositionRelativeToOwner() override;
   WebDocument GetDocument() override;
   WebPagePopupClient* GetClientForTesting() const override;
+  void InitializeForTesting(WebView* view) override;
 
   // PagePopup implementation.
   void PostMessageToPopup(const String& message) override;
@@ -135,10 +135,10 @@ class CORE_EXPORT WebPagePopupImpl final : public WebPagePopup,
   void ScheduleAnimation() override;
   void UpdateVisualProperties(
       const VisualProperties& visual_properties) override;
-  void UpdateScreenRects(const gfx::Rect& widget_screen_rect,
-                         const gfx::Rect& window_screen_rect) override;
-  ScreenInfo GetOriginalScreenInfo() override;
+  const ScreenInfo& GetOriginalScreenInfo() override;
   gfx::Rect ViewportVisibleRect() override;
+  void ScreenRectToEmulated(gfx::Rect& screen_rect) override;
+  void EmulatedToScreenRect(gfx::Rect& screen_rect) override;
 
   // WebWidget implementation.
   // NOTE: The WebWidget may still be used after requesting the popup to be
@@ -158,7 +158,6 @@ class CORE_EXPORT WebPagePopupImpl final : public WebPagePopup,
   WebURL GetURLForDebugTrace() override;
   WebHitTestResult HitTestResultAt(const gfx::PointF&) override { return {}; }
   cc::LayerTreeHost* InitializeCompositing(
-      bool never_composited,
       scheduler::WebThreadScheduler* main_thread_scheduler,
       cc::TaskGraphRunner* task_graph_runner,
       bool for_child_local_root_frame,
@@ -170,8 +169,8 @@ class CORE_EXPORT WebPagePopupImpl final : public WebPagePopup,
   void SetCursor(const ui::Cursor& cursor) override;
   bool HandlingInputEvent() override;
   void SetHandlingInputEvent(bool handling) override;
-  void ProcessInputEventSynchronously(const WebCoalescedInputEvent&,
-                                      HandledEventCallback) override;
+  void ProcessInputEventSynchronouslyForTesting(const WebCoalescedInputEvent&,
+                                                HandledEventCallback) override;
   void UpdateTextInputState() override;
   void UpdateSelectionBounds() override;
   void ShowVirtualKeyboard() override;
@@ -197,17 +196,14 @@ class CORE_EXPORT WebPagePopupImpl final : public WebPagePopup,
                                        const WebMouseWheelEvent&) override;
   void ApplyVisualProperties(
       const VisualProperties& visual_properties) override;
-  void UpdateSurfaceAndScreenInfo(
-      const viz::LocalSurfaceIdAllocation& new_local_surface_id_allocation,
-      const gfx::Rect& compositor_viewport_pixel_rect,
-      const ScreenInfo& new_screen_info) override;
-  void UpdateScreenInfo(const ScreenInfo& new_screen_info) override;
-  void UpdateCompositorViewportAndScreenInfo(
-      const gfx::Rect& compositor_viewport_pixel_rect,
-      const ScreenInfo& new_screen_info) override;
-  void UpdateCompositorViewportRect(
-      const gfx::Rect& compositor_viewport_pixel_rect) override;
   const ScreenInfo& GetScreenInfo() override;
+  gfx::Rect WindowRect() override;
+  gfx::Rect ViewRect() override;
+  void SetScreenRects(const gfx::Rect& widget_screen_rect,
+                      const gfx::Rect& window_screen_rect) override;
+  gfx::Size VisibleViewportSizeInDIPs() override;
+  void SetPendingWindowRect(const gfx::Rect* window_screen_rect) override;
+  bool IsHidden() const override;
 
   // This may only be called if page_ is non-null.
   LocalFrame& MainFrame() const;
@@ -231,8 +227,9 @@ class CORE_EXPORT WebPagePopupImpl final : public WebPagePopup,
           widget);
   void DestroyPage();
   void SetRootLayer(scoped_refptr<cc::Layer>);
+  void SetWebView(WebViewImpl* web_view);
 
-  WebRect WindowRectInScreen() const;
+  gfx::Rect WindowRectInScreen() const;
 
   void InjectGestureScrollEvent(WebGestureDevice device,
                                 const gfx::Vector2dF& delta,
@@ -241,7 +238,7 @@ class CORE_EXPORT WebPagePopupImpl final : public WebPagePopup,
                                 WebInputEvent::Type injected_type);
 
   WebPagePopupClient* web_page_popup_client_;
-  WebViewImpl* web_view_;
+  WebViewImpl* web_view_ = nullptr;
   // WebPagePopupImpl wraps its own Page that renders the content in the popup.
   // This member is non-null between the call to Initialize() and the call to
   // ClosePopup(). If page_ is non-null, it is guaranteed to have an attached
@@ -257,6 +254,14 @@ class CORE_EXPORT WebPagePopupImpl final : public WebPagePopup,
 
   bool suppress_next_keypress_event_ = false;
   Persistent<DOMRect> popup_owner_client_rect_;
+
+  // When emulation is enabled, and a popup widget is opened, the popup widget
+  // needs these values to move between the popup's (non-emulated) coordinates
+  // and the opener widget's (emulated) coordinates. They are only valid when
+  // the |opener_emulator_scale_| is non-zero.
+  gfx::Point opener_widget_screen_origin_;
+  gfx::Point opener_original_widget_screen_origin_;
+  float opener_emulator_scale_ = 0;
 
   // Base functionality all widgets have. This is a member as to avoid
   // complicated inheritance structures.

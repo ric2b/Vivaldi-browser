@@ -611,6 +611,7 @@ base::Optional<SkColor> NativeThemeWin::GetPlatformHighContrastColor(
     case kColorId_TableBackgroundAlternate:
     case kColorId_TooltipBackground:
     case kColorId_ProminentButtonDisabledColor:
+    case kColorId_NotificationDefaultBackground:
       return system_colors_[SystemThemeColor::kWindow];
 
     // Window Text
@@ -623,6 +624,7 @@ base::Optional<SkColor> NativeThemeWin::GetPlatformHighContrastColor(
     case kColorId_TableHeaderText:
     case kColorId_TableGroupingIndicatorColor:
     case kColorId_TableHeaderSeparator:
+    case kColorId_TooltipIcon:
     case kColorId_TooltipText:
     case kColorId_ThrobberSpinningColor:
     case kColorId_ThrobberLightColor:
@@ -678,6 +680,7 @@ base::Optional<SkColor> NativeThemeWin::GetPlatformHighContrastColor(
     case kColorId_FocusedMenuItemBackgroundColor:
     case kColorId_LabelTextSelectionBackgroundFocused:
     case kColorId_TextfieldSelectionBackgroundFocused:
+    case kColorId_TooltipIconHovered:
     case kColorId_TreeSelectionBackgroundFocused:
     case kColorId_TreeSelectionBackgroundUnfocused:
     case kColorId_TableSelectionBackgroundFocused:
@@ -776,10 +779,10 @@ void NativeThemeWin::PaintIndirect(cc::PaintCanvas* destination_canvas,
     return;
   }
 
-  if (!offscreen_hdc.SelectBitmap(skia::CreateHBitmap(
-          rect.width(), rect.height(), false, nullptr, nullptr))) {
+  base::win::ScopedBitmap hbitmap = skia::CreateHBitmapXRGB8888(
+      rect.width(), rect.height(), nullptr, nullptr);
+  if (!offscreen_hdc.SelectBitmap(hbitmap.release()))
     return;
-  }
 
   // Will be NULL if lower-level Windows calls fail, or if the backing
   // allocated is 0 pixels in size (which should never happen according to

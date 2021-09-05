@@ -81,8 +81,7 @@ void SuccessCallback(bool* called) {
 // URLRequestJob that returns an HTTP 500 response.
 class MockServerErrorJob : public URLRequestJob {
  public:
-  MockServerErrorJob(URLRequest* request, NetworkDelegate* network_delegate)
-      : URLRequestJob(request, network_delegate) {}
+  explicit MockServerErrorJob(URLRequest* request) : URLRequestJob(request) {}
   ~MockServerErrorJob() override = default;
 
  protected:
@@ -103,10 +102,9 @@ class MockServerErrorJobInterceptor : public URLRequestInterceptor {
   MockServerErrorJobInterceptor() = default;
   ~MockServerErrorJobInterceptor() override = default;
 
-  URLRequestJob* MaybeInterceptRequest(
-      URLRequest* request,
-      NetworkDelegate* network_delegate) const override {
-    return new MockServerErrorJob(request, network_delegate);
+  std::unique_ptr<URLRequestJob> MaybeInterceptRequest(
+      URLRequest* request) const override {
+    return std::make_unique<MockServerErrorJob>(request);
   }
 
  private:
@@ -152,7 +150,7 @@ class TestReportSenderNetworkDelegate : public NetworkDelegateImpl {
     num_requests_++;
     EXPECT_EQ(expect_url_, request->url());
     EXPECT_STRCASEEQ("POST", request->method().data());
-    EXPECT_TRUE(request->load_flags() & LOAD_DO_NOT_SEND_COOKIES);
+    EXPECT_FALSE(request->allow_credentials());
     EXPECT_TRUE(request->load_flags() & LOAD_DO_NOT_SAVE_COOKIES);
 
     const HttpRequestHeaders& extra_headers = request->extra_request_headers();

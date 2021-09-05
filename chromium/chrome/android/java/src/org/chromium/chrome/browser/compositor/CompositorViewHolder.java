@@ -43,9 +43,9 @@ import org.chromium.base.compat.ApiHelperForO;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
-import org.chromium.chrome.browser.compositor.Invalidator.Client;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerHost;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
@@ -105,6 +105,27 @@ public class CompositorViewHolder extends FrameLayout
     private static final long SYSTEM_UI_VIEWPORT_UPDATE_DELAY_MS = 500;
 
     /**
+     * Initializer interface used to decouple initialization from the class that owns
+     * the CompositorViewHolder.
+     */
+    public interface Initializer {
+        /**
+         * Initializes the {@link CompositorViewHolder} with the relevant content it needs to
+         * properly show content on the screen.
+         * @param layoutManager             A {@link LayoutManager} instance.  This class is
+         *                                  responsible for driving all high level screen content
+         * and determines which {@link Layout} is shown when.
+         * @param urlBar                    The {@link View} representing the URL bar (must be
+         *                                  focusable) or {@code null} if none exists.
+         * @param contentContainer          A {@link ViewGroup} that can have content attached by
+         *                                  {@link Layout}s.
+         * @param controlContainer          A {@link ControlContainer} instance to draw.
+         */
+        void initializeCompositorContent(LayoutManager layoutManager, View urlBar,
+                ViewGroup contentContainer, ControlContainer controlContainer);
+    }
+
+    /**
      * Observer interface for any object that needs to process touch events.
      */
     public interface TouchEventObserver {
@@ -138,8 +159,7 @@ public class CompositorViewHolder extends FrameLayout
 
     private int mPendingFrameCount;
 
-    private final ArrayList<Invalidator.Client> mPendingInvalidations =
-            new ArrayList<>();
+    private final ArrayList<Runnable> mPendingInvalidations = new ArrayList<>();
     private boolean mSkipInvalidation;
 
     /**
@@ -155,7 +175,7 @@ public class CompositorViewHolder extends FrameLayout
     private CompositorAccessibilityProvider mNodeProvider;
 
     /** The toolbar control container. **/
-    private ControlContainer mControlContainer;
+    private @Nullable ControlContainer mControlContainer;
 
     private InsetObserverView mInsetObserverView;
     private boolean mShowingFullscreen;
@@ -473,7 +493,7 @@ public class CompositorViewHolder extends FrameLayout
     /**
      * @param controlContainer The ControlContainer.
      */
-    public void setControlContainer(ControlContainer controlContainer) {
+    public void setControlContainer(@Nullable ControlContainer controlContainer) {
         DynamicResourceLoader loader = mCompositorView.getResourceManager() != null
                 ? mCompositorView.getResourceManager().getDynamicResourceLoader()
                 : null;
@@ -1231,16 +1251,17 @@ public class CompositorViewHolder extends FrameLayout
      * @param tabModelSelector        The {@link TabModelSelector} this View should hold and
      *                                represent.
      * @param tabCreatorManager       The {@link TabCreatorManager} for this view.
-     * @param tabContentManager       The {@link TabContentManager} for the tabs.
      * @param contextualSearchManager A {@link ContextualSearchManagementDelegate} instance.
+     * @param tabProvider             A means of acquiring the active tab.
      */
     public void onFinishNativeInitialization(TabModelSelector tabModelSelector,
-            TabCreatorManager tabCreatorManager, TabContentManager tabContentManager,
-            ContextualSearchManagementDelegate contextualSearchManager) {
-        assert mLayoutManager != null && mControlContainer != null;
-        mLayoutManager.init(tabModelSelector, tabCreatorManager, tabContentManager,
-                mControlContainer, contextualSearchManager,
-                mCompositorView.getResourceManager().getDynamicResourceLoader());
+            TabCreatorManager tabCreatorManager,
+            ContextualSearchManagementDelegate contextualSearchManager,
+            ActivityTabProvider tabProvider) {
+        assert mLayoutManager != null;
+        mLayoutManager.init(tabModelSelector, tabCreatorManager, mControlContainer,
+                contextualSearchManager,
+                mCompositorView.getResourceManager().getDynamicResourceLoader(), tabProvider);
 
         mTabModelSelector = tabModelSelector;
         tabModelSelector.addObserver(new EmptyTabModelSelectorObserver() {
@@ -1411,11 +1432,11 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     @Override
-    public void deferInvalidate(Client client) {
+    public void deferInvalidate(Runnable clientInvalidator) {
         if (mPendingFrameCount <= 0) {
-            client.doInvalidate();
-        } else if (!mPendingInvalidations.contains(client)) {
-            mPendingInvalidations.add(client);
+            clientInvalidator.run();
+        } else if (!mPendingInvalidations.contains(clientInvalidator)) {
+            mPendingInvalidations.add(clientInvalidator);
         }
     }
 
@@ -1423,7 +1444,7 @@ public class CompositorViewHolder extends FrameLayout
         if (mPendingInvalidations.isEmpty()) return;
         TraceEvent.instant("CompositorViewHolder.flushInvalidation");
         for (int i = 0; i < mPendingInvalidations.size(); i++) {
-            mPendingInvalidations.get(i).doInvalidate();
+            mPendingInvalidations.get(i).run();
         }
         mPendingInvalidations.clear();
     }

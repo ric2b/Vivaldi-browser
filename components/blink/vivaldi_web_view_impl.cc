@@ -22,9 +22,8 @@ void WebViewImpl::SetPluginsEnabled(const bool plugins_enabled) {
 }
 
 void WebViewImpl::SetImagesEnabled(const bool images_enabled) {
-  Page* page = AsView().page.Get();
-  Document* document = page->MainFrame()->IsLocalFrame()
-                           ? page->DeprecatedLocalMainFrame()->GetDocument()
+  Document* document = page_->MainFrame()->IsLocalFrame()
+                           ? page_->DeprecatedLocalMainFrame()->GetDocument()
                            : 0;
 
   if (document && document->GetSettings()->GetImagesEnabled() == images_enabled)

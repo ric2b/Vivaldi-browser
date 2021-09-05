@@ -41,7 +41,7 @@
 #include "third_party/blink/renderer/core/page/viewport_description.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
-#include "third_party/blink/renderer/platform/heap_observer_list.h"
+#include "third_party/blink/renderer/platform/heap_observer_set.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_lifecycle_state.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_scheduler.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
@@ -76,7 +76,6 @@ class PageScaleConstraintsSet;
 class PluginData;
 class PluginsChangedObserver;
 class PointerLockController;
-class TextFragmentSelectorGenerator;
 class ScopedPagePauser;
 class ScrollingCoordinator;
 class ScrollbarTheme;
@@ -356,8 +355,8 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
     return history_navigation_virtual_time_pauser_;
   }
 
-  HeapObserverList<PageVisibilityObserver>& PageVisibilityObserverList() {
-    return page_visibility_observer_list_;
+  HeapObserverSet<PageVisibilityObserver>& PageVisibilityObserverSet() {
+    return page_visibility_observer_set_;
   }
 
   void SetPageLifecycleState(
@@ -375,11 +374,11 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   // still hidden (possibly preserved in the back-forward cache, or unloaded).
   bool DispatchedPagehideAndStillHidden();
 
-  static void PrepareForLeakDetection();
+  // Similar to above, but will only return true if we've dispatched 'pagehide'
+  // with the 'persisted' property set to 'true'.
+  bool DispatchedPagehidePersistedAndStillHidden();
 
-  TextFragmentSelectorGenerator& GetTextFragmentSelectorGenerator() const {
-    return *text_fragment_selector_generator_;
-  }
+  static void PrepareForLeakDetection();
 
  private:
   friend class ScopedPagePauser;
@@ -418,7 +417,7 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   const Member<FocusController> focus_controller_;
   const Member<ContextMenuController> context_menu_controller_;
   const Member<PageScaleConstraintsSet> page_scale_constraints_set_;
-  HeapObserverList<PageVisibilityObserver> page_visibility_observer_list_;
+  HeapObserverSet<PageVisibilityObserver> page_visibility_observer_set_;
   const Member<PointerLockController> pointer_lock_controller_;
   Member<ScrollingCoordinator> scrolling_coordinator_;
   const Member<BrowserControls> browser_controls_;
@@ -501,8 +500,6 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   mojom::blink::TextAutosizerPageInfo web_text_autosizer_page_info_;
 
   WebScopedVirtualTimePauser history_navigation_virtual_time_pauser_;
-
-  const Member<TextFragmentSelectorGenerator> text_fragment_selector_generator_;
 
   DISALLOW_COPY_AND_ASSIGN(Page);
 };

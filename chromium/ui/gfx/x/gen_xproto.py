@@ -236,6 +236,10 @@ WRITE_SPECIAL = set([
     ('xcb', 'Expose'),
     ('xcb', 'UnmapNotify'),
     ('xcb', 'SelectionNotify'),
+    ('xcb', 'MotionNotify'),
+    ('xcb', 'Key'),
+    ('xcb', 'Button'),
+    ('xcb', 'PropertyNotify'),
 ])
 
 
@@ -365,8 +369,6 @@ class GenXproto(FileWriter):
         self.xml_filename = os.path.join(proto_dir, '%s.xml' % proto)
         self.header_file = open(os.path.join(gen_dir, '%s.h' % proto), 'w')
         self.source_file = open(os.path.join(gen_dir, '%s.cc' % proto), 'w')
-        self.undef_file = open(os.path.join(gen_dir, '%s_undef.h' % proto),
-                               'w')
 
         # Top-level xcbgen python module
         self.xcbgen = xcbgen
@@ -495,8 +497,10 @@ class GenXproto(FileWriter):
         if field.type.is_list:
             len_name = field_name + '_len'
             if not self.field_from_scope(len_name):
-                self.write('size_t %s = %s;' %
-                           (len_name, list_size(field_name, field.type)))
+                len_expr = list_size(field_name, field.type)
+                if field.type.is_ref_counted_memory:
+                    len_expr = '%s ? %s : 0' % (field_name, len_expr)
+                self.write('size_t %s = %s;' % (len_name, len_expr))
 
         return 1
 
@@ -507,12 +511,6 @@ class GenXproto(FileWriter):
             if field.field_name == name:
                 return field
         return None
-
-    # Work around conflicts caused by Xlib's liberal use of macros.
-    def undef(self, name):
-        print('#ifdef %s' % name, file=self.undef_file)
-        print('#undef %s' % name, file=self.undef_file)
-        print('#endif', file=self.undef_file)
 
     def expr(self, expr):
         if expr.op == 'popcount':
@@ -631,7 +629,11 @@ class GenXproto(FileWriter):
             else:
                 container_type, container_name = field.parent
                 assert container_type.is_event
-                opcode = container_type.opcodes[container_name]
+                # Extension events require offsetting the opcode, so make
+                # sure this path is only hit for non-extension events for now.
+                assert not self.module.namespace.is_ext
+                opcode = container_type.opcodes.get(container_name,
+                                                    'obj.opcode')
                 self.write('%s %s = %s;' % (type_name, name, opcode))
                 self.copy_primitive(name)
         elif name in ('extension', 'error_code', 'event_type'):
@@ -825,10 +827,8 @@ class GenXproto(FileWriter):
     def declare_enum(self, enum):
         def declare_enum_entry(name, value):
             name = safe_name(name)
-            self.undef(name)
             self.write('%s = %s,' % (name, value))
 
-        self.undef(enum.name[-1])
         with Indent(
                 self, 'enum class %s : %s {' %
             (adjust_type_name(enum.name[-1]), self.enum_types[enum.name][0]
@@ -899,7 +899,6 @@ class GenXproto(FileWriter):
 
     def declare_event(self, event, name):
         event_name = name[-1] + 'Event'
-        self.undef(event_name)
         with Indent(self, 'struct %s {' % adjust_type_name(event_name), '};'):
             self.write('static constexpr int type_id = %d;' % event.type_id)
             if len(event.opcodes) == 1:
@@ -910,7 +909,6 @@ class GenXproto(FileWriter):
                     items = [(int(x), y)
                              for (y, x) in event.enum_opcodes.items()]
                     for opcode, opname in sorted(items):
-                        self.undef(opname)
                         self.write('%s = %s,' % (opname, opcode))
             self.write('bool send_event{};')
             self.declare_fields(event.fields)
@@ -923,7 +921,6 @@ class GenXproto(FileWriter):
 
     def declare_container(self, struct, struct_name):
         name = struct_name[-1] + self.type_suffix(struct)
-        self.undef(name)
         with Indent(self, 'struct %s {' % adjust_type_name(name), '};'):
             self.declare_fields(struct.fields)
         self.write()
@@ -1323,7 +1320,6 @@ class GenXproto(FileWriter):
             imports.add(('xproto', 'xproto'))
         for direct_import in sorted(list(imports)):
             self.write('#include "%s.h"' % direct_import[-1])
-        self.write('#include "%s_undef.h"' % self.module.namespace.header)
         self.write()
         self.write('namespace x11 {')
         self.write()
@@ -1336,7 +1332,6 @@ class GenXproto(FileWriter):
                 self.declare_type(item, name)
 
         name = self.class_name
-        self.undef(name)
         with Indent(self, 'class COMPONENT_EXPORT(X11) %s {' % name, '};'):
             self.namespace = ['x11', self.class_name]
             self.write('public:')
@@ -1449,9 +1444,6 @@ class GenExtensionManager(FileWriter):
         self.write('#include <memory>')
         self.write()
         self.write('#include "base/component_export.h"')
-        self.write()
-        self.write('// Avoid conflicts caused by the GenericEvent macro.')
-        self.write('#include "ui/gfx/x/ge_undef.h"')
         self.write()
         self.write('namespace x11 {')
         self.write()

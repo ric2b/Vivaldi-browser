@@ -80,7 +80,7 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
                             cc::PaintHoldingCommitTrigger) override;
   void StartDragging(LocalFrame*,
                      const WebDragData&,
-                     WebDragOperationsMask,
+                     DragOperationsMask,
                      const SkBitmap& drag_image,
                      const gfx::Point& drag_image_offset) override;
   bool AcceptsLoadDrops() const override;
@@ -134,8 +134,6 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
   IntRect ViewportToScreen(const IntRect&,
                            const LocalFrameView*) const override;
   float WindowToViewportScalar(LocalFrame*, const float) const override;
-  void WindowToViewportRect(LocalFrame& frame,
-                            WebFloatRect* viewport_rect) const override;
   ScreenInfo GetScreenInfo(LocalFrame&) const override;
   void OverrideVisibleRectForMainFrame(LocalFrame& frame,
                                        IntRect* paint_rect) const override;

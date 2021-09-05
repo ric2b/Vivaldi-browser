@@ -6,26 +6,38 @@
 #define CHROME_BROWSER_UI_VIEWS_TAB_SEARCH_TAB_SEARCH_BUBBLE_VIEW_H_
 
 #include "base/scoped_observer.h"
+#include "base/timer/elapsed_timer.h"
+#include "chrome/browser/ui/webui/tab_search/tab_search_ui_embedder.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
-#include "ui/views/controls/webview/webview.h"
-#include "ui/web_dialogs/web_dialog_delegate.h"
 
 namespace views {
 class Widget;
-class WidgetObserver;
+class WebView;
 }  // namespace views
 
 namespace content {
 class BrowserContext;
 }  // namespace content
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class TabSearchOpenAction {
+  kMouseClick = 0,
+  kKeyboardNavigation = 1,
+  kKeyboardShortcut = 2,
+  kTouchGesture = 3,
+  kMaxValue = kTouchGesture,
+};
+
 class TabSearchBubbleView : public views::BubbleDialogDelegateView,
+                            public TabSearchUIEmbedder,
                             public views::WidgetObserver {
  public:
   // TODO(tluk): Since the Bubble is shown asynchronously, we shouldn't call
   // this if the Widget is hidden and yet to be revealed.
-  static void CreateTabSearchBubble(content::BrowserContext* browser_context,
-                                    views::View* anchor_view);
+  static views::Widget* CreateTabSearchBubble(
+      content::BrowserContext* browser_context,
+      views::View* anchor_view);
 
   TabSearchBubbleView(content::BrowserContext* browser_context,
                       views::View* anchor_view);
@@ -35,28 +47,23 @@ class TabSearchBubbleView : public views::BubbleDialogDelegateView,
   gfx::Size CalculatePreferredSize() const override;
   void AddedToWidget() override;
 
+  // TabSearchUIEmbedder:
+  void ShowBubble() override;
+  void CloseBubble() override;
+
   // views::WidgetObserver:
-  void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
-  void OnWidgetDestroying(views::Widget* widget) override;
+  void OnWidgetClosing(views::Widget* widget) override;
 
   void OnWebViewSizeChanged();
 
+  views::WebView* web_view_for_testing() { return web_view_; }
+
  private:
-#if defined(USE_AURA)
-  // TabSearchWindowObserverAura deals with issues in bubble deactivation on
-  // Aura platforms. See comments in OnWindowActivated().
-  // These issues are not present on Mac.
-  class TabSearchWindowObserverAura;
-
-  // |window_observer_| is a helper that hooks into the TabSearchBubbleView's
-  // widget lifecycle events.
-  std::unique_ptr<TabSearchWindowObserverAura> window_observer_;
-#endif
-
   views::WebView* web_view_;
 
-  ScopedObserver<views::Widget, views::WidgetObserver> observed_anchor_widget_{
-      this};
+  // Time the Tab Search window has been open.
+  base::Optional<base::ElapsedTimer> timer_;
+
   ScopedObserver<views::Widget, views::WidgetObserver> observed_bubble_widget_{
       this};
 

@@ -5,6 +5,7 @@
 <translation id="1195447618553298278">未知错误。</translation>
 <translation id="1413240736185167732">失败 - 过滤器出问题了</translation>
 <translation id="1468664791493211953">优惠</translation>
+<translation id="1478594628797167447">扫描器</translation>
 <translation id="1482734542997480527"><ph name="ENROLLMENT_DOMAIN" /> 管理此设备，并可能监控您的活动。</translation>
 <translation id="150962533380566081">PUK 无效。</translation>
 <translation id="1510238584712386396">启动器</translation>
@@ -19,10 +20,12 @@
 <translation id="2161394479394250669">取消打印任务</translation>
 <translation id="2338501278241028356">开启蓝牙以发现附近的设备</translation>
 <translation id="2375079107209812402">剩余尝试次数：<ph name="ATTEMPTS_LEFT" /></translation>
+<translation id="2517472476991765520">扫描</translation>
 <translation id="2805756323405976993">应用</translation>
 <translation id="2872961005593481000">关机</translation>
 <translation id="3008341117444806826">刷新</translation>
 <translation id="3091839911843451378">失败 - 已停止</translation>
+<translation id="3246869037381808805">系统会自动移除存在时长已超过 1 天的打印任务</translation>
 <translation id="3268178239013324452">失败 - 机盖未关</translation>
 <translation id="3369013195428705271">确定要清除所有打印记录吗？您正在执行的打印任务不会被清除。</translation>
 <translation id="3456078764689556234">已打印 <ph name="PRINTED_PAGES" /> 页（共 <ph name="TOTAL_PAGES" /> 页）。</translation>
@@ -33,13 +36,13 @@
 <translation id="38114475217616659">清除所有打印记录</translation>
 <translation id="3820172043799983114">PIN 码无效。</translation>
 <translation id="3838338534323494292">新密码</translation>
+<translation id="39823212440917567">系统会自动移除存在时长已超过 <ph name="NUMBER_OF_DAYS" /> 天的打印任务</translation>
 <translation id="4003259559679196451"><ph name="ENROLLMENT_DOMAIN" /> 管理此设备并可查看所有用户活动（包括访问过的网页、密码和电子邮件）。</translation>
 <translation id="4003384961948020559">失败 - 出纸盘已满</translation>
 <translation id="4027485274696301677">此 <ph name="DEVICE_TYPE" /> 由 <ph name="ENROLLMENT_DOMAIN" /> 管理。管理员可以远程配置此设备。</translation>
 <translation id="4034824040120875894">打印机</translation>
 <translation id="4227825898293920515">密码将于 <ph name="TIME" />后到期</translation>
 <translation id="4238516577297848345">没有正在进行的打印任务</translation>
-<translation id="428217921675623177">系统会自动移除存在时长已超过 90 天的打印任务</translation>
 <translation id="4297501883039923494">已停止 - 未知错误</translation>
 <translation id="4429881212383817840">Kerberos 票据即将过期</translation>
 <translation id="445059817448385655">旧密码</translation>
@@ -52,6 +55,7 @@
 <translation id="4890353053343094602">请立即设置一个新密码</translation>
 <translation id="4917889632206600977">已停止 - 纸张已用完</translation>
 <translation id="4932733599132424254">日期</translation>
+<translation id="520299634122159966">无可用的扫描器</translation>
 <translation id="5212543919916444558">无法提供与您的屏幕上可以找到的任何内容相关的帮助。
 请尝试通过点按麦克风图标向我提问。</translation>
 <translation id="5222676887888702881">退出</translation>
@@ -71,6 +75,7 @@
 <translation id="649050271426829538">已停止 - 卡纸了</translation>
 <translation id="6517239166834772319">探索</translation>
 <translation id="6564646048574748301">失败 - 无法连接到打印机</translation>
+<translation id="6620487321149975369">打印任务如未被手动移除，将会显示在历史记录中，</translation>
 <translation id="6643016212128521049">清除</translation>
 <translation id="6747215703636344499">已停止 - 出纸盘已满</translation>
 <translation id="7162487448488904999">媒体库</translation>
@@ -81,7 +86,9 @@
 <translation id="7805768142964895445">状态</translation>
 <translation id="808894953321890993">更改密码</translation>
 <translation id="8208861521865154048">福利</translation>
+<translation id="8294431847097064396">来源</translation>
 <translation id="8347227221149377169">打印任务</translation>
+<translation id="8352772353338965963">为多帐号登录添加帐号。用户无需使用密码即可访问所有已登录的帐号，因此您应仅通过受信任的帐号使用此功能。</translation>
 <translation id="8701136875688985581">此用户由 <ph name="ENROLLMENT_DOMAIN" /> 管理。管理方可能会远程管理设置并监控用户活动。</translation>
 <translation id="871560550817059752">失败 - 墨水已用完</translation>
 <translation id="8726019395068607495">已停止 - 机盖未关</translation>

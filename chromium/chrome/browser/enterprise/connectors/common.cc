@@ -82,4 +82,16 @@ TriggeredRule::Action GetHighestPrecedenceAction(
   return TriggeredRule::ACTION_UNSPECIFIED;
 }
 
+const char ScanResult::kKey[] = "enterprise_connectors.scan_result_key";
+ScanResult::ScanResult(const ContentAnalysisResponse& response)
+    : response(response) {}
+ScanResult::~ScanResult() = default;
+
+bool ContainsMalwareVerdict(const ContentAnalysisResponse& response) {
+  const auto& results = response.results();
+  return std::any_of(results.begin(), results.end(), [](const auto& result) {
+    return result.tag() == "malware" && !result.triggered_rules().empty();
+  });
+}
+
 }  // namespace enterprise_connectors

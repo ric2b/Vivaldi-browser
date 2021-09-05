@@ -30,6 +30,7 @@
 <translation id="1208421848177517699">Transliteratie (namaste → નમસ્તે)</translation>
 <translation id="1243314992276662751">Uploaden</translation>
 <translation id="1249250836236328755">Genre</translation>
+<translation id="1276362640455948667">Portugees met Amerikaans toetsenbord (internationaal)</translation>
 <translation id="1278813325885878377">Hongaars QWERTY-toetsenbord</translation>
 <translation id="1293556467332435079">Bestanden</translation>
 <translation id="1297922636971898492">Google Drive is momenteel niet beschikbaar. Het uploaden wordt automatisch gestart zodra Google Drive weer beschikbaar is.</translation>
@@ -63,6 +64,7 @@
 <translation id="1572585716423026576">Instellen als achtergrond</translation>
 <translation id="158809615184981282">Faeröers toetsenbord</translation>
 <translation id="1589128298353575783"><ph name="NUMBER_OF_PB" /> PB</translation>
+<translation id="1620510694547887537">Camera</translation>
 <translation id="1646136617204068573">Hongaars toetsenbord</translation>
 <translation id="164729547906544836">Tamil toetsenbord (itrans)</translation>
 <translation id="164969095109328410">Chrome-apparaat</translation>
@@ -70,6 +72,7 @@
 <translation id="1673103856845176271">Uit veiligheidsoverwegingen kan het bestand niet worden geopend.</translation>
 <translation id="169515659049020177">Shift</translation>
 <translation id="1722487484194605434"><ph name="NUMBER_OF_ITEMS" /> items inpakken...</translation>
+<translation id="1731889557567069540"><ph name="NUMBER_OF_ITEMS" /> items gekopieerd.</translation>
 <translation id="174173592514158117">Alle Play-mappen weergeven</translation>
 <translation id="174937106936716857">Totaal aantal bestanden</translation>
 <translation id="1775381402323441512">Videogegevens</translation>
@@ -114,7 +117,9 @@
 <translation id="2208158072373999562">Zip-archiefbestand</translation>
 <translation id="2225536596944493418">Weet je zeker dat je <ph name="NUMBER_OF_ITEMS" /> items wilt verwijderen?</translation>
 <translation id="2230062665678605299">Kan map '<ph name="FOLDER_NAME" />' niet maken. <ph name="ERROR_MESSAGE" /></translation>
+<translation id="2275059641601412272">Verplaatst.</translation>
 <translation id="2278988676849463018">Kannada toetsenbord (fonetisch)</translation>
+<translation id="2287742181953707290">Portugees met Amerikaans pc-toetsenbord (internationaal)</translation>
 <translation id="2288278176040912387">Platenspeler</translation>
 <translation id="2291538123825441971"><ph name="NUMBER_OF_FILES" /> bestanden openen.</translation>
 <translation id="2303301624314357662">Bestand <ph name="FILE_NAME" /> wordt geopend.</translation>
@@ -185,7 +190,6 @@
 <translation id="3064388234319122767">Transliteratie (zdravo → здраво)</translation>
 <translation id="3067790092342515856">Windows-bestanden</translation>
 <translation id="3078461028045006476">Delen met <ph name="EXTENSION_NAME" /></translation>
-<translation id="3088034400796962477">Transliteratie (salam ← سلام)</translation>
 <translation id="3116361045094675131">Brits toetsenbord</translation>
 <translation id="3126026824346185272">Ctrl</translation>
 <translation id="3144126448740580210">KLAAR</translation>
@@ -219,6 +223,7 @@
 <translation id="3473378059788601120">Gekopieerd naar <ph name="FOLDER_NAME" />.</translation>
 <translation id="3475447146579922140">Google-spreadsheet</translation>
 <translation id="3495304270784461826"><ph name="COUNT" /> fouten.</translation>
+<translation id="349603508045926994">Perzisch (transliteratie)</translation>
 <translation id="3519867315646775981">Transliteratie (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Portugees</translation>
 <translation id="3524311639100184459">Let op: Deze bestanden zijn tijdelijk en kunnen automatisch worden verwijderd om schijfruimte vrij te maken.  <ph name="BEGIN_LINK" />Meer informatie<ph name="END_LINK" /></translation>
@@ -235,6 +240,7 @@
 <translation id="3620292326130836921">Er is een back-up van alles gemaakt</translation>
 <translation id="3626281679859535460">Helderheid</translation>
 <translation id="3644896802912593514">Breedte</translation>
+<translation id="3645233063072417428"><ph name="NUMBER_OF_ITEMS" /> items verplaatst.</translation>
 <translation id="3645531960514756307">Map losmaken</translation>
 <translation id="3678559383040232393">Maltees toetsenbord</translation>
 <translation id="3685122418104378273">De synchronisatie van Google Drive is bij het gebruik van mobiele data standaard uitgeschakeld.</translation>
@@ -276,6 +282,7 @@
 <translation id="4072248638558688893">Tamil toetsenbord (fonetisch)</translation>
 <translation id="4124935795427217608">Eenhoorn</translation>
 <translation id="4158739975813877944">Playlist openen</translation>
+<translation id="4159731583141908892"><ph name="FILE_NAME" /> verplaatst.</translation>
 <translation id="418179967336296930">Fonetisch Russisch toetsenbord (YaZHert)</translation>
 <translation id="4193154014135846272">Google-document</translation>
 <translation id="4195249722193633765">App met Linux (bèta) installeren</translation>
@@ -289,6 +296,7 @@
 <translation id="4298972503445160211">Deens toetsenbord</translation>
 <translation id="4299729908419173967">Braziliaans</translation>
 <translation id="4309915981827077375">Algemene informatie</translation>
+<translation id="4315949787858895817">Nederlands (België)</translation>
 <translation id="4326192123064055915">Koffie</translation>
 <translation id="4336032328163998280">Kopiëren mislukt. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">Meloen</translation>
@@ -300,7 +308,6 @@
 <translation id="4477219268485577442">Bulgaars fonetisch</translation>
 <translation id="4479812471636796472">Amerikaans Dvorak-toetsenbord</translation>
 <translation id="4481711095103932593">Deze map is gedeeld met Windows</translation>
-<translation id="4487088045714738411">Belgisch toetsenbord</translation>
 <translation id="4522570452068850558">Details</translation>
 <translation id="4542387084127299777">Kan '<ph name="PATH" />' niet openen</translation>
 <translation id="4552678318981539154">Meer opslagruimte kopen</translation>
@@ -311,6 +318,7 @@
 <translation id="4582497162516204941">Installeren met Linux (bèta)</translation>
 <translation id="4594543368593301662">Resultaten voor <ph name="SEARCH_TERM" />.</translation>
 <translation id="4603392156942865207"><ph name="FILE_NAME" /> kopiëren naar <ph name="FOLDER_NAME" /></translation>
+<translation id="4627439232948440198">Sanskriet</translation>
 <translation id="4631887759990505102">Artiest</translation>
 <translation id="4656293982926141856">Deze computer</translation>
 <translation id="4669606053856530811">Leden van '<ph name="SOURCE_NAME" />' hebben geen toegang meer, tenzij deze items met ze zijn gedeeld.</translation>
@@ -336,6 +344,7 @@
 <translation id="4804827417948292437">Avocado</translation>
 <translation id="4823651846660089135">Apparaat is alleen-lezen</translation>
 <translation id="4839847978919684242"><ph name="SELCTED_FILES_COUNT" /> items geselecteerd</translation>
+<translation id="4849981557599196363">Duits (België)</translation>
 <translation id="4850886885716139402">Weergave</translation>
 <translation id="485316830061041779">Duits</translation>
 <translation id="4867079195717347957">Klik om de kolom in aflopende volgorde te sorteren.</translation>
@@ -361,6 +370,7 @@
 <translation id="5010406651457630570">Computers</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">Een bewerking duurt langer dan verwacht. Wil je deze afbreken?</translation>
+<translation id="5026887030745057099">Hindi</translation>
 <translation id="5036159836254554629">Delen met Parallels Desktop beheren</translation>
 <translation id="5038625366300922036">Meer weergeven…</translation>
 <translation id="5061708541166515394">Contrast</translation>
@@ -371,6 +381,7 @@
 <translation id="5098629044894065541">Hebreeuws</translation>
 <translation id="5123433949759960244">Basketbal</translation>
 <translation id="5129662217315786329">Pools</translation>
+<translation id="5132435854979302863">Filipijns</translation>
 <translation id="5144820558584035333">Hangul 3 Set (390)</translation>
 <translation id="5145331109270917438">Bijgewerkt op</translation>
 <translation id="515594325917491223">Schaken</translation>
@@ -396,7 +407,9 @@
     Wat er ook gebeurt met je apparaat, je bestanden worden veilig opgeslagen in Google Drive.<ph name="MARKUP_6" />
     <ph name="MARKUP_7" />Bestanden delen, maken en eraan samenwerken<ph name="MARKUP_8" />
     met anderen allemaal op één locatie.<ph name="MARKUP_9" /></translation>
+<translation id="5274350207900771082">Gekopieerd.</translation>
 <translation id="5275973617553375938">Bestanden hersteld vanaf Google Drive</translation>
+<translation id="5283140566205748520">Frans (België)</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
 <translation id="5317780077021120954">Opslaan</translation>
 <translation id="5318819489018851358">Delen met Linux</translation>
@@ -413,16 +426,17 @@
 <translation id="5418923334382419584">Birmaans toetsenbord</translation>
 <translation id="5428105026674456456">Spaans</translation>
 <translation id="5438282218546237410">Geen resultaten voor <ph name="SEARCH_TERM" />.</translation>
+<translation id="5449551289610225147">Ongeldig wachtwoord</translation>
 <translation id="5464696796438641524">Pools toetsenbord</translation>
 <translation id="5465122519792752163">Nepalees toetsenbord (InScript)</translation>
 <translation id="5469868506864199649">Italiaans</translation>
+<translation id="5484429245813572665">Indonesisch</translation>
 <translation id="5494920125229734069">Alles selecteren</translation>
 <translation id="5500122897333236901">IJslands</translation>
 <translation id="5508696409934741614">Stippen</translation>
 <translation id="5522908512596376669">Bestandslijst is gewijzigd naar lijstweergave.</translation>
 <translation id="5524517123096967210">Het bestand kan niet worden gelezen.</translation>
 <translation id="5533102081734025921"><ph name="IMAGE_TYPE" />-afbeelding</translation>
-<translation id="5533555070048896610">Transliteratie (namaste → नमस्ते)</translation>
 <translation id="5534520101572674276">Grootte berekenen</translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5605830556594064952">Amerikaans Dvorak</translation>
@@ -594,6 +608,7 @@
 <translation id="751507702149411736">Wit-Russisch</translation>
 <translation id="7544853251252956727">Shuffle</translation>
 <translation id="7547811415869834682">Nederlands</translation>
+<translation id="7551643184018910560">Vastzetten op plank</translation>
 <translation id="7576032389798113292">6x4</translation>
 <translation id="7589661784326793847">Een ogenblik geduld</translation>
 <translation id="7603724359189955920">Rasters</translation>
@@ -602,8 +617,10 @@
 <translation id="7649070708921625228">Hulp</translation>
 <translation id="7654209398114106148"><ph name="NUMBER_OF_ITEMS" /> items verplaatsen...</translation>
 <translation id="7658239707568436148">Annuleren</translation>
+<translation id="7693909743393669729">Tijdens het formatteren van een schijf worden alle opgeslagen gegevens en alle bestaande partities verwijderd, inclusief partities die mogelijk niet zichtbaar zijn. Deze actie kan niet ongedaan worden gemaakt.</translation>
 <translation id="7695430100978772476">Formatteren van <ph name="DRIVE_NAME" /> is mislukt</translation>
 <translation id="770015031906360009">Grieks</translation>
+<translation id="7705251383879779343"><ph name="FILE_NAME" /> gekopieerd.</translation>
 <translation id="7706319470528945664">Portugees toetsenbord</translation>
 <translation id="7711920809702896782">Afbeeldingsgegevens</translation>
 <translation id="7724603315864178912">Knip</translation>
@@ -633,6 +650,7 @@
 <translation id="78946041517601018">Gedeelde Drives</translation>
 <translation id="7896906914454843592">Uitgebreid Amerikaans toetsenbord</translation>
 <translation id="7898607018410277265">Gujarati toetsenbord (nieuw fonetisch)</translation>
+<translation id="7908793776359722643">Tijdens het formatteren van een partitie worden alle opgeslagen gegevens verwijderd. Deze actie kan niet ongedaan worden gemaakt.</translation>
 <translation id="7917972308273378936">Litouws toetsenbord</translation>
 <translation id="7925686952655276919">Geen mobiele data gebruiken voor synchronisatie</translation>
 <translation id="7928710562641958568">Apparaat uitwerpen</translation>
@@ -677,7 +695,9 @@
 <translation id="8299269255470343364">Japans</translation>
 <translation id="8312871300878166382">Plakken in map</translation>
 <translation id="8329978297633540474">Platte tekst</translation>
+<translation id="8335587457941836791">Losmaken van plank</translation>
 <translation id="8336153091935557858">Gisteren <ph name="YESTERDAY_DAYTIME" /></translation>
+<translation id="8336524887811696057">Nepalees (transliteratie)</translation>
 <translation id="8336579025507394412">IJslands toetsenbord</translation>
 <translation id="8342318071240498787">Er bestaat al een bestand of map met dezelfde naam.</translation>
 <translation id="8382450452152102026">Naar <ph name="FOLDER_NAME" /></translation>
@@ -703,12 +723,14 @@
 <translation id="8600173386174225982">Bestandslijst is gewijzigd naar miniatuurweergave.</translation>
 <translation id="8601932370724196034">Crostini-afbeeldingsbestand</translation>
 <translation id="8669949407341943408">Verplaatsen…</translation>
+<translation id="8694836330346852143">Urdu</translation>
 <translation id="8698464937041809063">Google-tekening</translation>
 <translation id="8714406895390098252">Fiets</translation>
 <translation id="8719721339511222681"><ph name="ENTRY_NAME" /> is geselecteerd.</translation>
 <translation id="8722421161699219904">Amerikaans toetsenbord (internationaal)</translation>
 <translation id="872537912056138402">Kroatisch</translation>
 <translation id="874420130893181774">Traditionele Pinyin-invoermethode</translation>
+<translation id="8770002329960263418">Nederlands (Nederland) met Amerikaans pc-toetsenbord (internationaal)</translation>
 <translation id="8775404590947523323">Je bewerkingen worden automatisch opgeslagen.<ph name="BREAKS" />Als je een kopie van de oorspronkelijke afbeelding wilt behouden, vink je het selectievakje 'Oorspronkelijk bestand overschrijven' uit.</translation>
 <translation id="8803496343472038847">Russisch fonetisch toetsenbord</translation>
 <translation id="8808686172382650546">Kat</translation>
@@ -719,6 +741,7 @@
 <translation id="8900820606136623064">Hongaars</translation>
 <translation id="8901822611024316615">Tsjechisch QWERTY-toetsenbord</translation>
 <translation id="8919081441417203123">Deens</translation>
+<translation id="8941776146379310519">Maleis</translation>
 <translation id="8960999352790021682">Bengaals toetsenbord (fonetisch)</translation>
 <translation id="8965697826696209160">Er is onvoldoende ruimte.</translation>
 <translation id="9017798300203431059">Russisch fonetisch</translation>

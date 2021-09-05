@@ -1,0 +1,30 @@
+import("//build/config/features.gni")
+
+# Locales about to be added, but not ready
+vivaldi_pending_locales = [
+  "de-CH",
+  "eo",
+  "es-PE",
+  "fy",
+  "gd",
+  "io",
+  "ja-KS",
+  "jbo",
+  "ku",
+  "sc",
+  "nn",
+]
+
+if (!is_android) {
+  vivaldi_pending_locales += [
+    "af",
+    "be",
+    "eu",
+    "gl",
+    "hy",
+    "is",
+    "ka",
+    "mk",
+    "sq",
+  ]
+}

@@ -17,12 +17,9 @@ import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.animation.CompositorAnimationHandler;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
-import org.chromium.chrome.browser.compositor.layouts.components.VirtualView;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilter;
-import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
 import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
-import org.chromium.chrome.browser.compositor.scene_layer.SceneOverlayLayer;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -32,7 +29,6 @@ import org.chromium.ui.resources.ResourceManager;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.util.ArrayList;
 import java.util.List;
 
 // Vivaldi
@@ -101,9 +97,6 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
     protected TabModelSelector mTabModelSelector;
     protected TabContentManager mTabContentManager;
 
-    // Tablet tab strip managers.
-    private final List<SceneOverlay> mSceneOverlays = new ArrayList<SceneOverlay>();
-
     // Helpers
     private final LayoutUpdateHost mUpdateHost;
     protected final LayoutRenderHost mRenderHost;
@@ -161,28 +154,6 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
     public void onFinishNativeInitialization() {}
 
     /**
-     * Adds a {@link SceneOverlay} that can be shown in this layout to the first position in the
-     * scene overlay list, meaning it will be drawn behind all other overlays.
-     * @param overlay The {@link SceneOverlay} to be added.
-     */
-    void addSceneOverlayToBack(SceneOverlay overlay) {
-        assert !mSceneOverlays.contains(overlay);
-        mSceneOverlays.add(0, overlay);
-    }
-
-    /**
-     * Adds a {@link SceneOverlay} that can potentially be shown on top of this {@link Layout}.  The
-     * {@link SceneOverlay}s added to this {@link Layout} will be cascaded in the order they are
-     * added.  The {@link SceneOverlay} added first will become the content of the
-     * {@link SceneOverlay} added second, and so on.
-     * @param helper A {@link SceneOverlay} to add as a potential overlay for this {@link Layout}.
-     */
-    public void addSceneOverlay(SceneOverlay helper) {
-        assert !mSceneOverlays.contains(helper);
-        mSceneOverlays.add(helper);
-    }
-
-    /**
      * Cleans up any internal state.  This object should not be used after this call.
      */
     public void destroy() {
@@ -200,18 +171,6 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      */
     public boolean isActive() {
         return mUpdateHost.isActiveLayout(this);
-    }
-
-    /**
-     * Get a list of virtual views for accessibility.
-     *
-     * @param views A List to populate with virtual views.
-     */
-    public void getVirtualViews(List<VirtualView> views) {
-        // TODO(dtrainor): Investigate order.
-        for (int i = 0; i < mSceneOverlays.size(); i++) {
-            mSceneOverlays.get(i).getVirtualViews(views);
-        }
     }
 
     /**
@@ -283,11 +242,7 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      * @param time The current time of the app in ms.
      * @param dt   The delta time between update frames in ms.
      */
-    protected void updateLayout(long time, long dt) {
-        for (int i = 0; i < mSceneOverlays.size(); i++) {
-            mSceneOverlays.get(i).updateOverlay(time, dt);
-        }
-    }
+    protected void updateLayout(long time, long dt) {}
 
     /**
      * Update snapping to pixel. To be called once every frame.
@@ -388,19 +343,6 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
         if (layoutPropertiesChanged) {
             notifySizeChanged(width, height, orientation);
         }
-
-        // Note(david@vivaldi.com): When toolbar is at the bottom we consider the
-        // visibleViewportPx.bottom
-        if (!VivaldiUtils.isTopToolbarOn()) {
-            for (int i = 0; i < mSceneOverlays.size(); i++) {
-                mSceneOverlays.get(i).onSizeChanged(
-                        width, height, visibleViewportPx.bottom, orientation);
-            }
-        } else
-        // 5. TODO(dtrainor): Notify the overlay objects.
-        for (int i = 0; i < mSceneOverlays.size(); i++) {
-            mSceneOverlays.get(i).onSizeChanged(width, height, visibleViewportPx.top, orientation);
-        }
     }
 
     /**
@@ -420,10 +362,21 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      * @param manager       The {@link TabContentManager} to get tab display content.
      */
     public void setTabModelSelector(TabModelSelector modelSelector, TabContentManager manager) {
-        if (mTabContentManager != null) mTabContentManager.removeThumbnailChangeListener(this);
         mTabModelSelector = modelSelector;
+        setTabContentManager(manager);
+    }
+
+    /**
+     * Sets the manager needed for the layout to get thumbnails.
+     *
+     * @param manager The {@link TabContentManager} to get tab display content.
+     */
+    protected void setTabContentManager(TabContentManager manager) {
+        if (manager == null) return;
+
+        if (mTabContentManager != null) mTabContentManager.removeThumbnailChangeListener(this);
         mTabContentManager = manager;
-        if (mTabContentManager != null) mTabContentManager.addThumbnailChangeListener(this);
+        mTabContentManager.addThumbnailChangeListener(this);
     }
 
     /**
@@ -500,6 +453,8 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
         if (mRenderHost != null && mRenderHost.getResourceManager() != null) {
             mRenderHost.getResourceManager().clearTintedResourceCache();
         }
+
+        if (getSceneLayer() != null) getSceneLayer().removeFromParent();
     }
 
     /**
@@ -600,10 +555,6 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      * @return Whether or not the layout consumed the event.
      */
     public boolean onBackPressed() {
-        for (int i = 0; i < mSceneOverlays.size(); i++) {
-            // If the back button was consumed by any overlays, return true.
-            if (mSceneOverlays.get(i).onBackPressed()) return true;
-        }
         return false;
     }
 
@@ -749,14 +700,6 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      */
     public boolean handlesTabCreating() {
         if (mLayoutTabs == null || mLayoutTabs.length != 1) return false;
-        for (int i = 0; i < mSceneOverlays.size(); i++) {
-            if (mSceneOverlays.get(i).handlesTabCreating()) {
-                // Prevent animation from happening if the overlay handles creation.
-                startHiding(mLayoutTabs[0].getId(), false);
-                doneHiding();
-                return true;
-            }
-        }
         return false;
     }
 
@@ -799,25 +742,6 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      */
     public EventFilter findInterceptingEventFilter(
             MotionEvent e, PointF offsets, boolean isKeyboardShowing) {
-        // The last added overlay will be drawn on top of everything else, therefore the last
-        // filter added should have the first chance to intercept any touch events.
-        for (int i = mSceneOverlays.size() - 1; i >= 0; i--) {
-            EventFilter eventFilter = mSceneOverlays.get(i).getEventFilter();
-            if (eventFilter == null) continue;
-            if (offsets != null) eventFilter.setCurrentMotionEventOffsets(offsets.x, offsets.y);
-            // Note(david@vivaldi.com): When the toolbar is at the bottom we need to consider the
-            // |mEventOffset| in order to consume the events.
-            if (mSceneOverlays.get(i) instanceof StripLayoutHelperManager) {
-                if (((StripLayoutHelperManager) mSceneOverlays.get(i)).isSceneOffScreen()) continue;
-                if (!VivaldiUtils.isTopToolbarOn()) {
-                    MotionEvent changedEvent = MotionEvent.obtain(e.getDownTime(), e.getEventTime(),
-                            e.getAction(), e.getX(), mEventOffset - e.getY(), e.getMetaState());
-                    e = changedEvent;
-                }
-            }
-            if (eventFilter.onInterceptTouchEvent(e, isKeyboardShowing)) return eventFilter;
-        }
-
         EventFilter layoutEventFilter = getEventFilter();
         if (layoutEventFilter != null) {
             if (offsets != null) {
@@ -847,37 +771,13 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
             ResourceManager resourceManager, BrowserControlsStateProvider browserControls) {
         updateSceneLayer(viewport, visibleViewport, layerTitleCache, tabContentManager,
                 resourceManager, browserControls);
-
-        float offsetPx = browserControls != null ? browserControls.getTopControlOffset() : 0.f;
-        float dpToPx = getContext().getResources().getDisplayMetrics().density;
-        float offsetDp = offsetPx / dpToPx;
-
-        SceneLayer content = getSceneLayer();
-        for (int i = 0; i < mSceneOverlays.size(); i++) {
-            // If the SceneOverlay is not showing, don't bother adding it to the tree.
-            if (!mSceneOverlays.get(i).isSceneOverlayTreeShowing()) continue;
-
-            SceneOverlayLayer overlayLayer = mSceneOverlays.get(i).getUpdatedSceneOverlayTree(
-                    viewport, visibleViewport, layerTitleCache, resourceManager, offsetDp);
-
-            overlayLayer.setContentTree(content);
-            content = overlayLayer;
-        }
-
-        // Note(david@vivaldi.com): This is used when the toolbar is at the bottom.
-        mEventOffset = viewport.height();
-
-        return content;
+        return getSceneLayer();
     }
 
     /**
      * @return Whether or not to force the browser controls Android view to hide.
      */
     public boolean forceHideBrowserControlsAndroidView() {
-        for (int i = 0; i < mSceneOverlays.size(); i++) {
-            // If any overlay wants to hide tha Android version of the browser controls, hide them.
-            if (mSceneOverlays.get(i).shouldHideAndroidBrowserControls()) return true;
-        }
         return false;
     }
 
@@ -908,10 +808,4 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
     protected void updateSceneLayer(RectF viewport, RectF contentViewport,
             LayerTitleCache layerTitleCache, TabContentManager tabContentManager,
             ResourceManager resourceManager, BrowserControlsStateProvider browserControls) {}
-
-    // Vivaldi: Removes the {@link SceneOverlay}.
-    public void removeSceneOverlay(SceneOverlay helper) {
-        if(mSceneOverlays.contains(helper))
-            mSceneOverlays.remove(helper);
-    }
 }

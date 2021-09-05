@@ -29,6 +29,7 @@
 #include "net/dns/host_resolver_source.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/dns/public/dns_query_type.h"
+#include "net/dns/public/secure_dns_mode.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
 #include "net/http/http_server_properties.h"
@@ -1366,7 +1367,7 @@ TEST_P(QuicStreamFactoryTest, 2gInitialRtt) {
   EXPECT_TRUE(stream.get());
 
   QuicChromiumClientSession* session = GetActiveSession(host_port_pair_);
-  EXPECT_EQ(1200000u, session->connection()->GetStats().srtt_us);
+  EXPECT_EQ(1000000u, session->connection()->GetStats().srtt_us);
   ASSERT_TRUE(session->config()->HasInitialRoundTripTimeUsToSend());
   EXPECT_EQ(1200000u, session->config()->GetInitialRoundTripTimeUsToSend());
 }
@@ -8849,7 +8850,7 @@ TEST_P(QuicStreamFactoryTest, DefaultRetransmittableOnWireTimeoutForMigration) {
   socket_data1.AddRead(
       ASYNC, server_maker_.MakeDataPacket(
                  2, GetNthClientInitiatedBidirectionalStreamId(0), false, false,
-                 base::StringPiece("Hello World")));
+                 "Hello World"));
 
   // Read an ACK from server which acks all client data.
   socket_data1.AddRead(SYNCHRONOUS, server_maker_.MakeAckPacket(3, 3, 1));
@@ -9010,7 +9011,7 @@ TEST_P(QuicStreamFactoryTest, CustomRetransmittableOnWireTimeoutForMigration) {
   socket_data1.AddRead(
       ASYNC, server_maker_.MakeDataPacket(
                  2, GetNthClientInitiatedBidirectionalStreamId(0), false, false,
-                 base::StringPiece("Hello World")));
+                 "Hello World"));
   // Read an ACK from server which acks all client data.
   socket_data1.AddRead(SYNCHRONOUS, server_maker_.MakeAckPacket(3, 3, 1));
   socket_data1.AddWrite(ASYNC, client_maker_.MakeAckPacket(packet_num++, 2, 1));
@@ -9158,7 +9159,7 @@ TEST_P(QuicStreamFactoryTest, CustomRetransmittableOnWireTimeout) {
   socket_data1.AddRead(
       ASYNC, server_maker_.MakeDataPacket(
                  2, GetNthClientInitiatedBidirectionalStreamId(0), false, false,
-                 base::StringPiece("Hello World")));
+                 "Hello World"));
   // Read an ACK from server which acks all client data.
   socket_data1.AddRead(SYNCHRONOUS, server_maker_.MakeAckPacket(3, 2, 1));
   socket_data1.AddWrite(ASYNC, client_maker_.MakeAckPacket(packet_num++, 2, 1));
@@ -9304,7 +9305,7 @@ TEST_P(QuicStreamFactoryTest, NoRetransmittableOnWireTimeout) {
   socket_data1.AddRead(
       ASYNC, server_maker_.MakeDataPacket(
                  2, GetNthClientInitiatedBidirectionalStreamId(0), false, false,
-                 base::StringPiece("Hello World")));
+                 "Hello World"));
   // Read an ACK from server which acks all client data.
   socket_data1.AddRead(SYNCHRONOUS, server_maker_.MakeAckPacket(3, 2, 1));
   socket_data1.AddWrite(ASYNC, client_maker_.MakeAckPacket(packet_num++, 2, 1));
@@ -9441,7 +9442,7 @@ TEST_P(QuicStreamFactoryTest,
   socket_data1.AddRead(
       ASYNC, server_maker_.MakeDataPacket(
                  2, GetNthClientInitiatedBidirectionalStreamId(0), false, false,
-                 base::StringPiece("Hello World")));
+                 "Hello World"));
   // Read an ACK from server which acks all client data.
   socket_data1.AddRead(SYNCHRONOUS, server_maker_.MakeAckPacket(3, 2, 1));
   socket_data1.AddWrite(ASYNC, client_maker_.MakeAckPacket(packet_num++, 2, 1));
@@ -9589,7 +9590,7 @@ TEST_P(QuicStreamFactoryTest,
   socket_data1.AddRead(
       ASYNC, server_maker_.MakeDataPacket(
                  2, GetNthClientInitiatedBidirectionalStreamId(0), false, false,
-                 base::StringPiece("Hello World")));
+                 "Hello World"));
   // Read an ACK from server which acks all client data.
   socket_data1.AddRead(SYNCHRONOUS, server_maker_.MakeAckPacket(3, 2, 1));
   socket_data1.AddWrite(ASYNC, client_maker_.MakeAckPacket(packet_num++, 2, 1));
@@ -12178,7 +12179,7 @@ TEST_P(QuicStreamFactoryTest, HostResolverUsesParams) {
   EXPECT_TRUE(stream.get());
 
   ASSERT_TRUE(host_resolver_->last_secure_dns_mode_override().has_value());
-  EXPECT_EQ(net::DnsConfig::SecureDnsMode::OFF,
+  EXPECT_EQ(net::SecureDnsMode::kOff,
             host_resolver_->last_secure_dns_mode_override().value());
   ASSERT_TRUE(host_resolver_->last_request_network_isolation_key().has_value());
   EXPECT_EQ(kNetworkIsolationKey,

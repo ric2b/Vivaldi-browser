@@ -19,12 +19,6 @@ if (is_win) {
   import("//build/toolchain/win/midl.gni")
 }
 
-# Reset sources_assignment_filter for the BUILD.gn file to prevent
-# regression during the migration of Chromium away from the feature.
-# See docs/no_sources_assignment_filter.md for more information.
-# TODO(crbug.com/1018739): remove this when migration is done.
-set_sources_assignment_filter([])
-
 mojom("ax_constants_mojo") {
   sources = [ "ax_constants.mojom" ]
 }
@@ -55,6 +49,8 @@ component("ax_base") {
     "ax_event.h",
     "ax_event_intent.cc",
     "ax_event_intent.h",
+    "ax_mode.cc",
+    "ax_mode.h",
     "ax_node_data.cc",
     "ax_node_data.h",
     "ax_node_text_styles.cc",
@@ -109,8 +105,6 @@ component("accessibility") {
     "ax_export.h",
     "ax_language_detection.cc",
     "ax_language_detection.h",
-    "ax_mode.cc",
-    "ax_mode.h",
     "ax_mode_observer.h",
     "ax_node.cc",
     "ax_node.h",

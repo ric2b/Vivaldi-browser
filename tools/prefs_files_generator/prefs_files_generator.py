@@ -77,7 +77,7 @@ enum class %(enum_name)s {
 """
 
 ENUM_VALUE_TEMPLATE = """\
-  %(name)s = %(value)s,"""
+  k%(name)s = %(value)s,"""
 
 def generate_prefs_list(current_path, prefs_definitions):
     """Parser preference definitions recursively """
@@ -194,7 +194,8 @@ def main():
             '\n'.join([ENUM_DEFINITION_TEMPLATE % {
                 'enum_name': pref['enum'],
                 'enum_values': '\n'.join([ENUM_VALUE_TEMPLATE % {
-                    'name': name.upper(),
+                    'name': ''.join([part.capitalize()
+                        for part in name.split("_")]),
                     'value': value
                 } for name, value in pref['enum_values'].items()])
             } for pref in prefs_list if 'enum' in pref])

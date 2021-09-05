@@ -13,14 +13,16 @@ namespace nearby {
 namespace chrome {
 
 BluetoothClassicMedium::BluetoothClassicMedium(
-    bluetooth::mojom::Adapter* adapter)
-    : adapter_(adapter) {}
+    const mojo::SharedRemote<bluetooth::mojom::Adapter>& adapter)
+    : adapter_(adapter) {
+  DCHECK(adapter_.is_bound());
+}
 
 BluetoothClassicMedium::~BluetoothClassicMedium() = default;
 
 bool BluetoothClassicMedium::StartDiscovery(
     DiscoveryCallback discovery_callback) {
-  if (adapter_client_.is_bound() && discovery_callback_ &&
+  if (adapter_observer_.is_bound() && discovery_callback_ &&
       discovery_session_.is_bound()) {
     return true;
   }
@@ -29,9 +31,9 @@ bool BluetoothClassicMedium::StartDiscovery(
   discovered_bluetooth_devices_map_.clear();
 
   bool success =
-      adapter_->SetClient(adapter_client_.BindNewPipeAndPassRemote());
+      adapter_->AddObserver(adapter_observer_.BindNewPipeAndPassRemote());
   if (!success) {
-    adapter_client_.reset();
+    adapter_observer_.reset();
     return false;
   }
 
@@ -39,7 +41,7 @@ bool BluetoothClassicMedium::StartDiscovery(
   success = adapter_->StartDiscoverySession(&discovery_session);
 
   if (!success || !discovery_session.is_valid()) {
-    adapter_client_.reset();
+    adapter_observer_.reset();
     return false;
   }
 
@@ -63,7 +65,7 @@ bool BluetoothClassicMedium::StopDiscovery() {
     stop_discovery_success = stop_discovery_success && message_success;
   }
 
-  adapter_client_.reset();
+  adapter_observer_.reset();
   discovery_callback_.reset();
   discovery_session_.reset();
 
@@ -73,15 +75,7 @@ bool BluetoothClassicMedium::StopDiscovery() {
 std::unique_ptr<api::BluetoothSocket> BluetoothClassicMedium::ConnectToService(
     api::BluetoothDevice& remote_device,
     const std::string& service_uuid) {
-  // TODO(hansberry): This currently assumes that the device was discovered via
-  // Bluetooth Classic (the remote device is in high visibility mode), meaning
-  // this address is the expected permanent BT MAC address. Once an
-  // implementation is in place to scan for devices over BLE, a new mechanism
-  // to query for the remote device's permanent BT MAC address from stored
-  // certificates will be needed.
-  // We provided this |remote_device|, so we can safely downcast it.
-  const std::string& address =
-      static_cast<chrome::BluetoothDevice&>(remote_device).GetAddress();
+  const std::string& address = remote_device.GetMacAddress();
 
   bluetooth::mojom::ConnectToServiceResultPtr result;
   bool success = adapter_->ConnectToServiceInsecurely(
@@ -109,6 +103,23 @@ BluetoothClassicMedium::ListenForService(const std::string& service_name,
   }
 
   return nullptr;
+}
+
+BluetoothDevice* BluetoothClassicMedium::GetRemoteDevice(
+    const std::string& mac_address) {
+  auto it = discovered_bluetooth_devices_map_.find(mac_address);
+  if (it != discovered_bluetooth_devices_map_.end())
+    return &it->second;
+
+  // If a device with |mac_address| has not been found, Nearby Connections
+  // is attempting to connect to a device with |mac_adress| which is not
+  // discoverable. Create a placeholder BluetoothDevice to be used by
+  // ConnectToService().
+  bluetooth::mojom::DeviceInfoPtr device = bluetooth::mojom::DeviceInfo::New();
+  device->address = mac_address;
+  return &discovered_bluetooth_devices_map_
+              .emplace(mac_address, std::move(device))
+              .first->second;
 }
 
 void BluetoothClassicMedium::PresentChanged(bool present) {
@@ -142,16 +153,28 @@ void BluetoothClassicMedium::DiscoveringChanged(bool discovering) {
 
 void BluetoothClassicMedium::DeviceAdded(
     bluetooth::mojom::DeviceInfoPtr device) {
-  if (!adapter_client_.is_bound() || !discovery_callback_ ||
+  if (!adapter_observer_.is_bound() || !discovery_callback_ ||
       !discovery_session_.is_bound()) {
     return;
   }
 
+  // Best-effort attempt to filter out BLE advertisements. BLE advertisements
+  // represented as "devices" may have their |name| set if the system has
+  // created a GATT connection to the advertiser, but all BT Classic devices
+  // that we are interested in must have their |name| set. See BleMedium
+  // for separate discovery of BLE advertisements (BlePeripherals).
+  if (!device->name)
+    return;
+
   const std::string& address = device->address;
   if (base::Contains(discovered_bluetooth_devices_map_, address)) {
     auto& bluetooth_device = discovered_bluetooth_devices_map_.at(address);
+    bool name_changed = device->name.has_value() &&
+                        device->name.value() != bluetooth_device.GetName();
     bluetooth_device.UpdateDeviceInfo(std::move(device));
-    discovery_callback_->device_name_changed_cb(bluetooth_device);
+    if (name_changed) {
+      discovery_callback_->device_name_changed_cb(bluetooth_device);
+    }
   } else {
     discovered_bluetooth_devices_map_.emplace(address, std::move(device));
     discovery_callback_->device_discovered_cb(
@@ -166,7 +189,7 @@ void BluetoothClassicMedium::DeviceChanged(
 
 void BluetoothClassicMedium::DeviceRemoved(
     bluetooth::mojom::DeviceInfoPtr device) {
-  if (!adapter_client_.is_bound() || !discovery_callback_ ||
+  if (!adapter_observer_.is_bound() || !discovery_callback_ ||
       !discovery_session_.is_bound()) {
     return;
   }

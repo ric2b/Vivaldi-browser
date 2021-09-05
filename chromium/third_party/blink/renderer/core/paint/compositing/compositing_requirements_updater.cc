@@ -437,14 +437,13 @@ void CompositingRequirementsUpdater::UpdateRecursive(
   //  * may need compositing requirements update for another reason (
   //    e.g. change of stacking order)
   bool recursion_blocked_by_display_lock =
-      layer->GetLayoutObject().PrePaintBlockedByDisplayLock(
-          DisplayLockLifecycleTarget::kChildren);
+      layer->GetLayoutObject().ChildPrePaintBlockedByDisplayLock();
   bool skip_children = !vivaldi::IsVivaldiRunning() && (
       recursion_blocked_by_display_lock ||
       (!layer->DescendantHasDirectOrScrollingCompositingReason() &&
        !needs_recursion_for_composited_scrolling_plus_fixed_or_sticky &&
        !needs_recursion_for_out_of_flow_descendant &&
-       layer->GetLayoutObject().ShouldClipOverflow() &&
+       layer->GetLayoutObject().ShouldClipOverflowAlongEitherAxis() &&
        !layer->HasCompositingDescendant() &&
        !layer->DescendantMayNeedCompositingRequirementsUpdate()));
 
@@ -545,12 +544,14 @@ void CompositingRequirementsUpdater::UpdateRecursive(
     if (child_recursion_data.subtree_is_compositing_ ||
         RequiresCompositingOrSquashing(reasons_to_composite)) {
 #if DCHECK_IS_ON()
-      // The reason for compositing should not be due to composited scrolling.
-      // It should only be compositing in order to represent composited content
-      // within a composited subframe.
-      bool was = layer->NeedsCompositedScrolling();
-      layer->GetScrollableArea()->UpdateNeedsCompositedScrolling(true);
-      DCHECK(was == layer->NeedsCompositedScrolling());
+      if (layer->GetScrollableArea()) {
+        // The reason for compositing should not be due to composited scrolling.
+        // It should only be compositing in order to represent composited
+        // content within a composited subframe.
+        bool was = layer->NeedsCompositedScrolling();
+        layer->GetScrollableArea()->UpdateNeedsCompositedScrolling(true);
+        DCHECK(was == layer->NeedsCompositedScrolling());
+      }
 #endif
 
       reasons_to_composite |= CompositingReason::kRoot;

@@ -51,6 +51,22 @@ Polymer({
      * @private
      */
     displayString_: String,
+
+    /**
+     * A set of statuses that the entire row is clickable.
+     * @type {!Set<!SafetyCheckExtensionsStatus>}
+     * @private
+     */
+    rowClickableStatuses: {
+      readOnly: true,
+      type: Object,
+      value: () => new Set([
+        SafetyCheckExtensionsStatus.NO_BLOCKLISTED_EXTENSIONS,
+        SafetyCheckExtensionsStatus.ERROR,
+        SafetyCheckExtensionsStatus.BLOCKLISTED_ALL_DISABLED,
+        SafetyCheckExtensionsStatus.BLOCKLISTED_REENABLED_ALL_BY_ADMIN,
+      ]),
+    },
   },
 
   /** @private {?MetricsBrowserProxy} */
@@ -103,26 +119,11 @@ Polymer({
    */
   getButtonLabel_: function() {
     switch (this.status_) {
-      case SafetyCheckExtensionsStatus.BLOCKLISTED_ALL_DISABLED:
       case SafetyCheckExtensionsStatus.BLOCKLISTED_REENABLED_ALL_BY_USER:
       case SafetyCheckExtensionsStatus.BLOCKLISTED_REENABLED_SOME_BY_USER:
         return this.i18n('safetyCheckReview');
       default:
         return null;
-    }
-  },
-
-  /**
-   * @private
-   * @return {string}
-   */
-  getButtonClass_: function() {
-    switch (this.status_) {
-      case SafetyCheckExtensionsStatus.BLOCKLISTED_REENABLED_ALL_BY_USER:
-      case SafetyCheckExtensionsStatus.BLOCKLISTED_REENABLED_SOME_BY_USER:
-        return 'action-button';
-      default:
-        return '';
     }
   },
 
@@ -133,8 +134,7 @@ Polymer({
         SafetyCheckInteractions.SAFETY_CHECK_EXTENSIONS_REVIEW);
     this.metricsBrowserProxy_.recordAction(
         'Settings.SafetyCheck.ReviewExtensions');
-
-    OpenWindowProxyImpl.getInstance().openURL('chrome://extensions');
+    this.openExtensionsPage_();
   },
 
   /**
@@ -148,5 +148,31 @@ Polymer({
       default:
         return null;
     }
+  },
+
+  /**
+   * @private
+   * @return {?boolean}
+   */
+  isRowClickable_: function() {
+    return this.rowClickableStatuses.has(this.status_);
+  },
+
+  /** @private */
+  onRowClick_: function() {
+    if (this.isRowClickable_()) {
+      // Log click both in action and histogram.
+      this.metricsBrowserProxy_.recordSafetyCheckInteractionHistogram(
+          SafetyCheckInteractions
+              .SAFETY_CHECK_EXTENSIONS_REVIEW_THROUGH_CARET_NAVIGATION);
+      this.metricsBrowserProxy_.recordAction(
+          'Settings.SafetyCheck.ReviewExtensionsThroughCaretNavigation');
+      this.openExtensionsPage_();
+    }
+  },
+
+  /** @private */
+  openExtensionsPage_: function() {
+    OpenWindowProxyImpl.getInstance().openURL('chrome://extensions');
   },
 });

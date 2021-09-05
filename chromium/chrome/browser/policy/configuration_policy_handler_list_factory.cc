@@ -17,7 +17,7 @@
 #include "base/values.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "chrome/browser/nearby_sharing/common/nearby_share_prefs.h"
+#include "chrome/browser/chromeos/login/login_pref_names.h"
 #include "chrome/browser/net/disk_cache_dir_policy_handler.h"
 #include "chrome/browser/net/referrer_policy_policy_handler.h"
 #include "chrome/browser/net/secure_dns_policy_handler.h"
@@ -64,7 +64,6 @@
 #include "components/language/core/browser/pref_names.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/network_time/network_time_pref_names.h"
-#include "components/ntp_snippets/pref_names.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/payments/core/payment_prefs.h"
@@ -107,6 +106,7 @@
 #include "chrome/browser/enterprise/connectors/connectors_prefs.h"
 #include "chrome/browser/enterprise/connectors/enterprise_connectors_policy_handler.h"
 #include "chrome/browser/enterprise/reporting/extension_request_policy_handler.h"
+#include "chrome/browser/media/kaleidoscope/kaleidoscope_prefs.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/policy/local_sync_policy_handler.h"
 #endif  // defined(OS_ANDROID)
@@ -120,13 +120,14 @@
 #include "chrome/browser/chromeos/policy/configuration_policy_handler_chromeos.h"
 #include "chrome/browser/chromeos/policy/secondary_google_account_signin_policy_handler.h"
 #include "chrome/browser/chromeos/policy/system_features_disable_list_policy_handler.h"
+#include "chrome/browser/nearby_sharing/common/nearby_share_prefs.h"
 #include "chrome/browser/policy/default_geolocation_policy_handler.h"
 #include "chrome/common/chrome_features.h"
 #include "chromeos/constants/chromeos_pref_names.h"
 #include "chromeos/dbus/power/power_policy_controller.h"
 #include "chromeos/services/multidevice_setup/public/cpp/prefs.h"
 #include "components/arc/arc_prefs.h"
-#include "components/drive/drive_pref_names.h"
+#include "components/drive/drive_pref_names.h"  // nogncheck crbug.com/1125897
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #else  // defined(OS_CHROMEOS)
@@ -145,10 +146,6 @@
 #include "extensions/browser/pref_names.h"
 #include "extensions/common/manifest.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-
-#if BUILDFLAG(ENABLE_EXTENSIONS) && !defined(OS_CHROMEOS)
-#include "chrome/browser/extensions/api/enterprise_reporting_private/prefs.h"
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS) && !defined(OS_CHROMEOS)
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/browser/plugins/plugin_policy_handler.h"
@@ -237,9 +234,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::Type::BOOLEAN },
   { key::kAllowDeletingBrowserHistory,
     prefs::kAllowDeletingBrowserHistory,
-    base::Value::Type::BOOLEAN },
-  { key::kBlockThirdPartyCookies,
-    prefs::kBlockThirdPartyCookies,
     base::Value::Type::BOOLEAN },
   { key::kAdsSettingForIntrusiveAdsSites,
     prefs::kManagedDefaultAdsSetting,
@@ -715,6 +709,12 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kURLsToNotCheckComplianceOfUploadedContent,
     prefs::kURLsToNotCheckComplianceOfUploadedContent,
     base::Value::Type::LIST },
+  { key::kWebRtcAllowLegacyTLSProtocols,
+    prefs::kWebRTCAllowLegacyTLSProtocols,
+    base::Value::Type::BOOLEAN },
+  { key::kMediaRecommendationsEnabled,
+    kaleidoscope::prefs::kKaleidoscopePolicyEnabled,
+    base::Value::Type::BOOLEAN },
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
@@ -1037,13 +1037,13 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     ash::prefs::kBootOnAcEnabled,
     base::Value::Type::BOOLEAN },
   { key::kSamlInSessionPasswordChangeEnabled,
-    prefs::kSamlInSessionPasswordChangeEnabled,
+    chromeos::prefs::kSamlInSessionPasswordChangeEnabled,
     base::Value::Type::BOOLEAN },
   { key::kSamlPasswordExpirationAdvanceWarningDays,
-    prefs::kSamlPasswordExpirationAdvanceWarningDays,
+    chromeos::prefs::kSamlPasswordExpirationAdvanceWarningDays,
     base::Value::Type::INTEGER },
   { key::kSamlLockScreenReauthenticationEnabled,
-    prefs::kSamlLockScreenReauthenticationEnabled,
+    chromeos::prefs::kSamlLockScreenReauthenticationEnabled,
     base::Value::Type::BOOLEAN },
   { key::kDeviceAdvancedBatteryChargeModeEnabled,
     ash::prefs::kAdvancedBatteryChargeModeEnabled,
@@ -1096,9 +1096,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kAllowScreenLock,
     ash::prefs::kAllowScreenLock,
     base::Value::Type::BOOLEAN },
-  { key::kQuickUnlockModeWhitelist,
-    prefs::kQuickUnlockModeWhitelist,
-    base::Value::Type::LIST },
   { key::kQuickUnlockTimeout,
     prefs::kQuickUnlockTimeout,
     base::Value::Type::INTEGER },
@@ -1276,24 +1273,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if !defined(OS_CHROMEOS) && BUILDFLAG(ENABLE_EXTENSIONS)
-  { key::kReportVersionData,
-    extensions::enterprise_reporting::kReportVersionData,
-    base::Value::Type::BOOLEAN },
-  { key::kReportPolicyData,
-    extensions::enterprise_reporting::kReportPolicyData,
-    base::Value::Type::BOOLEAN },
-  { key::kReportMachineIDData,
-    extensions::enterprise_reporting::kReportMachineIDData,
-    base::Value::Type::BOOLEAN },
-  { key::kReportUserIDData,
-    extensions::enterprise_reporting::kReportUserIDData,
-    base::Value::Type::BOOLEAN },
-  { key::kReportExtensionsAndPluginsData,
-    extensions::enterprise_reporting::kReportExtensionsAndPluginsData,
-    base::Value::Type::BOOLEAN },
-  { key::kReportSafeBrowsingData,
-    extensions::enterprise_reporting::kReportSafeBrowsingData,
-    base::Value::Type::BOOLEAN },
   { key::kBlockExternalExtensions,
     extensions::pref_names::kBlockExternalExtensions,
     base::Value::Type::BOOLEAN },
@@ -1352,9 +1331,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::Type::LIST },
 
 #if defined(OS_ANDROID)
-  { key::kCCTToSDialogEnabled,
-    first_run::kCCTToSDialogEnabled,
-    base::Value::Type::BOOLEAN },
+  { key::kTosDialogBehavior,
+    first_run::kTosDialogBehavior,
+    base::Value::Type::INTEGER },
 #endif  // defined(OS_ANDROID)
 };
 // clang-format on
@@ -1375,13 +1354,6 @@ void GetExtensionAllowedTypesMap(
   }
 }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-
-void GetDeprecatedFeaturesMap(
-    std::vector<std::unique_ptr<StringMappingListPolicyHandler::MappingEntry>>*
-        result) {
-  // Maps feature tags as specified in policy to the corresponding switch to
-  // re-enable them.
-}
 
 // Future policies are not supported on Stable and Beta by default.
 bool AreFuturePoliciesSupported() {
@@ -1502,10 +1474,6 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
           key::kSafeBrowsingAllowlistDomains,
           prefs::kSafeBrowsingWhitelistDomains, base::Value::Type::LIST)));
   handlers->AddHandler(std::make_unique<syncer::SyncPolicyHandler>());
-  handlers->AddHandler(std::make_unique<StringMappingListPolicyHandler>(
-      key::kEnableDeprecatedWebPlatformFeatures,
-      prefs::kEnableDeprecatedWebPlatformFeatures,
-      base::Bind(GetDeprecatedFeaturesMap)));
   handlers->AddHandler(std::make_unique<BrowsingHistoryPolicyHandler>());
 
   handlers->AddHandler(std::make_unique<SimpleDeprecatingPolicyHandler>(
@@ -1518,6 +1486,12 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       std::make_unique<SimplePolicyHandler>(key::kURLAllowlist,
                                             policy_prefs::kUrlWhitelist,
                                             base::Value::Type::LIST)));
+  handlers->AddHandler(std::make_unique<SimpleSchemaValidatingPolicyHandler>(
+      key::kSafeBrowsingExtendedReportingEnabled,
+      prefs::kSafeBrowsingScoutReportingEnabled, chrome_schema,
+      SCHEMA_ALLOW_UNKNOWN,
+      SimpleSchemaValidatingPolicyHandler::RECOMMENDED_ALLOWED,
+      SimpleSchemaValidatingPolicyHandler::MANDATORY_ALLOWED));
 
 #if defined(OS_ANDROID)
   handlers->AddHandler(
@@ -1525,8 +1499,6 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
 #else   // defined(OS_ANDROID)
   handlers->AddHandler(
       std::make_unique<NtpCustomBackgroundEnabledPolicyHandler>());
-  handlers->AddHandler(std::make_unique<BooleanDisablingPolicyHandler>(
-      key::kNearbyShareAllowed, prefs::kNearbySharingEnabledPrefName));
   handlers->AddHandler(std::make_unique<DefaultDownloadDirPolicyHandler>());
   handlers->AddHandler(
       std::make_unique<DownloadAutoOpenPolicyHandler>(chrome_schema));
@@ -1539,13 +1511,6 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       SCHEMA_ALLOW_UNKNOWN,
       SimpleSchemaValidatingPolicyHandler::RECOMMENDED_ALLOWED,
       SimpleSchemaValidatingPolicyHandler::MANDATORY_PROHIBITED));
-
-  handlers->AddHandler(std::make_unique<SimpleSchemaValidatingPolicyHandler>(
-      key::kSafeBrowsingExtendedReportingEnabled,
-      prefs::kSafeBrowsingScoutReportingEnabled, chrome_schema,
-      SCHEMA_ALLOW_UNKNOWN,
-      SimpleSchemaValidatingPolicyHandler::RECOMMENDED_ALLOWED,
-      SimpleSchemaValidatingPolicyHandler::MANDATORY_ALLOWED));
 
   handlers->AddHandler(std::make_unique<SimpleDeprecatingPolicyHandler>(
       std::make_unique<SimplePolicyHandler>(key::kAutoplayWhitelist,
@@ -1669,9 +1634,22 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       std::move(screen_lock_legacy_policies),
       std::make_unique<ScreenLockDelayPolicyHandler>(chrome_schema)));
 
-  handlers->AddHandler(std::make_unique<extensions::ExtensionListPolicyHandler>(
-      key::kAttestationExtensionWhitelist,
-      prefs::kAttestationExtensionWhitelist, false));
+  handlers->AddHandler(std::make_unique<policy::SimpleDeprecatingPolicyHandler>(
+      std::make_unique<extensions::ExtensionListPolicyHandler>(
+          key::kAttestationExtensionAllowlist,
+          prefs::kAttestationExtensionAllowlist, false),
+      std::make_unique<extensions::ExtensionListPolicyHandler>(
+          key::kAttestationExtensionWhitelist,
+          prefs::kAttestationExtensionAllowlist, false)));
+
+  handlers->AddHandler(std::make_unique<SimpleDeprecatingPolicyHandler>(
+      std::make_unique<SimplePolicyHandler>(key::kQuickUnlockModeAllowlist,
+                                            prefs::kQuickUnlockModeAllowlist,
+                                            base::Value::Type::LIST),
+      std::make_unique<SimplePolicyHandler>(key::kQuickUnlockModeWhitelist,
+                                            prefs::kQuickUnlockModeAllowlist,
+                                            base::Value::Type::LIST)));
+
   handlers->AddHandler(base::WrapUnique(
       NetworkConfigurationPolicyHandler::CreateForDevicePolicy()));
   handlers->AddHandler(base::WrapUnique(
@@ -1700,8 +1678,8 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
                                             prefs::kUserPrintersAllowed,
                                             base::Value::Type::BOOLEAN)));
   handlers->AddHandler(std::make_unique<IntRangePolicyHandler>(
-      key::kSAMLOfflineSigninTimeLimit, prefs::kSAMLOfflineSigninTimeLimit, -1,
-      INT_MAX, true));
+      key::kSAMLOfflineSigninTimeLimit,
+      chromeos::prefs::kSAMLOfflineSigninTimeLimit, -1, INT_MAX, true));
   handlers->AddHandler(std::make_unique<IntRangePolicyHandler>(
       key::kLidCloseAction, ash::prefs::kPowerLidClosedAction,
       chromeos::PowerPolicyController::ACTION_SUSPEND,
@@ -1827,6 +1805,12 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
           SCHEMA_ALLOW_UNKNOWN,
           SimpleSchemaValidatingPolicyHandler::RECOMMENDED_PROHIBITED,
           SimpleSchemaValidatingPolicyHandler::MANDATORY_ALLOWED)));
+  handlers->AddHandler(std::make_unique<SimpleSchemaValidatingPolicyHandler>(
+      key::kEduCoexistenceToSVersion,
+      chromeos::prefs::kEduCoexistenceToSVersion, chrome_schema,
+      SCHEMA_ALLOW_UNKNOWN,
+      SimpleSchemaValidatingPolicyHandler::RECOMMENDED_PROHIBITED,
+      SimpleSchemaValidatingPolicyHandler::MANDATORY_ALLOWED));
   handlers->AddHandler(
       std::make_unique<EcryptfsMigrationStrategyPolicyHandler>());
   handlers->AddHandler(std::make_unique<SimpleSchemaValidatingPolicyHandler>(
@@ -1846,10 +1830,21 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       std::make_unique<SimplePolicyHandler>(
           key::kExternalPrintServersAllowlist,
           prefs::kExternalPrintServersAllowlist, base::Value::Type::LIST)));
+  handlers->AddHandler(std::make_unique<BooleanDisablingPolicyHandler>(
+      key::kNearbyShareAllowed, prefs::kNearbySharingEnabledPrefName));
+  handlers->AddHandler(std::make_unique<SimpleSchemaValidatingPolicyHandler>(
+      key::kDataLeakPreventionRulesList, policy_prefs::kDlpRulesList,
+      chrome_schema, SCHEMA_ALLOW_UNKNOWN,
+      SimpleSchemaValidatingPolicyHandler::RECOMMENDED_PROHIBITED,
+      SimpleSchemaValidatingPolicyHandler::MANDATORY_ALLOWED));
 #if defined(USE_CUPS)
-  handlers->AddHandler(std::make_unique<extensions::ExtensionListPolicyHandler>(
-      key::kPrintingAPIExtensionsWhitelist,
-      prefs::kPrintingAPIExtensionsWhitelist, /*allow_wildcards=*/false));
+  handlers->AddHandler(std::make_unique<SimpleDeprecatingPolicyHandler>(
+      std::make_unique<extensions::ExtensionListPolicyHandler>(
+          key::kPrintingAPIExtensionsWhitelist,
+          prefs::kPrintingAPIExtensionsAllowlist, /*allow_wildcards=*/false),
+      std::make_unique<extensions::ExtensionListPolicyHandler>(
+          key::kPrintingAPIExtensionsAllowlist,
+          prefs::kPrintingAPIExtensionsAllowlist, /*allow_wildcards=*/false)));
 #endif  // defined(USE_CUPS)
 #else   // defined(OS_CHROMEOS)
   std::vector<std::unique_ptr<ConfigurationPolicyHandler>>

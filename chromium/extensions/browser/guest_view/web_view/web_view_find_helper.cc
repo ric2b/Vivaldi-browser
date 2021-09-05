@@ -13,6 +13,7 @@
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/dip_util.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 
 using guest_view::GuestViewEvent;
 
@@ -183,8 +184,8 @@ void WebViewFindHelper::FindReply(int request_id,
       screen->GetDisplayNearestWindow(window);
 
     scale = display.device_scale_factor();
-    gfx::Rect scaled_selection_rect =
-      gfx::ConvertRectToDIP(scale, selection_rect);
+    gfx::Rect scaled_selection_rect = gfx::ToFlooredRectDeprecated(
+        gfx::ConvertRectToDips(selection_rect, scale));
 
     find_info->AggregateResults(number_of_matches, scaled_selection_rect,
       active_match_ordinal, final_update);

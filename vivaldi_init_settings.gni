@@ -1,0 +1,76 @@
+# Static feature overrides, don't change
+# Features we either always want enable or don't want at all,
+# depending on platform settings
+
+import("//build/toolchain/cc_wrapper.gni")
+import("//build/toolchain/goma.gni")
+import("//vivaldi/gn/config/features.gni")
+import("//vivaldi/gn/config/product.gni")
+import("//vivaldi/gn/config/hermetic.gni")
+
+declare_overrides() {
+  branding_path_component = "vivaldi"
+  branding_file_path = "//vivaldi/app/resources/theme/vivaldi/BRANDING"
+  ffmpeg_branding = "Chromium"
+  proprietary_codecs = true
+  enable_widevine = true
+
+  enable_media_remoting = true
+
+  if (is_linux) {
+    if (!is_component_build) {
+      enable_linux_installer = is_linux
+      # enable_snap_package = true
+    }
+    if (is_official_build) {
+      symbol_level = 1
+    }
+    if (target_cpu == "x86") {
+      use_lld = true
+      enable_av1_decoder = false
+    }
+  }
+
+  if (is_android) {
+    if (is_official_build) {
+      symbol_level = 1
+    }
+    enable_gvr_services = false
+    enable_vr = false
+    ffmpeg_branding = "Chrome"
+    android_channel = "stable"
+    chrome_public_manifest_package = android_vivaldi_manifest_package
+  }
+
+  enable_hangout_services_extension = true
+
+  enable_precompiled_headers = !is_official_build && cc_wrapper == "" && !use_goma
+
+  if (is_win) {
+    skip_archive_compression = is_component_build
+  }
+
+  if (is_mac) { # && !is_component_build) {
+     use_system_xcode = true
+    # We need to force SDK 10.14 for Official Mac builds
+    # since we cannot update current builders to have SDK 10.15
+    # due to unsupported hardware prevening an OSX upgrade
+    # mac_sdk_official_version = "10.14"
+  }
+
+  # Needed until we discover what is causing the unused argument during clcache
+  if (is_win && cc_wrapper != "") {
+    use_ghash = false
+  }
+
+  if (target_cpu == "arm" || target_cpu == "arm64") {
+    enable_openscreen = false
+  }
+
+  if (is_win && defined(use_hermetic_toolchain) && use_hermetic_toolchain) {
+    toolchain_json_spec_file = "//vivaldi/build/toolchain.json"
+  }
+
+  enable_cdm_host_verification = (is_mac || is_win) && is_official_build && !vivaldi_disable_widevine_verification
+  enable_cdm_storage_id = (is_mac || is_win) && is_official_build && !vivaldi_disable_widevine_verification
+}

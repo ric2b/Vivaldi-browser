@@ -129,6 +129,14 @@ struct SameSizeAsPaintLayer : DisplayItemClient {
 ASSERT_SIZE(PaintLayer, SameSizeAsPaintLayer);
 #endif
 
+inline PhysicalRect PhysicalVisualOverflowRectAllowingUnset(
+    const LayoutBoxModelObject& layout_object) {
+#if DCHECK_IS_ON()
+  NGInkOverflow::ReadUnsetAsNoneScope read_unset_as_none;
+#endif
+  return layout_object.PhysicalVisualOverflowRect();
+}
+
 }  // namespace
 
 PaintLayerRareData::PaintLayerRareData()
@@ -197,7 +205,7 @@ PaintLayer::PaintLayer(LayoutBoxModelObject& layout_object)
       last_(nullptr),
       static_inline_position_(0),
       static_block_position_(0),
-      ancestor_overflow_layer_(nullptr)
+      ancestor_scroll_container_layer_(nullptr)
 #if DCHECK_IS_ON()
       ,
       stacking_parent_(nullptr)
@@ -350,10 +358,8 @@ void PaintLayer::UpdateLayerPositionRecursive() {
   // PaintLayer traversal won't skip locked elements. Thus, we don't have to do
   // an ancestor check, and simply skip iterating children when this element is
   // locked for child layout.
-  if (GetLayoutObject().LayoutBlockedByDisplayLock(
-          DisplayLockLifecycleTarget::kChildren)) {
+  if (GetLayoutObject().ChildLayoutBlockedByDisplayLock())
     return;
-  }
 
   for (PaintLayer* child = FirstChild(); child; child = child->NextSibling())
     child->UpdateLayerPositionRecursive();
@@ -362,7 +368,7 @@ void PaintLayer::UpdateLayerPositionRecursive() {
 bool PaintLayer::SticksToScroller() const {
   if (!GetLayoutObject().StyleRef().HasStickyConstrainedPosition())
     return false;
-  return AncestorOverflowLayer()->GetScrollableArea();
+  return AncestorScrollContainerLayer()->GetScrollableArea();
 }
 
 bool PaintLayer::FixedToViewport() const {
@@ -533,10 +539,8 @@ void PaintLayer::UpdatePaginationRecursive(bool needs_pagination_update) {
 
   // If this element prevents child painting, then we can skip updating
   // pagination info, since it won't be used anyway.
-  if (GetLayoutObject().PaintBlockedByDisplayLock(
-          DisplayLockLifecycleTarget::kChildren)) {
+  if (GetLayoutObject().ChildPaintBlockedByDisplayLock())
     return;
-  }
 
   for (PaintLayer* child = FirstChild(); child; child = child->NextSibling())
     child->UpdatePaginationRecursive(needs_pagination_update);
@@ -621,8 +625,7 @@ void PaintLayer::UpdateDescendantDependentFlags() {
         GetLayoutObject().CanContainAbsolutePositionObjects();
 
     auto* first_child = [this]() -> PaintLayer* {
-      if (GetLayoutObject().PrePaintBlockedByDisplayLock(
-              DisplayLockLifecycleTarget::kChildren)) {
+      if (GetLayoutObject().ChildPrePaintBlockedByDisplayLock()) {
         GetLayoutObject()
             .GetDisplayLockContext()
             ->NotifyCompositingDescendantDependentFlagUpdateWasBlocked();
@@ -688,7 +691,8 @@ void PaintLayer::UpdateDescendantDependentFlags() {
     needs_descendant_dependent_flags_update_ = false;
 
     if (IsSelfPaintingLayer() && needs_visual_overflow_recalc_) {
-      auto old_visual_rect = GetLayoutObject().PhysicalVisualOverflowRect();
+      PhysicalRect old_visual_rect =
+          PhysicalVisualOverflowRectAllowingUnset(GetLayoutObject());
       GetLayoutObject().RecalcVisualOverflow();
       if (old_visual_rect != GetLayoutObject().PhysicalVisualOverflowRect()) {
         SetNeedsCompositingInputsUpdateInternal();
@@ -852,17 +856,6 @@ void PaintLayer::UpdateSizeAndScrollingAfterLayout() {
   }
 }
 
-FloatPoint PaintLayer::PerspectiveOrigin() const {
-  if (!GetLayoutObject().HasTransformRelatedProperty())
-    return FloatPoint();
-
-  const LayoutRect border_box = ToLayoutBox(GetLayoutObject()).BorderBoxRect();
-  const ComputedStyle& style = GetLayoutObject().StyleRef();
-
-  return FloatPointForLengthPoint(style.PerspectiveOrigin(),
-                                  FloatSize(border_box.Size()));
-}
-
 PaintLayer* PaintLayer::ContainingLayer(const PaintLayer* ancestor,
                                         bool* skipped_ancestor) const {
   // If we have specified an ancestor, surely the caller needs to know whether
@@ -892,8 +885,10 @@ PaintLayer* PaintLayer::ContainingLayer(const PaintLayer* ancestor,
   // inline parent to find the actual containing layer through the containing
   // block chain.
   // Column span need to find the containing layer through its containing block.
+  // A rendered legend needs to find the containing layer through its containing
+  // block to skip anonymous fieldset content box.
   if ((!Parent() || Parent()->GetLayoutObject().IsLayoutBlock()) &&
-      !layout_object.IsColumnSpanAll())
+      !layout_object.IsColumnSpanAll() && !layout_object.IsRenderedLegend())
     return Parent();
 
   // This is a universal approach to find containing layer, but is slower than
@@ -1122,8 +1117,7 @@ void PaintLayer::SetNeedsCompositingInputsUpdateInternal() {
   // (|needs_ancestor_dependent_compositing_inputs_update_|) can be discovered
   // by the compositing update walk.
   bool child_flag_may_persist_after_update =
-      GetLayoutObject().PrePaintBlockedByDisplayLock(
-          DisplayLockLifecycleTarget::kChildren);
+      GetLayoutObject().ChildPrePaintBlockedByDisplayLock();
 
   PaintLayer* initial_layer = child_needs_compositing_inputs_update_ &&
                                       child_flag_may_persist_after_update
@@ -1169,9 +1163,10 @@ bool PaintLayer::HasNonIsolatedDescendantWithBlendMode() const {
   DCHECK(!needs_descendant_dependent_flags_update_);
   if (has_non_isolated_descendant_with_blend_mode_)
     return true;
-  if (GetLayoutObject().IsSVGRoot())
+  if (GetLayoutObject().IsSVGRoot()) {
     return ToLayoutSVGRoot(GetLayoutObject())
         .HasNonIsolatedBlendingDescendants();
+  }
   return false;
 }
 
@@ -1265,9 +1260,9 @@ void PaintLayer::AddChild(PaintLayer* child, PaintLayer* before_child) {
 
   child->parent_ = this;
 
-  // The ancestor overflow layer is calculated during compositing inputs update
-  // and should not be set yet.
-  CHECK(!child->AncestorOverflowLayer());
+  // The ancestor scroll container layer is calculated during compositing inputs
+  // update and should not be set yet.
+  CHECK(!child->AncestorScrollContainerLayer());
 
   SetNeedsCompositingInputsUpdate();
 
@@ -1335,9 +1330,12 @@ void PaintLayer::RemoveChild(PaintLayer* old_child) {
   old_child->SetNextSibling(nullptr);
   old_child->parent_ = nullptr;
 
-  // Remove any ancestor overflow layers which descended into the removed child.
-  if (old_child->AncestorOverflowLayer())
-    old_child->RemoveAncestorOverflowLayer(old_child->AncestorOverflowLayer());
+  // Remove any ancestor scroll container layers which descended into the
+  // removed child.
+  if (old_child->AncestorScrollContainerLayer()) {
+    old_child->RemoveAncestorScrollContainerLayer(
+        old_child->AncestorScrollContainerLayer());
+  }
 
   if (old_child->has_visible_content_ || old_child->has_visible_descendant_)
     MarkAncestorChainForFlagsUpdate();
@@ -1564,12 +1562,16 @@ void PaintLayer::UpdateStackingNode() {
 bool PaintLayer::RequiresScrollableArea() const {
   if (!GetLayoutBox())
     return false;
-  if (GetLayoutObject().HasOverflowClip())
+  if (GetLayoutObject().IsScrollContainer())
     return true;
   // Iframes with the resize property can be resized. This requires
   // scroll corner painting, which is implemented, in part, by
   // PaintLayerScrollableArea.
   if (GetLayoutBox()->CanResize())
+    return true;
+  // When scrollbar-gutter is "force" we need a PaintLayerScrollableArea
+  // in order to calculate the size of scrollbar gutters.
+  if (GetLayoutObject().StyleRef().IsScrollbarGutterForce())
     return true;
   return false;
 }
@@ -2153,8 +2155,8 @@ PaintLayer* PaintLayer::HitTestLayer(PaintLayer* root_layer,
   if (recursion_data.intersects_location) {
     // Next we want to see if the mouse pos is inside the child LayoutObjects of
     // the layer. Check every fragment in reverse order.
-    if (IsSelfPaintingLayer() && !layout_object.PaintBlockedByDisplayLock(
-                                     DisplayLockLifecycleTarget::kChildren)) {
+    if (IsSelfPaintingLayer() &&
+        !layout_object.ChildPaintBlockedByDisplayLock()) {
       // Hit test with a temporary HitTestResult, because we only want to commit
       // to 'result' if we know we're frontmost.
       STACK_UNINITIALIZED HitTestResult temp_result(
@@ -2431,8 +2433,7 @@ PaintLayer* PaintLayer::HitTestChildren(
   if (!HasSelfPaintingLayerDescendant())
     return nullptr;
 
-  if (GetLayoutObject().PaintBlockedByDisplayLock(
-          DisplayLockLifecycleTarget::kChildren))
+  if (GetLayoutObject().ChildPaintBlockedByDisplayLock())
     return nullptr;
 
   const LayoutObject* stop_node = result.GetHitTestRequest().GetStopNode();
@@ -2675,10 +2676,8 @@ void PaintLayer::ExpandRectForStackingChildren(
   // If we're locked, th en the subtree does not contribute painted output.
   // Furthermore, we might not have up-to-date sizing and position information
   // in the subtree, so skip recursing into the subtree.
-  if (GetLayoutObject().PaintBlockedByDisplayLock(
-          DisplayLockLifecycleTarget::kChildren)) {
+  if (GetLayoutObject().ChildPaintBlockedByDisplayLock())
     return;
-  }
 
   PaintLayerPaintOrderIterator iterator(*this, kAllChildren);
   while (PaintLayer* child_layer = iterator.Next()) {
@@ -3074,14 +3073,14 @@ bool PaintLayer::HasNonEmptyChildLayoutObjects() const {
   // <img src=...>
   // </div>
   // so test for 0x0 LayoutTexts here
-  for (LayoutObject* child = GetLayoutObject().SlowFirstChild(); child;
+  for (const auto* child = GetLayoutObject().SlowFirstChild(); child;
        child = child->NextSibling()) {
     if (!child->HasLayer()) {
       if (child->IsLayoutInline() || !child->IsBox())
         return true;
 
-      if (ToLayoutBox(child)->Size().Width() > 0 ||
-          ToLayoutBox(child)->Size().Height() > 0)
+      const auto* box = ToLayoutBox(child);
+      if (!box->Size().IsZero() || box->HasVisualOverflow())
         return true;
     }
   }
@@ -3299,7 +3298,7 @@ void PaintLayer::StyleDidChange(StyleDifference diff,
 }
 
 LayoutSize PaintLayer::PixelSnappedScrolledContentOffset() const {
-  if (GetLayoutObject().HasOverflowClip())
+  if (GetLayoutObject().IsScrollContainer())
     return GetLayoutBox()->PixelSnappedScrolledContentOffset();
   return LayoutSize();
 }
@@ -3398,17 +3397,20 @@ PaintLayerResourceInfo& PaintLayer::EnsureResourceInfo() {
   return *rare_data.resource_info;
 }
 
-void PaintLayer::RemoveAncestorOverflowLayer(const PaintLayer* removed_layer) {
-  // If the current ancestor overflow layer does not match the removed layer
+void PaintLayer::RemoveAncestorScrollContainerLayer(
+    const PaintLayer* removed_layer) {
+  // If the current scroll container layer does not match the removed layer
   // the ancestor overflow layer has changed so we can stop searching.
-  if (AncestorOverflowLayer() && AncestorOverflowLayer() != removed_layer)
+  if (AncestorScrollContainerLayer() &&
+      AncestorScrollContainerLayer() != removed_layer) {
     return;
+  }
 
-  if (AncestorOverflowLayer()) {
-    // If the previous AncestorOverflowLayer is the root and this object is a
-    // sticky viewport constrained object, it is no longer known to be
+  if (AncestorScrollContainerLayer()) {
+    // If the previous AncestorScrollContainerLayer is the root and this object
+    // is a sticky viewport constrained object, it is no longer known to be
     // constrained by the root.
-    if (AncestorOverflowLayer()->IsRootLayer() &&
+    if (AncestorScrollContainerLayer()->IsRootLayer() &&
         GetLayoutObject().StyleRef().HasStickyConstrainedPosition()) {
       if (LocalFrameView* frame_view = GetLayoutObject().GetFrameView()) {
         frame_view->RemoveViewportConstrainedObject(
@@ -3418,17 +3420,17 @@ void PaintLayer::RemoveAncestorOverflowLayer(const PaintLayer* removed_layer) {
     }
 
     if (PaintLayerScrollableArea* ancestor_scrollable_area =
-            AncestorOverflowLayer()->GetScrollableArea()) {
+            AncestorScrollContainerLayer()->GetScrollableArea()) {
       // TODO(pdr): When CompositeAfterPaint is enabled, we will need to
       // invalidate the scroll paint property subtree for this so main thread
       // scroll reasons are recomputed.
       ancestor_scrollable_area->InvalidateStickyConstraintsFor(this);
     }
   }
-  UpdateAncestorOverflowLayer(nullptr);
+  UpdateAncestorScrollContainerLayer(nullptr);
   PaintLayer* current = first_;
   while (current) {
-    current->RemoveAncestorOverflowLayer(removed_layer);
+    current->RemoveAncestorScrollContainerLayer(removed_layer);
     current = current->NextSibling();
   }
 }
@@ -3461,17 +3463,14 @@ void PaintLayer::SetNeedsRepaint() {
 
   LocalFrameView* frame_view = GetLayoutObject().GetDocument().View();
   if (frame_view) {
-    // If you need repaint, then you might issue raster invalidations, and in
-    // Composite after Paint mode, we do these in PAC::Update().
-    if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
+    // If you need repaint, then you might do layerization and isue raster
+    // invalidations. In CompositeAfterPaint mode, and in CompositeSVG mode for
+    // SVG roots, we do these in PAC::Update(). TODO(paint-team): distinguish
+    // requirements for layerization and non-geometry raster invalidations.
+    if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled() ||
+        (RuntimeEnabledFeatures::CompositeSVGEnabled() &&
+         GetLayoutObject().IsSVGRoot()))
       frame_view->SetPaintArtifactCompositorNeedsUpdate();
-    } else if (RuntimeEnabledFeatures::CompositeSVGEnabled()) {
-      // With GraphicsLayer layerization after paint, we also need to call
-      // PaintArtifactCompositor::Update for raster invalidations.
-      // TODO(pdr): Can we do a lighter-weight update that only does raster
-      // invalidation and skips the overlap test?
-      frame_view->SetPaintArtifactCompositorNeedsUpdate();
-    }
   }
 
   // Do this unconditionally to ensure container chain is marked when
@@ -3525,8 +3524,7 @@ void PaintLayer::MarkCompositingContainerChainForNeedsRepaint() {
     // display lock, then stop propagating the dirty bit.
     if (container->descendant_needs_repaint_ ||
         (!layer->SelfNeedsRepaint() &&
-         layer->GetLayoutObject().PaintBlockedByDisplayLock(
-             DisplayLockLifecycleTarget::kChildren))) {
+         layer->GetLayoutObject().ChildPaintBlockedByDisplayLock())) {
       break;
     }
 
@@ -3539,10 +3537,8 @@ void PaintLayer::ClearNeedsRepaintRecursively() {
   self_needs_repaint_ = false;
 
   // Don't clear dirty bits in a display-locked subtree.
-  if (GetLayoutObject().PaintBlockedByDisplayLock(
-          DisplayLockLifecycleTarget::kChildren)) {
+  if (GetLayoutObject().ChildPaintBlockedByDisplayLock())
     return;
-  }
 
   for (PaintLayer* child = FirstChild(); child; child = child->NextSibling())
     child->ClearNeedsRepaintRecursively();
@@ -3637,7 +3633,7 @@ void showLayerTree(const blink::PaintLayer* layer) {
                                    blink::kLayoutAsTextShowLayoutState |
                                    blink::kLayoutAsTextShowPaintProperties,
                                layer);
-    LOG(ERROR) << output.Utf8();
+    LOG(INFO) << output.Utf8();
   }
 }
 

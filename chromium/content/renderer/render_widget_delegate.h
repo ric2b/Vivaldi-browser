@@ -9,7 +9,6 @@
 
 namespace blink {
 class WebWidget;
-struct DeviceEmulationParams;
 }  // namespace blink
 
 namespace content {
@@ -37,18 +36,6 @@ class CONTENT_EXPORT RenderWidgetDelegate {
   // Returns the current state of auto resize.
   virtual bool AutoResizeMode() = 0;
 
-  // ==================================
-  // These methods called during handling of a SynchronizeVisualProperties
-  // message to handle updating state on the delegate.
-  //
-  // Called during handling a SynchronizeVisualProperties message, if the
-  // message informed that the focused node should be scrolled into view.
-  virtual void ScrollFocusedNodeIntoViewForWidget() = 0;
-  // ==================================
-
-  // Called when RenderWidget receives a SetFocus event.
-  virtual void DidReceiveSetFocusEventForWidget() = 0;
-
   // Called when the RenderWidget handles
   // LayerTreeViewDelegate::DidCommitCompositorFrame().
   virtual void DidCommitCompositorFrameForWidget() = 0;
@@ -63,12 +50,6 @@ class CONTENT_EXPORT RenderWidgetDelegate {
       const gfx::Size& size,
       const gfx::Size& visible_viewport_size,
       cc::BrowserControlsParams browser_controls_params) = 0;
-
-  // Called when RenderWidget services RenderWidgetScreenMetricsEmulatorDelegate
-  // SetScreenMetricsEmulationParameters().
-  virtual void SetScreenMetricsEmulationParametersForWidget(
-      bool enabled,
-      const blink::DeviceEmulationParams& params) = 0;
 };
 
 }  // namespace content

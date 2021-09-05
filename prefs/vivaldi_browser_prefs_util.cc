@@ -5,6 +5,7 @@
 #include "apps/switches.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/threading/thread_restrictions.h"
 #include "components/version_info/version_info.h"
 
 namespace vivaldi {
@@ -17,6 +18,9 @@ bool GetDeveloperFilePath(const base::FilePath::StringPieceType& filename,
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(apps::kLoadAndLaunchApp) &&
       !version_info::IsOfficialBuild()) {
+    // In a development build allow MakeAbsoluteFilePath on UI thread for
+    // convinience.
+    base::ThreadRestrictions::ScopedAllowIO allow_io;
     base::FilePath file_from_switch =
         command_line->GetSwitchValuePath(apps::kLoadAndLaunchApp);
     *file = base::MakeAbsoluteFilePath(file_from_switch).Append(filename);

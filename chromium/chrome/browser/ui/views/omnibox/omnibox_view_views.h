@@ -153,7 +153,7 @@ class OmniboxViewViews : public OmniboxView,
   void OnMouseReleased(const ui::MouseEvent& event) override;
   void OnPaint(gfx::Canvas* canvas) override;
   void ExecuteCommand(int command_id, int event_flags) override;
-  void OnInputMethodChanged() override;
+  ui::TextInputType GetTextInputType() const override;
   void AddedToWidget() override;
   void RemovedFromWidget() override;
   base::string16 GetLabelForCommandId(int command_id) const override;
@@ -327,6 +327,8 @@ class OmniboxViewViews : public OmniboxView,
       OmniboxViewViewsHideOnInteractionAndRevealOnHoverTest,
       NoStaleGradientMask);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsHideOnInteractionTest, ModifierKeys);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsHideOnInteractionTest,
+                           ErrorPageNavigation);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsHideOnInteractionTest,
                            SameDocNavigations);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsHideOnInteractionTest,

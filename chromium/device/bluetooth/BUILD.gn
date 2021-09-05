@@ -12,6 +12,13 @@ if (is_chromeos) {
   use_real_dbus_clients = false
 }
 
+# This file depends on the legacy global sources assignment filter. It should
+# be converted to check target platform before assigning source files to the
+# sources variable. Remove this import and set_sources_assignment_filter call
+# when the file has been converted. See https://crbug.com/1018739 for details.
+import("//build/config/deprecated_default_sources_assignment_filter.gni")
+set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
+
 config("bluetooth_config") {
   if (is_win) {
     ldflags = [
@@ -36,6 +43,8 @@ source_set("deprecated_experimental_mojo") {
     "//device/bluetooth/public/mojom/gatt_result_type_converter.h",
     "adapter.cc",
     "adapter.h",
+    "advertisement.cc",
+    "advertisement.h",
     "device.cc",
     "device.h",
     "discovery_session.cc",
@@ -107,8 +116,6 @@ component("bluetooth") {
     "bluetooth_adapter_android.h",
     "bluetooth_adapter_factory.cc",
     "bluetooth_adapter_factory.h",
-    "bluetooth_adapter_factory_wrapper.cc",
-    "bluetooth_adapter_factory_wrapper.h",
     "bluetooth_adapter_mac.h",
     "bluetooth_adapter_mac.mm",
     "bluetooth_adapter_mac_metrics.h",
@@ -253,6 +260,7 @@ component("bluetooth") {
   if (is_mac) {
     frameworks = [
       "IOBluetooth.framework",
+      "IOKit.framework",
       "Foundation.framework",
     ]
   }

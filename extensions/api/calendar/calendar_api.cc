@@ -55,6 +55,7 @@ using vivaldi::calendar::EventType;
 using vivaldi::calendar::Invite;
 using vivaldi::calendar::Notification;
 using vivaldi::calendar::RecurrenceException;
+using vivaldi::calendar::SupportedCalendarComponents;
 
 namespace OnEventCreated = vivaldi::calendar::OnEventCreated;
 namespace OnEventRemoved = vivaldi::calendar::OnEventRemoved;
@@ -194,6 +195,20 @@ std::unique_ptr<std::vector<Invite>> CreateInvites(const InviteRows& invites) {
   return new_invites;
 }
 
+std::unique_ptr<SupportedCalendarComponents> GetSupportedComponents(
+    int supported_component_set) {
+  bool vevent = (supported_component_set & calendar::CALENDAR_VEVENT);
+  bool vtodo = (supported_component_set & calendar::CALENDAR_VTODO);
+  bool vjournal = (supported_component_set & calendar::CALENDAR_VJOURNAL);
+  auto supported_components_set =
+      std::make_unique<SupportedCalendarComponents>();
+  supported_components_set->vevent = vevent;
+  supported_components_set->vtodo = vtodo;
+  supported_components_set->vjournal = vjournal;
+
+  return supported_components_set;
+}
+
 Calendar GetCalendarItem(const CalendarRow& row) {
   Calendar calendar;
   calendar.id = base::NumberToString(row.id());
@@ -209,6 +224,9 @@ Calendar GetCalendarItem(const CalendarRow& row) {
   calendar.last_checked.reset(
       new double(MilliSecondsFromTime(row.last_checked())));
   calendar.timezone.reset(new std::string(row.timezone()));
+  calendar.supported_calendar_component =
+      GetSupportedComponents(row.supported_component_set());
+
   return calendar;
 }
 
@@ -252,45 +270,55 @@ std::unique_ptr<CalendarEvent> CreateVivaldiEvent(
     const calendar::EventResult& event) {
   std::unique_ptr<CalendarEvent> cal_event(new CalendarEvent());
 
-  cal_event->id = base::NumberToString(event.id());
-  cal_event->calendar_id = base::NumberToString(event.calendar_id());
+  cal_event->id = base::NumberToString(event.id);
+  cal_event->calendar_id = base::NumberToString(event.calendar_id);
   cal_event->alarm_id.reset(
-      new std::string(base::NumberToString(event.alarm_id())));
+      new std::string(base::NumberToString(event.alarm_id)));
 
-  cal_event->title = base::UTF16ToUTF8(event.title());
+  cal_event->title = base::UTF16ToUTF8(event.title);
   cal_event->description.reset(
-      new std::string(base::UTF16ToUTF8(event.description())));
-  cal_event->start.reset(new double(MilliSecondsFromTime(event.start())));
-  cal_event->end.reset(new double(MilliSecondsFromTime(event.end())));
-  cal_event->all_day.reset(new bool(event.all_day()));
-  cal_event->is_recurring.reset(new bool(event.is_recurring()));
+      new std::string(base::UTF16ToUTF8(event.description)));
+  cal_event->start.reset(new double(MilliSecondsFromTime(event.start)));
+  cal_event->end.reset(new double(MilliSecondsFromTime(event.end)));
+  cal_event->all_day.reset(new bool(event.all_day));
+  cal_event->is_recurring.reset(new bool(event.is_recurring));
   cal_event->start_recurring.reset(
-      new double(MilliSecondsFromTime(event.start_recurring())));
+      new double(MilliSecondsFromTime(event.start_recurring)));
   cal_event->end_recurring.reset(
-      new double(MilliSecondsFromTime(event.end_recurring())));
-  cal_event->location.reset(
-      new std::string(base::UTF16ToUTF8(event.location())));
-  cal_event->url.reset(new std::string(base::UTF16ToUTF8(event.url())));
-  cal_event->etag.reset(new std::string(event.etag()));
-  cal_event->href.reset(new std::string(event.href()));
-  cal_event->uid.reset(new std::string(event.uid()));
+      new double(MilliSecondsFromTime(event.end_recurring)));
+  cal_event->location.reset(new std::string(base::UTF16ToUTF8(event.location)));
+  cal_event->url.reset(new std::string(base::UTF16ToUTF8(event.url)));
+  cal_event->etag.reset(new std::string(event.etag));
+  cal_event->href.reset(new std::string(event.href));
+  cal_event->uid.reset(new std::string(event.uid));
   cal_event->event_type_id.reset(
-      new std::string(base::NumberToString(event.event_type_id())));
-  cal_event->task.reset(new bool(event.task()));
-  cal_event->complete.reset(new bool(event.complete()));
-  cal_event->trash.reset(new bool(event.trash()));
+      new std::string(base::NumberToString(event.event_type_id)));
+  cal_event->task.reset(new bool(event.task));
+  cal_event->complete.reset(new bool(event.complete));
+  cal_event->trash.reset(new bool(event.trash));
   cal_event->trash_time.reset(
-      new double(MilliSecondsFromTime(event.trash_time())));
-  cal_event->sequence.reset(new int(event.sequence()));
-  cal_event->ical.reset(new std::string(base::UTF16ToUTF8(event.ical())));
-  cal_event->rrule.reset(new std::string(event.rrule()));
+      new double(MilliSecondsFromTime(event.trash_time)));
+  cal_event->sequence.reset(new int(event.sequence));
+  cal_event->ical.reset(new std::string(base::UTF16ToUTF8(event.ical)));
+  cal_event->rrule.reset(new std::string(event.rrule));
   cal_event->recurrence_exceptions =
-      CreateRecurrenceException(event.recurrence_exceptions());
+      CreateRecurrenceException(event.recurrence_exceptions);
 
-  cal_event->notifications = CreateNotifications(event.notifications());
-  cal_event->invites = CreateInvites(event.invites());
-  cal_event->organizer.reset(new std::string(event.organizer()));
-  cal_event->timezone.reset(new std::string(event.timezone()));
+  cal_event->notifications = CreateNotifications(event.notifications);
+  cal_event->invites = CreateInvites(event.invites);
+  cal_event->organizer.reset(new std::string(event.organizer));
+  cal_event->timezone.reset(new std::string(event.timezone));
+  cal_event->due.reset(new double(MilliSecondsFromTime(event.due)));
+  cal_event->priority.reset(new int(event.priority));
+  cal_event->status.reset(new std::string(event.status));
+  cal_event->percentage_complete.reset(new int(event.percentage_complete));
+  cal_event->categories.reset(
+      new std::string(base::UTF16ToUTF8(event.categories)));
+  cal_event->component_class.reset(
+      new std::string(base::UTF16ToUTF8(event.component_class)));
+  cal_event->attachment.reset(
+      new std::string(base::UTF16ToUTF8(event.attachment)));
+  cal_event->completed.reset(new double(MilliSecondsFromTime(event.completed)));
   return cal_event;
 }
 void CalendarEventRouter::OnEventCreated(CalendarService* service,
@@ -556,7 +584,7 @@ ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
       vivaldi::calendar::UpdateEvent::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  calendar::CalendarEvent updatedEvent;
+  calendar::EventRow updatedEvent;
 
   base::string16 id;
   id = base::UTF8ToUTF16(params->id);
@@ -702,6 +730,47 @@ ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
     updatedEvent.updateFields |= calendar::EVENT_TYPE_ID;
   }
 
+  if (params->changes.due.get()) {
+    updatedEvent.due = GetTime(*params->changes.due);
+    updatedEvent.updateFields |= calendar::DUE;
+  }
+
+  if (params->changes.priority.get()) {
+    updatedEvent.priority = *params->changes.priority;
+    updatedEvent.updateFields |= calendar::PRIORITY;
+  }
+
+  if (params->changes.status.get()) {
+    updatedEvent.status = *params->changes.status;
+    updatedEvent.updateFields |= calendar::STATUS;
+  }
+
+  if (params->changes.percentage_complete.get()) {
+    updatedEvent.percentage_complete = *params->changes.percentage_complete;
+    updatedEvent.updateFields |= calendar::PERCENTAGE_COMPLETE;
+  }
+
+  if (params->changes.categories.get()) {
+    updatedEvent.categories = base::UTF8ToUTF16(*params->changes.categories);
+    updatedEvent.updateFields |= calendar::CATEGORIES;
+  }
+
+  if (params->changes.component_class.get()) {
+    updatedEvent.component_class =
+        base::UTF8ToUTF16(*params->changes.component_class);
+    updatedEvent.updateFields |= calendar::COMPONENT_CLASS;
+  }
+
+  if (params->changes.attachment.get()) {
+    updatedEvent.attachment = base::UTF8ToUTF16(*params->changes.attachment);
+    updatedEvent.updateFields |= calendar::ATTACHMENT;
+  }
+
+  if (params->changes.completed.get()) {
+    updatedEvent.completed = GetTime(*params->changes.completed);
+    updatedEvent.updateFields |= calendar::COMPLETED;
+  }
+
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
   model->UpdateCalendarEvent(
       eventId, updatedEvent,
@@ -773,6 +842,8 @@ std::unique_ptr<vivaldi::calendar::Calendar> CreateVivaldiCalendar(
   calendar->last_checked.reset(
       new double(MilliSecondsFromTime(result.last_checked())));
   calendar->timezone.reset(new std::string(result.timezone()));
+  calendar->supported_calendar_component =
+      GetSupportedComponents(result.supported_component_set());
 
   return calendar;
 }
@@ -831,6 +902,29 @@ ExtensionFunction::ResponseAction CalendarCreateFunction::Run() {
   if (params->calendar.timezone.get()) {
     std::string timezone = *params->calendar.timezone.get();
     createCalendar.set_timezone(timezone);
+  }
+
+  if (params->calendar.ctag.get()) {
+    std::string timezone = *params->calendar.ctag.get();
+    createCalendar.set_ctag(timezone);
+  }
+
+  int supported_components = calendar::NONE;
+  if (params->calendar.supported_calendar_component.get()) {
+    if (params->calendar.supported_calendar_component->vevent)
+      supported_components |= calendar::CALENDAR_VEVENT;
+
+    if (params->calendar.supported_calendar_component->vtodo)
+      supported_components |= calendar::CALENDAR_VTODO;
+
+    if (params->calendar.supported_calendar_component->vjournal)
+      supported_components |= calendar::CALENDAR_VJOURNAL;
+
+    createCalendar.set_supported_component_set(supported_components);
+  } else {
+    supported_components |= calendar::CALENDAR_VEVENT;
+    supported_components |= calendar::CALENDAR_VTODO;
+    createCalendar.set_supported_component_set(supported_components);
   }
 
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
@@ -945,6 +1039,21 @@ ExtensionFunction::ResponseAction CalendarUpdateFunction::Run() {
   if (params->changes.timezone.get()) {
     updatedCalendar.timezone = *params->changes.timezone;
     updatedCalendar.updateFields |= calendar::CALENDAR_TIMEZONE;
+  }
+
+  if (params->changes.supported_calendar_component.get()) {
+    int supported_components = calendar::NONE;
+    if (params->changes.supported_calendar_component->vevent)
+      supported_components |= calendar::CALENDAR_VEVENT;
+
+    if (params->changes.supported_calendar_component->vtodo)
+      supported_components |= calendar::CALENDAR_VTODO;
+
+    if (params->changes.supported_calendar_component->vjournal)
+      supported_components |= calendar::CALENDAR_VJOURNAL;
+
+    updatedCalendar.supported_component_set = supported_components;
+    updatedCalendar.updateFields |= calendar::CALENDAR_SUPPORTED_COMPONENT_SET;
   }
 
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
@@ -1260,13 +1369,82 @@ ExtensionFunction::ResponseAction CalendarCreateNotificationFunction::Run() {
 }
 
 void CalendarCreateNotificationFunction::CreateNotificationComplete(
-    std::shared_ptr<calendar::CreateNotificationResult> results) {
+    std::shared_ptr<calendar::NotificationResult> results) {
   if (!results->success) {
     Respond(Error("Error creating notification"));
   } else {
-    Notification notification = CreateNotification(results->createdRow);
+    Notification notification = CreateNotification(results->notification_row);
     Respond(ArgumentList(
         extensions::vivaldi::calendar::CreateNotification::Results::Create(
+            notification)));
+  }
+}
+
+ExtensionFunction::ResponseAction CalendarUpdateNotificationFunction::Run() {
+  std::unique_ptr<vivaldi::calendar::UpdateNotification::Params> params(
+      vivaldi::calendar::UpdateNotification::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  calendar::UpdateNotificationRow update_notification;
+
+  base::string16 id;
+  id = base::UTF8ToUTF16(params->id);
+  calendar::EventID eventId;
+
+  if (!GetIdAsInt64(id, &eventId)) {
+    return RespondNow(Error("Error. Invalid notification id"));
+  }
+
+  update_notification.notification_row.id = eventId;
+
+  if (params->changes.name.get()) {
+    update_notification.notification_row.name =
+        base::UTF8ToUTF16(*params->changes.name);
+    update_notification.updateFields |= calendar::NOTIFICATION_NAME;
+  }
+
+  if (params->changes.description.get()) {
+    update_notification.notification_row.description =
+        base::UTF8ToUTF16(*params->changes.description);
+    update_notification.updateFields |= calendar::NOTIFICATION_DESCRIPTION;
+  }
+
+  if (params->changes.when.get()) {
+    double when = *params->changes.when;
+
+    update_notification.notification_row.when = GetTime(when);
+    update_notification.updateFields |= calendar::NOTIFICATION_WHEN;
+  }
+
+  if (params->changes.period) {
+    update_notification.notification_row.period = *params->changes.period;
+    update_notification.updateFields |= calendar::NOTIFICATION_PERIOD;
+  }
+
+  if (params->changes.delay) {
+    update_notification.notification_row.delay = *params->changes.delay;
+    update_notification.updateFields |= calendar::NOTIFICATION_DELAY;
+  }
+
+  CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
+  model->UpdateNotification(
+      eventId, update_notification,
+      base::Bind(
+          &CalendarUpdateNotificationFunction::UpdateNotificationComplete,
+          this),
+      &task_tracker_);
+  return RespondLater();  // UpdateNotificationComplete() will be called
+                          // asynchronously.
+}
+
+void CalendarUpdateNotificationFunction::UpdateNotificationComplete(
+    std::shared_ptr<calendar::NotificationResult> results) {
+  if (!results->success) {
+    Respond(Error(results->message));
+  } else {
+    Notification notification = CreateNotification(results->notification_row);
+    Respond(ArgumentList(
+        extensions::vivaldi::calendar::UpdateNotification::Results::Create(
             notification)));
   }
 }

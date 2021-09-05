@@ -21,6 +21,8 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
+import("//vivaldi/testing/testing.gni")
+
 group("All") {
   testonly = true
 
@@ -71,21 +73,29 @@ group("All") {
       "//vivaldi/tools/vivaldi_proxy",
       "//chrome/installer/mini_installer",
       "//courgette:courgette",
-      "//courgette:courgette_unittests",
-      "//sandbox/win:sbox_integration_tests",
-      "//sandbox/win:sbox_unittests",
-      "//sandbox/win:sbox_validation_tests",
       "//vivaldi/update_notifier",
     ]
+    if (vivaldi_build_tests) {
+      deps += [
+        "//courgette:courgette_unittests",
+        "//sandbox/win:sbox_integration_tests",
+        "//sandbox/win:sbox_unittests",
+        "//sandbox/win:sbox_validation_tests",
+      ]
+    }
   } else if (!is_linux || !is_component_build) {
     deps += [ "//chrome/installer" ]
   }
   if (is_mac) {
     deps += [
-      "//third_party/ocmock",
-      "//ui/message_center:message_center_unittests",
       "//vivaldi/installer/mac",
     ]
+    if (vivaldi_build_tests) {
+      deps += [
+        "//third_party/ocmock",
+        "//ui/message_center:message_center_unittests",
+      ]
+    }
   }
   if (is_linux) {
     deps += [
@@ -130,7 +140,7 @@ group("All") {
       deps += [ "//ui/views:views_unittests" ]
     }
   }
-  if (is_win) {
+  if (is_win && vivaldi_build_tests) {
     deps += ["//vivaldi/testing:testing"]
   }
   if (generate_untranslated){

@@ -5,7 +5,10 @@
     sub-label="[[displayString_]]"
     button-label="[[getButtonLabel_(status_)]]"
     button-aria-label="$i18n{safetyCheckExtensionsButtonAriaLabel}"
-    button-class="[[getButtonClass_(status_)]]"
+    button-class="action-button"
     on-button-click="onButtonClick_"
+    on-click="onRowClick_"
+    row-clickable="[[isRowClickable_(status_)]]"
+    external
     managed-icon="[[getManagedIcon_(status_)]]">
 </settings-safety-check-child>

@@ -32,7 +32,6 @@
 
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink.h"
-#include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
@@ -104,6 +103,12 @@ static void ScrollToVisible(Range* match) {
     first_node.GetDocument().UpdateStyleAndLayoutForNode(
         &first_node, DocumentUpdateReason::kFindInPage);
   }
+
+  // We don't always have a LayoutObject for the node we're trying to scroll to
+  // after the async step: crbug.com/1129341
+  if (!first_node.GetLayoutObject())
+    return;
+
   Settings* settings = first_node.GetDocument().GetSettings();
   bool smooth_find_enabled =
       settings ? settings->GetSmoothScrollForFindEnabled() : false;
@@ -171,9 +176,6 @@ bool TextFinder::FindInternal(int identifier,
       (options.forward ? 0 : kBackwards) |
       (options.match_case ? 0 : kCaseInsensitive) |
       (wrap_within_frame ? kWrapAround : 0) |
-      (options.find_next_if_selection_matches
-           ? 0
-           : kDontFindNextIfSelectionMatches) |
       (options.new_session ? kStartInSelection : 0);
   active_match_ = Editor::FindRangeOfString(
       *OwnerFrame().GetFrame()->GetDocument(), search_text,

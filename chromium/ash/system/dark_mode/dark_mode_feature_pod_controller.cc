@@ -5,6 +5,8 @@
 #include "ash/system/dark_mode/dark_mode_feature_pod_controller.h"
 
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/session/session_controller_impl.h"
+#include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/system/unified/feature_pod_button.h"
@@ -17,28 +19,30 @@ DarkModeFeaturePodController::DarkModeFeaturePodController(
     UnifiedSystemTrayController* tray_controller)
     : tray_controller_(tray_controller) {
   DCHECK(tray_controller_);
+  AshColorProvider::Get()->AddObserver(this);
 }
 
-DarkModeFeaturePodController::~DarkModeFeaturePodController() = default;
+DarkModeFeaturePodController::~DarkModeFeaturePodController() {
+  AshColorProvider::Get()->RemoveObserver(this);
+}
 
 FeaturePodButton* DarkModeFeaturePodController::CreateButton() {
   DCHECK(!button_);
   button_ = new FeaturePodButton(this);
   button_->SetVectorIcon(kUnifiedMenuDarkModeIcon);
-  button_->SetLabel(
-      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_DARK_MODE_BUTTON_LABEL));
+  button_->SetLabel(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_DARK_THEME));
   button_->SetLabelTooltip(l10n_util::GetStringUTF16(
-      IDS_ASH_STATUS_TRAY_DARK_MODE_SETTINGS_TOOLTIP));
+      IDS_ASH_STATUS_TRAY_DARK_THEME_SETTINGS_TOOLTIP));
+  // TODO(minch): Add the logic for login screen.
+  button_->SetVisible(
+      Shell::Get()->session_controller()->IsActiveUserSessionStarted());
 
-  UpdateButton();
+  UpdateButton(AshColorProvider::Get()->IsDarkModeEnabled());
   return button_;
 }
 
 void DarkModeFeaturePodController::OnIconPressed() {
-  // TODO: Switch dark mode here.
-  UpdateButton();
-
-  // TODO(amehfooz): Add metrics recording here.
+  AshColorProvider::Get()->ToggleColorMode();
 }
 
 void DarkModeFeaturePodController::OnLabelPressed() {
@@ -46,23 +50,25 @@ void DarkModeFeaturePodController::OnLabelPressed() {
 }
 
 SystemTrayItemUmaType DarkModeFeaturePodController::GetUmaType() const {
-  // TODO(amehfooz): Add new UMA type here.
   return SystemTrayItemUmaType::UMA_DARK_MODE;
 }
 
-void DarkModeFeaturePodController::UpdateButton() {
-  const bool is_enabled = AshColorProvider::Get()->color_mode() ==
-                          AshColorProvider::AshColorMode::kDark;
-  button_->SetToggled(is_enabled);
+void DarkModeFeaturePodController::OnColorModeChanged(bool dark_mode_enabled) {
+  UpdateButton(dark_mode_enabled);
+}
+
+void DarkModeFeaturePodController::UpdateButton(bool dark_mode_enabled) {
+  button_->SetToggled(dark_mode_enabled);
   button_->SetSubLabel(l10n_util::GetStringUTF16(
-      is_enabled ? IDS_ASH_STATUS_TRAY_DARK_MODE_ON_STATE
-                 : IDS_ASH_STATUS_TRAY_DARK_MODE_OFF_STATE));
+      dark_mode_enabled ? IDS_ASH_STATUS_TRAY_DARK_THEME_ON_STATE
+                        : IDS_ASH_STATUS_TRAY_DARK_THEME_OFF_STATE));
 
   base::string16 tooltip_state = l10n_util::GetStringUTF16(
-      is_enabled ? IDS_ASH_STATUS_TRAY_DARK_MODE_ENABLED_STATE_TOOLTIP
-                 : IDS_ASH_STATUS_TRAY_DARK_MODE_DISABLED_STATE_TOOLTIP);
+      dark_mode_enabled
+          ? IDS_ASH_STATUS_TRAY_DARK_THEME_ENABLED_STATE_TOOLTIP
+          : IDS_ASH_STATUS_TRAY_DARK_THEME_DISABLED_STATE_TOOLTIP);
   button_->SetIconTooltip(l10n_util::GetStringFUTF16(
-      IDS_ASH_STATUS_TRAY_DARK_MODE_TOGGLE_TOOLTIP, tooltip_state));
+      IDS_ASH_STATUS_TRAY_DARK_THEME_TOGGLE_TOOLTIP, tooltip_state));
 }
 
 }  // namespace ash

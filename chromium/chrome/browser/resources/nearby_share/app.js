@@ -53,11 +53,11 @@ Polymer({
     /**
      * Set by the nearby-discovery-page component when switching to the
      * nearby-confirmation-page.
-     * @type {?String}
+     * @type {?nearbyShare.mojom.TransferUpdateListenerPendingReceiver}
      * @private
      */
-    confirmationToken_: {
-      type: String,
+    transferUpdateListener_: {
+      type: Object,
       value: null,
     },
 
@@ -76,6 +76,7 @@ Polymer({
   listeners: {
     'change-page': 'onChangePage_',
     'close': 'onClose_',
+    'onboarding-complete': 'onOnboardingComplete_',
   },
 
   /**
@@ -112,6 +113,15 @@ Polymer({
    * @private
    */
   onClose_(event) {
-    // TODO(vecore): handle closing when share sheet is hooked up
-  }
+    chrome.send('close');
+  },
+
+  /**
+   * Handler for when onboarding is completed.
+   * @param {!Event} event
+   * @private
+   */
+  onOnboardingComplete_(event) {
+    this.getViewManager_().switchView(Page.DISCOVERY);
+  },
 });

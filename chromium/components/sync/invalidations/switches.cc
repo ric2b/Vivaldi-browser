@@ -6,7 +6,13 @@
 
 namespace switches {
 
-const base::Feature kSubscribeForSyncInvalidations = {
-    "SubscribeForSyncInvalidations", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kSyncSendInterestedDataTypes = {
+    "SyncSendInterestedDataTypes", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kUseSyncInvalidations = {"UseSyncInvalidations",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kUseSyncInvalidationsForWalletAndOffer = {
+    "UseSyncInvalidationsForWalletAndOffer", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace switches

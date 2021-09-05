@@ -7,6 +7,13 @@ import("//gpu/vulkan/features.gni")
 import("//skia/features.gni")
 import("//testing/test.gni")
 
+# This file depends on the legacy global sources assignment filter. It should
+# be converted to check target platform before assigning source files to the
+# sources variable. Remove this import and set_sources_assignment_filter call
+# when the file has been converted. See https://crbug.com/1018739 for details.
+import("//build/config/deprecated_default_sources_assignment_filter.gni")
+set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
+
 source_set("resource_format") {
   sources = [ "resources/resource_format.h" ]
 }
@@ -186,10 +193,18 @@ viz_component("common") {
     "hit_test/aggregated_hit_test_region.h",
     "hit_test/hit_test_region_list.cc",
     "hit_test/hit_test_region_list.h",
+    "quads/aggregated_render_pass.cc",
+    "quads/aggregated_render_pass.h",
+    "quads/aggregated_render_pass_draw_quad.cc",
+    "quads/aggregated_render_pass_draw_quad.h",
     "quads/compositor_frame.cc",
     "quads/compositor_frame.h",
     "quads/compositor_frame_metadata.cc",
     "quads/compositor_frame_metadata.h",
+    "quads/compositor_render_pass.cc",
+    "quads/compositor_render_pass.h",
+    "quads/compositor_render_pass_draw_quad.cc",
+    "quads/compositor_render_pass_draw_quad.h",
     "quads/content_draw_quad_base.cc",
     "quads/content_draw_quad_base.h",
     "quads/debug_border_draw_quad.cc",
@@ -204,10 +219,10 @@ viz_component("common") {
     "quads/picture_draw_quad.h",
     "quads/quad_list.cc",
     "quads/quad_list.h",
-    "quads/render_pass.cc",
-    "quads/render_pass.h",
-    "quads/render_pass_draw_quad.cc",
-    "quads/render_pass_draw_quad.h",
+    "quads/render_pass_draw_quad_internal.cc",
+    "quads/render_pass_draw_quad_internal.h",
+    "quads/render_pass_internal.cc",
+    "quads/render_pass_internal.h",
     "quads/render_pass_io.cc",
     "quads/render_pass_io.h",
     "quads/selection.h",
@@ -244,8 +259,6 @@ viz_component("common") {
     "resources/transferable_resource.h",
     "skia_helper.cc",
     "skia_helper.h",
-    "surfaces/aggregated_frame.cc",
-    "surfaces/aggregated_frame.h",
     "surfaces/child_local_surface_id_allocator.cc",
     "surfaces/child_local_surface_id_allocator.h",
     "surfaces/frame_sink_id.cc",
@@ -254,8 +267,6 @@ viz_component("common") {
     "surfaces/frame_sink_id_allocator.h",
     "surfaces/local_surface_id.cc",
     "surfaces/local_surface_id.h",
-    "surfaces/local_surface_id_allocation.cc",
-    "surfaces/local_surface_id_allocation.h",
     "surfaces/parent_local_surface_id_allocator.cc",
     "surfaces/parent_local_surface_id_allocator.h",
     "surfaces/scoped_surface_id_allocator.cc",
@@ -345,18 +356,10 @@ viz_source_set("unit_tests") {
     "frame_sinks/begin_frame_source_unittest.cc",
     "frame_sinks/copy_output_util_unittest.cc",
     "frame_sinks/delay_based_time_source_unittest.cc",
-    "gl_i420_converter_pixeltest.cc",
-    "gl_i420_converter_unittest.cc",
-    "gl_scaler_overscan_pixeltest.cc",
-    "gl_scaler_pixeltest.cc",
-    "gl_scaler_shader_pixeltest.cc",
-    "gl_scaler_test_util.cc",
-    "gl_scaler_test_util.h",
-    "gl_scaler_unittest.cc",
     "gpu/context_cache_controller_unittest.cc",
+    "quads/compositor_render_pass_unittest.cc",
     "quads/draw_quad_unittest.cc",
     "quads/render_pass_io_unittest.cc",
-    "quads/render_pass_unittest.cc",
     "resources/resource_sizes_unittest.cc",
     "surfaces/child_local_surface_id_allocator_unittest.cc",
     "surfaces/local_surface_id_unittest.cc",
@@ -365,6 +368,19 @@ viz_source_set("unit_tests") {
     "surfaces/surface_range_unittest.cc",
     "yuv_readback_unittest.cc",
   ]
+
+  if (enable_gl_backend_tests) {
+    sources += [
+      "gl_i420_converter_pixeltest.cc",
+      "gl_i420_converter_unittest.cc",
+      "gl_scaler_overscan_pixeltest.cc",
+      "gl_scaler_pixeltest.cc",
+      "gl_scaler_shader_pixeltest.cc",
+      "gl_scaler_test_util.cc",
+      "gl_scaler_test_util.h",
+      "gl_scaler_unittest.cc",
+    ]
+  }
 
   deps = [
     ":common",

@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Skoða frumkóða ramma</translation>
 <translation id="1165039591588034296">Villa</translation>
 <translation id="1175364870820465910">&amp;Prenta...</translation>
-<translation id="1177863135347784049">Sérsniðin</translation>
 <translation id="1181037720776840403">Fjarlægja</translation>
 <translation id="1187722533808055681">Vakning úr dvala</translation>
 <translation id="119944043368869598">Hreinsa allt</translation>
 <translation id="1221825588892235038">Aðeins valið</translation>
 <translation id="1244303850296295656">Villa í viðbót</translation>
+<translation id="125220115284141797">Sjálfgefið</translation>
 <translation id="1274977772557788323">Geymslustillingar fyrir Flash spilarann frá Adobe</translation>
 <translation id="1297175357211070620">Áfangastaður</translation>
 <translation id="1303101771013849280">HTML bókamerkja skrá</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Nýr gluggi</translation>
 <translation id="1725149567830788547">Sýna &amp;stjórntæki</translation>
 <translation id="1729533290416704613">Hún stjórnar líka hvaða síða er sýnda þegar þú leitar í netfangasvæði í veffangsstiku.</translation>
+<translation id="174123615272205933">Sérsniðin</translation>
 <translation id="1744108098763830590">bakgrunnssíða</translation>
 <translation id="176587472219019965">&amp;Nýr gluggi</translation>
 <translation id="1769104665586091481">Opna hlekk í nýjum &amp;glugga</translation>
+<translation id="1779468444204342338">Lágmark prentara</translation>
 <translation id="1815083418640426271">Líma sem venjulegan texta</translation>
 <translation id="1828901632669367785">Prenta með því að nota kerfisglugga...</translation>
 <translation id="1850508293116537636">Snúa &amp;réttsælis</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Spyrja áður en sent er (mælt með)</translation>
 <translation id="241082044617551207">Óþekkt viðbót</translation>
 <translation id="2423578206845792524">Vi&amp;sta mynd sem...</translation>
-<translation id="2436707352762155834">Lágmark prentara</translation>
 <translation id="2439110203301358333">Annað forrit á tölvunni þinni bætti við viðbót sem gæti breytt virkni Vivaldi.</translation>
 <translation id="2445081178310039857">Rótarmappa viðbótar er krafist.</translation>
 <translation id="2470702053775288986">Óstuddar viðbætur gerða óvirkar</translation>
@@ -245,7 +246,6 @@
 <translation id="5039804452771397117">Leyfa</translation>
 <translation id="5057110919553308744">Þegar þú smellir á viðbót</translation>
 <translation id="5063480226653192405">Notkun</translation>
-<translation id="5068918910148307423">Ekki leyfa síðum sem nýlega hefur verið lokað að klára að senda og taka á móti gögnum</translation>
 <translation id="5116628073786783676">Vi&amp;sta hljóð sem...</translation>
 <translation id="5143374789336132547">Viðbót "<ph name="EXTENSION_NAME" />" hefur breytt hvaða síða er sýnd þegar þú ýtir á heimasíðuhnapp.</translation>
 <translation id="5154108062446123722">Nánari stillingar fyrir <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +264,7 @@
 <translation id="5355926466126177564">Viðbótin "<ph name="EXTENSION_NAME" />" hefur breytt hvaða síða er sýnd þegar leitað er í netfangasvæði í veffangastiku.</translation>
 <translation id="5360150013186312835">Sýna í stiku</translation>
 <translation id="5362741141255528695">Veldu einkalyklaskrá.</translation>
+<translation id="536638840841140142">Engin</translation>
 <translation id="5370819323174483825">&amp;Endurhlaða</translation>
 <translation id="5398572795982417028">Bil síðna nær út fyrir fjölda síðna, skorðast við <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Halda áfram niðurhali</translation>
@@ -388,7 +389,6 @@
 <translation id="7663719505383602579">Viðtakandi: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Sett upp af kerfisstjóra</translation>
 <translation id="7685049629764448582">JavaScript minni</translation>
-<translation id="7701040980221191251">Engin</translation>
 <translation id="7701869757853594372">NOTENDA handtök</translation>
 <translation id="7704305437604973648">Verkefni</translation>
 <translation id="7710568461918838723">&amp;Varpa...</translation>

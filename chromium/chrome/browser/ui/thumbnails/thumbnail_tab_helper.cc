@@ -5,11 +5,13 @@
 #include "chrome/browser/ui/thumbnails/thumbnail_tab_helper.h"
 
 #include <algorithm>
+#include <set>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/check_op.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/no_destructor.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -19,6 +21,7 @@
 #include "chrome/browser/ui/tabs/tab_style.h"
 #include "chrome/browser/ui/thumbnails/thumbnail_capture_driver.h"
 #include "chrome/browser/ui/thumbnails/thumbnail_readiness_tracker.h"
+#include "chrome/browser/ui/thumbnails/thumbnail_scheduler.h"
 #include "components/history/core/common/thumbnail_score.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
@@ -64,10 +67,7 @@ class ScopedThumbnailCapture {
       : web_contents_observer_(web_contents_observer) {
     auto* const contents = web_contents_observer->web_contents();
     if (contents) {
-      contents->IncrementCapturerCount(
-          gfx::ScaleToFlooredSize(GetMinimumThumbnailSize(),
-                                  kMinThumbnailScaleFactor),
-          /* stay_hidden */ true);
+      contents->IncrementCapturerCount(gfx::Size(), /* stay_hidden */ true);
       captured_ = true;
     }
   }
@@ -83,6 +83,27 @@ class ScopedThumbnailCapture {
   // web contents has disappeared without having to add another observer.
   content::WebContentsObserver* const web_contents_observer_;
   bool captured_ = false;
+};
+
+// A scheduler that immediately captures any tab that wants it without
+// restrictions.
+class ImmediateThumbnailScheduler : public ThumbnailScheduler {
+ public:
+  ImmediateThumbnailScheduler() = default;
+  ~ImmediateThumbnailScheduler() override = default;
+
+  // ThumbnailScheduler:
+  void AddTab(TabCapturer* tab) override {}
+  void RemoveTab(TabCapturer* tab) override {}
+
+  void SetTabCapturePriority(TabCapturer* tab,
+                             TabCapturePriority priority) override {
+    DCHECK(tab);
+    if (priority == TabCapturePriority::kNone)
+      tab->SetCapturePermittedByScheduler(false);
+    else
+      tab->SetCapturePermittedByScheduler(true);
+  }
 };
 
 }  // anonymous namespace
@@ -109,10 +130,10 @@ class ThumbnailTabHelper::TabStateTracker
   TabStateTracker(ThumbnailTabHelper* thumbnail_tab_helper,
                   content::WebContents* contents)
       : content::WebContentsObserver(contents),
+        thumbnail_tab_helper_(thumbnail_tab_helper),
         readiness_tracker_(contents,
                            base::Bind(&TabStateTracker::PageReadinessChanged,
-                                      base::Unretained(this))),
-        thumbnail_tab_helper_(thumbnail_tab_helper) {
+                                      base::Unretained(this))) {
     visible_ =
         (web_contents()->GetVisibility() == content::Visibility::VISIBLE);
   }
@@ -178,6 +199,8 @@ class ThumbnailTabHelper::TabStateTracker
   // ThumbnailImage::Delegate:
   void ThumbnailImageBeingObservedChanged(bool is_being_observed) override {
     capture_driver_.UpdateThumbnailVisibility(is_being_observed);
+    if (is_being_observed)
+      web_contents()->GetController().LoadIfNecessary();
   }
 
   void PageReadinessChanged(PageReadiness readiness) {
@@ -185,7 +208,10 @@ class ThumbnailTabHelper::TabStateTracker
     capture_driver_.UpdatePageReadiness(readiness);
   }
 
-  ThumbnailCaptureDriver capture_driver_{this};
+  ThumbnailTabHelper* const thumbnail_tab_helper_;
+
+  ThumbnailCaptureDriver capture_driver_{
+      this, &thumbnail_tab_helper_->GetScheduler()};
   ThumbnailReadinessTracker readiness_tracker_;
 
   // The last known visibility WebContents visibility.
@@ -197,8 +223,6 @@ class ThumbnailTabHelper::TabStateTracker
   // Scoped request for video capture. Ensures we always decrement the counter
   // once per increment.
   std::unique_ptr<ScopedThumbnailCapture> scoped_capture_;
-
-  ThumbnailTabHelper* const thumbnail_tab_helper_;
 };
 
 // ThumbnailTabHelper ----------------------------------------------------
@@ -217,6 +241,12 @@ ThumbnailTabHelper::~ThumbnailTabHelper() {
 // static
 void ThumbnailTabHelper::RecordCaptureType(CaptureType type) {
   UMA_HISTOGRAM_ENUMERATION("Tab.Preview.CaptureType", type);
+}
+
+// static
+ThumbnailScheduler& ThumbnailTabHelper::GetScheduler() {
+  static base::NoDestructor<ImmediateThumbnailScheduler> instance;
+  return *instance.get();
 }
 
 void ThumbnailTabHelper::CaptureThumbnailOnTabHidden() {
@@ -285,6 +315,7 @@ void ThumbnailTabHelper::StartVideoCapture() {
     return;
 
   start_video_capture_time_ = base::TimeTicks::Now();
+  got_first_frame_ = false;
 
   // Figure out how large we want the capture target to be.
   last_frame_capture_info_ =
@@ -305,10 +336,17 @@ void ThumbnailTabHelper::StartVideoCapture() {
 }
 
 void ThumbnailTabHelper::StopVideoCapture() {
-  if (video_capturer_) {
-    video_capturer_->Stop();
-    video_capturer_.reset();
+  if (!video_capturer_) {
+    DCHECK_EQ(start_video_capture_time_, base::TimeTicks());
+    return;
   }
+
+  video_capturer_->Stop();
+  video_capturer_.reset();
+
+  UMA_HISTOGRAM_MEDIUM_TIMES(
+      "Tab.Preview.VideoCaptureDuration",
+      base::TimeTicks::Now() - start_video_capture_time_);
 
   start_video_capture_time_ = base::TimeTicks();
 }
@@ -345,10 +383,10 @@ void ThumbnailTabHelper::OnFrameCaptured(
     return;
   }
 
-  if (start_video_capture_time_ != base::TimeTicks()) {
+  if (!got_first_frame_) {
     UMA_HISTOGRAM_TIMES("Tab.Preview.TimeToFirstUsableFrameAfterStartCapture",
                         time_of_call - start_video_capture_time_);
-    start_video_capture_time_ = base::TimeTicks();
+    got_first_frame_ = true;
   }
 
   // The SkBitmap's pixels will be marked as immutable, but the installPixels()

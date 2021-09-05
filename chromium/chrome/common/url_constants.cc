@@ -117,6 +117,9 @@ const char kContentSettingsExceptionsLearnMoreURL[] =
 const char kCookiesSettingsHelpCenterURL[] =
     "https://support.google.com/chrome?p=cpn_cookies";
 
+const char kCpuX86Sse2ObsoleteURL[] =
+    "https://support.google.com/chrome/?p=chrome_update_sse3";
+
 const char kCrashReasonURL[] =
 #if defined(OS_CHROMEOS)
     "https://support.google.com/chromebook/?p=e_awsnap";
@@ -206,6 +209,9 @@ const char kPasswordCheckLearnMoreURL[] =
     "?p=settings_password#leak_detection_privacy";
 #endif
 
+const char kPasswordGenerationLearnMoreURL[] =
+    "https://support.google.com/chrome/answer/7570435";
+
 const char kPasswordManagerLearnMoreURL[] =
 #if defined(OS_CHROMEOS)
     "https://support.google.com/chromebook/?p=settings_password";
@@ -245,6 +251,9 @@ const char kSafeBrowsingHelpCenterURL[] =
 
 const char kSafetyTipHelpCenterURL[] =
     "https://support.google.com/chrome/?p=safety_tip";
+
+const char kSeeMoreSecurityTipsURL[] =
+    "https://support.google.com/accounts/answer/32040";
 
 const char kSettingsSearchHelpURL[] =
     "https://support.google.com/chrome/?p=settings_search_help";
@@ -416,7 +425,7 @@ const char kWifiSyncLearnMoreURL[] =
 const char kChromeEnterpriseSignInLearnMoreURL[] =
     "https://support.google.com/chromebook/answer/1331549";
 
-const char kMac10_9_ObsoleteURL[] =
+const char kMac10_10_ObsoleteURL[] =
     "https://support.google.com/chrome/?p=unsupported_mac";
 #endif
 

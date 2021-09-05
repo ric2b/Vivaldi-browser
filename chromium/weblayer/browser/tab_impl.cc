@@ -45,7 +45,8 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/renderer_preferences_util.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/web_preferences.h"
+#include "content/public/browser/web_contents_observer.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
 #include "third_party/blink/public/mojom/window_features/window_features.mojom.h"
 #include "ui/base/window_open_disposition.h"
@@ -100,7 +101,6 @@
 #include "weblayer/browser/browser_controls_container_view.h"
 #include "weblayer/browser/browser_controls_navigation_state_handler.h"
 #include "weblayer/browser/controls_visibility_reason.h"
-#include "weblayer/browser/http_auth_handler_impl.h"
 #include "weblayer/browser/java/jni/TabImpl_jni.h"
 #include "weblayer/browser/javascript_tab_modal_dialog_manager_delegate_android.h"
 #include "weblayer/browser/js_communication/web_message_host_factory_proxy.h"
@@ -231,6 +231,15 @@ std::set<TabImpl*>& GetTabs() {
   static base::NoDestructor<std::set<TabImpl*>> s_all_tab_impl;
   return *s_all_tab_impl;
 }
+
+// Simulates a WeakPtr for WebContents. Specifically if the WebContents
+// supplied to the constructor is destroyed then web_contents() returns
+// null.
+class WebContentsTracker : public content::WebContentsObserver {
+ public:
+  explicit WebContentsTracker(content::WebContents* web_contents)
+      : content::WebContentsObserver(web_contents) {}
+};
 
 }  // namespace
 
@@ -513,7 +522,7 @@ void TabImpl::WebPreferencesChanged() {
   web_contents_->OnWebPreferencesChanged();
 }
 
-void TabImpl::SetWebPreferences(content::WebPreferences* prefs) {
+void TabImpl::SetWebPreferences(blink::web_pref::WebPreferences* prefs) {
   prefs->fullscreen_supported = !!fullscreen_delegate_;
 
   if (!browser_)
@@ -538,28 +547,6 @@ void TabImpl::ShowContextMenu(const content::ContextMenuParams& params) {
 #endif
 }
 
-void TabImpl::ShowHttpAuthPrompt(HttpAuthHandlerImpl* auth_handler) {
-  CHECK(!auth_handler_);
-  auth_handler_ = auth_handler;
-#if defined(OS_ANDROID)
-  JNIEnv* env = AttachCurrentThread();
-  GURL url = auth_handler_->url();
-  Java_TabImpl_showHttpAuthPrompt(
-      env, java_impl_, base::android::ConvertUTF8ToJavaString(env, url.host()),
-      base::android::ConvertUTF8ToJavaString(env, url.spec()));
-#endif
-}
-
-void TabImpl::CloseHttpAuthPrompt() {
-  if (!auth_handler_)
-    return;
-  auth_handler_ = nullptr;
-#if defined(OS_ANDROID)
-  JNIEnv* env = AttachCurrentThread();
-  Java_TabImpl_closeHttpAuthPrompt(env, java_impl_);
-#endif
-}
-
 #if defined(OS_ANDROID)
 // static
 void TabImpl::DisableAutofillSystemIntegrationForTesting() {
@@ -580,9 +567,10 @@ static jlong JNI_TabImpl_CreateTab(JNIEnv* env,
 static void JNI_TabImpl_DeleteTab(JNIEnv* env, jlong tab) {
   TabImpl* tab_impl = reinterpret_cast<TabImpl*>(tab);
   DCHECK(tab_impl);
-  DCHECK(tab_impl->browser());
-  // Don't call Browser::DestroyTab() as it calls back to the java side.
-  tab_impl->browser()->DestroyTabFromJava(tab_impl);
+  // RemoveTabBeforeDestroyingFromJava() should have been called before this,
+  // which sets browser to null.
+  DCHECK(!tab_impl->browser());
+  delete tab_impl;
 }
 
 ScopedJavaLocalRef<jobject> TabImpl::GetWebContents(JNIEnv* env) {
@@ -760,21 +748,6 @@ jboolean TabImpl::IsRendererControllingBrowserControlsOffsets(JNIEnv* env) {
       ->IsRendererControllingOffsets();
 }
 
-void TabImpl::SetHttpAuth(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jstring>& username,
-    const base::android::JavaParamRef<jstring>& password) {
-  auth_handler_->Proceed(
-      base::android::ConvertJavaStringToUTF16(env, username),
-      base::android::ConvertJavaStringToUTF16(env, password));
-  CloseHttpAuthPrompt();
-}
-
-void TabImpl::CancelHttpAuth(JNIEnv* env) {
-  auth_handler_->Cancel();
-  CloseHttpAuthPrompt();
-}
-
 base::android::ScopedJavaLocalRef<jstring> TabImpl::RegisterWebMessageCallback(
     JNIEnv* env,
     const base::android::JavaParamRef<jstring>& js_object_name,
@@ -806,6 +779,11 @@ jboolean TabImpl::CanTranslate(JNIEnv* env) {
 void TabImpl::ShowTranslateUi(JNIEnv* env) {
   TranslateClientImpl::FromWebContents(web_contents())
       ->ManualTranslateWhenReady();
+}
+
+void TabImpl::RemoveTabFromBrowserBeforeDestroying(JNIEnv* env) {
+  DCHECK(browser_);
+  browser_->RemoveTabBeforeDestroyingFromJava(this);
 }
 
 void TabImpl::SetTranslateTargetLanguage(
@@ -844,15 +822,15 @@ content::WebContents* TabImpl::OpenURLFromTab(
   std::unique_ptr<content::WebContents> new_tab_contents =
       content::WebContents::Create(content::WebContents::CreateParams(
           web_contents()->GetBrowserContext()));
-  content::WebContents* new_tab_contents_raw = new_tab_contents.get();
+  WebContentsTracker tracker(new_tab_contents.get());
   bool was_blocked = false;
   AddNewContents(web_contents(), std::move(new_tab_contents), params.url,
                  params.disposition, {}, params.user_gesture, &was_blocked);
-  if (was_blocked)
+  if (was_blocked || !tracker.web_contents())
     return nullptr;
-  new_tab_contents_raw->GetController().LoadURLWithParams(
+  tracker.web_contents()->GetController().LoadURLWithParams(
       content::NavigationController::LoadURLParams(params));
-  return new_tab_contents_raw;
+  return tracker.web_contents();
 }
 
 void TabImpl::ShowRepostFormWarningDialog(content::WebContents* source) {
@@ -1098,19 +1076,10 @@ void TabImpl::CloseContents(content::WebContents* source) {
   DCHECK(browser_);
 
 #if defined(OS_ANDROID)
-  // Prior to 84 closing tabs was delegated to the embedder. In 84 closing tabs
-  // was changed to be done internally in the implementation, but as this
-  // required changes on the client side as well as in the implementation the
-  // prior flow needs to be preserved when the client is expecting it.
-  if (WebLayerFactoryImplAndroid::GetClientMajorVersion() < 84) {
-    if (new_tab_delegate_)
-      new_tab_delegate_->CloseTab();
-  } else {
-    JNIEnv* env = AttachCurrentThread();
-    Java_TabImpl_handleCloseFromWebContents(env, java_impl_);
-    // The above call resulted in the destruction of this; nothing to do but
-    // return.
-  }
+  JNIEnv* env = AttachCurrentThread();
+  Java_TabImpl_handleCloseFromWebContents(env, java_impl_);
+  // The above call resulted in the destruction of this; nothing to do but
+  // return.
 #else
   browser_->DestroyTab(this);
 #endif
@@ -1158,6 +1127,15 @@ void TabImpl::FindMatchRectsReply(content::WebContents* web_contents,
 #endif
 
 void TabImpl::RenderProcessGone(base::TerminationStatus status) {
+#if defined(OS_ANDROID)
+  // If a renderer process is lost when the tab is not visible, indicate to the
+  // WebContents that it should automatically reload the next time it becomes
+  // visible.
+  JNIEnv* env = AttachCurrentThread();
+  if (Java_TabImpl_willAutomaticallyReloadAfterCrashImpl(env, java_impl_))
+    web_contents()->GetController().SetNeedsReload();
+#endif
+
   for (auto& observer : observers_)
     observer.OnRenderProcessGone();
 }
@@ -1175,9 +1153,9 @@ void TabImpl::OnFindResultAvailable(content::WebContents* web_contents) {
 
 #if defined(OS_ANDROID)
 void TabImpl::OnBrowserControlsStateStateChanged(
+    ControlsVisibilityReason reason,
     content::BrowserControlsState state) {
-  SetBrowserControlsConstraint(ControlsVisibilityReason::kPostNavigation,
-                               state);
+  SetBrowserControlsConstraint(reason, state);
 }
 
 void TabImpl::OnUpdateBrowserControlsStateBecauseOfProcessSwitch(
@@ -1198,10 +1176,6 @@ void TabImpl::OnUpdateBrowserControlsStateBecauseOfProcessSwitch(
         current_browser_controls_visibility_constraint_ !=
             content::BROWSER_CONTROLS_STATE_HIDDEN);
   }
-}
-
-void TabImpl::OnForceBrowserControlsShown() {
-  Java_TabImpl_onForceBrowserControlsShown(AttachCurrentThread(), java_impl_);
 }
 
 #endif

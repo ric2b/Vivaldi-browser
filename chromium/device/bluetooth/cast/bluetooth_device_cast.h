@@ -40,6 +40,7 @@ class BluetoothDeviceCast : public BluetoothDevice {
   uint32_t GetBluetoothClass() const override;
   BluetoothTransport GetType() const override;
   std::string GetAddress() const override;
+  AddressType GetAddressType() const override;
   VendorIDSource GetVendorIDSource() const override;
   uint16_t GetVendorID() const override;
   uint16_t GetProductID() const override;
@@ -120,7 +121,7 @@ class BluetoothDeviceCast : public BluetoothDevice {
   void DisconnectGatt() override;
 
   // Called back from connect requests generated from CreateGattConnectionImpl.
-  void OnConnect(bool success);
+  void OnConnect(chromecast::bluetooth::RemoteDevice::ConnectStatus status);
 
   // Called in response to GetServices
   void OnGetServices(

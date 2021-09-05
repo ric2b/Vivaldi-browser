@@ -97,8 +97,9 @@ class WaitForSwapDisplayClient : public DisplayClient {
   WaitForSwapDisplayClient() = default;
 
   void DisplayOutputSurfaceLost() override {}
-  void DisplayWillDrawAndSwap(bool will_draw_and_swap,
-                              RenderPassList* render_passes) override {}
+  void DisplayWillDrawAndSwap(
+      bool will_draw_and_swap,
+      AggregatedRenderPassList* render_passes) override {}
   void DisplayDidDrawAndSwap() override {}
   void DisplayDidReceiveCALayerParams(
       const gfx::CALayerParams& ca_layer_params) override {}
@@ -127,12 +128,12 @@ class WaitForSwapDisplayClient : public DisplayClient {
   DISALLOW_COPY_AND_ASSIGN(WaitForSwapDisplayClient);
 };
 
-std::unique_ptr<RenderPass> CreateTestRootRenderPass() {
-  const RenderPassId id{1};
+std::unique_ptr<CompositorRenderPass> CreateTestRootRenderPass() {
+  const CompositorRenderPassId id{1};
   const gfx::Rect output_rect = kSurfaceRect;
   const gfx::Rect damage_rect = kSurfaceRect;
   const gfx::Transform transform_to_root_target;
-  std::unique_ptr<RenderPass> pass = RenderPass::Create();
+  auto pass = CompositorRenderPass::Create();
   pass->SetNew(id, output_rect, damage_rect, transform_to_root_target);
   pass->has_transparent_background = false;
   return pass;
@@ -141,7 +142,7 @@ std::unique_ptr<RenderPass> CreateTestRootRenderPass() {
 SharedQuadState* CreateTestSharedQuadState(
     gfx::Transform quad_to_target_transform,
     const gfx::Rect& rect,
-    RenderPass* render_pass,
+    CompositorRenderPass* render_pass,
     const gfx::RRectF& rrect) {
   const gfx::Rect layer_rect = rect;
   const gfx::Rect visible_layer_rect = rect;
@@ -217,7 +218,7 @@ void CreateTestTextureDrawQuad(ResourceId resource_id,
                                SkColor background_color,
                                bool premultiplied_alpha,
                                const SharedQuadState* shared_state,
-                               RenderPass* render_pass) {
+                               CompositorRenderPass* render_pass) {
   const bool needs_blending = true;
   const gfx::PointF uv_top_left(0.0f, 0.0f);
   const gfx::PointF uv_bottom_right(1.0f, 1.0f);
@@ -236,7 +237,7 @@ void CreateTestTileDrawQuad(ResourceId resource_id,
                             const gfx::Size& texture_size,
                             bool premultiplied_alpha,
                             const SharedQuadState* shared_state,
-                            RenderPass* render_pass) {
+                            CompositorRenderPass* render_pass) {
   // TileDrawQuads are non-normalized texture coords, so assume it's 1-1 with
   // the visible rect.
   const gfx::RectF tex_coord_rect(rect);
@@ -249,11 +250,12 @@ void CreateTestTileDrawQuad(ResourceId resource_id,
                nearest_neighbor, force_anti_aliasing_off);
 }
 
-bool RenderPassListFromJSON(const std::string& tag,
-                            const std::string& site,
-                            uint32_t year,
-                            size_t frame_index,
-                            RenderPassList* render_pass_list) {
+bool CompositorRenderPassListFromJSON(
+    const std::string& tag,
+    const std::string& site,
+    uint32_t year,
+    size_t frame_index,
+    CompositorRenderPassList* render_pass_list) {
   base::FilePath json_path;
   if (!base::PathService::Get(Paths::DIR_TEST_DATA, &json_path))
     return false;
@@ -274,7 +276,7 @@ bool RenderPassListFromJSON(const std::string& tag,
   base::Optional<base::Value> dict = base::JSONReader::Read(json_text);
   if (!dict.has_value())
     return false;
-  return RenderPassListFromDict(dict.value(), render_pass_list);
+  return CompositorRenderPassListFromDict(dict.value(), render_pass_list);
 }
 
 }  // namespace
@@ -336,9 +338,7 @@ class RendererPerfTest : public testing::Test {
     display_->Resize(kSurfaceSize);
 
     id_allocator_.GenerateId();
-    display_->SetLocalSurfaceId(
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
-        1.f);
+    display_->SetLocalSurfaceId(id_allocator_.GetCurrentLocalSurfaceId(), 1.f);
   }
 
   void TearDown() override {
@@ -386,14 +386,13 @@ class RendererPerfTest : public testing::Test {
     display_.reset();
   }
 
-  void DrawFrame(RenderPassList pass_list) {
+  void DrawFrame(CompositorRenderPassList pass_list) {
     CompositorFrame frame = CompositorFrameBuilder()
                                 .SetRenderPassList(std::move(pass_list))
                                 .SetTransferableResources(resource_list_)
                                 .Build();
-    support_->SubmitCompositorFrame(
-        id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
-        std::move(frame));
+    support_->SubmitCompositorFrame(id_allocator_.GetCurrentLocalSurfaceId(),
+                                    std::move(frame));
     ASSERT_TRUE(display_->DrawAndSwap(base::TimeTicks::Now()));
   }
 
@@ -416,7 +415,8 @@ class RendererPerfTest : public testing::Test {
     return actual_id;
   }
 
-  void SetUpRenderPassListResources(RenderPassList* render_pass_list) {
+  void SetUpRenderPassListResources(
+      CompositorRenderPassList* render_pass_list) {
     base::flat_map<ResourceId, ResourceId> resource_map;
     for (auto& render_pass : *render_pass_list) {
       for (auto* quad : render_pass->quad_list) {
@@ -482,7 +482,7 @@ class RendererPerfTest : public testing::Test {
 
     timer_.Reset();
     do {
-      std::unique_ptr<RenderPass> pass = CreateTestRootRenderPass();
+      std::unique_ptr<CompositorRenderPass> pass = CreateTestRootRenderPass();
 
       SharedQuadState* shared_state = CreateTestSharedQuadState(
           gfx::Transform(), kSurfaceRect, pass.get(), gfx::RRectF());
@@ -492,7 +492,7 @@ class RendererPerfTest : public testing::Test {
                                 /*premultiplied_alpha=*/false, shared_state,
                                 pass.get());
 
-      RenderPassList pass_list;
+      CompositorRenderPassList pass_list;
       pass_list.push_back(std::move(pass));
 
       DrawFrame(std::move(pass_list));
@@ -518,7 +518,7 @@ class RendererPerfTest : public testing::Test {
 
     timer_.Reset();
     do {
-      std::unique_ptr<RenderPass> pass = CreateTestRootRenderPass();
+      std::unique_ptr<CompositorRenderPass> pass = CreateTestRootRenderPass();
       SharedQuadState* shared_state = CreateTestSharedQuadState(
           gfx::Transform(), kSurfaceRect, pass.get(), gfx::RRectF());
 
@@ -533,7 +533,7 @@ class RendererPerfTest : public testing::Test {
         }
       }
 
-      RenderPassList pass_list;
+      CompositorRenderPassList pass_list;
       pass_list.push_back(std::move(pass));
       DrawFrame(std::move(pass_list));
 
@@ -555,7 +555,7 @@ class RendererPerfTest : public testing::Test {
 
     timer_.Reset();
     do {
-      std::unique_ptr<RenderPass> pass = CreateTestRootRenderPass();
+      std::unique_ptr<CompositorRenderPass> pass = CreateTestRootRenderPass();
       SharedQuadState* shared_state = CreateTestSharedQuadState(
           gfx::Transform(), kSurfaceRect, pass.get(), gfx::RRectF());
 
@@ -570,7 +570,7 @@ class RendererPerfTest : public testing::Test {
         }
       }
 
-      RenderPassList pass_list;
+      CompositorRenderPassList pass_list;
       pass_list.push_back(std::move(pass));
       DrawFrame(std::move(pass_list));
 
@@ -609,7 +609,7 @@ class RendererPerfTest : public testing::Test {
 
     timer_.Reset();
     do {
-      std::unique_ptr<RenderPass> pass = CreateTestRootRenderPass();
+      std::unique_ptr<CompositorRenderPass> pass = CreateTestRootRenderPass();
       gfx::Transform current_transform = starting_transform;
       for (int i = 0; i < tile_count; ++i) {
         // Every TileDrawQuad is at at different transform, so always need a new
@@ -626,7 +626,7 @@ class RendererPerfTest : public testing::Test {
         current_transform.ConcatTransform(transform_step);
       }
 
-      RenderPassList pass_list;
+      CompositorRenderPassList pass_list;
       pass_list.push_back(std::move(pass));
       DrawFrame(std::move(pass_list));
 
@@ -655,9 +655,9 @@ class RendererPerfTest : public testing::Test {
                                        const std::string& site,
                                        uint32_t year,
                                        size_t index) {
-    RenderPassList render_pass_list;
-    ASSERT_TRUE(
-        RenderPassListFromJSON(tag, site, year, index, &render_pass_list));
+    CompositorRenderPassList render_pass_list;
+    ASSERT_TRUE(CompositorRenderPassListFromJSON(tag, site, year, index,
+                                                 &render_pass_list));
     ASSERT_FALSE(render_pass_list.empty());
     // Root render pass damage needs to match the output surface size.
     auto& last_render_pass = *render_pass_list.back();
@@ -667,8 +667,8 @@ class RendererPerfTest : public testing::Test {
 
     timer_.Reset();
     do {
-      RenderPassList local_list;
-      RenderPass::CopyAll(render_pass_list, &local_list);
+      CompositorRenderPassList local_list;
+      CompositorRenderPass::CopyAllForTest(render_pass_list, &local_list);
       DrawFrame(std::move(local_list));
       client_.WaitForSwap();
       timer_.NextLap();

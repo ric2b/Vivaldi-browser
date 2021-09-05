@@ -21,6 +21,13 @@ class ASH_PUBLIC_EXPORT AmbientBackendModelObserver
   // Invoked when prev/current/next images changed.
   virtual void OnImagesChanged() {}
 
+  // Invoked when enough images are loaded in memory to start ambient mode.
+  virtual void OnImagesReady() {}
+
+  // Invoked when fetching images has failed and not enough images are present
+  // to start ambient mode.
+  virtual void OnImagesFailed() {}
+
   // Invoked when the weather info (condition icon or temperature) stored in the
   // model has been updated.
   virtual void OnWeatherInfoUpdated() {}

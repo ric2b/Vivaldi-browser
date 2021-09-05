@@ -71,7 +71,6 @@
 <translation id="7800304661137206267">La connexió està xifrada mitjançant <ph name="CIPHER" />, amb <ph name="MAC" /> per a l'autenticació de missatges i amb <ph name="KX" /> com a mecanisme d'intercanvi clau.</translation>
 <translation id="7834399512844817676">Normalment, <ph name="SITE" /> fa servir el xifratge per protegir la vostra informació. En aquesta ocasió, quan el Vivaldi ha provat de connectar-se a <ph name="SITE" />, el lloc web ha enviat unes credencials poc comunes i incorrectes. Pot ser que un atacant estigui provant de fer-se passar per <ph name="SITE" /> o que una pantalla d'inici de sessió a la xarxa Wi-Fi hagi interromput la connexió. En qualsevol cas, la vostra informació continua estant segura, perquè Vivaldi ha aturat la connexió abans no s'intercanviés cap dada.</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
-<translation id="8142868475871995937">Visiteu &lt;strong&gt;vivaldi://policy&lt;/strong&gt; per veure la llista d'URL inclosos a la llista negra i altres polítiques aplicades per l'administrador del sistema.</translation>
 <translation id="8150722005171944719">El fitxer de <ph name="URL" /> no es pot llegir. Pot ser que s'hagi eliminat, que s'hagi traslladat o que els permisos del fitxer n'impedeixin l'accés.</translation>
 <translation id="8225771182978767009">La persona que ha configurat l'ordinador ha bloquejat aquest lloc.</translation>
 <translation id="8289355894181816810">Si no esteu segur de què significa això, contacteu amb l'administrador de la xarxa.</translation>

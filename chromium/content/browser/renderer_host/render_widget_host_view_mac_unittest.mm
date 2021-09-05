@@ -27,6 +27,7 @@
 #import "content/app_shim_remote_cocoa/render_widget_host_view_cocoa.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/gpu/compositor_util.h"
+#include "content/browser/renderer_host/agent_scheduling_group_host.h"
 #include "content/browser/renderer_host/frame_token_message_queue.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/text_input_manager.h"
@@ -336,10 +337,12 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
   MOCK_METHOD0(Blur, void());
 
   ui::LatencyInfo lastWheelEventLatencyInfo;
-  static MockRenderWidgetHostImpl* Create(RenderWidgetHostDelegate* delegate,
-                                          RenderProcessHost* process,
-                                          int32_t routing_id) {
-    return new MockRenderWidgetHostImpl(delegate, process, routing_id);
+  static MockRenderWidgetHostImpl* Create(
+      RenderWidgetHostDelegate* delegate,
+      AgentSchedulingGroupHost& agent_scheduling_group_host,
+      int32_t routing_id) {
+    return new MockRenderWidgetHostImpl(delegate, agent_scheduling_group_host,
+                                        routing_id);
   }
 
   MockWidgetInputHandler* input_handler() { return &input_handler_; }
@@ -352,14 +355,24 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
   }
 
  private:
-  MockRenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
-                           RenderProcessHost* process,
-                           int32_t routing_id)
+  MockRenderWidgetHostImpl(
+      RenderWidgetHostDelegate* delegate,
+      AgentSchedulingGroupHost& agent_scheduling_group_host,
+      int32_t routing_id)
       : RenderWidgetHostImpl(delegate,
-                             process,
+                             agent_scheduling_group_host,
                              routing_id,
                              /*hidden=*/false,
                              std::make_unique<FrameTokenMessageQueue>()) {
+    mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> frame_widget_host;
+    auto frame_widget_host_receiver =
+        frame_widget_host.BindNewEndpointAndPassDedicatedReceiver();
+    mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
+    auto frame_widget_receiver =
+        frame_widget.BindNewEndpointAndPassDedicatedReceiver();
+    BindFrameWidgetInterfaces(std::move(frame_widget_host_receiver),
+                              frame_widget.Unbind());
+
     set_renderer_initialized(true);
     lastWheelEventLatencyInfo = ui::LatencyInfo();
 
@@ -480,8 +493,19 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
     process_host_ =
         std::make_unique<MockRenderProcessHost>(browser_context_.get());
     process_host_->Init();
+    agent_scheduling_group_host_ =
+        std::make_unique<AgentSchedulingGroupHost>(*process_host_);
     host_ = base::WrapUnique(MockRenderWidgetHostImpl::Create(
-        &delegate_, process_host_.get(), process_host_->GetNextRoutingID()));
+        &delegate_, *agent_scheduling_group_host_,
+        process_host_->GetNextRoutingID()));
+    mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> frame_widget_host;
+    auto frame_widget_host_receiver =
+        frame_widget_host.BindNewEndpointAndPassDedicatedReceiver();
+    mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
+    auto frame_widget_receiver =
+        frame_widget.BindNewEndpointAndPassDedicatedReceiver();
+    host_->BindFrameWidgetInterfaces(std::move(frame_widget_host_receiver),
+                                     frame_widget.Unbind());
     host_->set_owner_delegate(&mock_owner_delegate_);
     rwhv_mac_ = new RenderWidgetHostViewMac(host_.get());
     rwhv_cocoa_.reset([rwhv_mac_->GetInProcessNSView() retain]);
@@ -535,6 +559,7 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
 
   std::unique_ptr<TestBrowserContext> browser_context_;
   std::unique_ptr<MockRenderProcessHost> process_host_;
+  std::unique_ptr<AgentSchedulingGroupHost> agent_scheduling_group_host_;
   testing::NiceMock<MockRenderWidgetHostOwnerDelegate> mock_owner_delegate_;
   std::unique_ptr<MockRenderWidgetHostImpl> host_;
   RenderWidgetHostViewMac* rwhv_mac_ = nullptr;
@@ -1122,7 +1147,7 @@ TEST_F(RenderWidgetHostViewMacTest, PointerEventWithPenTypeSendAsTouch) {
   [rwhv_mac_->GetInProcessNSView() mouseEvent:event];
   base::RunLoop().RunUntilIdle();
   events = host_->GetAndResetDispatchedMessages();
-  ASSERT_EQ("TouchEnd GestureScrollEnd", GetMessageNames(events));
+  ASSERT_EQ("TouchEnd", GetMessageNames(events));
   EXPECT_EQ(blink::WebPointerProperties::PointerType::kPen,
             static_cast<const blink::WebTouchEvent&>(
                 events[0]->ToEvent()->Event()->Event())
@@ -1132,6 +1157,7 @@ TEST_F(RenderWidgetHostViewMacTest, PointerEventWithPenTypeSendAsTouch) {
   events.clear();
   base::RunLoop().RunUntilIdle();
   events = host_->GetAndResetDispatchedMessages();
+  ASSERT_EQ("GestureScrollEnd", GetMessageNames(events));
 
   event =
       MockMouseEventWithParams(kCGEventLeftMouseDown, {6, 9},
@@ -1300,10 +1326,11 @@ TEST_F(RenderWidgetHostViewMacTest,
   MockRenderProcessHost* process_host =
       new MockRenderProcessHost(&browser_context);
   process_host->Init();
+  AgentSchedulingGroupHost agent_scheduling_group_host(*process_host);
   MockRenderWidgetHostDelegate delegate;
   int32_t routing_id = process_host->GetNextRoutingID();
-  MockRenderWidgetHostImpl* host =
-      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
+  MockRenderWidgetHostImpl* host = MockRenderWidgetHostImpl::Create(
+      &delegate, agent_scheduling_group_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host);
   base::RunLoop().RunUntilIdle();
 
@@ -1360,10 +1387,11 @@ TEST_F(RenderWidgetHostViewMacTest,
   MockRenderProcessHost* process_host =
       new MockRenderProcessHost(&browser_context);
   process_host->Init();
+  AgentSchedulingGroupHost agent_scheduling_group_host(*process_host);
   MockRenderWidgetHostDelegate delegate;
   int32_t routing_id = process_host->GetNextRoutingID();
-  MockRenderWidgetHostImpl* host =
-      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
+  MockRenderWidgetHostImpl* host = MockRenderWidgetHostImpl::Create(
+      &delegate, agent_scheduling_group_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host);
   base::RunLoop().RunUntilIdle();
 
@@ -1417,9 +1445,10 @@ TEST_F(RenderWidgetHostViewMacTest,
       new MockRenderProcessHost(&browser_context);
   process_host->Init();
   MockRenderWidgetHostDelegate delegate;
+  AgentSchedulingGroupHost agent_scheduling_group_host(*process_host);
   int32_t routing_id = process_host->GetNextRoutingID();
-  MockRenderWidgetHostImpl* host =
-      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
+  MockRenderWidgetHostImpl* host = MockRenderWidgetHostImpl::Create(
+      &delegate, agent_scheduling_group_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host);
   base::RunLoop().RunUntilIdle();
 
@@ -1734,8 +1763,10 @@ class InputMethodMacTest : public RenderWidgetHostViewMacTest {
     child_process_host_ =
         new MockRenderProcessHost(child_browser_context_.get());
     child_process_host_->Init();
+    child_agent_scheduling_group_host_ =
+        std::make_unique<AgentSchedulingGroupHost>(*child_process_host_);
     child_widget_ = MockRenderWidgetHostImpl::Create(
-        &delegate_, child_process_host_,
+        &delegate_, *child_agent_scheduling_group_host_,
         child_process_host_->GetNextRoutingID());
     child_view_ = new TestRenderWidgetHostView(child_widget_);
     base::RunLoop().RunUntilIdle();
@@ -1773,6 +1804,7 @@ class InputMethodMacTest : public RenderWidgetHostViewMacTest {
 
  protected:
   MockRenderProcessHost* child_process_host_;
+  std::unique_ptr<AgentSchedulingGroupHost> child_agent_scheduling_group_host_;
   MockRenderWidgetHostImpl* child_widget_;
   TestRenderWidgetHostView* child_view_;
 
@@ -2179,26 +2211,23 @@ TEST_F(InputMethodMacTest, TouchBarTextSuggestionsInvalidSelection) {
 // This test verifies that in AutoResize mode a child-allocated
 // viz::LocalSurfaceId will be properly routed and stored in the parent.
 TEST_F(RenderWidgetHostViewMacTest, ChildAllocationAcceptedInParent) {
-  viz::LocalSurfaceId local_surface_id1(
-      rwhv_mac_->GetLocalSurfaceIdAllocation().local_surface_id());
+  viz::LocalSurfaceId local_surface_id1(rwhv_mac_->GetLocalSurfaceId());
   EXPECT_TRUE(local_surface_id1.is_valid());
 
   host_->SetAutoResize(true, gfx::Size(50, 50), gfx::Size(100, 100));
 
   viz::ChildLocalSurfaceIdAllocator child_allocator;
-  child_allocator.UpdateFromParent(rwhv_mac_->GetLocalSurfaceIdAllocation());
+  child_allocator.UpdateFromParent(rwhv_mac_->GetLocalSurfaceId());
   child_allocator.GenerateId();
   viz::LocalSurfaceId local_surface_id2 =
-      child_allocator.GetCurrentLocalSurfaceIdAllocation().local_surface_id();
+      child_allocator.GetCurrentLocalSurfaceId();
   cc::RenderFrameMetadata metadata;
   metadata.viewport_size_in_pixels = gfx::Size(75, 75);
-  metadata.local_surface_id_allocation =
-      child_allocator.GetCurrentLocalSurfaceIdAllocation();
+  metadata.local_surface_id = child_allocator.GetCurrentLocalSurfaceId();
   static_cast<RenderFrameMetadataProvider::Observer&>(*host_)
       .OnLocalSurfaceIdChanged(metadata);
 
-  viz::LocalSurfaceId local_surface_id3(
-      rwhv_mac_->GetLocalSurfaceIdAllocation().local_surface_id());
+  viz::LocalSurfaceId local_surface_id3(rwhv_mac_->GetLocalSurfaceId());
   EXPECT_NE(local_surface_id1, local_surface_id3);
   EXPECT_EQ(local_surface_id2, local_surface_id3);
 }
@@ -2206,28 +2235,25 @@ TEST_F(RenderWidgetHostViewMacTest, ChildAllocationAcceptedInParent) {
 // This test verifies that when the child and parent both allocate their own
 // viz::LocalSurfaceId the resulting conflict is resolved.
 TEST_F(RenderWidgetHostViewMacTest, ConflictingAllocationsResolve) {
-  viz::LocalSurfaceId local_surface_id1(
-      rwhv_mac_->GetLocalSurfaceIdAllocation().local_surface_id());
+  viz::LocalSurfaceId local_surface_id1(rwhv_mac_->GetLocalSurfaceId());
   EXPECT_TRUE(local_surface_id1.is_valid());
 
   host_->SetAutoResize(true, gfx::Size(50, 50), gfx::Size(100, 100));
   viz::ChildLocalSurfaceIdAllocator child_allocator;
-  child_allocator.UpdateFromParent(rwhv_mac_->GetLocalSurfaceIdAllocation());
+  child_allocator.UpdateFromParent(rwhv_mac_->GetLocalSurfaceId());
   child_allocator.GenerateId();
   viz::LocalSurfaceId local_surface_id2 =
-      child_allocator.GetCurrentLocalSurfaceIdAllocation().local_surface_id();
+      child_allocator.GetCurrentLocalSurfaceId();
   cc::RenderFrameMetadata metadata;
   metadata.viewport_size_in_pixels = gfx::Size(75, 75);
-  metadata.local_surface_id_allocation =
-      child_allocator.GetCurrentLocalSurfaceIdAllocation();
+  metadata.local_surface_id = child_allocator.GetCurrentLocalSurfaceId();
   static_cast<RenderFrameMetadataProvider::Observer&>(*host_)
       .OnLocalSurfaceIdChanged(metadata);
 
   // Cause a conflicting viz::LocalSurfaceId allocation
   BrowserCompositorMac* browser_compositor = rwhv_mac_->BrowserCompositor();
   EXPECT_TRUE(browser_compositor->ForceNewSurfaceForTesting());
-  viz::LocalSurfaceId local_surface_id3(
-      rwhv_mac_->GetLocalSurfaceIdAllocation().local_surface_id());
+  viz::LocalSurfaceId local_surface_id3(rwhv_mac_->GetLocalSurfaceId());
   EXPECT_NE(local_surface_id1, local_surface_id3);
 
   // RenderWidgetHostImpl has delayed auto-resize processing. Yield here to
@@ -2237,8 +2263,7 @@ TEST_F(RenderWidgetHostViewMacTest, ConflictingAllocationsResolve) {
                                                 run_loop.QuitClosure());
   run_loop.Run();
 
-  viz::LocalSurfaceId local_surface_id4(
-      rwhv_mac_->GetLocalSurfaceIdAllocation().local_surface_id());
+  viz::LocalSurfaceId local_surface_id4(rwhv_mac_->GetLocalSurfaceId());
   EXPECT_NE(local_surface_id1, local_surface_id4);
   EXPECT_NE(local_surface_id2, local_surface_id4);
   viz::LocalSurfaceId merged_local_surface_id(

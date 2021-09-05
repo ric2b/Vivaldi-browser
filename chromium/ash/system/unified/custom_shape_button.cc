@@ -5,7 +5,6 @@
 #include "ash/system/unified/custom_shape_button.h"
 
 #include "ash/style/ash_color_provider.h"
-#include "ash/style/default_color_constants.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/unified/unified_system_tray_view.h"
 #include "ui/compositor/paint_recorder.h"
@@ -59,15 +58,12 @@ std::unique_ptr<views::InkDropRipple> CustomShapeButton::CreateInkDropRipple()
     const {
   return TrayPopupUtils::CreateInkDropRipple(
       TrayPopupInkDropStyle::FILL_BOUNDS, this,
-      GetInkDropCenterBasedOnLastEvent(),
-      UnifiedSystemTrayView::GetBackgroundColor());
+      GetInkDropCenterBasedOnLastEvent());
 }
 
 std::unique_ptr<views::InkDropHighlight>
 CustomShapeButton::CreateInkDropHighlight() const {
-  return TrayPopupUtils::CreateInkDropHighlight(
-      TrayPopupInkDropStyle::FILL_BOUNDS, this,
-      UnifiedSystemTrayView::GetBackgroundColor());
+  return TrayPopupUtils::CreateInkDropHighlight(this);
 }
 
 const char* CustomShapeButton::GetClassName() const {
@@ -77,10 +73,8 @@ const char* CustomShapeButton::GetClassName() const {
 void CustomShapeButton::PaintCustomShapePath(gfx::Canvas* canvas) {
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
-  const SkColor button_color =
-      AshColorProvider::Get()->DeprecatedGetControlsLayerColor(
-          AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive,
-          kUnifiedMenuButtonColor);
+  const SkColor button_color = AshColorProvider::Get()->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive);
   flags.setColor(GetEnabled()
                      ? button_color
                      : AshColorProvider::GetDisabledColor(button_color));

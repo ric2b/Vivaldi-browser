@@ -31,7 +31,10 @@ const std::string kPartnersList =
 
 RuleServiceImpl::RuleServiceImpl(content::BrowserContext* context)
     : context_(context) {}
-RuleServiceImpl::~RuleServiceImpl() = default;
+RuleServiceImpl::~RuleServiceImpl() {
+  if (delegate_)
+    delegate_->RuleServiceDeleted();
+}
 
 void RuleServiceImpl::AddObserver(Observer* observer) {
   observers_.AddObserver(observer);
@@ -53,6 +56,11 @@ void RuleServiceImpl::Load() {
   // Unretained is safe because we own the sources store
   state_store_->Load(
       base::BindOnce(&RuleServiceImpl::OnStateLoaded, base::Unretained(this)));
+}
+
+void RuleServiceImpl::SetDelegate(Delegate* delegate) {
+  DCHECK(!delegate_);
+  delegate_ = delegate;
 }
 
 bool RuleServiceImpl::IsLoaded() const {
@@ -164,6 +172,7 @@ void RuleServiceImpl::OnStateLoaded(
 
   known_sources_handler_.emplace(
       this, load_result->storage_version, load_result->known_sources,
+      std::move(load_result->deleted_presets),
       base::Bind(&RuleServiceStorage::ScheduleSave,
                  base::Unretained(&state_store_.value())));
 
@@ -347,15 +356,11 @@ void RuleServiceImpl::RemoveAllExceptions(RuleGroup group,
 
   state_store_->ScheduleSave();
 }
-std::vector<std::string> RuleServiceImpl::GetExceptions(
+
+const std::set<std::string>& RuleServiceImpl::GetExceptions(
     RuleGroup group,
     ExceptionsList list) const {
-  std::vector<std::string> result;
-  for (const auto& origin : exceptions_[static_cast<size_t>(group)][list]) {
-    result.push_back(origin);
-  }
-
-  return result;
+  return exceptions_[static_cast<size_t>(group)][list];
 }
 
 bool RuleServiceImpl::IsExemptOfFiltering(RuleGroup group,

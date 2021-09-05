@@ -22,7 +22,6 @@
 #include "ios/chrome/browser/chrome_switches.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/ios_chrome_main_parts.h"
-#include "ios/chrome/browser/passwords/password_manager_features.h"
 #import "ios/chrome/browser/reading_list/offline_page_tab_helper.h"
 #import "ios/chrome/browser/safe_browsing/safe_browsing_blocking_page.h"
 #import "ios/chrome/browser/safe_browsing/safe_browsing_error.h"
@@ -290,10 +289,6 @@ NSString* ChromeWebClient::GetDocumentStartScriptForMainFrame(
   NSMutableArray* scripts = [NSMutableArray array];
   [scripts addObject:GetPageScript(@"chrome_bundle_main_frame")];
 
-  if (base::FeatureList::IsEnabled(features::kCredentialManager)) {
-    [scripts addObject:GetPageScript(@"credential_manager")];
-  }
-
   return [scripts componentsJoinedByString:@";"];
 }
 
@@ -317,8 +312,10 @@ void ChromeWebClient::AllowCertificateError(
 
 bool ChromeWebClient::IsLegacyTLSAllowedForHost(web::WebState* web_state,
                                                 const std::string& hostname) {
-  return LegacyTLSTabAllowList::FromWebState(web_state)->IsDomainAllowed(
-      hostname);
+  auto* allowlist = LegacyTLSTabAllowList::FromWebState(web_state);
+  if (!allowlist)
+    return false;
+  return allowlist->IsDomainAllowed(hostname);
 }
 
 void ChromeWebClient::PrepareErrorPage(

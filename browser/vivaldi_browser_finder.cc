@@ -8,10 +8,6 @@
 #include "extensions/buildflags/buildflags.h"
 #include "ui/vivaldi_browser_window.h"
 
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "chrome/browser/extensions/extension_tab_util.h"
-#endif
-
 using content::WebContents;
 
 namespace vivaldi {
@@ -19,12 +15,16 @@ namespace vivaldi {
 Browser* FindBrowserForEmbedderWebContents(const WebContents* web_contents) {
   if (!web_contents)
     return nullptr;
+  VivaldiBrowserWindow* window = FindWindowForEmbedderWebContents(web_contents);
+  return window ? window->browser() : nullptr;
+}
+
+VivaldiBrowserWindow* FindWindowForEmbedderWebContents(
+    const content::WebContents* web_contents) {
   for (auto* browser : *BrowserList::GetInstance()) {
-    // Devtools windows are not vivaldi windows, so exclude those.
-    if (browser->is_vivaldi() &&
-        static_cast<VivaldiBrowserWindow*>(browser->window())->web_contents() ==
-            web_contents) {
-      return browser;
+    VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(browser);
+    if (window && window->web_contents() == web_contents) {
+      return window;
     }
   }
   return nullptr;
@@ -55,15 +55,12 @@ Browser* FindBrowserWithWebContents(WebContents* web_contents) {
 #endif
 }
 
-Browser* FindBrowserByWindowId(int window_id) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
+Browser* FindBrowserByWindowId(SessionID::id_type window_id) {
   for (Browser* browser : *BrowserList::GetInstance()) {
-    if (extensions::ExtensionTabUtil::GetWindowId(browser) == window_id &&
-        browser->window()) {
-      return browser;
+    if (browser->session_id().id() == window_id) {
+      return browser->window() ? browser : nullptr;
     }
   }
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
   return nullptr;
 }
 

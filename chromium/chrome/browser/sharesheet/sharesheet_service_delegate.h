@@ -7,11 +7,13 @@
 
 #include <memory>
 
+#include "base/callback.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/sharesheet/sharesheet_controller.h"
 #include "chrome/browser/sharesheet/sharesheet_types.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 
+class Profile;
 class SharesheetBubbleView;
 
 namespace views {
@@ -31,9 +33,6 @@ class SharesheetService;
 class SharesheetServiceDelegate : public SharesheetController {
  public:
   SharesheetServiceDelegate(uint32_t id,
-                            views::View* bubble_anchor_view,
-                            SharesheetService* sharesheet_service);
-  SharesheetServiceDelegate(uint32_t id,
                             content::WebContents* web_contents,
                             SharesheetService* sharesheet_service);
   ~SharesheetServiceDelegate() override;
@@ -42,7 +41,8 @@ class SharesheetServiceDelegate : public SharesheetController {
       delete;
 
   void ShowBubble(std::vector<TargetInfo> targets,
-                  apps::mojom::IntentPtr intent);
+                  apps::mojom::IntentPtr intent,
+                  sharesheet::CloseCallback close_callback);
   void OnBubbleClosed(const base::string16& active_action);
   void OnTargetSelected(const base::string16& target_name,
                         const TargetType type,
@@ -52,6 +52,7 @@ class SharesheetServiceDelegate : public SharesheetController {
 
   // SharesheetController overrides
   uint32_t GetId() override;
+  Profile* GetProfile() override;
   void SetSharesheetSize(const int& width, const int& height) override;
   void CloseSharesheet() override;
 

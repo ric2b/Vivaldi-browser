@@ -25,6 +25,7 @@ class GURL;
 namespace weblayer {
 class CookieManager;
 class DownloadDelegate;
+class PrerenderController;
 
 // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.weblayer_private
 // GENERATED_JAVA_CLASS_NAME_OVERRIDE: ImplBrowsingDataType
@@ -45,10 +46,9 @@ enum class SettingType {
 
 class Profile {
  public:
-  // Pass an empty |name| for an in-memory profile.
-  // Otherwise, |name| should contain only alphanumeric characters and
-  // underscore.
-  static std::unique_ptr<Profile> Create(const std::string& name);
+  // Creates a new profile.
+  static std::unique_ptr<Profile> Create(const std::string& name,
+                                         bool is_incognito);
 
   // Delete all profile's data from disk. If there are any existing usage
   // of this profile, return |profile| immediately and |done_callback| will not
@@ -76,6 +76,9 @@ class Profile {
 
   // Gets the cookie manager for this profile.
   virtual CookieManager* GetCookieManager() = 0;
+
+  // Gets the prerender controller for this profile.
+  virtual PrerenderController* GetPrerenderController() = 0;
 
   // Asynchronously fetches the set of known Browser persistence-ids. See
   // Browser::PersistenceInfo for more details on persistence-ids.

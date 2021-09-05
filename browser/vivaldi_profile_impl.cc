@@ -6,8 +6,11 @@
 #include "base/command_line.h"
 #include "calendar/calendar_model_loaded_observer.h"
 #include "calendar/calendar_service_factory.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/language/core/browser/pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/translate/core/browser/translate_language_list.h"
 #include "components/translate/core/browser/translate_pref_names.h"
@@ -30,12 +33,28 @@
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #endif
 
+namespace {
+class RuleServiceDelegate : public adblock_filter::RuleService::Delegate {
+ public:
+  RuleServiceDelegate() = default;
+  ~RuleServiceDelegate() override = default;
+  std::string GetLocaleForDefaultLists() override {
+    PrefService* pref_service = g_browser_process->local_state();
+    if (pref_service->HasPrefPath(language::prefs::kApplicationLocale))
+      return pref_service->GetString(language::prefs::kApplicationLocale);
+    return g_browser_process->GetApplicationLocale();
+  }
+  void RuleServiceDeleted() override { delete this; }
+};
+}  // namespace
+
 namespace vivaldi {
 void VivaldiInitProfile(Profile* profile) {
   PrefService* pref_service = profile->GetPrefs();
   pref_service->SetBoolean(prefs::kOfferTranslateEnabled, false);
 
-  adblock_filter::RuleServiceFactory::GetForBrowserContext(profile);
+  adblock_filter::RuleServiceFactory::GetForBrowserContext(profile)
+      ->SetDelegate(new RuleServiceDelegate);
 
   vivaldi::NotesModel* notes_model =
       vivaldi::NotesModelFactory::GetForBrowserContext(profile);

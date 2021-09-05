@@ -15,8 +15,9 @@
 #include "chrome/browser/chromeos/arc/enterprise/cert_store/arc_cert_store_bridge.h"
 #include "chrome/browser/chromeos/arc/session/arc_service_launcher.h"
 #include "chrome/browser/chromeos/login/test/local_policy_test_server_mixin.h"
-#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_manager.h"
-#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_manager_user_service.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/extension_key_permissions_service.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/extension_key_permissions_service_factory.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_service_factory.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys.h"
 #include "chrome/browser/chromeos/policy/user_policy_test_helper.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -204,19 +205,21 @@ class ArcCertStoreBridgeTest : public MixinBasedInProcessBrowserTest {
   void RegisterCorporateKeys() {
     ASSERT_NO_FATAL_FAILURE(ImportCerts());
 
-    chromeos::platform_keys::KeyPermissionsManager* const permissions =
-        chromeos::platform_keys::KeyPermissionsManagerUserServiceFactory::
-            GetForBrowserContext(browser()->profile())
-                ->key_permissions_manager();
+    chromeos::platform_keys::KeyPermissionsService* const
+        key_permissions_service =
+            chromeos::platform_keys::KeyPermissionsServiceFactory::
+                GetForBrowserContext(browser()->profile());
 
-    ASSERT_TRUE(permissions);
+    ASSERT_TRUE(key_permissions_service);
 
     {
       base::RunLoop run_loop;
-      permissions->GetPermissionsForExtension(
-          kFakeExtensionId,
-          base::Bind(&ArcCertStoreBridgeTest::GotPermissionsForExtension,
-                     base::Unretained(this), run_loop.QuitClosure()));
+      chromeos::platform_keys::ExtensionKeyPermissionsServiceFactory::
+          GetForBrowserContextAndExtension(
+              base::BindOnce(
+                  &ArcCertStoreBridgeTest::GotPermissionsForExtension,
+                  base::Unretained(this), run_loop.QuitClosure()),
+              browser()->profile(), kFakeExtensionId, key_permissions_service);
       run_loop.Run();
     }
   }
@@ -255,18 +258,32 @@ class ArcCertStoreBridgeTest : public MixinBasedInProcessBrowserTest {
   net::ScopedCERTCertificate client_cert2_;
 
  private:
+  void OnKeyRegisteredForCorporateUsage(
+      std::unique_ptr<chromeos::platform_keys::ExtensionKeyPermissionsService>
+          extension_key_permissions_service,
+      const base::Closure& done_callback,
+      chromeos::platform_keys::Status status) {
+    ASSERT_EQ(status, chromeos::platform_keys::Status::kSuccess);
+    done_callback.Run();
+  }
+
   // Register only client_cert1_ for corporate usage to test that
   // client_cert2_ is not allowed.
   void GotPermissionsForExtension(
       const base::Closure& done_callback,
-      std::unique_ptr<chromeos::platform_keys::KeyPermissionsManager::
-                          PermissionsForExtension> permissions_for_ext) {
+      std::unique_ptr<chromeos::platform_keys::ExtensionKeyPermissionsService>
+          extension_key_permissions_service) {
+    auto* extension_key_permissions_service_unowned =
+        extension_key_permissions_service.get();
     std::string client_cert1_spki(
         client_cert1_->derPublicKey.data,
         client_cert1_->derPublicKey.data + client_cert1_->derPublicKey.len);
-    permissions_for_ext->RegisterKeyForCorporateUsage(
-        client_cert1_spki, {chromeos::platform_keys::TokenId::kUser});
-    done_callback.Run();
+    extension_key_permissions_service_unowned->RegisterKeyForCorporateUsage(
+        client_cert1_spki,
+        base::BindOnce(
+            &ArcCertStoreBridgeTest::OnKeyRegisteredForCorporateUsage,
+            base::Unretained(this),
+            std::move(extension_key_permissions_service), done_callback));
   }
 
   void SetUpTestClientCerts(const base::Closure& done_callback,

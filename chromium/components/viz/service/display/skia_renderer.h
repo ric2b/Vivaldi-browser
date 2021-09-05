@@ -5,30 +5,25 @@
 #ifndef COMPONENTS_VIZ_SERVICE_DISPLAY_SKIA_RENDERER_H_
 #define COMPONENTS_VIZ_SERVICE_DISPLAY_SKIA_RENDERER_H_
 
-#include <map>
 #include <memory>
 #include <tuple>
 #include <vector>
 
+#include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "cc/cc_export.h"
 #include "components/viz/service/display/direct_renderer.h"
 #include "components/viz/service/display/sync_query_collection.h"
 #include "components/viz/service/viz_service_export.h"
-#include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "ui/latency/latency_info.h"
 
 class SkColorFilter;
-class SkNWayCanvas;
-class SkPictureRecorder;
 class SkRuntimeEffect;
 
-namespace gpu {
-struct Capabilities;
-}
-
 namespace viz {
+class AggregatedRenderPassDrawQuad;
 class DebugBorderDrawQuad;
 class PictureDrawQuad;
 class SkiaOutputSurface;
@@ -42,22 +37,20 @@ class YUVVideoDrawQuad;
 // SkColorSpace.
 class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
  public:
-  // Different draw modes that are supported by SkiaRenderer right now.
-  enum DrawMode { DDL, SKPRECORD };
-
   // TODO(penghuang): Remove skia_output_surface when DDL is used everywhere.
   SkiaRenderer(const RendererSettings* settings,
                const DebugRendererSettings* debug_settings,
                OutputSurface* output_surface,
                DisplayResourceProvider* resource_provider,
                OverlayProcessorInterface* overlay_processor,
-               SkiaOutputSurface* skia_output_surface,
-               DrawMode mode);
+               SkiaOutputSurface* skia_output_surface);
   ~SkiaRenderer() override;
 
   void SwapBuffers(SwapFrameData swap_frame_data) override;
   void SwapBuffersSkipped() override;
   void SwapBuffersComplete() override;
+  void DidReceiveReleasedOverlays(
+      const std::vector<gpu::Mailbox>& released_overlays) override;
 
   void SetDisablePictureQuadImageFiltering(bool disable) {
     disable_picture_quad_image_filtering_ = disable;
@@ -66,18 +59,19 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
  protected:
   bool CanPartialSwap() override;
   void UpdateRenderPassTextures(
-      const RenderPassList& render_passes_in_draw_order,
-      const base::flat_map<RenderPassId, RenderPassRequirements>&
+      const AggregatedRenderPassList& render_passes_in_draw_order,
+      const base::flat_map<AggregatedRenderPassId, RenderPassRequirements>&
           render_passes_in_frame) override;
   void AllocateRenderPassResourceIfNeeded(
-      const RenderPassId& render_pass_id,
+      const AggregatedRenderPassId& render_pass_id,
       const RenderPassRequirements& requirements) override;
   bool IsRenderPassResourceAllocated(
-      const RenderPassId& render_pass_id) const override;
+      const AggregatedRenderPassId& render_pass_id) const override;
   gfx::Size GetRenderPassBackingPixelSize(
-      const RenderPassId& render_pass_id) override;
+      const AggregatedRenderPassId& render_pass_id) override;
   void BindFramebufferToOutputSurface() override;
-  void BindFramebufferToTexture(const RenderPassId render_pass_id) override;
+  void BindFramebufferToTexture(
+      const AggregatedRenderPassId render_pass_id) override;
   void SetScissorTestRect(const gfx::Rect& scissor_rect) override;
   void PrepareSurfaceForPass(SurfaceInitializationMode initialization_mode,
                              const gfx::Rect& render_pass_scissor) override;
@@ -133,7 +127,7 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
                                          const gfx::Rect* scissor_rect,
                                          const DrawQuad* quad,
                                          const gfx::QuadF* draw_region) const;
-  DrawRPDQParams CalculateRPDQParams(const RenderPassDrawQuad* quad,
+  DrawRPDQParams CalculateRPDQParams(const AggregatedRenderPassDrawQuad* quad,
                                      DrawQuadParams* params);
   // Modifies |params| and |rpdq_params| to apply correctly when drawing the
   // RenderPass directly via |bypass_quad|.
@@ -190,7 +184,7 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   // either are not textures (debug, picture), or it's very likely
   // the texture will have advanced paint effects (rpdq). Additionally, they do
   // not support being drawn directly for a pass-through RenderPass.
-  void DrawRenderPassQuad(const RenderPassDrawQuad* quad,
+  void DrawRenderPassQuad(const AggregatedRenderPassDrawQuad* quad,
                           DrawQuadParams* params);
   void DrawDebugBorderQuad(const DebugBorderDrawQuad* quad,
                            DrawQuadParams* params);
@@ -224,13 +218,8 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
 
   // skia_renderer can draw most single-quad passes directly, regardless of
   // blend mode or image filtering.
-  const DrawQuad* CanPassBeDrawnDirectly(const RenderPass* pass) override;
-
-  // Get corresponding GrContext. Returns nullptr when there is no GrContext.
-  // TODO(weiliangc): This currently only returns nullptr. If SKPRecord isn't
-  // going to use this later, it should be removed.
-  GrDirectContext* GetGrContext();
-  bool is_using_ddl() const { return draw_mode_ == DrawMode::DDL; }
+  const DrawQuad* CanPassBeDrawnDirectly(
+      const AggregatedRenderPass* pass) override;
 
   // Get a color filter that converts from |src| color space to |dst| color
   // space using a shader constructed from gfx::ColorTransform.  The color
@@ -244,33 +233,20 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
       float resource_multiplier = 1.0f);
   // Returns the color filter that should be applied to the current canvas.
   sk_sp<SkColorFilter> GetContentColorFilter();
+
+#if defined(OS_APPLE)
+  void PrepareRenderPassOverlay(CALayerOverlay* overlay);
+#endif
+
   // A map from RenderPass id to the texture used to draw the RenderPass from.
   struct RenderPassBacking {
-    sk_sp<SkSurface> render_pass_surface;
     gfx::Size size;
     bool generate_mipmap;
     gfx::ColorSpace color_space;
     ResourceFormat format;
-
-    // Specific for SkPictureRecorder.
-    std::unique_ptr<SkPictureRecorder> recorder;
-    sk_sp<SkPicture> picture;
-
-    RenderPassBacking(GrDirectContext* gr_context,
-                      const gpu::Capabilities& caps,
-                      const gfx::Size& size,
-                      bool generate_mipmap,
-                      const gfx::ColorSpace& color_space);
-    RenderPassBacking(const gfx::Size& size,
-                      bool generate_mipmap,
-                      const gfx::ColorSpace& color_space);
-    ~RenderPassBacking();
-    RenderPassBacking(RenderPassBacking&&);
-    RenderPassBacking& operator=(RenderPassBacking&&);
   };
-  base::flat_map<RenderPassId, RenderPassBacking> render_pass_backings_;
-
-  const DrawMode draw_mode_;
+  base::flat_map<AggregatedRenderPassId, RenderPassBacking>
+      render_pass_backings_;
 
   // Interface used for drawing. Common among different draw modes.
   sk_sp<SkSurface> root_surface_;
@@ -283,11 +259,6 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   bool disable_picture_quad_image_filtering_ = false;
   bool is_scissor_enabled_ = false;
   gfx::Rect scissor_rect_;
-
-  // Specific for overdraw.
-  sk_sp<SkSurface> overdraw_surface_;
-  std::unique_ptr<SkCanvas> overdraw_canvas_;
-  std::unique_ptr<SkNWayCanvas> nway_canvas_;
 
   // TODO(crbug.com/920344): Use partial swap for SkDDL.
   bool use_swap_with_bounds_ = false;
@@ -329,20 +300,35 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   base::circular_deque<
       std::vector<DisplayResourceProvider::ScopedReadLockSharedImage>>
       pending_overlay_locks_;
+
   // Locks for overlays have been committed. |pending_overlay_locks_| will
   // be moved to |committed_overlay_locks_| after SwapBuffers() completed.
   std::vector<DisplayResourceProvider::ScopedReadLockSharedImage>
       committed_overlay_locks_;
 
-  // Specific for SkPRecord.
-  std::unique_ptr<SkPictureRecorder> root_recorder_;
-  sk_sp<SkPicture> root_picture_;
-  sk_sp<SkPicture>* current_picture_;
-  SkPictureRecorder* current_recorder_;
-  ContextProvider* context_provider_ = nullptr;
-  base::Optional<SyncQueryCollection> sync_queries_;
+#if defined(OS_APPLE)
+  class ScopedReadLockComparator {
+   public:
+    using is_transparent = void;
+    bool operator()(
+        const DisplayResourceProvider::ScopedReadLockSharedImage& lhs,
+        const DisplayResourceProvider::ScopedReadLockSharedImage& rhs) const;
+    bool operator()(
+        const DisplayResourceProvider::ScopedReadLockSharedImage& lhs,
+        const gpu::Mailbox& rhs) const;
+    bool operator()(
+        const gpu::Mailbox& lhs,
+        const DisplayResourceProvider::ScopedReadLockSharedImage& rhs) const;
+  };
+  // a set for locks of overlays which are waiting for releasing.
+  // The set is using lock.mailbox() as the unique key.
+  base::flat_set<DisplayResourceProvider::ScopedReadLockSharedImage,
+                 ScopedReadLockComparator>
+      awaiting_release_overlay_locks_;
+#endif  // defined(OS_APPLE)
 
-  std::map<gfx::ColorSpace, std::map<gfx::ColorSpace, sk_sp<SkRuntimeEffect>>>
+  base::flat_map<gfx::ColorSpace,
+                 base::flat_map<gfx::ColorSpace, sk_sp<SkRuntimeEffect>>>
       color_filter_cache_;
 
   DISALLOW_COPY_AND_ASSIGN(SkiaRenderer);

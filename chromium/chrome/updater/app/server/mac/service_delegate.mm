@@ -226,11 +226,29 @@
     VLOG(0) << "performControlTasks complete.";
     if (reply)
       reply();
+
+    _appServer->TaskCompleted();
   }));
 
+  _appServer->TaskStarted();
   _callbackRunner->PostTask(
       FROM_HERE,
       base::BindOnce(&updater::ControlService::Run, _service, std::move(cb)));
+}
+
+- (void)performInitializeUpdateServiceWithReply:(void (^)(void))reply {
+  auto cb = base::BindOnce(base::RetainBlock(^(void) {
+    if (reply)
+      reply();
+
+    _appServer->TaskCompleted();
+  }));
+
+  _appServer->TaskStarted();
+  _callbackRunner->PostTask(
+      FROM_HERE,
+      base::BindOnce(&updater::ControlService::InitializeUpdateService,
+                     _service, std::move(cb)));
 }
 
 @end
@@ -282,6 +300,7 @@
                  appServer:(scoped_refptr<updater::AppServerMac>)appServer {
   if (self = [super init]) {
     _service = service;
+    _appServer = appServer;
     _callbackRunner = base::SequencedTaskRunnerHandle::Get();
   }
   return self;

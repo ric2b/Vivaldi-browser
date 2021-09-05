@@ -77,6 +77,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.ScalableTimeout;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.password_check.PasswordCheckProperties.HeaderProperties;
@@ -102,26 +103,26 @@ import java.util.concurrent.atomic.AtomicInteger;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class PasswordCheckViewTest {
-    private static final CompromisedCredential ANA =
-            new CompromisedCredential("https://some-url.com/signin",
-                    new GURL("https://some-url.com/"), "Ana", "some-url.com", "Ana", "password",
-                    "https://some-url.com/.well-known/change-password", "", 1, true, false, false);
-    private static final CompromisedCredential PHISHED =
-            new CompromisedCredential("http://example.com/signin", new GURL("http://example.com/"),
-                    "", "http://example.com", "(No username)", "DoSomething",
-                    "http://example.com/.well-known/change-password", "", 1, false, true, false);
+    private static final CompromisedCredential ANA = new CompromisedCredential(
+            "https://some-url.com/signin", new GURL("https://some-url.com/"), "Ana", "some-url.com",
+            "Ana", "password", "https://some-url.com/.well-known/change-password", "", 1, true,
+            false, false, false);
+    private static final CompromisedCredential PHISHED = new CompromisedCredential(
+            "http://example.com/signin", new GURL("http://example.com/"), "", "http://example.com",
+            "(No username)", "DoSomething", "http://example.com/.well-known/change-password", "", 1,
+            false, true, false, false);
     private static final CompromisedCredential LEAKED =
             new CompromisedCredential("https://some-other-url.com/signin",
                     new GURL("https://some-other-url.com/"), "AZiegler", "some-other-url.com",
-                    "AZiegler", "N0M3rcy", "", "com.other.package", 1, true, false, false);
+                    "AZiegler", "N0M3rcy", "", "com.other.package", 1, true, false, false, false);
     private static final CompromisedCredential LEAKED_AND_PHISHED =
             new CompromisedCredential("https://super-important.com/signin",
                     new GURL("https://super-important.com/"), "HSong", "super-important.com",
-                    "HSong", "N3rfTh1s", "", "com.important.super", 1, true, true, false);
-    private static final CompromisedCredential SCRIPTED =
-            new CompromisedCredential("https://script.com/signin", new GURL("https://script.com/"),
-                    "Charlie", "script.com", "Charlie", "secret",
-                    "https://script.com/.well-known/change-password", "", 1, true, false, true);
+                    "HSong", "N3rfTh1s", "", "com.important.super", 1, true, true, false, false);
+    private static final CompromisedCredential SCRIPTED = new CompromisedCredential(
+            "https://script.com/signin", new GURL("https://script.com/"), "Charlie", "script.com",
+            "Charlie", "secret", "https://script.com/.well-known/change-password", "", 1, true,
+            false, true, true);
 
     private static final int LEAKS_COUNT = 2;
 
@@ -197,6 +198,7 @@ public class PasswordCheckViewTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "https://crbug.com/1133604")
     public void testStatusIllustrationWarning() {
         Long checkTimestamp = System.currentTimeMillis();
         runOnUiThreadBlocking(
@@ -738,7 +740,7 @@ public class PasswordCheckViewTest {
     }
 
     private MVCListAdapter.ListItem buildCredentialItem(CompromisedCredential credential) {
-        return new MVCListAdapter.ListItem(credential.hasScript()
+        return new MVCListAdapter.ListItem(credential.hasAutoChangeButton()
                         ? PasswordCheckProperties.ItemType.COMPROMISED_CREDENTIAL_WITH_SCRIPT
                         : PasswordCheckProperties.ItemType.COMPROMISED_CREDENTIAL,
                 new PropertyModel

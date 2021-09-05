@@ -12,12 +12,13 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind_test_util.h"
+#include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/task_environment.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/sync/base/model_type.h"
 #include "components/sync/base/time.h"
-#include "components/sync/invalidations/switches.h"
 #include "components/sync/model/data_batch.h"
 #include "components/sync/model/data_type_activation_request.h"
 #include "components/sync/model/data_type_error_handler_mock.h"
@@ -40,6 +41,7 @@ using sync_pb::DeviceInfoSpecifics;
 using sync_pb::EntitySpecifics;
 using sync_pb::ModelTypeState;
 using testing::_;
+using testing::AllOf;
 using testing::IsEmpty;
 using testing::Matcher;
 using testing::NotNull;
@@ -93,6 +95,15 @@ MATCHER_P(ModelEqualsSpecifics, expected_specifics, "") {
     }
   }
 
+  ModelTypeSet expected_data_types;
+  for (const int field_number :
+       expected_specifics.invalidation_fields().interested_data_type_ids()) {
+    expected_data_types.Put(GetModelTypeFromSpecificsFieldNumber(field_number));
+  }
+  if (expected_data_types != arg.interested_data_types()) {
+    return false;
+  }
+
   // Note that we ignore the device name here to avoid having to inject the
   // local device's.
   return expected_specifics.cache_guid() == arg.guid() &&
@@ -136,6 +147,15 @@ MATCHER(HasLastUpdatedAboutNow, "") {
 MATCHER(HasInstanceIdToken, "") {
   const sync_pb::DeviceInfoSpecifics& specifics = arg.device_info();
   if (specifics.invalidation_fields().instance_id_token().empty()) {
+    *result_listener << "which is empty";
+    return false;
+  }
+  return true;
+}
+
+MATCHER(HasAnyInterestedDataTypes, "") {
+  const sync_pb::DeviceInfoSpecifics& specifics = arg.device_info();
+  if (specifics.invalidation_fields().interested_data_type_ids().empty()) {
     *result_listener << "which is empty";
     return false;
   }
@@ -213,10 +233,11 @@ sync_pb::SharingSpecificFields::EnabledFeatures SharingEnabledFeaturesForSuffix(
 }
 
 std::string SyncInvalidationsInstanceIdTokenForSuffix(int suffix) {
-  if (base::FeatureList::IsEnabled(switches::kSubscribeForSyncInvalidations)) {
-    return base::StringPrintf("instance id token %d", suffix);
-  }
-  return std::string();
+  return base::StringPrintf("instance id token %d", suffix);
+}
+
+ModelTypeSet SyncInvalidationsInterestedDataTypes() {
+  return ModelTypeSet(BOOKMARKS);
 }
 
 DataTypeActivationRequest TestDataTypeActivationRequest(SyncMode sync_mode) {
@@ -256,12 +277,13 @@ DeviceInfoSpecifics CreateSpecifics(
   specifics.mutable_sharing_fields()->add_enabled_features(
       SharingEnabledFeaturesForSuffix(suffix));
 
-  const std::string sync_invalidations_instance_id_token =
-      SyncInvalidationsInstanceIdTokenForSuffix(suffix);
-  if (!sync_invalidations_instance_id_token.empty()) {
-    specifics.mutable_invalidation_fields()->set_instance_id_token(
-        sync_invalidations_instance_id_token);
+  specifics.mutable_invalidation_fields()->set_instance_id_token(
+      SyncInvalidationsInstanceIdTokenForSuffix(suffix));
+  for (const ModelType type : SyncInvalidationsInterestedDataTypes()) {
+    specifics.mutable_invalidation_fields()->add_interested_data_type_ids(
+        GetSpecificsFieldNumberFromModelType(type));
   }
+
   return specifics;
 }
 
@@ -334,7 +356,8 @@ class TestLocalDeviceInfoProvider : public MutableLocalDeviceInfoProvider {
              SharingSenderIdP256dhForSuffix(kLocalSuffix),
              SharingSenderIdAuthSecretForSuffix(kLocalSuffix)},
             sharing_enabled_features),
-        SyncInvalidationsInstanceIdTokenForSuffix(kLocalSuffix));
+        SyncInvalidationsInstanceIdTokenForSuffix(kLocalSuffix),
+        SyncInvalidationsInterestedDataTypes());
   }
 
   void Clear() override { local_device_info_.reset(); }
@@ -469,7 +492,9 @@ class DeviceInfoSyncBridgeTest : public testing::Test,
 
   void ForcePulse() { bridge()->ForcePulseForTest(); }
 
-  void RefreshLocalDeviceInfo() { bridge()->RefreshLocalDeviceInfo(); }
+  void RefreshLocalDeviceInfo() {
+    bridge()->RefreshLocalDeviceInfo(base::OnceClosure());
+  }
 
   void CommitToStoreAndWait(std::unique_ptr<WriteBatch> batch) {
     base::RunLoop loop;
@@ -1262,12 +1287,30 @@ TEST_F(DeviceInfoSyncBridgeTest, RefreshLocalDeviceNameForSyncModeToggle) {
 }
 
 TEST_F(DeviceInfoSyncBridgeTest, ShouldSendInvalidationFields) {
-  base::test::ScopedFeatureList override_features;
-  override_features.InitAndEnableFeature(
-      switches::kSubscribeForSyncInvalidations);
-
-  EXPECT_CALL(*processor(), Put(_, HasSpecifics(HasInstanceIdToken()), _));
+  EXPECT_CALL(*processor(),
+              Put(_,
+                  HasSpecifics(
+                      AllOf(HasInstanceIdToken(), HasAnyInterestedDataTypes())),
+                  _));
   InitializeAndMergeInitialData(SyncMode::kFull);
+}
+
+TEST_F(DeviceInfoSyncBridgeTest, ShouldNotifyWhenDeviceInfoIsSynced) {
+  InitializeAndMergeInitialData(SyncMode::kFull);
+
+  base::MockOnceClosure callback;
+  bridge()->RefreshLocalDeviceInfo(callback.Get());
+
+  std::string guid = local_device()->GetLocalDeviceInfo()->guid();
+  EXPECT_CALL(*processor(), IsEntityUnsynced(guid)).WillOnce(Return(true));
+  EXPECT_CALL(callback, Run()).Times(0);
+  bridge()->ApplySyncChanges(bridge()->CreateMetadataChangeList(),
+                             EntityChangeList());
+
+  EXPECT_CALL(*processor(), IsEntityUnsynced(guid)).WillOnce(Return(false));
+  EXPECT_CALL(callback, Run());
+  bridge()->ApplySyncChanges(bridge()->CreateMetadataChangeList(),
+                             EntityChangeList());
 }
 
 }  // namespace

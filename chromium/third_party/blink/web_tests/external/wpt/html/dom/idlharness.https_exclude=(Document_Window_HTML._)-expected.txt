@@ -1,5 +1,5 @@
 This is a testharness.js-based test.
-Found 1412 tests; 1328 PASS, 84 FAIL, 0 TIMEOUT, 0 NOTRUN.
+Found 1458 tests; 1375 PASS, 83 FAIL, 0 TIMEOUT, 0 NOTRUN.
 PASS idl_test setup
 PASS idl_test validation
 PASS Partial interface Document: original interface defined
@@ -127,6 +127,7 @@ PASS OffscreenCanvasRenderingContext2D includes CanvasImageData: member names ar
 PASS OffscreenCanvasRenderingContext2D includes CanvasPathDrawingStyles: member names are unique
 PASS OffscreenCanvasRenderingContext2D includes CanvasTextDrawingStyles: member names are unique
 PASS OffscreenCanvasRenderingContext2D includes CanvasPath: member names are unique
+PASS ElementInternals includes ARIAMixin: member names are unique
 PASS Window includes GlobalEventHandlers: member names are unique
 PASS Window includes WindowEventHandlers: member names are unique
 PASS Window includes WindowOrWorkerGlobalScope: member names are unique
@@ -149,6 +150,11 @@ PASS WorkerNavigator includes NavigatorLanguage: member names are unique
 PASS WorkerNavigator includes NavigatorOnLine: member names are unique
 PASS WorkerNavigator includes NavigatorConcurrentHardware: member names are unique
 PASS HTMLFrameSetElement includes WindowEventHandlers: member names are unique
+PASS Element includes ARIAMixin: member names are unique
+PASS Element includes ParentNode: member names are unique
+PASS Element includes NonDocumentTypeChildNode: member names are unique
+PASS Element includes ChildNode: member names are unique
+PASS Element includes Slottable: member names are unique
 PASS SVGElement includes GlobalEventHandlers: member names are unique
 PASS SVGElement includes DocumentAndElementEventHandlers: member names are unique
 PASS SVGElement includes SVGElementInstance: member names are unique
@@ -164,10 +170,6 @@ FAIL SVGAElement includes HTMLHyperlinkElementUtils: member names are unique ass
 PASS DocumentFragment includes NonElementParentNode: member names are unique
 PASS DocumentFragment includes ParentNode: member names are unique
 PASS ShadowRoot includes DocumentOrShadowRoot: member names are unique
-PASS Element includes ParentNode: member names are unique
-PASS Element includes NonDocumentTypeChildNode: member names are unique
-PASS Element includes ChildNode: member names are unique
-PASS Element includes Slottable: member names are unique
 PASS RadioNodeList interface: existence and properties of interface object
 PASS RadioNodeList interface object length
 PASS RadioNodeList interface object name
@@ -1158,6 +1160,18 @@ PASS EventSource interface: attribute onopen
 PASS EventSource interface: attribute onmessage
 PASS EventSource interface: attribute onerror
 PASS EventSource interface: operation close()
+PASS EventSource must be primary interface of new EventSource("http://invalid")
+PASS Stringification of new EventSource("http://invalid")
+PASS EventSource interface: new EventSource("http://invalid") must inherit property "url" with the proper type
+PASS EventSource interface: new EventSource("http://invalid") must inherit property "withCredentials" with the proper type
+PASS EventSource interface: new EventSource("http://invalid") must inherit property "CONNECTING" with the proper type
+PASS EventSource interface: new EventSource("http://invalid") must inherit property "OPEN" with the proper type
+PASS EventSource interface: new EventSource("http://invalid") must inherit property "CLOSED" with the proper type
+PASS EventSource interface: new EventSource("http://invalid") must inherit property "readyState" with the proper type
+PASS EventSource interface: new EventSource("http://invalid") must inherit property "onopen" with the proper type
+PASS EventSource interface: new EventSource("http://invalid") must inherit property "onmessage" with the proper type
+PASS EventSource interface: new EventSource("http://invalid") must inherit property "onerror" with the proper type
+PASS EventSource interface: new EventSource("http://invalid") must inherit property "close()" with the proper type
 PASS WebSocket interface: existence and properties of interface object
 PASS WebSocket interface object length
 PASS WebSocket interface object name
@@ -1295,6 +1309,30 @@ PASS Storage interface: operation getItem(DOMString)
 PASS Storage interface: operation setItem(DOMString, DOMString)
 PASS Storage interface: operation removeItem(DOMString)
 PASS Storage interface: operation clear()
+PASS Storage must be primary interface of localStorage
+PASS Stringification of localStorage
+PASS Storage interface: localStorage must inherit property "length" with the proper type
+PASS Storage interface: localStorage must inherit property "key(unsigned long)" with the proper type
+PASS Storage interface: calling key(unsigned long) on localStorage with too few arguments must throw TypeError
+PASS Storage interface: localStorage must inherit property "getItem(DOMString)" with the proper type
+PASS Storage interface: calling getItem(DOMString) on localStorage with too few arguments must throw TypeError
+PASS Storage interface: localStorage must inherit property "setItem(DOMString, DOMString)" with the proper type
+PASS Storage interface: calling setItem(DOMString, DOMString) on localStorage with too few arguments must throw TypeError
+PASS Storage interface: localStorage must inherit property "removeItem(DOMString)" with the proper type
+PASS Storage interface: calling removeItem(DOMString) on localStorage with too few arguments must throw TypeError
+PASS Storage interface: localStorage must inherit property "clear()" with the proper type
+PASS Storage must be primary interface of sessionStorage
+PASS Stringification of sessionStorage
+PASS Storage interface: sessionStorage must inherit property "length" with the proper type
+PASS Storage interface: sessionStorage must inherit property "key(unsigned long)" with the proper type
+PASS Storage interface: calling key(unsigned long) on sessionStorage with too few arguments must throw TypeError
+PASS Storage interface: sessionStorage must inherit property "getItem(DOMString)" with the proper type
+PASS Storage interface: calling getItem(DOMString) on sessionStorage with too few arguments must throw TypeError
+PASS Storage interface: sessionStorage must inherit property "setItem(DOMString, DOMString)" with the proper type
+PASS Storage interface: calling setItem(DOMString, DOMString) on sessionStorage with too few arguments must throw TypeError
+PASS Storage interface: sessionStorage must inherit property "removeItem(DOMString)" with the proper type
+PASS Storage interface: calling removeItem(DOMString) on sessionStorage with too few arguments must throw TypeError
+PASS Storage interface: sessionStorage must inherit property "clear()" with the proper type
 PASS StorageEvent interface: existence and properties of interface object
 PASS StorageEvent interface object length
 PASS StorageEvent interface object name
@@ -1307,6 +1345,15 @@ PASS StorageEvent interface: attribute newValue
 PASS StorageEvent interface: attribute url
 PASS StorageEvent interface: attribute storageArea
 PASS StorageEvent interface: operation initStorageEvent(DOMString, optional boolean, optional boolean, optional DOMString?, optional DOMString?, optional DOMString?, optional USVString, optional Storage?)
+PASS StorageEvent must be primary interface of new StorageEvent("storage")
+PASS Stringification of new StorageEvent("storage")
+PASS StorageEvent interface: new StorageEvent("storage") must inherit property "key" with the proper type
+PASS StorageEvent interface: new StorageEvent("storage") must inherit property "oldValue" with the proper type
+PASS StorageEvent interface: new StorageEvent("storage") must inherit property "newValue" with the proper type
+PASS StorageEvent interface: new StorageEvent("storage") must inherit property "url" with the proper type
+PASS StorageEvent interface: new StorageEvent("storage") must inherit property "storageArea" with the proper type
+PASS StorageEvent interface: new StorageEvent("storage") must inherit property "initStorageEvent(DOMString, optional boolean, optional boolean, optional DOMString?, optional DOMString?, optional DOMString?, optional USVString, optional Storage?)" with the proper type
+PASS StorageEvent interface: calling initStorageEvent(DOMString, optional boolean, optional boolean, optional DOMString?, optional DOMString?, optional DOMString?, optional USVString, optional Storage?) on new StorageEvent("storage") with too few arguments must throw TypeError
 PASS External interface: existence and properties of interface object
 PASS External interface object length
 PASS External interface object name
@@ -1334,7 +1381,6 @@ PASS SVGElement interface: attribute ondblclick
 PASS SVGElement interface: attribute ondrag
 PASS SVGElement interface: attribute ondragend
 PASS SVGElement interface: attribute ondragenter
-FAIL SVGElement interface: attribute ondragexit assert_true: The prototype object must have a property "ondragexit" expected true got false
 PASS SVGElement interface: attribute ondragleave
 PASS SVGElement interface: attribute ondragover
 PASS SVGElement interface: attribute ondragstart

@@ -16,13 +16,20 @@ Here's the mapping [isolate script flag] : [wpt flag]
 
 import json
 import os
+import shutil
 import sys
 
 import common
 import wpt_common
 
+# The checked-in manifest is copied to a temporary working directory so it can
+# be mutated by wptrunner
+WPT_CHECKED_IN_MANIFEST = (
+    "../../third_party/blink/web_tests/external/WPT_BASE_MANIFEST_8.json")
+WPT_WORKING_COPY_MANIFEST = "../../out/Release/MANIFEST.json"
+
 WPT_CHECKED_IN_METADATA_DIR = "../../third_party/blink/web_tests/external/wpt"
-WPT_METADATA_OUTPUT_DIR = "../../wpt_expectations_metadata/"
+WPT_METADATA_OUTPUT_DIR = "../../out/Release/wpt_expectations_metadata/"
 WPT_OVERRIDE_EXPECTATIONS_PATH = (
     "../../third_party/blink/web_tests/WPTOverrideExpectations")
 
@@ -37,7 +44,8 @@ class WPTTestAdapter(wpt_common.BaseWptScriptAdapter):
             "--venv=../../",
             "--skip-venv-setup",
             "run",
-            "chrome",
+            "chrome"
+        ] + self.options.test_list + [
             "--binary=../../out/Release/chrome",
             "--binary-arg=--host-resolver-rules="
                 "MAP nonexistent.*.test ~NOTFOUND, MAP *.test 127.0.0.1",
@@ -68,8 +76,8 @@ class WPTTestAdapter(wpt_common.BaseWptScriptAdapter):
             # a lengthy import/export cycle to refresh. So we allow WPT to
             # update the manifest in cast it's stale.
             #"--no-manifest-update",
-            "--manifest=../../third_party/blink/web_tests/external/"
-                "WPT_BASE_MANIFEST_8.json",
+            "--manifest",
+            WPT_WORKING_COPY_MANIFEST,
             # (crbug.com/1023835) The flags below are temporary to aid debugging
             "--log-mach=-",
             "--log-mach-verbose",
@@ -77,22 +85,32 @@ class WPTTestAdapter(wpt_common.BaseWptScriptAdapter):
             # TODO(lpz): Consider removing --processes and compute automatically
             # from multiprocessing.cpu_count()
             #"--processes=5",
+            "--mojojs-path=../../out/Release/gen/",
         ])
         return rest_args
 
-def main():
-    # First, generate WPT metadata files.
-    common.run_command([
-        sys.executable,
-        os.path.join(wpt_common.BLINK_TOOLS_DIR, 'build_wpt_metadata.py'),
-        "--metadata-output-dir",
-        WPT_METADATA_OUTPUT_DIR,
-        "--additional-expectations",
-        WPT_OVERRIDE_EXPECTATIONS_PATH,
-        "--checked-in-metadata-dir",
-        WPT_CHECKED_IN_METADATA_DIR
-    ])
+    def add_extra_arguments(self, parser):
+        parser.add_argument('test_list', nargs="*",
+                            help="List of tests or test directories to run")
 
+    def do_pre_test_run_tasks(self):
+        # Copy the checked-in manifest to the temporary working directory
+        shutil.copy(WPT_CHECKED_IN_MANIFEST, WPT_WORKING_COPY_MANIFEST)
+
+        # Generate WPT metadata files.
+        common.run_command([
+            sys.executable,
+            os.path.join(wpt_common.BLINK_TOOLS_DIR, 'build_wpt_metadata.py'),
+            "--metadata-output-dir",
+            WPT_METADATA_OUTPUT_DIR,
+            "--additional-expectations",
+            WPT_OVERRIDE_EXPECTATIONS_PATH,
+            "--checked-in-metadata-dir",
+            WPT_CHECKED_IN_METADATA_DIR
+        ])
+
+
+def main():
     adapter = WPTTestAdapter()
     return adapter.run_test()
 

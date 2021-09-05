@@ -4,12 +4,10 @@
 
 package org.chromium.chrome.browser.shape_detection;
 
-import android.os.StrictMode;
 import android.support.test.InstrumentationRegistry;
 
 import androidx.test.filters.LargeTest;
 
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -19,15 +17,13 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeRestriction;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.browser.TabTitleObserver;
-import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 
 import java.util.concurrent.TimeoutException;
@@ -42,13 +38,11 @@ import java.util.concurrent.TimeoutException;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class ShapeDetectionTest {
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     private static final String BARCODE_TEST_EXPECTED_TAB_TITLE = "https://chromium.org";
     private static final String TEXT_TEST_EXPECTED_TAB_TITLE =
             "The quick brown fox jumped over the lazy dog. Helvetica Neue 36.";
-    private StrictMode.ThreadPolicy mOldPolicy;
 
     /**
      * Verifies that QR codes are detected correctly.
@@ -106,12 +100,5 @@ public class ShapeDetectionTest {
     @Before
     public void setUp() throws Exception {
         mActivityTestRule.startMainActivityOnBlankPage();
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> { mOldPolicy = StrictMode.allowThreadDiskWrites(); });
-    }
-
-    @After
-    public void tearDown() {
-        TestThreadUtils.runOnUiThreadBlocking(() -> StrictMode.setThreadPolicy(mOldPolicy));
     }
 }

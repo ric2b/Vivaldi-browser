@@ -8,9 +8,9 @@ import("//chrome/browser/buildflags.gni")
 
 android_library("java") {
   sources = [
-    "java/src/org/chromium/chrome/browser/contextmenu/ContextMenuItem.java",
     "java/src/org/chromium/chrome/browser/contextmenu/ContextMenuItemDelegate.java",
     "java/src/org/chromium/chrome/browser/contextmenu/ContextMenuPopulator.java",
+    "java/src/org/chromium/chrome/browser/contextmenu/ContextMenuPopulatorFactory.java",
   ]
 
   srcjar_deps = [ "//chrome:context_menu_image_format_enum_javagen" ]
@@ -20,5 +20,6 @@ android_library("java") {
     "//components/embedder_support/android:context_menu_java",
     "//content/public/android:content_java",
     "//third_party/android_deps:androidx_annotation_annotation_java",
+    "//ui/android:ui_no_recycler_view_java",
   ]
 }

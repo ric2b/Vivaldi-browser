@@ -9,6 +9,9 @@ static_library("invalidations") {
     "fcm_handler.cc",
     "fcm_handler.h",
     "fcm_registration_token_observer.h",
+    "interested_data_types_handler.h",
+    "interested_data_types_manager.cc",
+    "interested_data_types_manager.h",
     "invalidations_listener.h",
     "switches.cc",
     "switches.h",
@@ -21,6 +24,7 @@ static_library("invalidations") {
     "//base",
     "//components/gcm_driver",
     "//components/keyed_service/core",
+    "//components/sync/base",
   ]
 }
 

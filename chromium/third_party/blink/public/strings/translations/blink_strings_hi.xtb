@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">एंड नोट</translation>
 <translation id="1281252709823657822">संवाद</translation>
 <translation id="1306460908038601864">बंद है</translation>
+<translation id="1311894908970423688">तारीख <ph name="VALUE_DATE_OR_TIME" /> होनी चाहिए.</translation>
 <translation id="1335095011850992622">क्रेडिट</translation>
 <translation id="1342835525016946179">लेख</translation>
 <translation id="1359897965706325498">बैनर</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> आइटम</translation>
 <translation id="1480676835519562650">कई विकल्प चुनने की सुविधा, <ph name="COUNT" /> में से <ph name="SELECTED" /> चुने गए.</translation>
 <translation id="1589122976691792535">क्षेत्र</translation>
 <translation id="1591562245178063882">इस माह</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033">हफ़्ता <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">ट्रैक <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">चेकबॉक्स</translation>
+<translation id="2307576640803031502">सूची में मौजूद <ph name="COUNT" /> आइटम में से आइटम <ph name="INDEX" /></translation>
 <translation id="2311842470354187719">नया पेज</translation>
 <translation id="2335594187091864976">तारीख और समय पिकर</translation>
 <translation id="2393030564806080191">रंग का हेक्साडेसिमल मान</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">ज़्यादा विकल्प</translation>
 <translation id="576709008726043716">परिचय</translation>
 <translation id="57838592816432529">म्यूट करें</translation>
+<translation id="5860033963881614850">बंद</translation>
 <translation id="588258955323874662">पूर्णस्‍क्रीन</translation>
 <translation id="5888666972993069672">अब <ph name="DEVICE_FRIENDLY_NAME" /> पर कास्ट किया जा रहा है</translation>
 <translation id="591047860372322273">खोज बॉक्स</translation>
+<translation id="5916664084637901428">चालू है</translation>
 <translation id="5939518447894949180">रीसेट करें</translation>
 <translation id="5966707198760109579">हफ़्ता</translation>
 <translation id="5987525920412732405">स्पिन बटन</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">साफ़ करें</translation>
 <translation id="668171684555832681">अन्य...</translation>
 <translation id="6692633176391053278">स्टेपर</translation>
+<translation id="6709093583001123835">अंक <ph name="VALUE" /> होना चाहिए.</translation>
 <translation id="6709570249143506788">खराब वीडियो क्वालिटी</translation>
 <translation id="6755330956360078551">टूलटिप</translation>
 <translation id="6790428901817661496">चलाएं</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, <ph name="WEEK_START_DATE" /> से प्रारंभ हो रहा है</translation>
 <translation id="916607977885256133">पिक्चर में पिक्चर</translation>
 <translation id="9168329111483466115">फ़ुटनोट</translation>
+<translation id="945780513535800434">कुछ विकल्प चुने गए</translation>
 <translation id="954003015749068518">पिक्चर में पिक्चर चालू करें</translation>
 <translation id="966787709310836684">मेन्यू</translation>
 </translationbundle>

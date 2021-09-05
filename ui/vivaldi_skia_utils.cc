@@ -6,7 +6,12 @@
 
 #include "ui/vivaldi_skia_utils.h"
 
+#include "base/base64.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
+#include "base/guid.h"
 #include "base/logging.h"
+#include "base/strings/stringprintf.h"
 #include "skia/ext/image_operations.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -97,37 +102,101 @@ SkBitmap SmartCropAndSize(const SkBitmap& capture,
   return result;
 }
 
-bool EncodeBitmap(const SkBitmap& bitmap,
-                  ImageFormat image_format,
-                  int image_quality,
-                  std::vector<unsigned char>& data,
-                  std::string& mime_type) {
-  bool encoded = false;
+std::vector<unsigned char> EncodeBitmap(SkBitmap bitmap,
+                                        ImageFormat image_format,
+                                        int image_quality) {
+  std::vector<unsigned char> data;
+  if (!bitmap.getPixels()) {
+    LOG(ERROR) << "Cannot encode empty bitmap";
+  } else {
+    switch (image_format) {
+      case ImageFormat::kJPEG:
+        if (!gfx::JPEGCodec::Encode(bitmap, image_quality, &data)) {
+          LOG(ERROR) << "Failed to encode bitmap as jpeg";
+          data.clear();
+        }
+        break;
+      case ImageFormat::kPNG:
+        if (!gfx::PNGCodec::EncodeBGRASkBitmap(
+                bitmap, true /* discard transparency */, &data)) {
+          LOG(ERROR) << "Failed to encode bitmap as png";
+          data.clear();
+        }
+        break;
+    }
+  }
+  return data;
+}
+
+std::string EncodeBitmapAsDataUrl(SkBitmap bitmap,
+                                  ImageFormat image_format,
+                                  int image_quality) {
+  std::vector<unsigned char> image_bytes =
+      EncodeBitmap(std::move(bitmap), image_format, image_quality);
+  if (image_bytes.empty())
+    return std::string();
+
+  const char* mime_type;
   switch (image_format) {
     case ImageFormat::kJPEG:
-      if (bitmap.getPixels()) {
-        encoded = gfx::JPEGCodec::Encode(bitmap, image_quality, &data);
-        mime_type = "image/jpeg";  // kMimeTypeJpeg;
-        if (!encoded) {
-          LOG(ERROR) << "Failed to encode bitmap as jpeg";
-        }
-      } else {
-        LOG(ERROR) << "Cannot encode empty bitmap as jpeg";
-      }
+      mime_type = "image/jpeg";  // kMimeTypeJpeg;
       break;
     case ImageFormat::kPNG:
-      encoded =
-          gfx::PNGCodec::EncodeBGRASkBitmap(bitmap,
-                                            true,  // Discard transparency.
-                                            &data);
       mime_type = "image/png";  // kMimeTypePng;
-      if (!encoded) {
-        LOG(ERROR) << "Failed to encode bitmap as png";
-      }
       break;
   }
 
-  return encoded;
+  std::string data_url;
+  base::StringPiece base64_input(
+      reinterpret_cast<const char*>(image_bytes.data()), image_bytes.size());
+  base::Base64Encode(base64_input, &data_url);
+  data_url.insert(0, base::StringPrintf("data:%s;base64,", mime_type));
+  return data_url;
+}
+
+base::FilePath EncodeBitmapToFile(base::FilePath directory,
+                                  SkBitmap bitmap,
+                                  ImageFormat image_format,
+                                  int image_quality) {
+  std::vector<unsigned char> image_bytes =
+    EncodeBitmap(std::move(bitmap), image_format, image_quality);
+  if (image_bytes.empty())
+    return base::FilePath();
+
+  std::string ext;
+  const char* mime_type;
+  switch (image_format) {
+  case ImageFormat::kJPEG:
+    mime_type = "image/jpeg";  // kMimeTypeJpeg;
+    ext = ".jpg";
+    break;
+  case ImageFormat::kPNG:
+    mime_type = "image/png";  // kMimeTypePng;
+    ext = ".png";
+    break;
+  }
+  base::FilePath base_path(directory);
+
+  std::string filename = "QR Code ";
+  filename += base::GenerateGUID();
+  filename += ext;
+
+  base_path = base_path.AppendASCII(filename);
+
+  // Ensure unique filename.
+  int unique_number = base::GetUniquePathNumber(base_path);
+  if (unique_number > 0) {
+    base_path = base_path.InsertBeforeExtensionASCII(
+      base::StringPrintf(" (%d)", unique_number));
+  }
+  int bytes =
+      base::WriteFile(base_path, reinterpret_cast<const char*>(&image_bytes[0]),
+                      static_cast<int>(image_bytes.size()));
+  if (bytes < 0 || static_cast<size_t>(bytes) != image_bytes.size()) {
+    LOG(ERROR) << "Error writing to file: " << base_path.value();
+    return base::FilePath();
+  }
+  return base_path;
 }
 
 }  // namespace skia_utils

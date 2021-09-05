@@ -4,16 +4,19 @@
 
 #include "ash/ambient/backdrop/ambient_backend_controller_impl.h"
 
+#include <array>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "ash/ambient/ambient_controller.h"
+#include "ash/ambient/util/ambient_util.h"
 #include "ash/public/cpp/ambient/ambient_backend_controller.h"
 #include "ash/public/cpp/ambient/ambient_client.h"
 #include "ash/public/cpp/ambient/ambient_metrics.h"
 #include "ash/public/cpp/ambient/ambient_prefs.h"
 #include "ash/public/cpp/ambient/common/ambient_settings.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "base/barrier_closure.h"
@@ -21,14 +24,21 @@
 #include "base/guid.h"
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "chromeos/assistant/internal/ambient/backdrop_client_config.h"
 #include "chromeos/assistant/internal/proto/google3/backdrop/backdrop.pb.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/prefs/pref_service.h"
+#include "components/user_manager/user_manager.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
+#include "net/base/url_util.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/data_decoder/public/cpp/data_decoder.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "url/gurl.h"
 
 namespace ash {
@@ -79,40 +89,102 @@ std::unique_ptr<network::ResourceRequest> CreateResourceRequest(
   return resource_request;
 }
 
-std::string BuildCuratedTopicDetails(
-    const backdrop::ScreenUpdate::Topic& topic) {
-  if (topic.has_metadata_line_1() && topic.has_metadata_line_2()) {
-    // Uses a space as the separator between.
-    return topic.metadata_line_1() + " " + topic.metadata_line_2();
-  } else if (topic.has_metadata_line_1()) {
-    return topic.metadata_line_1();
-  } else if (topic.has_metadata_line_2()) {
-    return topic.metadata_line_2();
-  } else {
-    return std::string();
+std::string BuildBackdropTopicDetails(
+    const backdrop::ScreenUpdate::Topic& backdrop_topic) {
+  std::string result;
+  if (backdrop_topic.has_metadata_line_1())
+    result += backdrop_topic.metadata_line_1();
+
+  if (backdrop_topic.has_metadata_line_2()) {
+    if (!result.empty())
+      result += " ";
+    result += backdrop_topic.metadata_line_2();
   }
+  // Do not include metadata_line_3.
+  return result;
 }
 
-std::string BuildPersonalTopicDetails(
-    const backdrop::ScreenUpdate::Topic& topic) {
-  // |metadata_line_1| contains the album name.
-  return topic.has_metadata_line_1() ? topic.metadata_line_1() : std::string();
-}
+AmbientModeTopicType ToAmbientModeTopicType(
+    const backdrop::ScreenUpdate_Topic& topic) {
+  if (!topic.has_topic_type())
+    return AmbientModeTopicType::kOther;
 
-void BuildBackdropTopicDetails(
-    const backdrop::ScreenUpdate::Topic& backdrop_topic,
-    AmbientModeTopic& ambient_topic) {
-  switch (backdrop_topic.topic_type()) {
-    case backdrop::TopicSource::CURATED:
-      ambient_topic.details = BuildCuratedTopicDetails(backdrop_topic);
-      break;
-    case backdrop::TopicSource::PERSONAL_PHOTO:
-      ambient_topic.details = BuildPersonalTopicDetails(backdrop_topic);
-      break;
+  switch (topic.topic_type()) {
+    case backdrop::CURATED:
+      return AmbientModeTopicType::kCurated;
+    case backdrop::PERSONAL_PHOTO:
+      return AmbientModeTopicType::kPersonal;
+    case backdrop::FEATURED_PHOTO:
+      return AmbientModeTopicType::kFeatured;
+    case backdrop::GEO_PHOTO:
+      return AmbientModeTopicType::kGeo;
+    case backdrop::CULTURAL_INSTITUTE:
+      return AmbientModeTopicType::kCulturalInstitute;
+    case backdrop::RSS_TOPIC:
+      return AmbientModeTopicType::kRss;
+    case backdrop::CAPTURED_ON_PIXEL:
+      return AmbientModeTopicType::kCapturedOnPixel;
     default:
-      ambient_topic.details = std::string();
-      break;
+      return AmbientModeTopicType::kOther;
   }
+}
+
+base::Optional<std::string> GetStringValue(base::Value::ConstListView values,
+                                           size_t field_number) {
+  if (values.empty() || values.size() < field_number)
+    return base::nullopt;
+
+  const base::Value& v = values[field_number - 1];
+  if (!v.is_string())
+    return base::nullopt;
+
+  return v.GetString();
+}
+
+base::Optional<double> GetDoubleValue(base::Value::ConstListView values,
+                                      size_t field_number) {
+  if (values.empty() || values.size() < field_number)
+    return base::nullopt;
+
+  const base::Value& v = values[field_number - 1];
+  if (!v.is_double() && !v.is_int())
+    return base::nullopt;
+
+  return v.GetDouble();
+}
+
+base::Optional<bool> GetBoolValue(base::Value::ConstListView values,
+                                  size_t field_number) {
+  if (values.empty() || values.size() < field_number)
+    return base::nullopt;
+
+  const base::Value& v = values[field_number - 1];
+  if (v.is_bool())
+    return v.GetBool();
+
+  if (v.is_int())
+    return v.GetInt() > 0;
+
+  return base::nullopt;
+}
+
+base::Optional<WeatherInfo> ToWeatherInfo(const base::Value& result) {
+  DCHECK(result.is_list());
+  if (!result.is_list())
+    return base::nullopt;
+
+  WeatherInfo weather_info;
+  const auto& list_result = result.GetList();
+
+  weather_info.condition_icon_url = GetStringValue(
+      list_result, backdrop::WeatherInfo::kConditionIconUrlFieldNumber);
+  weather_info.temp_f =
+      GetDoubleValue(list_result, backdrop::WeatherInfo::kTempFFieldNumber);
+  weather_info.show_celsius =
+      GetBoolValue(list_result, backdrop::WeatherInfo::kShowCelsiusFieldNumber)
+          .value_or(false);
+
+  return weather_info;
 }
 
 // Helper function to save the information we got from the backdrop server to a
@@ -124,12 +196,29 @@ ScreenUpdate ToScreenUpdate(
   int topics_size = backdrop_screen_update.next_topics_size();
   if (topics_size > 0) {
     for (auto& backdrop_topic : backdrop_screen_update.next_topics()) {
-      AmbientModeTopic ambient_topic;
       DCHECK(backdrop_topic.has_url());
-      ambient_topic.url = backdrop_topic.url();
+
+      auto topic_type = ToAmbientModeTopicType(backdrop_topic);
+      if (!ambient::util::IsAmbientModeTopicTypeAllowed(topic_type))
+        continue;
+
+      AmbientModeTopic ambient_topic;
+      ambient_topic.topic_type = topic_type;
       if (backdrop_topic.has_portrait_image_url())
-        ambient_topic.portrait_image_url = backdrop_topic.portrait_image_url();
-      BuildBackdropTopicDetails(backdrop_topic, ambient_topic);
+        ambient_topic.url = backdrop_topic.portrait_image_url();
+      else
+        ambient_topic.url = backdrop_topic.url();
+
+      if (backdrop_topic.has_related_topic()) {
+        if (backdrop_topic.related_topic().has_portrait_image_url()) {
+          ambient_topic.related_image_url =
+              backdrop_topic.related_topic().portrait_image_url();
+        } else {
+          ambient_topic.related_image_url =
+              backdrop_topic.related_topic().url();
+        }
+      }
+      ambient_topic.details = BuildBackdropTopicDetails(backdrop_topic);
       screen_update.next_topics.emplace_back(ambient_topic);
     }
   }
@@ -153,6 +242,35 @@ ScreenUpdate ToScreenUpdate(
     screen_update.weather_info = weather_info;
   }
   return screen_update;
+}
+
+bool IsArtSettingVisible(const ArtSetting& art_setting) {
+  const auto& album_id = art_setting.album_id;
+
+  if (album_id == kAmbientModeStreetArtAlbumId)
+    return chromeos::features::kAmbientModeStreetArtAlbumEnabled.Get();
+
+  if (album_id == kAmbientModeCapturedOnPixelAlbumId)
+    return chromeos::features::kAmbientModeCapturedOnPixelAlbumEnabled.Get();
+
+  if (album_id == kAmbientModeEarthAndSpaceAlbumId)
+    return chromeos::features::kAmbientModeEarthAndSpaceAlbumEnabled.Get();
+
+  if (album_id == kAmbientModeFeaturedPhotoAlbumId)
+    return chromeos::features::kAmbientModeFeaturedPhotoAlbumEnabled.Get();
+
+  if (album_id == kAmbientModeFineArtAlbumId)
+    return chromeos::features::kAmbientModeFineArtAlbumEnabled.Get();
+
+  return false;
+}
+
+gfx::Size GetDisplaySizeInPixel() {
+  auto* ambient_container = Shell::GetContainer(
+      Shell::GetPrimaryRootWindow(), kShellWindowId_AmbientModeContainer);
+  return display::Screen::GetScreen()
+      ->GetDisplayNearestView(ambient_container)
+      .GetSizeInPixel();
 }
 
 }  // namespace
@@ -278,6 +396,53 @@ void AmbientBackendControllerImpl::SetPhotoRefreshInterval(
       ->SetPhotoRefreshInterval(interval);
 }
 
+void AmbientBackendControllerImpl::FetchWeather(FetchWeatherCallback callback) {
+  auto response_handler =
+      [](FetchWeatherCallback callback,
+         std::unique_ptr<BackdropURLLoader> backdrop_url_loader,
+         std::unique_ptr<std::string> response) {
+        constexpr char kJsonPrefix[] = ")]}'\n";
+
+        if (response && response->length() > strlen(kJsonPrefix)) {
+          auto json_handler =
+              [](FetchWeatherCallback callback,
+                 data_decoder::DataDecoder::ValueOrError result) {
+                if (result.value) {
+                  std::move(callback).Run(ToWeatherInfo(result.value.value()));
+                } else {
+                  DVLOG(1) << "Failed to parse weather json.";
+                  std::move(callback).Run(base::nullopt);
+                }
+              };
+
+          data_decoder::DataDecoder::ParseJsonIsolated(
+              response->substr(strlen(kJsonPrefix)),
+              base::BindOnce(json_handler, std::move(callback)));
+        } else {
+          std::move(callback).Run(base::nullopt);
+        }
+      };
+
+  const auto* user = user_manager::UserManager::Get()->GetActiveUser();
+  DCHECK(user->HasGaiaAccount());
+  BackdropClientConfig::Request request =
+      backdrop_client_config_.CreateFetchWeatherInfoRequest(
+          user->GetAccountId().GetGaiaId(), GetClientId());
+  std::unique_ptr<network::ResourceRequest> resource_request =
+      CreateResourceRequest(request);
+  auto backdrop_url_loader = std::make_unique<BackdropURLLoader>();
+  auto* loader_ptr = backdrop_url_loader.get();
+  loader_ptr->Start(std::move(resource_request), /*request_body=*/base::nullopt,
+                    NO_TRAFFIC_ANNOTATION_YET,
+                    base::BindOnce(response_handler, std::move(callback),
+                                   std::move(backdrop_url_loader)));
+}
+
+const std::array<const char*, 2>&
+AmbientBackendControllerImpl::GetBackupPhotoUrls() const {
+  return chromeos::ambient::kBackupPhotoUrls;
+}
+
 void AmbientBackendControllerImpl::FetchScreenUpdateInfoInternal(
     int num_topics,
     OnScreenUpdateInfoFetchedCallback callback,
@@ -295,6 +460,22 @@ void AmbientBackendControllerImpl::FetchScreenUpdateInfoInternal(
       backdrop_client_config_.CreateFetchScreenUpdateRequest(
           num_topics, gaia_id, access_token, client_id);
   auto resource_request = CreateResourceRequest(request);
+
+  // For portrait photos, the server returns image of half requested width.
+  // When the device is in portrait mode, where only shows one portrait photo,
+  // it will cause unnecessary scaling. To reduce this effect, always requesting
+  // the landscape display size.
+  // TODO(b/172075868): Support tiling in portrait mode.
+  gfx::Size display_size_px = GetDisplaySizeInPixel();
+  const int width = std::max(display_size_px.width(), display_size_px.height());
+  const int height =
+      std::min(display_size_px.width(), display_size_px.height());
+  resource_request->url =
+      net::AppendQueryParameter(resource_request->url, "device-screen-width",
+                                base::NumberToString(width));
+  resource_request->url =
+      net::AppendQueryParameter(resource_request->url, "device-screen-height",
+                                base::NumberToString(height));
 
   auto backdrop_url_loader = std::make_unique<BackdropURLLoader>();
   auto* loader_ptr = backdrop_url_loader.get();
@@ -354,10 +535,15 @@ void AmbientBackendControllerImpl::OnGetSettings(
 
   auto settings = BackdropClientConfig::ParseGetSettingsResponse(*response);
   // |art_settings| should not be empty if parsed successfully.
-  if (settings.art_settings.empty())
+  if (settings.art_settings.empty()) {
     std::move(callback).Run(base::nullopt);
-  else
+  } else {
+    for (auto& art_setting : settings.art_settings) {
+      art_setting.visible = IsArtSettingVisible(art_setting);
+      art_setting.enabled = art_setting.enabled && art_setting.visible;
+    }
     std::move(callback).Run(settings);
+  }
 }
 
 void AmbientBackendControllerImpl::StartToUpdateSettings(

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/optional.h"
+#include "base/values.h"
 #include "chrome/browser/ui/webui/settings/chromeos/os_settings_section.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -40,6 +41,7 @@ class InternetSection
   mojom::Section GetSection() const override;
   mojom::SearchResultIcon GetSectionIcon() const override;
   std::string GetSectionPath() const override;
+  bool LogMetric(mojom::Setting setting, base::Value& value) const override;
   void RegisterHierarchy(HierarchyGenerator* generator) const override;
   std::string ModifySearchResultUrl(
       mojom::SearchResultType type,
@@ -74,6 +76,8 @@ class InternetSection
   base::Optional<std::string> connected_wifi_guid_;
   base::Optional<std::string> connected_tether_guid_;
   base::Optional<std::string> connected_vpn_guid_;
+
+  bool does_ethernet_device_exist_ = false;
 
   mojo::Receiver<network_config::mojom::CrosNetworkConfigObserver> receiver_{
       this};

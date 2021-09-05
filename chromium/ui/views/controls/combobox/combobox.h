@@ -6,6 +6,7 @@
 #define UI_VIEWS_CONTROLS_COMBOBOX_COMBOBOX_H_
 
 #include <memory>
+#include <utility>
 
 #include "base/macros.h"
 #include "base/scoped_observer.h"
@@ -30,7 +31,6 @@ namespace test {
 class ComboboxTestApi;
 }
 
-class ComboboxListener;
 class FocusRing;
 class MenuRunner;
 class PrefixSelector;
@@ -63,8 +63,10 @@ class VIEWS_EXPORT Combobox : public View,
 
   const gfx::FontList& GetFontList() const;
 
-  // Sets the listener which will be called when a selection has been made.
-  void set_listener(ComboboxListener* listener) { listener_ = listener; }
+  // Sets the callback which will be called when a selection has been made.
+  void set_callback(base::RepeatingClosure callback) {
+    callback_ = std::move(callback);
+  }
 
   // Gets/Sets the selected index.
   int GetSelectedIndex() const { return selected_index_; }
@@ -92,6 +94,10 @@ class VIEWS_EXPORT Combobox : public View,
   void SetInvalid(bool invalid);
   bool GetInvalid() const { return invalid_; }
 
+  // Whether the combobox should use the largest label as the content size.
+  void SetSizeToLargestLabel(bool size_to_largest_label);
+  bool GetSizeToLargestLabel() const { return size_to_largest_label_; }
+
   // Overridden from View:
   gfx::Size CalculatePreferredSize() const override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
@@ -114,10 +120,6 @@ class VIEWS_EXPORT Combobox : public View,
   void ButtonPressed(Button* sender, const ui::Event& event) override;
 
  protected:
-  void set_size_to_largest_label(bool size_to_largest_label) {
-    size_to_largest_label_ = size_to_largest_label;
-  }
-
   // Overridden from ComboboxModelObserver:
   void OnComboboxModelChanged(ui::ComboboxModel* model) override;
 
@@ -170,8 +172,8 @@ class VIEWS_EXPORT Combobox : public View,
   // in the drop-down menu.
   const int text_style_;
 
-  // Our listener. Not owned. Notified when the selected index change.
-  ComboboxListener* listener_ = nullptr;
+  // Callback notified when the selected index changes.
+  base::RepeatingClosure callback_;
 
   // The current selected index; -1 and means no selection.
   int selected_index_ = -1;

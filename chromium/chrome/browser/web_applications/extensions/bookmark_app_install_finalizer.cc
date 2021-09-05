@@ -17,6 +17,7 @@
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/components/app_registry_controller.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_prefs_utils.h"
@@ -25,7 +26,6 @@
 #include "chrome/browser/web_applications/extensions/bookmark_app_finalizer_utils.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_registrar.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
-#include "chrome/browser/web_applications/os_integration_manager.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/web_application_info.h"
@@ -70,7 +70,7 @@ void BookmarkAppInstallFinalizer::FinalizeInstall(
 
   crx_installer->set_installer_callback(base::BindOnce(
       &BookmarkAppInstallFinalizer::OnExtensionInstalled,
-      weak_ptr_factory_.GetWeakPtr(), web_app_info.app_url, launch_type,
+      weak_ptr_factory_.GetWeakPtr(), web_app_info.start_url, launch_type,
       web_app_info.enable_experimental_tabbed_window, options.locally_installed,
       options.install_source == WebappInstallSource::SYSTEM_DEFAULT,
       std::move(callback), crx_installer));
@@ -111,7 +111,7 @@ void BookmarkAppInstallFinalizer::FinalizeInstall(
   }
 
   const web_app::AppId app_id =
-      web_app::GenerateAppIdFromURL(web_app_info.app_url);
+      web_app::GenerateAppIdFromURL(web_app_info.start_url);
   web_app::UpdateIntWebAppPref(profile_->GetPrefs(), app_id,
                                web_app::kLatestWebAppInstallSource,
                                static_cast<int>(options.install_source));
@@ -129,7 +129,7 @@ void BookmarkAppInstallFinalizer::FinalizeUpdate(
     const WebApplicationInfo& web_app_info,
     InstallFinalizedCallback callback) {
   web_app::AppId expected_app_id =
-      web_app::GenerateAppIdFromURL(web_app_info.app_url);
+      web_app::GenerateAppIdFromURL(web_app_info.start_url);
 
   const Extension* existing_extension = GetEnabledExtension(expected_app_id);
   if (!existing_extension) {
@@ -236,7 +236,7 @@ const Extension* BookmarkAppInstallFinalizer::GetEnabledExtension(
 }
 
 void BookmarkAppInstallFinalizer::OnExtensionInstalled(
-    const GURL& app_url,
+    const GURL& start_url,
     LaunchType launch_type,
     bool enable_experimental_tabbed_window,
     bool is_locally_installed,
@@ -278,7 +278,7 @@ void BookmarkAppInstallFinalizer::OnExtensionInstalled(
     return;
   }
 
-  DCHECK_EQ(AppLaunchInfo::GetLaunchWebURL(extension), app_url);
+  DCHECK_EQ(AppLaunchInfo::GetLaunchWebURL(extension), start_url);
 
   SetLaunchType(profile_, extension->id(), launch_type);
 
@@ -286,7 +286,8 @@ void BookmarkAppInstallFinalizer::OnExtensionInstalled(
 
   if (!is_legacy_finalizer()) {
     registry_controller().SetExperimentalTabbedWindowMode(
-        extension->id(), enable_experimental_tabbed_window);
+        extension->id(), enable_experimental_tabbed_window,
+        /*is_user_action=*/false);
     registrar().NotifyWebAppInstalled(extension->id());
   }
 

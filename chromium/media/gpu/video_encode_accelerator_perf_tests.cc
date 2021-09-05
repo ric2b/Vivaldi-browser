@@ -271,7 +271,8 @@ class VideoEncoderTest : public ::testing::Test {
  public:
   // Create a new video encoder instance.
   std::unique_ptr<VideoEncoder> CreateVideoEncoder(const Video* video,
-                                                   VideoCodecProfile profile) {
+                                                   VideoCodecProfile profile,
+                                                   uint32_t bitrate) {
     LOG_ASSERT(video);
 
     std::vector<std::unique_ptr<BitstreamProcessor>> bitstream_processors;
@@ -279,11 +280,12 @@ class VideoEncoderTest : public ::testing::Test {
     performance_evaluator_ = performance_evaluator.get();
     bitstream_processors.push_back(std::move(performance_evaluator));
 
-    VideoEncoderClientConfig config;
-    config.framerate = video->FrameRate();
-    config.output_profile = profile;
+    constexpr size_t kNumTemporalLayers = 1u;
+    VideoEncoderClientConfig config(video, profile, kNumTemporalLayers,
+                                    bitrate);
     auto video_encoder =
-        VideoEncoder::Create(config, std::move(bitstream_processors));
+        VideoEncoder::Create(config, g_env->GetGpuMemoryBufferFactory(),
+                             std::move(bitstream_processors));
     LOG_ASSERT(video_encoder);
     LOG_ASSERT(video_encoder->Initialize(video));
 
@@ -299,7 +301,8 @@ class VideoEncoderTest : public ::testing::Test {
 // test will encode a video as fast as possible, and gives an idea about the
 // maximum output of the encoder.
 TEST_F(VideoEncoderTest, MeasureUncappedPerformance) {
-  auto encoder = CreateVideoEncoder(g_env->Video(), g_env->Profile());
+  auto encoder =
+      CreateVideoEncoder(g_env->Video(), g_env->Profile(), g_env->Bitrate());
 
   performance_evaluator_->StartMeasuring();
   encoder->Encode();
@@ -367,7 +370,7 @@ int main(int argc, char** argv) {
   media::test::VideoEncoderTestEnvironment* test_environment =
       media::test::VideoEncoderTestEnvironment::Create(
           video_path, video_metadata_path, false, base::FilePath(output_folder),
-          codec, false /* output_bitstream */);
+          codec, 1u /* num_temporal_layers */, false /* output_bitstream */);
   if (!test_environment)
     return EXIT_FAILURE;
 

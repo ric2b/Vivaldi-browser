@@ -29,7 +29,9 @@ function_registration("generated_api_registration") {
 
     "//chrome/common:buildflags",
     "//chrome/common/extensions/api",
+    "//chrome/services/qrcode_generator/public/mojom",
     "//components/omnibox/browser:buildflags",
+    "//components/paint_preview/buildflags:buildflags",
     "//content/public/browser",
     "//skia",
   ]

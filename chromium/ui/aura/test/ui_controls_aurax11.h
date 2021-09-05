@@ -19,7 +19,6 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/test/ui_controls_aura.h"
-#include "ui/compositor/dip_util.h"
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"
 #include "ui/events/test/x11_event_waiter.h"
 #include "ui/gfx/x/x11.h"
@@ -64,12 +63,12 @@ class UIControlsX11 : public ui_controls::UIControlsAura {
   void RunClosureAfterAllPendingUIEvents(base::OnceClosure closure);
 
  private:
-  void SetKeycodeAndSendThenMask(XEvent* xevent,
+  void SetKeycodeAndSendThenMask(x11::KeyEvent* xevent,
                                  KeySym keysym,
-                                 unsigned int mask);
+                                 x11::KeyButMask mask);
 
-  void UnmaskAndSetKeycodeThenSend(XEvent* xevent,
-                                   unsigned int mask,
+  void UnmaskAndSetKeycodeThenSend(x11::KeyEvent* xevent,
+                                   x11::KeyButMask mask,
                                    KeySym keysym);
   WindowTreeHost* const host_;
 };

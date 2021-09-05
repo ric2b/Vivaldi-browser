@@ -51,14 +51,10 @@ DEFINE_VARIATION_PARAM(kIPHDataSaverMilestonePromoFeature,
                        "IPH_DataSaverMilestonePromo");
 DEFINE_VARIATION_PARAM(kIPHDataSaverPreviewFeature, "IPH_DataSaverPreview");
 DEFINE_VARIATION_PARAM(kIPHDownloadHomeFeature, "IPH_DownloadHome");
+DEFINE_VARIATION_PARAM(kIPHDownloadIndicatorFeature, "IPH_DownloadIndicator");
 DEFINE_VARIATION_PARAM(kIPHDownloadPageFeature, "IPH_DownloadPage");
 DEFINE_VARIATION_PARAM(kIPHDownloadPageScreenshotFeature,
                        "IPH_DownloadPageScreenshot");
-DEFINE_VARIATION_PARAM(kIPHChromeDuetHomeButtonFeature,
-                       "IPH_ChromeDuetHomeButton");
-DEFINE_VARIATION_PARAM(kIPHChromeDuetSearchFeature, "IPH_ChromeDuet");
-DEFINE_VARIATION_PARAM(kIPHChromeDuetTabSwitcherFeature,
-                       "IPH_ChromeDuetTabSwitcherButton");
 DEFINE_VARIATION_PARAM(kIPHChromeHomeExpandFeature, "IPH_ChromeHomeExpand");
 DEFINE_VARIATION_PARAM(kIPHChromeHomePullToRefreshFeature,
                        "IPH_ChromeHomePullToRefresh");
@@ -91,6 +87,8 @@ DEFINE_VARIATION_PARAM(kIPHHomepagePromoCardFeature, "IPH_HomepagePromoCard");
 DEFINE_VARIATION_PARAM(kIPHIdentityDiscFeature, "IPH_IdentityDisc");
 DEFINE_VARIATION_PARAM(kIPHKeyboardAccessoryAddressFillingFeature,
                        "IPH_KeyboardAccessoryAddressFilling");
+DEFINE_VARIATION_PARAM(kIPHKeyboardAccessoryBarSwipingFeature,
+                       "IPH_KeyboardAccessoryBarSwiping");
 DEFINE_VARIATION_PARAM(kIPHKeyboardAccessoryPasswordFillingFeature,
                        "IPH_KeyboardAccessoryPasswordFilling");
 DEFINE_VARIATION_PARAM(kIPHKeyboardAccessoryPaymentFillingFeature,
@@ -108,6 +106,10 @@ DEFINE_VARIATION_PARAM(kIPHTabGroupsDragAndDropFeature,
                        "IPH_TabGroupsDragAndDrop");
 DEFINE_VARIATION_PARAM(kIPHTranslateMenuButtonFeature,
                        "IPH_TranslateMenuButton");
+DEFINE_VARIATION_PARAM(kIPHVideoTutorialDownloadFeature,
+                       "IPH_VideoTutorial_Download");
+DEFINE_VARIATION_PARAM(kIPHVideoTutorialSearchFeature,
+                       "IPH_VideoTutorial_Search");
 DEFINE_VARIATION_PARAM(kIPHExploreSitesTileFeature, "IPH_ExploreSitesTile");
 DEFINE_VARIATION_PARAM(kIPHFeedHeaderMenuFeature, "IPH_FeedHeaderMenu");
 #endif  // defined(OS_ANDROID)
@@ -130,6 +132,7 @@ DEFINE_VARIATION_PARAM(kIPHDesktopTabGroupsNewGroupFeature,
                        "IPH_DesktopTabGroupsNewGroup");
 DEFINE_VARIATION_PARAM(kIPHFocusModeFeature, "IPH_FocusMode");
 DEFINE_VARIATION_PARAM(kIPHGlobalMediaControls, "IPH_GlobalMediaControls");
+DEFINE_VARIATION_PARAM(kIPHLiveCaption, "IPH_LiveCaption");
 DEFINE_VARIATION_PARAM(kIPHPasswordsAccountStorageFeature,
                        "IPH_PasswordsAccountStorage");
 DEFINE_VARIATION_PARAM(kIPHReopenTabFeature, "IPH_ReopenTab");
@@ -149,11 +152,9 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHDataSaverMilestonePromoFeature),
         VARIATION_ENTRY(kIPHDataSaverPreviewFeature),
         VARIATION_ENTRY(kIPHDownloadHomeFeature),
+        VARIATION_ENTRY(kIPHDownloadIndicatorFeature),
         VARIATION_ENTRY(kIPHDownloadPageFeature),
         VARIATION_ENTRY(kIPHDownloadPageScreenshotFeature),
-        VARIATION_ENTRY(kIPHChromeDuetHomeButtonFeature),
-        VARIATION_ENTRY(kIPHChromeDuetSearchFeature),
-        VARIATION_ENTRY(kIPHChromeDuetTabSwitcherFeature),
         VARIATION_ENTRY(kIPHChromeHomeExpandFeature),
         VARIATION_ENTRY(kIPHChromeHomePullToRefreshFeature),
         VARIATION_ENTRY(kIPHChromeReengagementNotification1Feature),
@@ -173,6 +174,7 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHHomepagePromoCardFeature),
         VARIATION_ENTRY(kIPHIdentityDiscFeature),
         VARIATION_ENTRY(kIPHKeyboardAccessoryAddressFillingFeature),
+        VARIATION_ENTRY(kIPHKeyboardAccessoryBarSwipingFeature),
         VARIATION_ENTRY(kIPHKeyboardAccessoryPasswordFillingFeature),
         VARIATION_ENTRY(kIPHKeyboardAccessoryPaymentFillingFeature),
         VARIATION_ENTRY(kIPHPreviewsOmniboxUIFeature),
@@ -182,6 +184,8 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHTabGroupsYourTabsAreTogetherFeature),
         VARIATION_ENTRY(kIPHTabGroupsDragAndDropFeature),
         VARIATION_ENTRY(kIPHTranslateMenuButtonFeature),
+        VARIATION_ENTRY(kIPHVideoTutorialDownloadFeature),
+        VARIATION_ENTRY(kIPHVideoTutorialSearchFeature),
         VARIATION_ENTRY(kIPHExploreSitesTileFeature),
         VARIATION_ENTRY(kIPHFeedHeaderMenuFeature),
 #elif defined(OS_IOS)
@@ -197,6 +201,7 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHDesktopTabGroupsNewGroupFeature),
         VARIATION_ENTRY(kIPHFocusModeFeature),
         VARIATION_ENTRY(kIPHGlobalMediaControls),
+        VARIATION_ENTRY(kIPHLiveCaption),
         VARIATION_ENTRY(kIPHPasswordsAccountStorageFeature),
         VARIATION_ENTRY(kIPHReopenTabFeature),
         VARIATION_ENTRY(kIPHWebUITabStripFeature),

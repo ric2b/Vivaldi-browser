@@ -10,7 +10,6 @@
 #include "chrome/common/buildflags.h"
 #include "chrome/common/pref_font_webkit_names.h"
 #include "extensions/buildflags/buildflags.h"
-#include "media/media_buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
 
 namespace prefs {
@@ -665,7 +664,7 @@ const char kTermsOfServiceURL[] = "terms_of_service.url";
 const char kAttestationEnabled[] = "attestation.enabled";
 // The list of extensions allowed to use the platformKeysPrivate API for
 // remote attestation.
-const char kAttestationExtensionWhitelist[] = "attestation.extension_whitelist";
+const char kAttestationExtensionAllowlist[] = "attestation.extension_allowlist";
 
 // A boolean pref recording whether user has dismissed the multiprofile
 // itroduction dialog show.
@@ -685,22 +684,6 @@ const char kMultiProfileUserBehavior[] = "settings.multiprofile_user_behavior";
 // A boolean preference indicating whether user has seen first-run tutorial
 // already.
 const char kFirstRunTutorialShown[] = "settings.first_run_tutorial_shown";
-
-// Indicates the amount of time for which a user authenticated via SAML can use
-// offline authentication against a cached password before being forced to go
-// through online authentication against GAIA again. The time is expressed in
-// seconds. A value of -1 indicates no limit, allowing the user to use offline
-// authentication indefinitely. The limit is in effect only if GAIA redirected
-// the user to a SAML IdP during the last online authentication.
-const char kSAMLOfflineSigninTimeLimit[] = "saml.offline_signin_time_limit";
-
-// A preference to keep track of the last time the user authenticated against
-// GAIA using SAML. The preference is updated whenever the user authenticates
-// against GAIA: If GAIA redirects to a SAML IdP, the preference is set to the
-// current time. If GAIA performs the authentication itself, the preference is
-// cleared. The time is expressed as the serialization obtained from
-// PrefService::SetTime().
-const char kSAMLLastGAIASignInTime[] = "saml.last_gaia_sign_in_time";
 
 // The total number of seconds that the machine has spent sitting on the
 // OOBE screen.
@@ -789,8 +772,9 @@ const char kEolNotificationDismissed[] = "eol_notification_dismissed";
 
 // A list of allowed quick unlock modes. A quick unlock mode can only be used if
 // its type is on this list, or if type all (all quick unlock modes enabled) is
-// on this list.
-const char kQuickUnlockModeWhitelist[] = "quick_unlock_mode_whitelist";
+// on this list. The pref name variable was changed to match the policy, the
+// actual pref name stays the same to preserve the backward compatibility
+const char kQuickUnlockModeAllowlist[] = "quick_unlock_mode_whitelist";
 // Enum that specifies how often a user has to enter their password to continue
 // using quick unlock. These values are the same as the ones in
 // chromeos::QuickUnlockPasswordConfirmationFrequency.
@@ -964,10 +948,14 @@ const char kPerAppTimeLimitsPolicy[] = "child_user.per_app_time_limits.policy";
 const char kPerAppTimeLimitsAllowlistPolicy[] =
     "child_user.per_app_time_limits.whitelist";
 
-// Time pref to record the user engagement session start time for family user
-// metrics.
-const char kFamilyUserMetricsSessionEngagementStartTime[] =
-    "family_user.metrics.session_engagement_start_time";
+// Integer pref to record the day id (number of days since origin of time) when
+// family user metrics were last recorded.
+const char kFamilyUserMetricsDayId[] = "family_user.metrics.day_id";
+
+// TimeDelta pref to record the accumulated user session duration for family
+// user metrics.
+const char kFamilyUserMetricsSessionEngagementDuration[] =
+    "family_user.metrics.session_engagement_duration";
 
 // List of preconfigured network file shares.
 const char kNetworkFileSharesPreconfiguredShares[] =
@@ -1146,11 +1134,6 @@ const char kPluginsMetadata[] = "plugins.metadata";
 const char kPluginsResourceCacheUpdate[] = "plugins.resource_cache_update";
 #endif
 
-// Last time the flash deprecation message was dismissed. Used to ensure a
-// cooldown period passes before the deprecation message is displayed again.
-const char kPluginsDeprecationInfobarLastShown[] =
-    "plugins.deprecation_infobar_last_shown";
-
 // Int64 containing the internal value of the time at which the default browser
 // infobar was last dismissed by the user.
 const char kDefaultBrowserLastDeclined[] =
@@ -1208,6 +1191,18 @@ const char kAccessibilityImageLabelsEnabled[] =
 const char kAccessibilityImageLabelsOptInAccepted[] =
     "settings.a11y.enable_accessibility_image_labels_opt_in_accepted";
 
+#if defined(OS_ANDROID)
+// Whether the "Get Image Descriptions from Google" feature is enabled on
+// Android. We expose this only to mobile Android.
+const char kAccessibilityImageLabelsEnabledAndroid[] =
+    "settings.a11y.enable_accessibility_image_labels_android";
+
+// Whether the "Get Image Descriptions from Google" feature is enabled only
+// while on Wi-Fi, or if it can use mobile data. Exposed only to mobile Android.
+const char kAccessibilityImageLabelsOnlyOnWifi[] =
+    "settings.a11y.enable_accessibility_image_labels_only_on_wifi";
+#endif
+
 #if !defined(OS_CHROMEOS)
 // A boolean pref which determines whether focus highlighting is enabled.
 const char kAccessibilityFocusHighlightEnabled[] =
@@ -1219,11 +1214,20 @@ const char kAccessibilityFocusHighlightEnabled[] =
 const char kLiveCaptionEnabled[] =
     "accessibility.captions.live_caption_enabled";
 
+// The language to use with the Live Caption feature.
+const char kLiveCaptionLanguageCode[] =
+    "accessibility.captions.live_caption_language";
+
 // The file path of the Speech On-Device API (SODA) binary.
 const char kSodaBinaryPath[] = "accessibility.captions.soda_binary_path";
 
-// The file path of the en-us Speech On-Device API (SODA) configuration file.
-const char kSodaEnUsConfigPath[] = "accessibility.captions.soda_config_path";
+// The file path of the en-US Speech On-Device API (SODA) configuration file.
+const char kSodaEnUsConfigPath[] =
+    "accessibility.captions.soda_en_us_config_path";
+
+// The file path of the ja-JP Speech On-Device API (SODA) configuration file.
+const char kSodaJaJpConfigPath[] =
+    "accessibility.captions.soda_ja_jp_config_path";
 #endif
 
 #if defined(OS_MAC)
@@ -1259,9 +1263,6 @@ const char kPinnedTabs[] = "pinned_tabs";
 
 // Preference to disable 3D APIs (WebGL, Pepper 3D).
 const char kDisable3DAPIs[] = "disable_3d_apis";
-
-const char kEnableDeprecatedWebPlatformFeatures[] =
-    "enable_deprecated_web_platform_features";
 
 // Whether to enable hyperlink auditing ("<a ping>").
 const char kEnableHyperlinkAuditing[] = "enable_a_ping";
@@ -1452,8 +1453,10 @@ const char kPrintJobHistoryExpirationPeriod[] =
     "printing.print_job_history_expiration_period";
 
 // The list of extensions allowed to skip print job confirmation dialog when
-// they use the chrome.printing.submitJob() function.
-const char kPrintingAPIExtensionsWhitelist[] =
+// they use the chrome.printing.submitJob() function. Note that this used to be
+// `kPrintingAPIExtensionsWhitelist`, hence the difference between the variable
+// name and the string value.
+const char kPrintingAPIExtensionsAllowlist[] =
     "printing.printing_api_extensions_whitelist";
 
 // Boolean flag which represents whether the user's print job history can be
@@ -1556,6 +1559,10 @@ const char kWebRtcEventLogCollectionAllowed[] = "webrtc.event_logs_collection";
 // Holds URL patterns that specify URLs for which local IP addresses are exposed
 // in ICE candidates.
 const char kWebRtcLocalIpsAllowedUrls[] = "webrtc.local_ips_allowed_urls";
+// Whether WebRTC PeerConnections are allowed to use legacy versions of the TLS
+// and DTLS protocols.
+const char kWebRTCAllowLegacyTLSProtocols[] =
+    "webrtc.allow_legacy_tls_protocols";
 
 #if !defined(OS_ANDROID)
 // Whether or not this profile has been shown the Welcome page.
@@ -1617,13 +1624,6 @@ const char kProfileInfoCache[] = "profile.info_cache";
 // A list of profile paths that should be deleted on shutdown. The deletion does
 // not happen if the browser crashes, so we remove the profile on next start.
 const char kProfilesDeleted[] = "profiles.profiles_deleted";
-
-// Deprecated preference for metric / crash reporting on Android. Use
-// kMetricsReportingEnabled instead.
-#if defined(OS_ANDROID)
-const char kCrashReportingEnabled[] =
-    "user_experience_metrics_crash.reporting_enabled";
-#endif  // defined(OS_ANDROID)
 
 // This is the location of a list of dictionaries of plugin stability stats.
 const char kStabilityPluginStats[] =
@@ -2142,6 +2142,11 @@ const char kHardwareKeyboardLayout[] = "intl.hardware_keyboard";
 // made yet.
 const char kShouldAutoEnroll[] = "ShouldAutoEnroll";
 
+// A boolean pref of the private-set-membership decision. Its value is only
+// valid if it's not the default value; otherwise, no private-set-membership
+// decision has been made yet.
+const char kShouldRetrieveDeviceState[] = "ShouldRetrieveDeviceState";
+
 // An integer pref with the maximum number of bits used by the client in a
 // previous auto-enrollment request. If the client goes through an auto update
 // during OOBE and reboots into a version of the OS with a larger maximum
@@ -2343,20 +2348,6 @@ const char kAutoScreenBrightnessMetricsUnsupportedAlsUserAdjustmentCount[] =
 // set for child users only, and kept on the known user storage.
 const char kKnownUserParentAccessCodeConfig[] =
     "child_user.parent_access_code.config";
-
-// Enable chrome://password-change page for in-session change of SAML passwords.
-// Also enables SAML password expiry notifications, if we have that information.
-const char kSamlInSessionPasswordChangeEnabled[] =
-    "saml.in_session_password_change_enabled";
-// The number of days in advance to notify the user that their SAML password
-// will expire (works when kSamlInSessionPasswordChangeEnabled is true).
-const char kSamlPasswordExpirationAdvanceWarningDays[] =
-    "saml.password_expiration_advance_warning_days";
-
-// Enable online signin on the lock screen.
-const char kSamlLockScreenReauthenticationEnabled[] =
-    "saml.lock_screen_reauthentication_enabled";
-
 #endif  // defined(OS_CHROMEOS)
 
 // Whether there is a Flash version installed that supports clearing LSO data.
@@ -2611,6 +2602,12 @@ const char kAppListLocalState[] = "app_list.local_state";
 // Increasing this causes all app shortcuts to be recreated.
 const char kAppShortcutsVersion[] = "apps.shortcuts_version";
 
+// A string indicating the architecture in which app shortcuts have been
+// created. If this changes (e.g, due to migrating one's home directory
+// from an Intel mac to an ARM mac), then this will cause all shortcuts to be
+// re-created.
+const char kAppShortcutsArch[] = "apps.shortcuts_arch";
+
 // A string pref for storing the salt used to compute the pepper device ID.
 const char kDRMSalt[] = "settings.privacy.drm_salt";
 // A boolean pref that enables the (private) pepper GetDeviceID() call and
@@ -2739,24 +2736,6 @@ const char kClickedUpdateMenuItem[] = "omaha.clicked_update_menu_item";
 const char kLatestVersionWhenClickedUpdateMenuItem[] =
     "omaha.latest_version_when_clicked_upate_menu_item";
 #endif
-
-// Whether or not the user has explicitly set the cloud services preference
-// through the first run flow.
-const char kMediaRouterCloudServicesPrefSet[] =
-    "media_router.cloudservices.prefset";
-// Whether or not the user has enabled cloud services with Media Router.
-const char kMediaRouterEnableCloudServices[] =
-    "media_router.cloudservices.enabled";
-// Whether or not the Media Router first run flow has been acknowledged by the
-// user.
-const char kMediaRouterFirstRunFlowAcknowledged[] =
-    "media_router.firstrunflow.acknowledged";
-// Whether or not the user has enabled Media Remoting. Defaults to true.
-const char kMediaRouterMediaRemotingEnabled[] =
-    "media_router.media_remoting.enabled";
-// A list of website origins on which the user has chosen to use tab mirroring.
-const char kMediaRouterTabMirroringSources[] =
-    "media_router.tab_mirroring_sources";
 
 // The base64-encoded representation of the public key to use to validate origin
 // trial token signatures.

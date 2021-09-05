@@ -14,6 +14,7 @@
 #include "pdf/pdf_engine.h"
 
 namespace gfx {
+class Rect;
 class Vector2d;
 }  // namespace gfx
 
@@ -33,7 +34,7 @@ class PreviewModeClient : public PDFEngine::Client {
 
   // PDFEngine::Client implementation.
   void ProposeDocumentLayout(const DocumentLayout& layout) override;
-  void Invalidate(const pp::Rect& rect) override;
+  void Invalidate(const gfx::Rect& rect) override;
   void DidScroll(const gfx::Vector2d& offset) override;
   void ScrollToX(int x_in_screen_coords) override;
   void ScrollToY(int y_in_screen_coords, bool compensate_for_toolbar) override;
@@ -42,7 +43,7 @@ class PreviewModeClient : public PDFEngine::Client {
   void NavigateTo(const std::string& url,
                   WindowOpenDisposition disposition) override;
   void UpdateCursor(PP_CursorType_Dev cursor) override;
-  void UpdateTickMarks(const std::vector<pp::Rect>& tickmarks) override;
+  void UpdateTickMarks(const std::vector<gfx::Rect>& tickmarks) override;
   void NotifyNumberOfFindResultsChanged(int total, bool final_result) override;
   void NotifySelectedFindResultChanged(int current_find_index) override;
   void GetDocumentPassword(
@@ -61,7 +62,7 @@ class PreviewModeClient : public PDFEngine::Client {
   void SubmitForm(const std::string& url,
                   const void* data,
                   int length) override;
-  pp::URLLoader CreateURLLoader() override;
+  std::unique_ptr<UrlLoader> CreateUrlLoader() override;
   std::vector<SearchStringResult> SearchString(const base::char16* string,
                                                const base::char16* term,
                                                bool case_sensitive) override;

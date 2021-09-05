@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/paint/paint_invalidator.h"
 
 #include "base/optional.h"
+#include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -18,7 +19,6 @@
 #include "third_party/blink/renderer/core/layout/ng/legacy_layout_tree_walking.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_fragment_child_iterator.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
-#include "third_party/blink/renderer/core/layout/svg/svg_layout_support.h"
 #include "third_party/blink/renderer/core/page/link_highlight.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/clip_path_clipper.h"
@@ -206,13 +206,8 @@ void PaintInvalidator::UpdateLayoutShiftTracking(
   DCHECK(object.IsBox());
   const auto& box = ToLayoutBox(object);
 
-  PhysicalRect new_rect = box.PhysicalBorderBoxRect();
-  if (!box.HasOverflowClip())
-    new_rect.Unite(box.PhysicalLayoutOverflowRect());
-  PhysicalRect old_rect = PhysicalRect(PhysicalOffset(), box.PreviousSize());
-  if (!box.PreviouslyHadOverflowClip())
-    old_rect.Unite(box.PreviousPhysicalLayoutOverflowRect());
-
+  PhysicalRect new_rect = box.PhysicalVisualOverflowRect();
+  PhysicalRect old_rect = box.PreviousPhysicalVisualOverflowRect();
   bool should_report_layout_shift = [&]() -> bool {
     // If the layout shift root has changed, LayoutShiftTracker can't use the
     // current paint property tree to map the old rect.
@@ -220,8 +215,10 @@ void PaintInvalidator::UpdateLayoutShiftTracking(
       return false;
     if (new_rect.IsEmpty() || old_rect.IsEmpty())
       return false;
-    // The parent of out-of-flow-positioned object may not be its container.
-    if (object.IsOutOfFlowPositioned())
+    // Track self-painting layers separately because their ancestors'
+    // PhysicalVisualOverflowRect may not cover them.
+    if (object.HasLayer() &&
+        ToLayoutBoxModelObject(object).HasSelfPaintingLayer())
       return true;
     // We don't report shift for anonymous objects but report for the children.
     if (object.Parent()->IsAnonymous())

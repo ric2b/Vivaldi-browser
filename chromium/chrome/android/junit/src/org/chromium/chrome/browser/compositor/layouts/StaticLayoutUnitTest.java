@@ -117,10 +117,6 @@ public class StaticLayoutUnitTest {
     private ArgumentCaptor<TabObserver> mTabObserverCaptor;
 
     private CompositorAnimationHandler mCompositorAnimationHandler;
-    private ObservableSupplierImpl<TabModelSelector> mTabModelSelectoSupplier =
-            new ObservableSupplierImpl<>();
-    private ObservableSupplierImpl<TabContentManager> mTabContentManagerSupplier =
-            new ObservableSupplierImpl<>();
     private ObservableSupplierImpl<BrowserControlsStateProvider>
             mBrowserControlsStateProviderSupplier = new ObservableSupplierImpl<>();
 
@@ -165,7 +161,7 @@ public class StaticLayoutUnitTest {
         doReturn(mCompositorAnimationHandler).when(mUpdateHost).getAnimationHandler();
 
         mStaticLayout = new StaticLayout(mContext, mUpdateHost, mRenderHost, mViewHost,
-                mRequestSupplier, mTabModelSelectoSupplier, mTabContentManagerSupplier,
+                mRequestSupplier, mTabModelSelector, mTabContentManager,
                 mBrowserControlsStateProviderSupplier);
         mModel = mStaticLayout.getModelForTesting();
 
@@ -195,12 +191,7 @@ public class StaticLayoutUnitTest {
     }
 
     private void initAndAssertAllDependencies() {
-        assertNull(mStaticLayout.getTabModelSelectorForTesting());
-        mTabModelSelectoSupplier.set(mTabModelSelector);
         assertEquals(mTabModelSelector, mStaticLayout.getTabModelSelectorForTesting());
-
-        assertNull(mStaticLayout.getTabContentManagerForTesting());
-        mTabContentManagerSupplier.set(mTabContentManager);
         assertEquals(mTabContentManager, mStaticLayout.getTabContentManagerForTesting());
 
         assertNull(mStaticLayout.getBrowserControlsStateProviderForTesting());

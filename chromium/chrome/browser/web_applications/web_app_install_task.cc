@@ -10,6 +10,8 @@
 #include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
+#include "base/optional.h"
+#include "base/strings/string16.h"
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/installable/installable_manager.h"
 #include "chrome/browser/installable/installable_metrics.h"
@@ -200,7 +202,7 @@ void WebAppInstallTask::InstallWebAppFromInfo(
   install_source_ = install_source;
   background_installation_ = true;
 
-  RecordInstallEvent(for_installable_site);
+  RecordInstallEvent();
 
   InstallFinalizer::FinalizeOptions options;
   options.install_source = install_source;
@@ -258,7 +260,7 @@ void WebAppInstallTask::UpdateWebAppFromInfo(
 }
 
 void WebAppInstallTask::LoadAndRetrieveWebApplicationInfoWithIcons(
-    const GURL& app_url,
+    const GURL& start_url,
     WebAppUrlLoader* url_loader,
     RetrieveWebApplicationInfoWithIconsCallback callback) {
   CheckInstallPreconditions();
@@ -272,7 +274,7 @@ void WebAppInstallTask::LoadAndRetrieveWebApplicationInfoWithIcons(
 
   DCHECK(url_loader);
   url_loader->LoadUrl(
-      app_url, web_contents(),
+      start_url, web_contents(),
       WebAppUrlLoader::UrlComparison::kIgnoreQueryParamsAndRef,
       base::BindOnce(&WebAppInstallTask::OnWebAppUrlLoadedGetWebApplicationInfo,
                      weak_ptr_factory_.GetWeakPtr()));
@@ -312,12 +314,10 @@ void WebAppInstallTask::CheckInstallPreconditions() {
   initiated_ = true;
 }
 
-void WebAppInstallTask::RecordInstallEvent(
-    ForInstallableSite for_installable_site) {
+void WebAppInstallTask::RecordInstallEvent() {
   DCHECK(install_source_ != kNoInstallSource);
 
-  if (InstallableMetrics::IsReportableInstallSource(install_source_) &&
-      for_installable_site == ForInstallableSite::kYes) {
+  if (InstallableMetrics::IsReportableInstallSource(install_source_)) {
     InstallableMetrics::TrackInstallEvent(install_source_);
   }
 }
@@ -432,10 +432,10 @@ void WebAppInstallTask::OnGetWebApplicationInfo(
   bool bypass_service_worker_check = false;
   if (install_params_) {
     bypass_service_worker_check = install_params_->bypass_service_worker_check;
-    // Set app_url to fallback_start_url as web_contents may have been
+    // Set start_url to fallback_start_url as web_contents may have been
     // redirected. Will be overridden by manifest values if present.
     DCHECK(install_params_->fallback_start_url.is_valid());
-    web_app_info->app_url = install_params_->fallback_start_url;
+    web_app_info->start_url = install_params_->fallback_start_url;
 
     if (install_params_->fallback_app_name.has_value())
       web_app_info->title = install_params_->fallback_app_name.value();
@@ -447,6 +447,9 @@ void WebAppInstallTask::OnGetWebApplicationInfo(
       if (!search_term.empty())
         web_app_info->additional_search_terms.push_back(std::move(search_term));
     }
+
+    if (install_params_->launch_query_params)
+      web_app_info->launch_query_params = install_params_->launch_query_params;
   }
 
   data_retriever_->CheckInstallabilityAndRetrieveManifest(
@@ -470,7 +473,7 @@ void WebAppInstallTask::OnDidPerformInstallableCheck(
 
   if (install_params_ && install_params_->require_manifest &&
       !valid_manifest_for_web_app) {
-    LOG(WARNING) << "Did not install " << web_app_info->app_url.spec()
+    LOG(WARNING) << "Did not install " << web_app_info->start_url.spec()
                  << " because it didn't have a manifest for web app";
     CallInstallCallback(AppId(), InstallResultCode::kNotValidManifestForWebApp);
     return;
@@ -483,7 +486,7 @@ void WebAppInstallTask::OnDidPerformInstallableCheck(
   if (manifest)
     UpdateWebAppInfoFromManifest(*manifest, web_app_info.get());
 
-  AppId app_id = GenerateAppIdFromURL(web_app_info->app_url);
+  AppId app_id = GenerateAppIdFromURL(web_app_info->start_url);
 
   // Do the app_id expectation check if requested.
   if (expected_app_id_.has_value() && *expected_app_id_ != app_id) {
@@ -521,8 +524,9 @@ void WebAppInstallTask::CheckForPlayStoreIntentOrGetIcons(
       for_installable_site == ForInstallableSite::kYes &&
       !background_installation_ && manifest) {
     for (const auto& application : manifest->related_applications) {
-      std::string id = base::UTF16ToUTF8(application.id.string());
-      if (!base::EqualsASCII(application.platform.string(),
+      std::string id =
+          base::UTF16ToUTF8(application.id.value_or(base::string16()));
+      if (!base::EqualsASCII(application.platform.value_or(base::string16()),
                              kChromeOsPlayPlatform)) {
         continue;
       }
@@ -711,7 +715,7 @@ void WebAppInstallTask::OnDialogCompleted(
   WebApplicationInfo web_app_info_copy = *web_app_info;
 
   // This metric is recorded regardless of the installation result.
-  RecordInstallEvent(for_installable_site);
+  RecordInstallEvent();
 
   InstallFinalizer::FinalizeOptions finalize_options;
   finalize_options.install_source = install_source_;
@@ -767,27 +771,33 @@ void WebAppInstallTask::OnInstallFinalizedCreateShortcuts(
     return;
   }
 
-  RecordAppBanner(web_contents(), web_app_info->app_url);
+  RecordAppBanner(web_contents(), web_app_info->start_url);
   RecordWebAppInstallationTimestamp(profile_->GetPrefs(), app_id,
                                     install_source_);
 
   InstallOsHooksOptions options;
 
-  options.add_to_applications_menu = true;
+  options.os_hooks[OsHookType::kShortcuts] = true;
   options.add_to_desktop = true;
   options.add_to_quick_launch_bar = kAddAppsToQuickLaunchBarByDefault;
-  options.run_on_os_login = web_app_info->run_on_os_login;
+  options.os_hooks[OsHookType::kRunOnOsLogin] = web_app_info->run_on_os_login;
 
   if (install_source_ == WebappInstallSource::SYNC)
     options.add_to_quick_launch_bar = false;
 
   if (install_params_) {
-    options.add_to_applications_menu =
+    options.os_hooks[OsHookType::kShortcuts] =
         install_params_->add_to_applications_menu;
     options.add_to_desktop = install_params_->add_to_desktop;
     options.add_to_quick_launch_bar = install_params_->add_to_quick_launch_bar;
-    options.run_on_os_login = install_params_->run_on_os_login;
+    options.os_hooks[OsHookType::kRunOnOsLogin] =
+        install_params_->run_on_os_login;
   }
+
+  // TODO(crbug.com/1087219): Determine if file handlers should be
+  // configured from somewhere else rather than always true.
+  options.os_hooks[OsHookType::kFileHandlers] = true;
+  options.os_hooks[OsHookType::kShortcutsMenu] = true;
 
   auto hooks_created_callback = base::BindOnce(
       &WebAppInstallTask::OnOsHooksCreated, weak_ptr_factory_.GetWeakPtr(),

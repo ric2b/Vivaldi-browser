@@ -151,12 +151,10 @@ def blink_type_info(idl_type):
     if real_type.is_void:
         assert False, "Blink does not support/accept IDL void type."
 
-    if real_type.is_enumeration:
-        blink_impl_type = blink_class_name(real_type.type_definition_object)
-        return TypeInfo(blink_impl_type)
-
     if real_type.type_definition_object is not None:
         blink_impl_type = blink_class_name(real_type.type_definition_object)
+        if real_type.is_enumeration:
+            return TypeInfo(blink_impl_type)
         return TypeInfo(
             blink_impl_type,
             member_fmt="Member<{}>",
@@ -278,6 +276,39 @@ def native_value_tag(idl_type):
         return "IDLNullable<{}>".format(native_value_tag(real_type.inner_type))
 
     assert False, "Unknown type: {}".format(idl_type.syntactic_form)
+
+
+def make_blink_to_v8_value(v8_var_name, blink_value_expr, idl_type,
+                           v8_creation_context):
+    """
+    Returns a SymbolNode whose definition converts a Blink value to a v8::Value.
+    """
+    assert isinstance(v8_var_name, str)
+    assert isinstance(blink_value_expr, str)
+    assert isinstance(idl_type, web_idl.IdlType)
+    assert isinstance(v8_creation_context, str)
+
+    def create_definition(symbol_node):
+        if (idl_type.unwrap(typedef=True).is_nullable
+                and idl_type.unwrap().is_string):
+            pattern = ("v8::Local<v8::Value> {v8_var_name} = "
+                       "{blink_value_expr}.IsNull() "
+                       "? v8::Null(${isolate}).As<v8::Value>() "
+                       ": ToV8("
+                       "{blink_value_expr}, {v8_creation_context}, ${isolate})"
+                       ".As<v8::Value>();")
+        else:
+            pattern = (
+                "auto&& {v8_var_name} = ToV8("
+                "{blink_value_expr}, {v8_creation_context}, ${isolate});")
+        node = TextNode(
+            _format(pattern,
+                    v8_var_name=v8_var_name,
+                    blink_value_expr=blink_value_expr,
+                    v8_creation_context=v8_creation_context))
+        return SymbolDefinitionNode(symbol_node, [node])
+
+    return SymbolNode(v8_var_name, definition_constructor=create_definition)
 
 
 def make_default_value_expr(idl_type, default_value):
@@ -484,7 +515,8 @@ def make_v8_to_blink_value(blink_var_name,
         cg_context and cg_context.operation
         and not (cg_context.is_return_type_promise_type or
                  "RaisesException" in cg_context.operation.extended_attributes)
-        and all(arg.idl_type.type_name == "String"
+        and all((arg.idl_type.type_name == "String" or arg.idl_type.unwrap(
+            typedef=True).is_callback_function)
                 for arg in cg_context.operation.arguments))
     fast_path_cond = None
     fast_path_body_text = None
@@ -496,6 +528,14 @@ def make_v8_to_blink_value(blink_var_name,
         fast_path_cond = "LIKELY({}->IsString())".format(v8_value_expr)
         fast_path_body_text = "{}.Init({}.As<v8::String>());".format(
             blink_var_name, v8_value_expr)
+    elif idl_type.unwrap(typedef=True).is_callback_function:
+        # A key point of this fast path is that it doesn't require an
+        # ExceptionState.
+        fast_path_cond = "LIKELY({}->IsFunction())".format(v8_value_expr)
+        fast_path_body_text = "{} = {}::Create({}.As<v8::Function>());".format(
+            blink_var_name,
+            blink_class_name(idl_type.unwrap().type_definition_object),
+            v8_value_expr)
 
     def create_definition(symbol_node):
         if argument_index is None:

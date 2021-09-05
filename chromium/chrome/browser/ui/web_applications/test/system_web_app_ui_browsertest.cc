@@ -381,7 +381,7 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppLinkCaptureBrowserTest,
       browser()->tab_strip_model()->GetActiveWebContents(),
       content::JsReplace("let el = document.createElement('a');"
                          "el.href = $1;"
-                         "el.innerHTML = 'Link to SWA Page 2';"
+                         "el.textContent = 'Link to SWA Page 2';"
                          "document.body.appendChild(el);"
                          "el.click();",
                          kPageURL)));
@@ -419,13 +419,7 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppLinkCaptureBrowserTest,
   EXPECT_FALSE(app_browser->app_controller()->ShouldShowCustomTabBar());
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    SystemWebAppLinkCaptureBrowserTest,
-    ::testing::Combine(::testing::Values(ProviderType::kBookmarkApps,
-                                         ProviderType::kWebApps),
-                       ::testing::Values(InstallationType::kManifestInstall,
-                                         InstallationType::kWebAppInfoInstall)),
-    ProviderAndInstallationTypeToString);
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_ALL_INSTALL_TYPES_P(
+    SystemWebAppLinkCaptureBrowserTest);
 
 }  // namespace web_app

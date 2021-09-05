@@ -13,7 +13,7 @@
 #include "base/path_service.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "content/browser/frame_host/frame_tree_node.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/web_package/signed_exchange_cert_fetcher_factory.h"
 #include "content/browser/web_package/signed_exchange_devtools_proxy.h"
 #include "content/browser/web_package/signed_exchange_signature_verifier.h"
@@ -31,6 +31,7 @@
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/ct_verifier.h"
 #include "net/cert/mock_cert_verifier.h"
+#include "net/cert/sct_auditing_delegate.h"
 #include "net/cert/signed_certificate_timestamp_and_status.h"
 #include "net/filter/mock_source_stream.h"
 #include "net/http/transport_security_state.h"
@@ -1062,6 +1063,44 @@ TEST_P(SignedExchangeHandlerTest, SCTAuditingReportEnqueued) {
       .WillRepeatedly(Return(true));
   EXPECT_CALL(*mock_sct_auditing_delegate_, MaybeEnqueueReport(_, _, _))
       .Times(1);
+
+  SetSourceStreamContents("test.example.org_test.sxg");
+
+  CreateSignedExchangeHandler(CreateTestURLRequestContext());
+  WaitForHeader();
+
+  ASSERT_TRUE(read_header());
+  EXPECT_EQ(SignedExchangeLoadResult::kSuccess, result());
+  EXPECT_EQ(net::OK, error());
+
+  std::string payload;
+  int rv = ReadPayloadStream(&payload);
+  std::string expected_payload = GetTestFileContents("test.html");
+  EXPECT_EQ(expected_payload, payload);
+  EXPECT_EQ(static_cast<int>(expected_payload.size()), rv);
+}
+
+// Test that SignedExchangeHandler does not enqueue SCT auditing reports if the
+// certificate is not issued by a known root. Mirrors the
+// `SCTAuditingReportEnqueued` test above, except that `is_issued_by_known_root`
+// is set to false.
+TEST_P(SignedExchangeHandlerTest, SCTAuditingReportNonPublicCertsNotReported) {
+  mock_cert_fetcher_factory_->ExpectFetch(
+      GURL("https://cert.example.org/cert.msg"),
+      GetTestFileContents("test.example.org.public.pem.cbor"));
+
+  net::CertVerifyResult cert_result = CreateCertVerifyResult();
+  cert_result.is_issued_by_known_root = false;
+  SetupMockCertVerifier("prime256v1-sha256.public.pem", cert_result);
+
+  // The mock CT policy enforcer will return CT_POLICY_COMPLIES_VIA_SCTS, as
+  // configured in SetUp().
+
+  // Add SCTAuditingDelegate mock results.
+  EXPECT_CALL(*mock_sct_auditing_delegate_, IsSCTAuditingEnabled())
+      .WillRepeatedly(Return(true));
+  EXPECT_CALL(*mock_sct_auditing_delegate_, MaybeEnqueueReport(_, _, _))
+      .Times(0);
 
   SetSourceStreamContents("test.example.org_test.sxg");
 

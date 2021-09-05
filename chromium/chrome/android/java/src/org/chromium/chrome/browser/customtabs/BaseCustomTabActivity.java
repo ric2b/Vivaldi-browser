@@ -22,7 +22,8 @@ import androidx.browser.customtabs.CustomTabsIntent;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.base.supplier.OneshotSupplier;
+import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplication;
@@ -83,8 +84,8 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
     protected @Nullable WebappActivityCoordinator mWebappActivityCoordinator;
     protected @Nullable TrustedWebActivityCoordinator mTwaCoordinator;
     protected Verifier mVerifier;
-    private ObservableSupplierImpl<OverviewModeBehavior> mOverviewModeBehaviorSupplier =
-            new ObservableSupplierImpl<>();
+    private OneshotSupplier<OverviewModeBehavior> mOverviewModeBehaviorSupplier =
+            new OneshotSupplierImpl<>();
 
     // This is to give the right package name while using the client's resources during an
     // overridePendingTransition call.
@@ -150,9 +151,13 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
     @Override
     protected RootUiCoordinator createRootUiCoordinator() {
         return new BaseCustomTabRootUiCoordinator(this, getShareDelegateSupplier(),
-                () -> mToolbarCoordinator, () -> mNavigationController, getActivityTabProvider(),
-                mTabModelProfileSupplier, mBookmarkBridgeSupplier, mOverviewModeBehaviorSupplier,
-                this::getContextualSearchManager);
+                ()
+                        -> mToolbarCoordinator,
+                ()
+                        -> mNavigationController,
+                getActivityTabProvider(), mTabModelProfileSupplier, mBookmarkBridgeSupplier,
+                mOverviewModeBehaviorSupplier, this::getContextualSearchManager,
+                mTabModelSelectorSupplier, new OneshotSupplierImpl<>());
     }
 
     @Override
@@ -194,15 +199,21 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
             handleFinishAndClose();
         });
         component.resolveSessionHandler();
-        component.resolveCustomTabIncognitoManager();
 
         BrowserServicesIntentDataProvider intentDataProvider = getIntentDataProvider();
+
+        if (intentDataProvider.isIncognito()) {
+            component.resolveCustomTabIncognitoManager();
+        }
+
         if (intentDataProvider.isWebappOrWebApkActivity()) {
             mWebappActivityCoordinator = component.resolveWebappActivityCoordinator();
         }
+
         if (intentDataProvider.isWebApkActivity()) {
             component.resolveWebApkActivityCoordinator();
         }
+
         if (mIntentDataProvider.isTrustedWebActivity()) {
             mTwaCoordinator = component.resolveTrustedWebActivityCoordinator();
         }

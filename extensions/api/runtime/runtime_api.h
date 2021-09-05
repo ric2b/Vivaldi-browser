@@ -36,8 +36,6 @@ typedef struct FeatureEntry {
   std::string description;
   // in-memory active value
   bool enabled;
-  // in-memory active value for internal builds
-  bool internal_enabled = false;
   // The value set in the config file
   bool default_enabled;
   // Like default, except for internal (and sopranos builds)
