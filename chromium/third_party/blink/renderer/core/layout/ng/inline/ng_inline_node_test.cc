@@ -475,6 +475,29 @@ TEST_F(NGInlineNodeTest, MinMaxSizesFloatsClearance) {
   EXPECT_EQ(160, sizes.max_size);
 }
 
+// For http://crbug.com/1112560
+TEST_F(NGInlineNodeTest, MinMaxSizesSaturated) {
+  LoadAhem();
+  SetupHtml("t", R"HTML(
+    <style>
+    b {
+        display: inline-block;
+        border-inline-start: groove;
+        width:1e8px;
+    }
+    #t {
+        float: left;
+        font: 10px Ahem;
+    }
+    </style>
+    <div id=t><b></b> <img></div>)HTML");
+
+  NGInlineNodeForTest node = CreateInlineNode();
+  MinMaxSizes sizes = ComputeMinMaxSizes(node);
+  EXPECT_EQ(LayoutUnit(33554431), sizes.min_size.Round());
+  // Note: |sizes.max_size.Round()| isn't |LayoutUnit::Max()| on some platform.
+}
+
 TEST_F(NGInlineNodeTest, MinMaxSizesTabulationWithBreakWord) {
   LoadAhem();
   SetupHtml("t", R"HTML(
@@ -492,6 +515,25 @@ TEST_F(NGInlineNodeTest, MinMaxSizesTabulationWithBreakWord) {
   MinMaxSizes sizes = ComputeMinMaxSizes(node);
   EXPECT_EQ(160, sizes.min_size);
   EXPECT_EQ(170, sizes.max_size);
+}
+
+// For http://crbug.com/1116713
+TEST_F(NGInlineNodeTest, MinMaxSizesNeedsLayout) {
+  LoadAhem();
+  SetupHtml("t",
+            "<style>#t { width: 2ch; }</style>"
+            "<div id=t> a <b>b</b></div>");
+
+  auto& text = To<Text>(*GetElementById("t")->firstChild());
+  LayoutText& layout_text = *text.GetLayoutObject();
+  EXPECT_FALSE(layout_text.NeedsLayout());
+
+  text.replaceData(0, 1, u"X", ASSERT_NO_EXCEPTION);
+  EXPECT_TRUE(layout_text.NeedsLayout());
+
+  NGInlineNodeForTest node = CreateInlineNode();
+  ComputeMinMaxSizes(node);
+  EXPECT_TRUE(layout_text.NeedsLayout());
 }
 
 TEST_F(NGInlineNodeTest, AssociatedItemsWithControlItem) {
@@ -1266,6 +1308,101 @@ TEST_F(NGInlineNodeTest, ReusingWithCollapsed) {
   GetElementById("remove")->remove();
   UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(String(u"abc \uFFFCx"), GetText());
+}
+
+// https://crbug.com/109654
+TEST_F(NGInlineNodeTest, ReusingRTLAsLTR) {
+  SetupHtml("container",
+            "<div id=container>"
+            "<span id='text' dir=rtl>"
+            "[Text]text"
+            "</span>"
+            "</div>");
+  EXPECT_EQ(String(u"\u2067[Text]text\u2069"), GetText());
+  EXPECT_EQ(Items().size(), 8u);
+  TEST_ITEM_OFFSET_DIR(Items()[0], 0u, 1u, TextDirection::kLtr);
+  TEST_ITEM_OFFSET_DIR(Items()[1], 1u, 1u, TextDirection::kRtl);
+  TEST_ITEM_OFFSET_DIR(Items()[2], 1u, 2u, TextDirection::kRtl);
+  TEST_ITEM_OFFSET_DIR(Items()[3], 2u, 6u, TextDirection::kLtr);
+  TEST_ITEM_OFFSET_DIR(Items()[4], 6u, 7u, TextDirection::kRtl);
+  TEST_ITEM_OFFSET_DIR(Items()[5], 7u, 11u, TextDirection::kLtr);
+  TEST_ITEM_OFFSET_DIR(Items()[6], 11u, 11u, TextDirection::kLtr);
+  TEST_ITEM_OFFSET_DIR(Items()[7], 11u, 12u, TextDirection::kLtr);
+  GetElementById("text")->removeAttribute(html_names::kDirAttr);
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ(String("[Text]text"), GetText());
+  EXPECT_EQ(Items().size(), 3u);
+  TEST_ITEM_OFFSET_DIR(Items()[0], 0u, 0u, TextDirection::kLtr);
+  TEST_ITEM_OFFSET_DIR(Items()[1], 0u, 10u, TextDirection::kLtr);
+  TEST_ITEM_OFFSET_DIR(Items()[2], 10u, 10u, TextDirection::kLtr);
+}
+
+TEST_F(NGInlineNodeTest, LetterSpacingUseCounterFalse) {
+  SetBodyInnerHTML(R"HTML(
+    <p id="p" style="letter-spacing: 1em; text-align: center">
+      text
+    </p>
+  )HTML");
+  auto* p = ToLayoutNGBlockFlow(GetLayoutObjectByElementId("p"));
+  EXPECT_FALSE(NGInlineNode(p).ShouldReportLetterSpacingUseCounterForTesting(
+      p->FirstChild(), /* first_line */ false, p));
+}
+
+TEST_F(NGInlineNodeTest, LetterSpacingUseCounterCenterTextIndent) {
+  SetBodyInnerHTML(R"HTML(
+    <p id="p" style="letter-spacing: 1em; text-align: center; text-indent: 1em">
+      text
+    </p>
+  )HTML");
+  auto* p = ToLayoutNGBlockFlow(GetLayoutObjectByElementId("p"));
+  EXPECT_TRUE(NGInlineNode(p).ShouldReportLetterSpacingUseCounterForTesting(
+      p->FirstChild(), /* first_line */ false, p));
+}
+
+TEST_F(NGInlineNodeTest, LetterSpacingUseCounterCenterPadding) {
+  SetBodyInnerHTML(R"HTML(
+    <p id="p" style="letter-spacing: 1em; text-align: center; padding-left: 1em">
+      text
+    </p>
+  )HTML");
+  auto* p = ToLayoutNGBlockFlow(GetLayoutObjectByElementId("p"));
+  EXPECT_TRUE(NGInlineNode(p).ShouldReportLetterSpacingUseCounterForTesting(
+      p->FirstChild(), /* first_line */ false, p));
+}
+
+TEST_F(NGInlineNodeTest, LetterSpacingUseCounterRight) {
+  SetBodyInnerHTML(R"HTML(
+    <p id="p" style="letter-spacing: 1em; text-align: right; margin-right: -1em">
+      text
+    </p>
+  )HTML");
+  auto* p = ToLayoutNGBlockFlow(GetLayoutObjectByElementId("p"));
+  EXPECT_TRUE(NGInlineNode(p).ShouldReportLetterSpacingUseCounterForTesting(
+      p->FirstChild(), /* first_line */ false, p));
+}
+
+TEST_F(NGInlineNodeTest, LetterSpacingUseCounterBorder) {
+  SetBodyInnerHTML(R"HTML(
+    <p id="p" style="letter-spacing: 1em">
+      <span id="span" style="border:1px solid; padding-left:1em">span</span>
+    </p>
+  )HTML");
+  auto* p = ToLayoutNGBlockFlow(GetLayoutObjectByElementId("p"));
+  const LayoutObject* span = GetLayoutObjectByElementId("span");
+  EXPECT_TRUE(NGInlineNode(p).ShouldReportLetterSpacingUseCounterForTesting(
+      span->SlowFirstChild(), /* first_line */ false, p));
+}
+
+TEST_F(NGInlineNodeTest, LetterSpacingUseCounterUnderline) {
+  SetBodyInnerHTML(R"HTML(
+    <p id="p" style="letter-spacing: 1em">
+      <span id="span" style="text-decoration: underline">span</span>
+    </p>
+  )HTML");
+  auto* p = ToLayoutNGBlockFlow(GetLayoutObjectByElementId("p"));
+  const LayoutObject* span = GetLayoutObjectByElementId("span");
+  EXPECT_TRUE(NGInlineNode(p).ShouldReportLetterSpacingUseCounterForTesting(
+      span->SlowFirstChild(), /* first_line */ false, p));
 }
 
 }  // namespace blink

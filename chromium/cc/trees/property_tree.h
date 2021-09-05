@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -42,7 +43,7 @@ class LayerTreeImpl;
 class RenderSurfaceImpl;
 struct ClipNode;
 struct EffectNode;
-struct ScrollAndScaleSet;
+struct CompositorCommitData;
 struct ScrollNode;
 struct TransformNode;
 struct TransformCachedNodeData;
@@ -304,6 +305,8 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
 
   void UpdateEffectChanged(EffectNode* node, EffectNode* parent_node);
 
+  void UpdateHasFilters(EffectNode* node, EffectNode* parent_node);
+
   void AddCopyRequest(int node_id,
                       std::unique_ptr<viz::CopyOutputRequest> request);
   void PushCopyRequestsTo(EffectTree* other_tree);
@@ -432,7 +435,7 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
   // Collects deltas for scroll changes on the impl thread that need to be
   // reported to the main thread during the main frame. As such, should only be
   // called on the impl thread side PropertyTrees.
-  void CollectScrollDeltas(ScrollAndScaleSet* scroll_info,
+  void CollectScrollDeltas(CompositorCommitData* commit_data,
                            ElementId inner_viewport_scroll_element_id,
                            bool use_fractional_deltas,
                            const base::flat_set<ElementId>& snapped_elements);
@@ -453,6 +456,7 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
 
   void SetBaseScrollOffset(ElementId id,
                            const gfx::ScrollOffset& scroll_offset);
+  // Returns true if the scroll offset is changed.
   bool SetScrollOffset(ElementId id, const gfx::ScrollOffset& scroll_offset);
   void SetScrollOffsetClobberActiveValue(ElementId id) {
     GetOrCreateSyncedScrollOffset(id)->set_clobber_active_value();

@@ -237,6 +237,10 @@ class Internals final : public ScriptWrappable {
   void setAutofilledValue(Element*, const String&, ExceptionState&);
   void setEditingValue(Element* input_element, const String&, ExceptionState&);
   void setAutofilled(Element*, bool enabled, ExceptionState&);
+  void setSelectionRangeForNumberType(Element* input_element,
+                                      uint32_t start,
+                                      uint32_t end,
+                                      ExceptionState&);
 
   Range* rangeFromLocationAndLength(Element* scope,
                                     int range_location,
@@ -543,6 +547,10 @@ class Internals final : public ScriptWrappable {
   // document time in seconds
   double monotonicTimeToZeroBasedDocumentTime(double, ExceptionState&);
 
+  // Translate an event's DOMHighResTimeStamp in seconds into a monotonic time
+  // in milliseconds.
+  int64_t zeroBasedDocumentTimeToMonotonicTime(double dom_event_time);
+
   // Returns the current time ticks (in microseconds).
   int64_t currentTimeTicks();
 
@@ -555,9 +563,6 @@ class Internals final : public ScriptWrappable {
   // ScrollAnimatorCompositorCoordinater::RunState), or -1 if the node does not
   // have a scrollable area.
   String getProgrammaticScrollAnimationState(Node*) const;
-
-  // Returns the visual rect of a node's LayoutObject.
-  DOMRect* visualRect(Node*);
 
   // Intentional crash.
   void crash();
@@ -584,6 +589,8 @@ class Internals final : public ScriptWrappable {
   void DisableIntersectionObserverThrottleDelay() const;
   bool isSiteIsolated(HTMLIFrameElement* iframe) const;
   bool isTrackingOcclusionForIFrame(HTMLIFrameElement* iframe) const;
+
+  void DisableFrequencyCappingForOverlayPopupDetection() const;
 
   void addEmbedderCustomElementName(const AtomicString& name, ExceptionState&);
 

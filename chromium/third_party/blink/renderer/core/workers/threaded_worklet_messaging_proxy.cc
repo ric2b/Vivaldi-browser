@@ -66,14 +66,13 @@ void ThreadedWorkletMessagingProxy::Initialize(
           window->GetSecurityOrigin(), window->IsSecureContext(),
           window->GetHttpsState(), worker_clients,
           window->GetFrame()->Client()->CreateWorkerContentSettingsClient(),
-          window->GetSecurityContext().AddressSpace(),
-          OriginTrialContext::GetTokens(window).get(),
+          window->AddressSpace(), OriginTrialContext::GetTokens(window).get(),
           base::UnguessableToken::Create(),
           std::make_unique<WorkerSettings>(window->GetFrame()->GetSettings()),
           kV8CacheOptionsDefault, module_responses_map,
           mojo::NullRemote() /* browser_interface_broker */,
           BeginFrameProviderParams(), nullptr /* parent_feature_policy */,
-          window->GetAgentClusterID());
+          window->GetAgentClusterID(), window->GetExecutionContextToken());
 
   // Worklets share the pre-initialized backing thread so that we don't have to
   // specify the backing thread startup data.

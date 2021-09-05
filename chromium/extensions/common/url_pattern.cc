@@ -113,14 +113,14 @@ bool IsValidPortForScheme(base::StringPiece scheme, base::StringPiece port) {
 // out overlap much easier. It seems like there is probably a computer-sciency
 // way to solve the general case, but we don't need that yet.
 base::StringPiece StripTrailingWildcard(base::StringPiece path) {
-  if (path.ends_with("*"))
+  if (base::EndsWith(path, "*"))
     path.remove_suffix(1);
   return path;
 }
 
 // Removes trailing dot from |host_piece| if any.
 base::StringPiece CanonicalizeHostForMatching(base::StringPiece host_piece) {
-  if (host_piece.ends_with("."))
+  if (base::EndsWith(host_piece, "."))
     host_piece.remove_suffix(1);
   return host_piece;
 }
@@ -307,7 +307,7 @@ URLPattern::ParseResult URLPattern::Parse(base::StringPiece pattern) {
     if (host_piece == "*") {
       match_subdomains_ = true;
       host_piece = base::StringPiece();
-    } else if (host_piece.starts_with("*.")) {
+    } else if (base::StartsWith(host_piece, "*.")) {
       if (host_piece.length() == 2) {
         // We don't allow just '*.' as a host.
         return ParseResult::kEmptyHost;
@@ -517,7 +517,7 @@ bool URLPattern::MatchesHost(const GURL& test) const {
   if (test_host.length() <= (pattern_host.length() + 1))
     return false;
 
-  if (!test_host.ends_with(pattern_host))
+  if (!base::EndsWith(test_host, pattern_host))
     return false;
 
   return test_host[test_host.length() - pattern_host.length() - 1] == '.';
@@ -563,9 +563,8 @@ bool URLPattern::MatchesPath(base::StringPiece test) const {
   // need to match hosted apps on e.g. 'google.com' also run on 'google.com/'.
   // The below if is a no-copy way of doing (test + "/*" == path_escaped_).
   if (path_escaped_.length() == test.length() + 2 &&
-      base::StartsWith(path_escaped_.c_str(), test,
-                       base::CompareCase::SENSITIVE) &&
-      base::EndsWith(path_escaped_, "/*", base::CompareCase::SENSITIVE)) {
+      base::StartsWith(path_escaped_.c_str(), test) &&
+      base::EndsWith(path_escaped_, "/*")) {
     return true;
   }
 

@@ -14,26 +14,16 @@
 #include "base/callback.h"
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
-#include "chrome/browser/android/vr/vr_core_info.h"
 #include "content/public/browser/xr_runtime_manager.h"
 #include "device/vr/android/gvr/gvr_delegate_provider.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "device/vr/vr_device.h"
-#include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr_types.h"
 
 namespace device {
 class GvrDevice;
 }
 
 namespace vr {
-
-// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.vr
-enum class VrSupportLevel : int {
-  kVrDisabled = 0,
-  kVrNeedsUpdate = 1,  // VR Support is available, but needs update.
-  kVrCardboard = 2,
-  kVrDaydream = 3,  // Supports both Cardboard and Daydream viewer.
-};
 
 class VrShell;
 
@@ -89,8 +79,6 @@ class VrShellDelegate : public device::GvrDelegateProvider,
       device::mojom::XRRuntimeSessionOptionsPtr options,
       base::OnceCallback<void(device::mojom::XRSessionPtr)> callback,
       bool success);
-
-  std::unique_ptr<VrCoreInfo> MakeVrCoreInfo(JNIEnv* env);
 
   base::android::ScopedJavaGlobalRef<jobject> j_vr_shell_delegate_;
   VrShell* vr_shell_ = nullptr;

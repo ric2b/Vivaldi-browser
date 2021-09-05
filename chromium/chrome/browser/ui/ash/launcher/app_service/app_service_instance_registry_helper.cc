@@ -38,15 +38,11 @@ AppServiceInstanceRegistryHelper::AppServiceInstanceRegistryHelper(
       launcher_controller_helper_(std::make_unique<LauncherControllerHelper>(
           controller->owner()->profile())) {
   DCHECK(controller_);
-  DCHECK(proxy_);
 }
 
 AppServiceInstanceRegistryHelper::~AppServiceInstanceRegistryHelper() = default;
 
 void AppServiceInstanceRegistryHelper::ActiveUserChanged() {
-  if (!base::FeatureList::IsEnabled(features::kAppServiceInstanceRegistry))
-    return;
-
   proxy_ = apps::AppServiceProxyFactory::GetForProfile(
       ProfileManager::GetActiveUserProfile());
 }
@@ -59,9 +55,6 @@ void AppServiceInstanceRegistryHelper::AdditionalUserAddedToSession(
 void AppServiceInstanceRegistryHelper::OnActiveTabChanged(
     content::WebContents* old_contents,
     content::WebContents* new_contents) {
-  if (!base::FeatureList::IsEnabled(features::kAppServiceInstanceRegistry))
-    return;
-
   if (old_contents) {
     auto* window = old_contents->GetNativeView();
 
@@ -116,18 +109,12 @@ void AppServiceInstanceRegistryHelper::OnActiveTabChanged(
 void AppServiceInstanceRegistryHelper::OnTabReplaced(
     content::WebContents* old_contents,
     content::WebContents* new_contents) {
-  if (!base::FeatureList::IsEnabled(features::kAppServiceInstanceRegistry))
-    return;
-
   OnTabClosing(old_contents);
   OnTabInserted(new_contents);
 }
 
 void AppServiceInstanceRegistryHelper::OnTabInserted(
     content::WebContents* contents) {
-  if (!base::FeatureList::IsEnabled(features::kAppServiceInstanceRegistry))
-    return;
-
   std::string app_id = GetAppId(contents);
   aura::Window* window = GetWindow(contents);
 
@@ -157,9 +144,6 @@ void AppServiceInstanceRegistryHelper::OnTabInserted(
 
 void AppServiceInstanceRegistryHelper::OnTabClosing(
     content::WebContents* contents) {
-  if (!base::FeatureList::IsEnabled(features::kAppServiceInstanceRegistry))
-    return;
-
   aura::Window* window = GetWindow(contents);
 
   // When the tab is closed, if the window does not exists in the AppService
@@ -237,9 +221,6 @@ void AppServiceInstanceRegistryHelper::OnInstances(const std::string& app_id,
 
 void AppServiceInstanceRegistryHelper::OnSetShelfIDForBrowserWindowContents(
     content::WebContents* contents) {
-  if (!base::FeatureList::IsEnabled(features::kAppServiceInstanceRegistry))
-    return;
-
   aura::Window* window = GetWindow(contents);
   if (!window || !window->GetToplevelWindow())
     return;
@@ -350,8 +331,12 @@ void AppServiceInstanceRegistryHelper::SetWindowActivated(
     Browser* browser = chrome::FindBrowserWithWindow(window);
     if (!browser)
       return;
+
     content::WebContents* contents =
         browser->tab_strip_model()->GetActiveWebContents();
+    if (!contents)
+      return;
+
     apps::InstanceState state = static_cast<apps::InstanceState>(
         apps::InstanceState::kStarted | apps::InstanceState::kRunning |
         apps::InstanceState::kActive | apps::InstanceState::kVisible);

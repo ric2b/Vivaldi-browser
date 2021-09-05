@@ -44,6 +44,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
+#include "base/threading/hang_watcher.h"
 #include "base/trace_event/trace_event.h"
 #include "components/discardable_memory/service/discardable_shared_memory_manager.h"
 #include "components/download/public/common/download_task_runner.h"
@@ -91,10 +92,10 @@
 #include "mojo/public/cpp/system/invitation.h"
 #include "mojo/public/mojom/base/binder.mojom.h"
 #include "ppapi/buildflags/buildflags.h"
+#include "sandbox/policy/sandbox_type.h"
+#include "sandbox/policy/switches.h"
 #include "services/network/public/cpp/features.h"
 #include "services/service_manager/embedder/switches.h"
-#include "services/service_manager/sandbox/sandbox_type.h"
-#include "services/service_manager/sandbox/switches.h"
 #include "services/tracing/public/cpp/trace_startup.h"
 #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
 #include "ui/base/ui_base_paths.h"
@@ -109,7 +110,7 @@
 #include "base/trace_event/trace_event_etw_export_win.h"
 #include "ui/base/l10n/l10n_util_win.h"
 #include "ui/display/win/dpi.h"
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 #include "sandbox/mac/seatbelt.h"
 #include "sandbox/mac/seatbelt_exec.h"
 #endif  // OS_WIN
@@ -121,17 +122,17 @@
 #include "base/posix/global_descriptors.h"
 #include "content/public/common/content_descriptors.h"
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 #include "content/public/common/zygote/zygote_fork_delegate_linux.h"
 #endif
-#if !defined(OS_MACOSX) && !defined(OS_ANDROID)
+#if !defined(OS_MAC) && !defined(OS_ANDROID)
 #include "content/zygote/zygote_main.h"
 #include "sandbox/linux/services/libc_interceptor.h"
 #endif
 
 #endif  // OS_POSIX || OS_FUCHSIA
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include "base/native_library.h"
 #include "base/rand_util.h"
 #include "content/public/common/zygote/sandbox_support_linux.h"
@@ -151,7 +152,7 @@
 #include "content/public/common/content_client.h"
 #endif
 
-#endif  // OS_LINUX
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
 #include "content/browser/sandbox_host_linux.h"
@@ -204,7 +205,7 @@ void LoadV8SnapshotFile() {
   ALLOW_UNUSED_LOCAL(kSnapshotType);
   ALLOW_UNUSED_LOCAL(snapshot_data_descriptor);
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX)
+#if defined(OS_POSIX) && !defined(OS_MAC)
   base::FileDescriptorStore& file_descriptor_store =
       base::FileDescriptorStore::GetInstance();
   base::MemoryMappedFile::Region region;
@@ -216,7 +217,7 @@ void LoadV8SnapshotFile() {
                                                kSnapshotType);
     return;
   }
-#endif  // OS_POSIX && !OS_MACOSX
+#endif  // OS_POSIX && !OS_MAC
 
   gin::V8Initializer::LoadV8Snapshot(kSnapshotType);
 }
@@ -279,7 +280,7 @@ void InitializeZygoteSandboxForBrowserProcess(
   SandboxHostLinux::GetInstance()->Init();
 
   if (parsed_command_line.HasSwitch(switches::kNoZygote)) {
-    if (!parsed_command_line.HasSwitch(service_manager::switches::kNoSandbox)) {
+    if (!parsed_command_line.HasSwitch(sandbox::policy::switches::kNoSandbox)) {
       LOG(ERROR) << "--no-sandbox should be used together with --no--zygote";
       exit(EXIT_FAILURE);
     }
@@ -300,7 +301,7 @@ void InitializeZygoteSandboxForBrowserProcess(
 }
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 // Loads the (native) libraries but does not initialize them (i.e., does not
@@ -391,7 +392,7 @@ void PreSandboxInit() {
 }
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
-#endif  // OS_LINUX
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 class ControlInterfaceBinderImpl : public mojo_base::mojom::Binder {
  public:
@@ -472,7 +473,7 @@ int RunZygote(ContentMainDelegate* delegate) {
   delegate->ZygoteStarting(&zygote_fork_delegates);
   media::InitializeMediaLibrary();
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   PreSandboxInit();
 #endif
 
@@ -587,9 +588,9 @@ int ContentMainRunnerImpl::Initialize(const ContentMainParams& params) {
   sandbox_info_ = *params.sandbox_info;
 #else  // !OS_WIN
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   autorelease_pool_ = params.autorelease_pool;
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
 #if defined(OS_ANDROID)
   // Now that mojo's core is initialized (by service manager's Main()), we can
@@ -616,11 +617,11 @@ int ContentMainRunnerImpl::Initialize(const ContentMainParams& params) {
                    base::GlobalDescriptors::kBaseDescriptor);
 #endif  // !OS_ANDROID
 
-#if defined(OS_LINUX) || defined(OS_OPENBSD)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_OPENBSD)
     g_fds->Set(service_manager::kCrashDumpSignal,
                service_manager::kCrashDumpSignal +
                    base::GlobalDescriptors::kBaseDescriptor);
-#endif  // OS_LINUX || OS_OPENBSD
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_OPENBSD)
 
 #endif  // !OS_WIN
 
@@ -796,10 +797,10 @@ int ContentMainRunnerImpl::Initialize(const ContentMainParams& params) {
 
 #if defined(OS_WIN)
     if (!InitializeSandbox(
-            service_manager::SandboxTypeFromCommandLine(command_line),
+            sandbox::policy::SandboxTypeFromCommandLine(command_line),
             params.sandbox_info))
       return TerminateForFatalInitializationError();
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
     // Only the GPU process still runs the V1 sandbox.
     bool v2_enabled = base::CommandLine::ForCurrentProcess()->HasSwitch(
         sandbox::switches::kSeatbeltClientName);
@@ -852,7 +853,7 @@ int ContentMainRunnerImpl::Run(bool start_service_manager_only) {
       delegate_->PostFieldTrialInitialization();
     }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
     // If dynamic Mojo Core is being used, ensure that it's loaded very early in
     // the child/zygote process, before any sandbox is initialized. The library
     // is not fully initialized with IPC support until a ChildProcess is later
@@ -862,7 +863,7 @@ int ContentMainRunnerImpl::Run(bool start_service_manager_only) {
       CHECK_EQ(mojo::LoadCoreLibrary(GetMojoCoreSharedLibraryPath()),
                MOJO_RESULT_OK);
     }
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
   }
 
   MainFunctionParams main_params(command_line);
@@ -870,7 +871,7 @@ int ContentMainRunnerImpl::Run(bool start_service_manager_only) {
   main_params.created_main_parts_closure = created_main_parts_closure_;
 #if defined(OS_WIN)
   main_params.sandbox_info = &sandbox_info_;
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   main_params.autorelease_pool = autorelease_pool_;
 #endif
 
@@ -928,7 +929,7 @@ int ContentMainRunnerImpl::RunServiceManager(MainFunctionParams& main_params,
 
     // The hang watcher needs to be started once the feature list is available
     // but before the IO thread is started.
-    if (base::FeatureList::IsEnabled(base::HangWatcher::kEnableHangWatcher)) {
+    if (base::HangWatcher::IsEnabled()) {
       hang_watcher_ = new base::HangWatcher();
       hang_watcher_->Start();
       ANNOTATE_LEAKING_OBJECT_PTR(hang_watcher_);

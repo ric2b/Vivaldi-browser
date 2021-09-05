@@ -105,7 +105,8 @@ chrome.inputMethodPrivate.AutoCapitalizeType = {
  *   spellCheck: boolean,
  *   shouldDoLearning: boolean,
  *   focusReason: !chrome.inputMethodPrivate.FocusReason,
- *   hasBeenPassword: boolean
+ *   hasBeenPassword: boolean,
+ *   appKey: (string|undefined)
  * }}
  */
 chrome.inputMethodPrivate.InputContext;
@@ -328,9 +329,38 @@ chrome.inputMethodPrivate.setSettings = function(engineID, settings, callback) {
  * }} parameters
  * @param {function(boolean): void=} callback Called when the operation
  *     completes with a boolean indicating if the text was accepted or not. On
- *     failure, chrome.runtime.lastError is set.
+ *     failure, $(ref:runtime.lastError) is set.
  */
 chrome.inputMethodPrivate.setCompositionRange = function(parameters, callback) {};
+
+/**
+ * Get the autocorrected word's bounds.
+ * @param {{
+ *   contextID: number
+ * }} parameters
+ * @param {function({
+ *   start: number,
+ *   end: number
+ * }): void} callback Called with the bounds of the autocorrect word when the
+ *     operation completes. On failure, $(ref:runtime.lastError) is set.
+ */
+chrome.inputMethodPrivate.getAutocorrectRange = function(parameters, callback) {};
+
+/**
+ * Get the screen coordinates of the autocorrected word's bounds.
+ * @param {{
+ *   contextID: number
+ * }} parameters
+ * @param {function({
+ *   x: number,
+ *   y: number,
+ *   width: number,
+ *   height: number
+ * }): void} callback Called with screen coordinates of the autocorrect word
+ *     when the operation completes. On failure, $(ref:runtime.lastError) is
+ *     set.
+ */
+chrome.inputMethodPrivate.getAutocorrectCharacterBounds = function(parameters, callback) {};
 
 /**
  * Set the autocorrect range and autocorrect word. If this extension does not
@@ -341,8 +371,8 @@ chrome.inputMethodPrivate.setCompositionRange = function(parameters, callback) {
  *   selectionStart: number,
  *   selectionEnd: number
  * }} parameters
- * @param {function(boolean): void=} callback Called when the operation
- *     completes. On failure, chrome.runtime.lastError is set.
+ * @param {function(): void=} callback Called when the operation completes. On
+ *     failure, chrome.runtime.lastError is set.
  */
 chrome.inputMethodPrivate.setAutocorrectRange = function(parameters, callback) {};
 
@@ -421,3 +451,9 @@ chrome.inputMethodPrivate.onScreenProjectionChanged;
  * @type {!ChromeEvent}
  */
 chrome.inputMethodPrivate.onSuggestionsChanged;
+
+/**
+ * This event is sent when input method options are changed.
+ * @type {!ChromeEvent}
+ */
+chrome.inputMethodPrivate.onInputMethodOptionsChanged;

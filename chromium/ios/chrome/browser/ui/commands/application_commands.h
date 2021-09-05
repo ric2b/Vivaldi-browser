@@ -41,6 +41,11 @@ enum class KeyRetrievalTriggerForUMA;
 - (void)showSavedPasswordsSettingsFromViewController:
     (UIViewController*)baseViewController;
 
+// Shows the list of saved passwords in the settings. Automatically starts
+// password check.
+- (void)showSavedPasswordsSettingsAndStartPasswordCheckFromViewController:
+    (UIViewController*)baseViewController;
+
 // Shows the list of profiles (addresess) in the settings.
 - (void)showProfileSettingsFromViewController:
     (UIViewController*)baseViewController;
@@ -109,6 +114,13 @@ enum class KeyRetrievalTriggerForUMA;
 // Shows the Report an Issue UI, presenting from |baseViewController|.
 - (void)showReportAnIssueFromViewController:
     (UIViewController*)baseViewController;
+
+// Shows the Report an Issue UI, presenting from |baseViewController|, using
+// |specificProductData| for additional product data to be sent in the report.
+- (void)
+    showReportAnIssueFromViewController:(UIViewController*)baseViewController
+                    specificProductData:(NSDictionary<NSString*, NSString*>*)
+                                            specificProductData;
 
 // Opens the |command| URL in a new tab.
 // TODO(crbug.com/907527): Check if it is possible to merge it with the

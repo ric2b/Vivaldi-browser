@@ -211,7 +211,7 @@ void BindAddStatement(const PasswordForm& form, sql::Statement* s) {
   // The "preferred" column has been deprecated in M81.
   s->BindInt(COLUMN_PREFERRED, 0);
   s->BindInt64(COLUMN_DATE_CREATED, form.date_created.ToInternalValue());
-  s->BindInt(COLUMN_BLACKLISTED_BY_USER, form.blacklisted_by_user);
+  s->BindInt(COLUMN_BLACKLISTED_BY_USER, form.blocked_by_user);
   s->BindInt(COLUMN_SCHEME, static_cast<int>(form.scheme));
   s->BindInt(COLUMN_PASSWORD_TYPE, static_cast<int>(form.type));
   s->BindInt(COLUMN_TIMES_USED, form.times_used);
@@ -788,7 +788,7 @@ bool LoginDatabase::Init() {
   return true;
 }
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
 void LoginDatabase::InitPasswordRecoveryUtil(
     std::unique_ptr<PasswordRecoveryUtilMac> password_recovery_util) {
   password_recovery_util_ = std::move(password_recovery_util);
@@ -999,16 +999,6 @@ void LoginDatabase::ReportLoginsWithSchemesMetrics() {
 
 void LoginDatabase::ReportBubbleSuppressionMetrics() {
 #if !defined(OS_IOS) && !defined(OS_ANDROID)
-  // Number of times the user needs to dismiss a save/update bubble for it to
-  // not be shown again. This happens only on desktop platforms.
-  int threshold =
-      password_bubble_experiment::GetSmartBubbleDismissalThreshold();
-  LogAccountStatHiRes(
-      "PasswordManager.BubbleSuppression.DomainsWithSuppressedBubble",
-      stats_table_.GetNumDomainsWithAtLeastNDismissals(threshold));
-  LogAccountStatHiRes(
-      "PasswordManager.BubbleSuppression.AccountsWithSuppressedBubble",
-      stats_table_.GetNumAccountsWithAtLeastNDismissals(threshold));
   LogAccountStatHiRes(
       "PasswordManager.BubbleSuppression.AccountsInStatisticsTable",
       stats_table_.GetNumAccounts());
@@ -1220,7 +1210,7 @@ PasswordStoreChangeList LoginDatabase::UpdateLogin(const PasswordForm& form,
   // This is the "preferred" column which has been deprecated in M81.
   s.BindInt(next_param++, 0);
   s.BindInt64(next_param++, form.date_created.ToInternalValue());
-  s.BindInt(next_param++, form.blacklisted_by_user);
+  s.BindInt(next_param++, form.blocked_by_user);
   s.BindInt(next_param++, static_cast<int>(form.scheme));
   s.BindInt(next_param++, static_cast<int>(form.type));
   s.BindInt(next_param++, form.times_used);
@@ -1445,7 +1435,7 @@ LoginDatabase::EncryptionResult LoginDatabase::InitPasswordFormFromStatement(
   form->signon_realm = tmp;
   form->date_created =
       base::Time::FromInternalValue(s.ColumnInt64(COLUMN_DATE_CREATED));
-  form->blacklisted_by_user = (s.ColumnInt(COLUMN_BLACKLISTED_BY_USER) > 0);
+  form->blocked_by_user = (s.ColumnInt(COLUMN_BLACKLISTED_BY_USER) > 0);
   int scheme_int = s.ColumnInt(COLUMN_SCHEME);
   form->scheme = static_cast<PasswordForm::Scheme>(scheme_int);
   DCHECK(autofill::mojom::IsKnownEnumValue(form->scheme));
@@ -1679,17 +1669,22 @@ bool LoginDatabase::IsEmpty() {
   return s.Step() && s.ColumnInt(0) == 0;
 }
 
+// static
+void LoginDatabase::DeleteDatabaseFile(const base::FilePath& db_path) {
+  sql::Database::Delete(db_path);
+}
+
 bool LoginDatabase::DeleteAndRecreateDatabaseFile() {
   TRACE_EVENT0("passwords", "LoginDatabase::DeleteAndRecreateDatabaseFile");
   DCHECK(db_.is_open());
   meta_table_.Reset();
   db_.Close();
-  sql::Database::Delete(db_path_);
+  DeleteDatabaseFile(db_path_);
   return Init();
 }
 
 DatabaseCleanupResult LoginDatabase::DeleteUndecryptableLogins() {
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
   TRACE_EVENT0("passwords", "LoginDatabase::DeleteUndecryptableLogins");
   // If the Keychain is unavailable, don't delete any logins.
   if (!OSCrypt::IsEncryptionAvailable()) {
@@ -2023,7 +2018,7 @@ FormRetrievalResult LoginDatabase::StatementToForms(
     key_to_form_map->emplace(primary_key, std::move(new_form));
   }
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
   // Remove corrupted passwords.
   size_t count_removed_logins = 0;
   for (const auto& form : forms_to_be_deleted) {
@@ -2110,7 +2105,7 @@ void LoginDatabase::InitializeStatementStrings(const SQLTableBuilder& builder) {
 }
 
 bool LoginDatabase::IsUsingCleanupMechanism() const {
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
   return base::FeatureList::IsEnabled(features::kDeleteCorruptedPasswords);
 #else
   return false;

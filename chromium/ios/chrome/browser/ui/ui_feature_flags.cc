@@ -28,17 +28,11 @@ const base::Feature kVoiceOverUnstackedTabstrip{
 const base::Feature kForceUnstackedTabstrip{"ForceUnstackedTabstrip",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kContainedBVC{"ContainedBVC",
-                                  base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kTestFeature{"TestFeature",
                                  base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kFirstResponderSendAction{
     "FirstResponderSendAction", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kQRCodeGeneration{"QRCodeGeneration",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kEnableNativeContextMenus{
     "EnableNativeContextMenus", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -49,7 +43,7 @@ const base::Feature kPointerSupport{"PointerSupport",
 #endif  // defined(__IPHONE_13_4)
 
 const base::Feature kEnableMyGoogle{"EnableMyGoogle",
-                                    base::FEATURE_DISABLED_BY_DEFAULT};
+                                    base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kEnableIOSManagedSettingsUI{
     "EnableIOSManagedSettingsUI", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -62,3 +56,15 @@ const base::Feature kIllustratedEmptyStates{"IllustratedEmptyStates",
 
 const base::Feature kSharedHighlightingIOS{"SharedHighlightingIOS",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnableFullPageScreenshot{
+    "EnableFullPageScreenshot", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnableAutofillPasswordReauthIOS{
+    "EnableAutofillPasswordReauthIOS", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kDefaultBrowserFullscreenPromo{
+    "DefaultBrowserFullscreenPromo", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kDefaultBrowserSettings{"DefaultBrowserSettings",
+                                            base::FEATURE_ENABLED_BY_DEFAULT};

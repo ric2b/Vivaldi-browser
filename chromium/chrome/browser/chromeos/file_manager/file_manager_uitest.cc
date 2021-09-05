@@ -23,13 +23,6 @@ class FileManagerUITest : public InProcessBrowserTest {
     // --disable-web-security required to load resources from
     // files and from chrome://resources/... urls.
     command_line->AppendSwitch(switches::kDisableWebSecurity);
-
-    // TODO(yoichio): This is temporary switch to support chrome internal
-    // components migration from the old web APIs.
-    // After completion of the migration, we should remove this.
-    // See crbug.com/924873 for detail.
-    command_line->AppendSwitchASCII(switches::kDisableBlinkFeatures,
-                                    "ShadowDOMV0,CustomElementsV0,HTMLImports");
   }
 
   void RunTest(std::string test_scope) {
@@ -43,10 +36,10 @@ class FileManagerUITest : public InProcessBrowserTest {
         browser()->tab_strip_model()->GetActiveWebContents();
 
     // Set prefs required for cut/paste.
-    auto web_prefs = web_contents->GetRenderViewHost()->GetWebkitPreferences();
+    auto web_prefs = web_contents->GetOrCreateWebPreferences();
     web_prefs.dom_paste_enabled = true;
     web_prefs.javascript_can_access_clipboard = true;
-    web_contents->GetRenderViewHost()->UpdateWebkitPreferences(web_prefs);
+    web_contents->SetWebPreferences(web_prefs);
 
     ASSERT_TRUE(web_contents);
     ui_test_utils::NavigateToURL(browser(), url);

@@ -6,6 +6,8 @@ import("//third_party/blink/renderer/modules/modules.gni")
 
 blink_modules_sources("native_file_system") {
   sources = [
+    "data_transfer_item_native_file_system.cc",
+    "data_transfer_item_native_file_system.h",
     "global_native_file_system.cc",
     "global_native_file_system.h",
     "native_file_system_directory_handle.cc",
@@ -22,12 +24,14 @@ blink_modules_sources("native_file_system") {
     "native_file_system_underlying_sink.h",
     "native_file_system_writable_file_stream.cc",
     "native_file_system_writable_file_stream.h",
+    "storage_manager_native_file_system.cc",
+    "storage_manager_native_file_system.h",
   ]
 
   deps = [ "//third_party/blink/renderer/platform" ]
 }
 
-jumbo_source_set("unit_tests") {
+source_set("unit_tests") {
   testonly = true
   sources = [ "global_native_file_system_test.cc" ]
 
@@ -39,8 +43,10 @@ jumbo_source_set("unit_tests") {
 
   deps = [
     "//testing/gtest",
+    "//third_party/blink/renderer/core:unit_test_support",
     "//third_party/blink/renderer/modules",
     "//third_party/blink/renderer/platform",
+    "//third_party/blink/renderer/platform:test_support",
     "//third_party/blink/renderer/platform/wtf",
   ]
 }

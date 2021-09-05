@@ -1,5 +1,5 @@
 This is a testharness.js-based test.
-Found 59 tests; 58 PASS, 1 FAIL, 0 TIMEOUT, 0 NOTRUN.
+Found 58 tests; 57 PASS, 1 FAIL, 0 TIMEOUT, 0 NOTRUN.
 PASS idl_test setup
 PASS idl_test validation
 PASS Partial interface Window: original interface defined
@@ -20,8 +20,7 @@ PASS FileSystemHandle interface object name
 PASS FileSystemHandle interface: existence and properties of interface prototype object
 PASS FileSystemHandle interface: existence and properties of interface prototype object's "constructor" property
 PASS FileSystemHandle interface: existence and properties of interface prototype object's @@unscopables property
-PASS FileSystemHandle interface: attribute isFile
-PASS FileSystemHandle interface: attribute isDirectory
+PASS FileSystemHandle interface: attribute kind
 PASS FileSystemHandle interface: attribute name
 PASS FileSystemHandle interface: operation isSameEntry(FileSystemHandle)
 PASS FileSystemHandle interface: operation queryPermission(optional FileSystemHandlePermissionDescriptor)
@@ -40,9 +39,9 @@ PASS FileSystemDirectoryHandle interface object name
 PASS FileSystemDirectoryHandle interface: existence and properties of interface prototype object
 PASS FileSystemDirectoryHandle interface: existence and properties of interface prototype object's "constructor" property
 PASS FileSystemDirectoryHandle interface: existence and properties of interface prototype object's @@unscopables property
-FAIL FileSystemDirectoryHandle interface: async iterable<USVString, FileSystemHandle> Cannot read property 'writable' of undefined
-PASS FileSystemDirectoryHandle interface: operation getFile(USVString, optional FileSystemGetFileOptions)
-PASS FileSystemDirectoryHandle interface: operation getDirectory(USVString, optional FileSystemGetDirectoryOptions)
+PASS FileSystemDirectoryHandle interface: async iterable<USVString, FileSystemHandle>
+PASS FileSystemDirectoryHandle interface: operation getFileHandle(USVString, optional FileSystemGetFileOptions)
+PASS FileSystemDirectoryHandle interface: operation getDirectoryHandle(USVString, optional FileSystemGetDirectoryOptions)
 PASS FileSystemDirectoryHandle interface: operation removeEntry(USVString, optional FileSystemRemoveOptions)
 PASS FileSystemDirectoryHandle interface: operation resolve(FileSystemHandle)
 PASS FileSystemWritableFileStream interface: existence and properties of interface object
@@ -57,7 +56,7 @@ PASS FileSystemWritableFileStream interface: operation truncate(unsigned long lo
 PASS Window interface: operation showOpenFilePicker(optional OpenFilePickerOptions)
 PASS Window interface: operation showSaveFilePicker(optional SaveFilePickerOptions)
 PASS Window interface: operation showDirectoryPicker(optional DirectoryPickerOptions)
-PASS Window interface: operation getOriginPrivateDirectory()
+FAIL Window interface: operation getOriginPrivateDirectory() assert_own_property: global object missing non-static operation expected property "getOriginPrivateDirectory" missing
 PASS WorkerGlobalScope interface: existence and properties of interface object
 Harness: the test ran to completion.
 

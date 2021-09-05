@@ -88,7 +88,7 @@ task_manager::TaskManagerTableModel* TaskManagerView::Show(Browser* browser) {
   // process.
   if (browser) {
     ui::win::SetAppIdForWindow(
-        shell_integration::win::GetChromiumModelIdForProfile(
+        shell_integration::win::GetAppUserModelIdForBrowser(
             browser->profile()->GetPath()),
         views::HWNDForWidget(g_task_manager_view->GetWidget()));
   }
@@ -380,7 +380,7 @@ void TaskManagerView::RetrieveSavedAlwaysOnTopState() {
 
 namespace chrome {
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // These are used by the Mac versions of |ShowTaskManager| and |HideTaskManager|
 // if they decide to show the Views task manager instead of the Cocoa one.
 task_manager::TaskManagerTableModel* ShowTaskManagerViews(Browser* browser) {

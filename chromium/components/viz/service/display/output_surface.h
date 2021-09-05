@@ -51,6 +51,12 @@ class VIZ_SERVICE_EXPORT OutputSurface {
     kOpenGL = 1,
     kVulkan = 2,
   };
+
+  enum class OrientationMode {
+    kLogic,     // The orientation same to logical screen orientation as seen by
+                // the user.
+    kHardware,  // The orientation same to the hardware.
+  };
   struct Capabilities {
     Capabilities();
     Capabilities(const Capabilities& capabilities);
@@ -75,14 +81,15 @@ class VIZ_SERVICE_EXPORT OutputSurface {
     bool supports_commit_overlay_planes = false;
     // Whether this OutputSurface supports gpu vsync callbacks.
     bool supports_gpu_vsync = false;
-    // Whether this OutputSurface supports pre transform. If it is supported,
-    // the chrome will set the output surface size in hardware natural
-    // orientation, and will render transformed content on back buffers based
-    // on the current system transform. So the OS presentation engine can
-    // present buffers onto the screen directly.
-    bool supports_pre_transform = false;
+    // OutputSurface's orientation mode.
+    OrientationMode orientation_mode = OrientationMode::kLogic;
     // Whether this OutputSurface supports direct composition layers.
     bool supports_dc_layers = false;
+    // Set RGB10A2 overlay support flags true by force, which is used for
+    // playing hdr video.
+    // TODO(richard.li@intel.com): Remove this when Intel fixs its overlay caps.
+    // checking bug in their driver.
+    bool forces_rgb10a2_overlay_support_flags = false;
     // Whether this OutputSurface should skip DrawAndSwap(). This is true for
     // the unified display on Chrome OS. All drawing is handled by the physical
     // displays so the unified display should skip that work.
@@ -106,6 +113,10 @@ class VIZ_SERVICE_EXPORT OutputSurface {
     // SwapBuffersCompleteParams::frame_buffer_damage_area for every
     // SwapBuffers complete callback.
     bool damage_area_from_skia_output_device = false;
+    // This is the maximum size for RenderPass textures. No maximum size is
+    // enforced if zero.
+    int max_render_target_size = 0;
+
     // The SkColorType and GrBackendFormat for non-HDR and HDR.
     // TODO(penghuang): remove SkColorType and GrBackendFormat when
     // OutputSurface uses the |format| passed to Reshape().
@@ -157,8 +168,12 @@ class VIZ_SERVICE_EXPORT OutputSurface {
   virtual void BindFramebuffer() = 0;
 
   // Marks that the given rectangle will be drawn to on the default, bound
-  // framebuffer.
-  virtual void SetDrawRectangle(const gfx::Rect& rect) = 0;
+  // framebuffer. Only valid if |capabilities().supports_dc_layers| is true.
+  virtual void SetDrawRectangle(const gfx::Rect& rect);
+
+  // Enable or disable DC layers. Must be called before DC layers are scheduled.
+  // Only valid if |capabilities().supports_dc_layers| is true.
+  virtual void SetEnableDCLayers(bool enabled);
 
   // Returns true if a main image overlay plane should be scheduled.
   virtual bool IsDisplayedAsOverlayPlane() const = 0;
@@ -243,6 +258,9 @@ class VIZ_SERVICE_EXPORT OutputSurface {
   // override this.
   virtual void SetNeedsSwapSizeNotifications(
       bool needs_swap_size_notifications);
+
+  // Notifies surface that we want to measure viz-gpu latency for next draw.
+  virtual void SetNeedsMeasureNextDrawLatency() {}
 
   // Updates timing info on the provided LatencyInfo when swap completes.
   static void UpdateLatencyInfoOnSwap(

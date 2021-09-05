@@ -37,12 +37,14 @@ const char kDisableBackgroundMediaSuspend[] =
 const char kReportVp9AsAnUnsupportedMimeType[] =
     "report-vp9-as-an-unsupported-mime-type";
 
-#if defined(OS_LINUX) || defined(OS_FREEBSD) || defined(OS_SOLARIS)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_FREEBSD) || \
+    defined(OS_SOLARIS)
 // The Alsa device to use when opening an audio input stream.
 const char kAlsaInputDevice[] = "alsa-input-device";
 // The Alsa device to use when opening an audio stream.
 const char kAlsaOutputDevice[] = "alsa-output-device";
-#endif  // defined(OS_LINUX) || defined(OS_FREEBSD) || defined(OS_SOLARIS)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_FREEBSD) ||
+        // defined(OS_SOLARIS)
 
 #if defined(OS_WIN)
 // Use exclusive mode audio streaming for Windows Vista and higher.
@@ -181,11 +183,14 @@ const char kOverrideEnabledCdmInterfaceVersion[] =
 const char kOverrideHardwareSecureCodecsForTesting[] =
     "override-hardware-secure-codecs-for-testing";
 
-#if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
-// Force to disable kChromeosVideoDecoder feature, used for unsupported boards.
-const char kForceDisableNewAcceleratedVideoDecoder[] =
+#if defined(OS_CHROMEOS)
+// ChromeOS uses one of two VideoDecoder implementations based on SoC/board
+// specific configurations that are signalled via this command line flag.
+// TODO(b/159825227): remove when the "old" video decoder is fully launched.
+const char kPlatformDisallowsChromeOSDirectVideoDecoder[] =
+    // TODO(mcasas): Rename the flag string when crrev.com/c/2268600 lands.
     "force-disable-new-accelerated-video-decoder";
-#endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
+#endif
 
 namespace autoplay {
 
@@ -242,7 +247,7 @@ const base::Feature kResumeBackgroundVideo {
 // When enabled, MediaCapabilities will check with GPU Video Accelerator
 // Factories to determine isPowerEfficient = true/false.
 const base::Feature kMediaCapabilitiesQueryGpuFactories{
-    "MediaCapabilitiesQueryGpuFactories", base::FEATURE_DISABLED_BY_DEFAULT};
+    "MediaCapabilitiesQueryGpuFactories", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enable Media Capabilities with finch-parameters.
 const base::Feature kMediaCapabilitiesWithParameters{
@@ -296,11 +301,6 @@ const base::Feature kMemoryPressureBasedSourceBufferGC{
 const base::Feature kRevokeMediaSourceObjectURLOnAttach{
     "RevokeMediaSourceObjectURLOnAttach", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enable the instance from ChromeosVideoDecoderFactory in
-// MojoVideoDecoderService, replacing VdaVideoDecoder at Chrome OS platform.
-const base::Feature kChromeosVideoDecoder{"ChromeosVideoDecoder",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enable saving playback information in a crash trace, to see if some codecs
 // are crashier than others.
 const base::Feature kD3D11PrintCodecOnCrash{"D3D11PrintCodecOnCrash",
@@ -353,7 +353,7 @@ const base::Feature kGav1VideoDecoder{"Gav1VideoDecoder",
 // Show toolbar button that opens dialog for controlling media sessions.
 const base::Feature kGlobalMediaControls {
   "GlobalMediaControls",
-#if defined(OS_WIN) || defined(OS_MACOSX) || \
+#if defined(OS_WIN) || defined(OS_MAC) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
@@ -378,7 +378,7 @@ const base::Feature kGlobalMediaControlsOverlayControls{
 // Show picture-in-picture button in Global Media Controls.
 const base::Feature kGlobalMediaControlsPictureInPicture {
   "GlobalMediaControlsPictureInPicture",
-#if defined(OS_WIN) || defined(OS_MACOSX) || \
+#if defined(OS_WIN) || defined(OS_MAC) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
@@ -404,7 +404,7 @@ const base::Feature kSpecCompliantCanPlayThrough{
 // Disables the real audio output stream after silent audio has been delivered
 // for too long. Should save quite a bit of power in the muted video case.
 const base::Feature kSuspendMutedAudio{"SuspendMutedAudio",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Use shared block-based buffering for media.
 const base::Feature kUseNewMediaCache{"use-new-media-cache",
@@ -412,7 +412,7 @@ const base::Feature kUseNewMediaCache{"use-new-media-cache",
 
 // Enables using the media history store to store media engagement metrics.
 const base::Feature kUseMediaHistoryStore{"UseMediaHistoryStore",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Use R16 texture for 9-16 bit channel instead of half-float conversion by CPU.
 const base::Feature kUseR16Texture{"use-r16-texture",
@@ -488,13 +488,18 @@ const base::Feature kWidevineAv1ForceSupportForTesting{
 // Enables handling of hardware media keys for controlling media.
 const base::Feature kHardwareMediaKeyHandling {
   "HardwareMediaKeyHandling",
-#if defined(OS_CHROMEOS) || defined(OS_WIN) || defined(OS_MACOSX) || \
+#if defined(OS_CHROMEOS) || defined(OS_WIN) || defined(OS_MAC) || \
     BUILDFLAG(USE_MPRIS)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 };
+
+// Enables a platform-specific resolution cutoff for prioritizing platform
+// decoders over software decoders or vice-versa.
+const base::Feature kResolutionBasedDecoderPriority{
+    "ResolutionBasedDecoderPriority", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables low-delay video rendering in media pipeline on "live" stream.
 const base::Feature kLowDelayVideoRenderingOnLiveStream{
@@ -580,7 +585,27 @@ const base::Feature kUseAudioLatencyFromHAL{"UseAudioLatencyFromHAL",
 const base::Feature kUsePooledSharedImageVideoProvider{
     "UsePooledSharedImageVideoProvider", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Used to enable/disable zero copy video path on webview for MCVD.
+const base::Feature kWebViewZeroCopyVideo{"WebViewZeroCopyVideo",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_ANDROID)
+
+#if defined(OS_CHROMEOS) && BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
+// Enable the hardware-accelerated direct video decoder instead of the one
+// needing the VdaVideoDecoder adapter. This flag is used mainly as a
+// chrome:flag for developers debugging issues. TODO(b/159825227): remove when
+// the direct video decoder is fully launched.
+const base::Feature kUseChromeOSDirectVideoDecoder{
+    "UseChromeOSDirectVideoDecoder", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// ChromeOS has one of two VideoDecoder implementations active based on
+// SoC/board specific configurations that are sent via command line flags. This
+// switch allows using the non default implementation for testing.
+// TODO(b/159825227): remove when the "old" video decoder is fully launched.
+const base::Feature kUseAlternateVideoDecoderImplementation{
+    "UseAlternateVideoDecoderImplementation",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(OS_CHROMEOS) && BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
 
 #if defined(OS_WIN)
 // Does NV12->NV12 video copy on the main thread right before the texture's
@@ -612,6 +637,11 @@ const base::Feature MEDIA_EXPORT kMediaFoundationVP8Decoding{
     "MediaFoundationVP8Decoding", base::FEATURE_DISABLED_BY_DEFAULT};
 
 #endif  // defined(OS_WIN)
+
+#if defined(OS_MAC)
+const base::Feature MEDIA_EXPORT kVideoToolboxVp9Decoding{
+    "VideoToolboxVp9Decoding", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(OS_MAC)
 
 std::string GetEffectiveAutoplayPolicy(const base::CommandLine& command_line) {
   // Return the autoplay policy set in the command line, if any.
@@ -667,12 +697,11 @@ const base::Feature kMediaEngagementHTTPSOnly{
 
 // Enables Media Feeds to allow sites to provide specific recommendations for
 // users.
-const base::Feature kMediaFeeds{"MediaFeeds",
-                                base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kMediaFeeds{"MediaFeeds", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables fetching Media Feeds periodically in the background.
 const base::Feature kMediaFeedsBackgroundFetching{
-    "MediaFeedsBackgroundFetching", base::FEATURE_DISABLED_BY_DEFAULT};
+    "MediaFeedsBackgroundFetching", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables checking Media Feeds against safe search to prevent adult content.
 const base::Feature kMediaFeedsSafeSearch{"MediaFeedsSafeSearch",
@@ -696,6 +725,11 @@ const base::Feature kMediaLearningFramework{"MediaLearningFramework",
 // kMediaLearningFramework to be enabled also, else it does nothing.
 const base::Feature kMediaLearningSmoothnessExperiment{
     "MediaLearningSmoothnessExperiment", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable the prototype global optimization of tuneables via finch.  See
+// media/base/tuneable.h for how to create tuneable parameters.
+const base::Feature kMediaOptimizer{"JointMediaOptimizer",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enable aggregate power measurement for media playback.
 const base::Feature kMediaPowerExperiment{"MediaPowerExperiment",
@@ -733,6 +767,13 @@ const base::Feature kInternalMediaSession {
 const base::Feature kKaleidoscope{"Kaleidoscope",
                                   base::FEATURE_ENABLED_BY_DEFAULT};
 
+const base::Feature kKaleidoscopeForceShowFirstRunExperience{
+    "KaleidoscopeForceShowFirstRunExperience",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kKaleidoscopeModule{"KaleidoscopeModule",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kUseFakeDeviceForMediaStream{
     "use-fake-device-for-media-stream", base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -755,5 +796,12 @@ bool IsVideoCaptureAcceleratedJpegDecodingEnabled() {
 #endif
   return false;
 }
+
+// When enabled, causes the H264Decoder to treat each DecoderBuffer sent to it
+// as a complete frame, rather than waiting for a following indicator for frame
+// completeness. Temporary flag to allow verifying if this change breaks
+// anything.
+const base::Feature kH264DecoderBufferIsCompleteFrame{
+    "H264DecoderBufferIsCompleteFrame", base::FEATURE_ENABLED_BY_DEFAULT};
 
 }  // namespace media

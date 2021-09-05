@@ -1,4 +1,3 @@
-import("//build/config/jumbo.gni")
 
 # This is separated from datautils to avoid dependency on //chrome and
 # simplify the unit test config.
@@ -9,6 +8,7 @@ source_set("dataurl") {
   ]
   deps = [
     "//base:base",
+    "//url:url",
   ]
 }
 
@@ -22,44 +22,4 @@ source_set("dataurl_unit_tests") {
     "//base:base",
     "//base/test:test_support",
   ]
-}
-
-source_set("datasource") {
-  sources = [
-    "css_mods_data_source.cc",
-    "css_mods_data_source.h",
-    "desktop_data_source_win.cc",
-    "desktop_data_source_win.h",
-    "local_image_data_source.cc",
-    "local_image_data_source.h",
-    "notes_attachment_data_source.cc",
-    "notes_attachment_data_source.h",
-    "vivaldi_data_source.cc",
-    "vivaldi_data_source.h",
-    "vivaldi_data_source_api.cc",
-    "vivaldi_data_source_api.h",
-    "vivaldi_web_source.cc",
-    "vivaldi_web_source.h",
-  ]
-  deps = [
-    ":dataurl",
-    "//base:base",
-    "//chrome/common:common",
-    "//content/public/browser",
-    "//skia",
-    "//vivaldi/notes",
-    "//vivaldi/notes:browser",
-    "//vivaldi/prefs:prefs_files_generated"
-  ]
-  if (!is_android) {
-    deps += [
-      "//chrome/browser/extensions",
-      "//extensions/browser",
-      "//vivaldi/extensions/api:apis",
-    ]
-    allow_circular_includes_from = [
-      "//chrome/browser/extensions",
-      "//vivaldi/extensions/api:apis",
-    ]
-  }
 }

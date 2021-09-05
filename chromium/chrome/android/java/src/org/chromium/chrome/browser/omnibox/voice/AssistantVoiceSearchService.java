@@ -55,10 +55,8 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
     }
 
     // Constants for Assistant Voice Search.
-    // TODO(crbug.com/1041576): Update this placeholder to a the real min version once the code has
-    //                          landed.
     @VisibleForTesting
-    public static final String DEFAULT_ASSISTANT_AGSA_MIN_VERSION = "10.98";
+    public static final String DEFAULT_ASSISTANT_AGSA_MIN_VERSION = "11.7";
     @VisibleForTesting
     public static final int DEFAULT_ASSISTANT_MIN_ANDROID_SDK_VERSION =
             Build.VERSION_CODES.LOLLIPOP;
@@ -126,8 +124,6 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
     void initializeAssistantVoiceSearchState() {
         mIsAssistantVoiceSearchEnabled =
                 ChromeFeatureList.isEnabled(ChromeFeatureList.OMNIBOX_ASSISTANT_VOICE_SEARCH);
-        // If we're not using assistant, then don't bother initializing anything else.
-        if (!mIsAssistantVoiceSearchEnabled) return;
 
         mIsColorfulMicEnabled = ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
                 ChromeFeatureList.OMNIBOX_ASSISTANT_VOICE_SEARCH, "colorful_mic",
@@ -153,20 +149,19 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
     }
 
     /**
-     * Checks to see if the call to this method can be resolved with assistant voice search and
-     * resolves it if possible.
-     *
-     * @return Whether the startVoiceRecognition call has been resolved.
+     * Checks if the client should use Assistant for voice search. It's
+     * {@link canRequestAssistantVoiceSearch} with an additional check for experiment groups.
      */
     public boolean shouldRequestAssistantVoiceSearch() {
-        if (!mIsAssistantVoiceSearchEnabled || !mIsDefaultSearchEngineGoogle
-                || !isDeviceEligibleForAssistant(
-                        ConversionUtils.kilobytesToMegabytes(SysUtils.amountOfPhysicalMemoryKB()),
-                        Locale.getDefault())) {
-            return false;
-        }
+        return mIsAssistantVoiceSearchEnabled && canRequestAssistantVoiceSearch();
+    }
 
-        return true;
+    /** Checks if the client meetings the requirements to use Assistant for voice search. */
+    public boolean canRequestAssistantVoiceSearch() {
+        return mIsDefaultSearchEngineGoogle
+                && isDeviceEligibleForAssistant(
+                        ConversionUtils.kilobytesToMegabytes(SysUtils.amountOfPhysicalMemoryKB()),
+                        Locale.getDefault());
     }
 
     /**
@@ -254,8 +249,9 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
     }
 
     /** Records whether the user is eligible. */
-    public static void reportUserEligibility(boolean eligible) {
-        RecordHistogram.recordBooleanHistogram(USER_ELIGIBILITY_HISTOGRAM, eligible);
+    void reportUserEligibility() {
+        RecordHistogram.recordBooleanHistogram(
+                USER_ELIGIBILITY_HISTOGRAM, canRequestAssistantVoiceSearch());
     }
 
     /** Enable the colorful mic for testing purposes. */

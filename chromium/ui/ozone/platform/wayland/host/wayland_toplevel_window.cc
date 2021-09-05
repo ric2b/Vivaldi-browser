@@ -4,6 +4,9 @@
 
 #include "ui/ozone/platform/wayland/host/wayland_toplevel_window.h"
 
+#include "base/run_loop.h"
+#include "base/unguessable_token.h"
+#include "build/lacros_buildflags.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/hit_test.h"
@@ -14,8 +17,10 @@
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_data_drag_controller.h"
 #include "ui/ozone/platform/wayland/host/wayland_event_source.h"
+#include "ui/ozone/platform/wayland/host/wayland_window.h"
 #include "ui/ozone/platform/wayland/host/wayland_window_drag_controller.h"
-#include "ui/platform_window/platform_window_handler/wm_drop_handler.h"
+#include "ui/platform_window/extensions/wayland_extension.h"
+#include "ui/platform_window/wm/wm_drop_handler.h"
 
 namespace ui {
 
@@ -36,6 +41,7 @@ WaylandToplevelWindow::~WaylandToplevelWindow() {
     drag_handler_delegate_->OnDragFinished(
         DragDropTypes::DragOperation::DRAG_NONE);
   }
+  CancelDrag();
 }
 
 bool WaylandToplevelWindow::CreateShellSurface() {
@@ -46,7 +52,11 @@ bool WaylandToplevelWindow::CreateShellSurface() {
     return false;
   }
 
-  shell_surface_->SetAppId(app_id_);
+#if BUILDFLAG(IS_LACROS)
+  shell_surface_->SetAppId(window_unique_id_);
+#else
+  shell_surface_->SetAppId(wm_class_class_);
+#endif
   shell_surface_->SetTitle(window_title_);
   SetSizeConstraints();
   TriggerStateChanges();
@@ -78,13 +88,29 @@ void WaylandToplevelWindow::DispatchHostWindowDragMovement(
   connection()->ScheduleFlush();
 }
 
-void WaylandToplevelWindow::StartDrag(const ui::OSExchangeData& data,
+bool WaylandToplevelWindow::StartDrag(const ui::OSExchangeData& data,
                                       int operation,
                                       gfx::NativeCursor cursor,
+                                      bool can_grab_pointer,
                                       WmDragHandler::Delegate* delegate) {
   DCHECK(!drag_handler_delegate_);
   drag_handler_delegate_ = delegate;
   connection()->data_drag_controller()->StartSession(data, operation);
+
+  base::RunLoop drag_loop(base::RunLoop::Type::kNestableTasksAllowed);
+  drag_loop_quit_closure_ = drag_loop.QuitClosure();
+
+  auto alive = weak_ptr_factory_.GetWeakPtr();
+  drag_loop.Run();
+  if (!alive)
+    return false;
+  return true;
+}
+
+void WaylandToplevelWindow::CancelDrag() {
+  if (drag_loop_quit_closure_.is_null())
+    return;
+  std::move(drag_loop_quit_closure_).Run();
 }
 
 void WaylandToplevelWindow::Show(bool inactive) {
@@ -113,7 +139,7 @@ void WaylandToplevelWindow::Hide() {
 
   // Detach buffer from surface in order to completely shutdown menus and
   // tooltips, and release resources.
-  connection()->buffer_manager_host()->ResetSurfaceContents(GetWidget());
+  connection()->buffer_manager_host()->ResetSurfaceContents(root_surface());
 }
 
 bool WaylandToplevelWindow::IsVisible() const {
@@ -180,6 +206,14 @@ void WaylandToplevelWindow::SizeConstraintsChanged() {
   min_size_ = delegate()->GetMinimumSizeForWindow();
   max_size_ = delegate()->GetMaximumSizeForWindow();
   SetSizeConstraints();
+}
+
+std::string WaylandToplevelWindow::GetWindowUniqueId() const {
+#if BUILDFLAG(IS_LACROS)
+  return window_unique_id_;
+#else
+  return std::string();
+#endif
 }
 
 void WaylandToplevelWindow::HandleSurfaceConfigure(int32_t width,
@@ -254,9 +288,11 @@ void WaylandToplevelWindow::OnDragEnter(const gfx::PointF& point,
 
   // Wayland sends locations in DIP so they need to be translated to
   // physical pixels.
+  // TODO(crbug.com/1102857): get the real event modifier here.
   drop_handler->OnDragEnter(
       gfx::ScalePoint(point, buffer_scale(), buffer_scale()), std::move(data),
-      operation);
+      operation,
+      /*modifiers=*/0);
 }
 
 int WaylandToplevelWindow::OnDragMotion(const gfx::PointF& point,
@@ -267,15 +303,18 @@ int WaylandToplevelWindow::OnDragMotion(const gfx::PointF& point,
 
   // Wayland sends locations in DIP so they need to be translated to
   // physical pixels.
+  // TODO(crbug.com/1102857): get the real event modifier here.
   return drop_handler->OnDragMotion(
-      gfx::ScalePoint(point, buffer_scale(), buffer_scale()), operation);
+      gfx::ScalePoint(point, buffer_scale(), buffer_scale()), operation,
+      /*modifiers=*/0);
 }
 
 void WaylandToplevelWindow::OnDragDrop(std::unique_ptr<OSExchangeData> data) {
   WmDropHandler* drop_handler = GetWmDropHandler(*this);
   if (!drop_handler)
     return;
-  drop_handler->OnDragDrop(std::move(data));
+  // TODO(crbug.com/1102857): get the real event modifier here.
+  drop_handler->OnDragDrop(std::move(data), /*modifiers=*/0);
 }
 
 void WaylandToplevelWindow::OnDragLeave() {
@@ -290,11 +329,18 @@ void WaylandToplevelWindow::OnDragSessionClose(uint32_t dnd_action) {
   drag_handler_delegate_->OnDragFinished(dnd_action);
   drag_handler_delegate_ = nullptr;
   connection()->event_source()->ResetPointerFlags();
+  std::move(drag_loop_quit_closure_).Run();
 }
 
 bool WaylandToplevelWindow::OnInitialize(
     PlatformWindowInitProperties properties) {
-  app_id_ = properties.wm_class_class;
+#if BUILDFLAG(IS_LACROS)
+  auto token = base::UnguessableToken::Create();
+  window_unique_id_ = "org.chromium.lacros." + token.ToString();
+#else
+  wm_class_class_ = properties.wm_class_class;
+#endif
+  SetWaylandExtension(this, static_cast<WaylandExtension*>(this));
   SetWmMoveLoopHandler(this, static_cast<WmMoveLoopHandler*>(this));
   return true;
 }
@@ -307,6 +353,11 @@ bool WaylandToplevelWindow::RunMoveLoop(const gfx::Vector2d& drag_offset) {
 void WaylandToplevelWindow::EndMoveLoop() {
   DCHECK(connection()->window_drag_controller());
   connection()->window_drag_controller()->StopDragging();
+}
+
+void WaylandToplevelWindow::StartWindowDraggingSessionIfNeeded() {
+  DCHECK(connection()->window_drag_controller());
+  connection()->window_drag_controller()->StartDragSession();
 }
 
 void WaylandToplevelWindow::TriggerStateChanges() {

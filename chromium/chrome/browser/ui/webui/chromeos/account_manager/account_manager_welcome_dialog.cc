@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/check_op.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -43,21 +44,6 @@ AccountManagerWelcomeDialog::~AccountManagerWelcomeDialog() {
 
 // static
 bool AccountManagerWelcomeDialog::ShowIfRequired() {
-  if (g_dialog) {
-    // If the dialog is already being displayed, bring it to focus instead of
-    // creating another window.
-    g_dialog->dialog_window()->Focus();
-    return true;
-  }
-
-  // Check if the dialog should be shown.
-  // It should not be shown in kiosk mode since there are no actual accounts to
-  // manage, but the service account.
-  if (user_manager::UserManager::Get()
-          ->IsCurrentUserCryptohomeDataEphemeral() ||
-      user_manager::UserManager::Get()->IsLoggedInAsAnyKioskApp()) {
-    return false;
-  }
   PrefService* pref_service =
       ProfileManager::GetActiveUserProfile()->GetPrefs();
   const int num_times_shown = pref_service->GetInteger(
@@ -65,13 +51,20 @@ bool AccountManagerWelcomeDialog::ShowIfRequired() {
   if (num_times_shown >= kMaxNumTimesShown) {
     return false;
   }
+
+  if (!ShowIfRequiredInternal()) {
+    return false;
+  }
+
   pref_service->SetInteger(prefs::kAccountManagerNumTimesWelcomeScreenShown,
                            num_times_shown + 1);
 
-  // Will be deleted by |SystemWebDialogDelegate::OnDialogClosed|.
-  g_dialog = new AccountManagerWelcomeDialog();
-  g_dialog->ShowSystemDialog();
   return true;
+}
+
+// static
+bool AccountManagerWelcomeDialog::ShowIfRequiredForEduCoexistence() {
+  return ShowIfRequiredInternal();
 }
 
 void AccountManagerWelcomeDialog::AdjustWidgetInitParams(
@@ -83,8 +76,9 @@ void AccountManagerWelcomeDialog::AdjustWidgetInitParams(
 
 void AccountManagerWelcomeDialog::OnDialogClosed(
     const std::string& json_retval) {
-  // Opening Settings during shutdown leads to a crash.
-  if (!chrome::IsAttemptingShutdown()) {
+  // Opening Settings during shutdown or crash/restart leads to a crash.
+  if (!chrome::IsAttemptingShutdown() && g_browser_process &&
+      !g_browser_process->IsShuttingDown()) {
     chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
         ProfileManager::GetActiveUserProfile(),
         chromeos::settings::mojom::kMyAccountsSubpagePath);
@@ -107,6 +101,30 @@ bool AccountManagerWelcomeDialog::ShouldShowDialogTitle() const {
 
 bool AccountManagerWelcomeDialog::ShouldShowCloseButton() const {
   return false;
+}
+
+// static
+bool AccountManagerWelcomeDialog::ShowIfRequiredInternal() {
+  if (g_dialog) {
+    // If the dialog is already being displayed, bring it to focus instead of
+    // creating another window.
+    g_dialog->dialog_window()->Focus();
+    return true;
+  }
+
+  // Check if the dialog should be shown.
+  // It should not be shown in kiosk mode since there are no actual accounts to
+  // manage, but the service account.
+  if (user_manager::UserManager::Get()
+          ->IsCurrentUserCryptohomeDataEphemeral() ||
+      user_manager::UserManager::Get()->IsLoggedInAsAnyKioskApp()) {
+    return false;
+  }
+
+  // Will be deleted by |SystemWebDialogDelegate::OnDialogClosed|.
+  g_dialog = new AccountManagerWelcomeDialog();
+  g_dialog->ShowSystemDialog();
+  return true;
 }
 
 }  // namespace chromeos

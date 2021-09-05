@@ -26,6 +26,7 @@
 namespace device {
 
 struct CtapGetAssertionRequest;
+struct CtapGetAssertionOptions;
 struct CtapMakeCredentialRequest;
 
 namespace pin {
@@ -80,6 +81,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoAuthenticator {
   virtual void MakeCredential(CtapMakeCredentialRequest request,
                               MakeCredentialCallback callback) = 0;
   virtual void GetAssertion(CtapGetAssertionRequest request,
+                            CtapGetAssertionOptions options,
                             GetAssertionCallback callback) = 0;
   // GetNextAssertion fetches the next assertion from a device that indicated in
   // the response to |GetAssertion| that multiple results were available.
@@ -214,6 +216,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoAuthenticator {
   virtual ProtocolVersion SupportedProtocol() const;
   virtual bool SupportsCredProtectExtension() const;
   virtual bool SupportsHMACSecretExtension() const;
+  virtual bool SupportsEnterpriseAttestation() const;
   virtual const base::Optional<AuthenticatorSupportedOptions>& Options()
       const = 0;
   virtual base::Optional<FidoTransportProtocol> AuthenticatorTransport()
@@ -224,9 +227,12 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoAuthenticator {
 #if defined(OS_WIN)
   virtual bool IsWinNativeApiAuthenticator() const = 0;
 #endif  // defined(OS_WIN)
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   virtual bool IsTouchIdAuthenticator() const = 0;
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
+#if defined(OS_CHROMEOS)
+  virtual bool IsChromeOSAuthenticator() const = 0;
+#endif
   virtual base::WeakPtr<FidoAuthenticator> GetWeakPtr() = 0;
 
  private:

@@ -50,7 +50,8 @@ void CaptionController::RegisterProfilePrefs(
   registry->RegisterBooleanPref(
       prefs::kLiveCaptionEnabled, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  registry->RegisterFilePathPref(prefs::kSODAPath, base::FilePath());
+  registry->RegisterFilePathPref(prefs::kSodaBinaryPath, base::FilePath());
+  registry->RegisterFilePathPref(prefs::kSodaEnUsConfigPath, base::FilePath());
 }
 
 void CaptionController::Init() {
@@ -160,6 +161,15 @@ void CaptionController::OnBrowserRemoved(Browser* browser) {
   caption_bubble_controllers_.erase(browser);
 }
 
+bool CaptionController::OnSpeechRecognitionReady(
+    content::WebContents* web_contents) {
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  if (!browser || !caption_bubble_controllers_.count(browser))
+    return false;
+  return caption_bubble_controllers_[browser]->OnSpeechRecognitionReady(
+      web_contents);
+}
+
 bool CaptionController::DispatchTranscription(
     content::WebContents* web_contents,
     const chrome::mojom::TranscriptionResultPtr& transcription_result) {
@@ -168,6 +178,13 @@ bool CaptionController::DispatchTranscription(
     return false;
   return caption_bubble_controllers_[browser]->OnTranscription(
       transcription_result, web_contents);
+}
+
+void CaptionController::OnError(content::WebContents* web_contents) {
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  if (!browser || !caption_bubble_controllers_.count(browser))
+    return;
+  return caption_bubble_controllers_[browser]->OnError(web_contents);
 }
 
 CaptionBubbleController*

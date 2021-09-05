@@ -5,7 +5,10 @@
 #include "components/sync_device_info/local_device_info_provider_impl.h"
 
 #include "base/memory/ptr_util.h"
-#include "components/sync/driver/sync_util.h"
+#include "base/test/scoped_feature_list.h"
+#include "components/sync/base/sync_util.h"
+#include "components/sync/invalidations/mock_sync_invalidations_service.h"
+#include "components/sync/invalidations/switches.h"
 #include "components/sync_device_info/device_info_sync_client.h"
 #include "components/version_info/version_string.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -16,19 +19,24 @@ namespace {
 
 const char kLocalDeviceGuid[] = "foo";
 const char kLocalDeviceClientName[] = "bar";
+const char kLocalDeviceManufacturerName[] = "manufacturer";
+const char kLocalDeviceModelName[] = "model";
 
-const char kSharingVapidFCMToken[] = "test_vapid_fcm_token";
+const char kSharingVapidFCMRegistrationToken[] = "test_vapid_fcm_token";
 const char kSharingVapidP256dh[] = "test_vapid_p256_dh";
 const char kSharingVapidAuthSecret[] = "test_vapid_auth_secret";
-const char kSharingSenderIdFCMToken[] = "test_sender_id_fcm_token";
+const char kSharingSenderIdFCMRegistrationToken[] = "test_sender_id_fcm_token";
 const char kSharingSenderIdP256dh[] = "test_sender_id_p256_dh";
 const char kSharingSenderIdAuthSecret[] = "test_sender_id_auth_secret";
 const sync_pb::SharingSpecificFields::EnabledFeatures
     kSharingEnabledFeatures[] = {
         sync_pb::SharingSpecificFields::CLICK_TO_CALL_V2};
 
+using testing::_;
+using testing::NiceMock;
 using testing::NotNull;
 using testing::Return;
+using testing::ReturnRef;
 
 class MockDeviceInfoSyncClient : public DeviceInfoSyncClient {
  public:
@@ -53,21 +61,46 @@ class LocalDeviceInfoProviderImplTest : public testing::Test {
     provider_ = std::make_unique<LocalDeviceInfoProviderImpl>(
         version_info::Channel::UNKNOWN,
         version_info::GetVersionStringWithModifier("UNKNOWN"),
-        &device_info_sync_client_);
+        &device_info_sync_client_, GetSyncInvalidationsService());
   }
 
   void TearDown() override { provider_.reset(); }
 
  protected:
+  virtual SyncInvalidationsService* GetSyncInvalidationsService() {
+    return nullptr;
+  }
+
   void InitializeProvider() { InitializeProvider(kLocalDeviceGuid); }
 
   void InitializeProvider(const std::string& guid) {
     provider_->Initialize(guid, kLocalDeviceClientName,
-                          base::SysInfo::HardwareInfo());
+                          kLocalDeviceManufacturerName, kLocalDeviceModelName);
   }
 
   testing::NiceMock<MockDeviceInfoSyncClient> device_info_sync_client_;
   std::unique_ptr<LocalDeviceInfoProviderImpl> provider_;
+};
+
+class LocalDeviceInfoProviderImplWithSyncInvalidationsTest
+    : public LocalDeviceInfoProviderImplTest {
+ public:
+  LocalDeviceInfoProviderImplWithSyncInvalidationsTest() {
+    override_features_.InitAndEnableFeature(
+        switches::kSubscribeForSyncInvalidations);
+    ON_CALL(mock_sync_invalidations_service_, GetFCMRegistrationToken())
+        .WillByDefault(ReturnRef(kEmptyToken));
+  }
+
+ protected:
+  SyncInvalidationsService* GetSyncInvalidationsService() override {
+    return &mock_sync_invalidations_service_;
+  }
+
+  const std::string kEmptyToken;
+
+  base::test::ScopedFeatureList override_features_;
+  NiceMock<MockSyncInvalidationsService> mock_sync_invalidations_service_;
 };
 
 TEST_F(LocalDeviceInfoProviderImplTest, GetLocalDeviceInfo) {
@@ -79,6 +112,9 @@ TEST_F(LocalDeviceInfoProviderImplTest, GetLocalDeviceInfo) {
   ASSERT_NE(nullptr, local_device_info);
   EXPECT_EQ(std::string(kLocalDeviceGuid), local_device_info->guid());
   EXPECT_EQ(kLocalDeviceClientName, local_device_info->client_name());
+  EXPECT_EQ(kLocalDeviceManufacturerName,
+            local_device_info->manufacturer_name());
+  EXPECT_EQ(kLocalDeviceModelName, local_device_info->model_name());
   EXPECT_EQ(MakeUserAgentForSync(provider_->GetChannel()),
             local_device_info->sync_user_agent());
 
@@ -130,10 +166,10 @@ TEST_F(LocalDeviceInfoProviderImplTest, SharingInfo) {
       std::begin(kSharingEnabledFeatures), std::end(kSharingEnabledFeatures));
   base::Optional<DeviceInfo::SharingInfo> sharing_info =
       base::make_optional<DeviceInfo::SharingInfo>(
-          DeviceInfo::SharingTargetInfo{kSharingVapidFCMToken,
+          DeviceInfo::SharingTargetInfo{kSharingVapidFCMRegistrationToken,
                                         kSharingVapidP256dh,
                                         kSharingVapidAuthSecret},
-          DeviceInfo::SharingTargetInfo{kSharingSenderIdFCMToken,
+          DeviceInfo::SharingTargetInfo{kSharingSenderIdFCMRegistrationToken,
                                         kSharingSenderIdP256dh,
                                         kSharingSenderIdAuthSecret},
           enabled_features);
@@ -144,18 +180,34 @@ TEST_F(LocalDeviceInfoProviderImplTest, SharingInfo) {
   const base::Optional<DeviceInfo::SharingInfo>& local_sharing_info =
       provider_->GetLocalDeviceInfo()->sharing_info();
   ASSERT_TRUE(local_sharing_info);
-  EXPECT_EQ(kSharingVapidFCMToken,
+  EXPECT_EQ(kSharingVapidFCMRegistrationToken,
             local_sharing_info->vapid_target_info.fcm_token);
   EXPECT_EQ(kSharingVapidP256dh, local_sharing_info->vapid_target_info.p256dh);
   EXPECT_EQ(kSharingVapidAuthSecret,
             local_sharing_info->vapid_target_info.auth_secret);
-  EXPECT_EQ(kSharingSenderIdFCMToken,
+  EXPECT_EQ(kSharingSenderIdFCMRegistrationToken,
             local_sharing_info->sender_id_target_info.fcm_token);
   EXPECT_EQ(kSharingSenderIdP256dh,
             local_sharing_info->sender_id_target_info.p256dh);
   EXPECT_EQ(kSharingSenderIdAuthSecret,
             local_sharing_info->sender_id_target_info.auth_secret);
   EXPECT_EQ(enabled_features, local_sharing_info->enabled_features);
+}
+
+TEST_F(LocalDeviceInfoProviderImplWithSyncInvalidationsTest,
+       ShouldPopulateFCMRegistrationToken) {
+  InitializeProvider();
+  ASSERT_THAT(provider_->GetLocalDeviceInfo(), NotNull());
+  EXPECT_TRUE(
+      provider_->GetLocalDeviceInfo()->fcm_registration_token().empty());
+
+  const std::string kFCMRegistrationToken = "token";
+  EXPECT_CALL(mock_sync_invalidations_service_, GetFCMRegistrationToken())
+      .WillOnce(ReturnRef(kFCMRegistrationToken));
+
+  provider_->OnFCMRegistrationTokenChanged();
+  EXPECT_EQ(provider_->GetLocalDeviceInfo()->fcm_registration_token(),
+            kFCMRegistrationToken);
 }
 
 }  // namespace

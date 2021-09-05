@@ -26,6 +26,9 @@ class CompositingInputsUpdater {
   static void AssertNeedsCompositingInputsUpdateBitsCleared(PaintLayer*);
 #endif
 
+  // Combine all reasons for compositing a layer into a single boolean value
+  bool LayerOrDescendantShouldBeComposited(PaintLayer*);
+
  private:
   enum UpdateType {
     kDoNotForceUpdate,
@@ -83,10 +86,9 @@ class CompositingInputsUpdater {
   // current value of AncestorInfo.
   void UpdateAncestorInfo(PaintLayer* const, UpdateType&, AncestorInfo&);
 
-  // Combine all reasons for compositing a layer into a single boolean value
-  bool LayerOrDescendantShouldBeComposited(PaintLayer*);
+  bool NeedsPaintOffsetTranslationForCompositing(PaintLayer*);
 
-  LayoutGeometryMap geometry_map_;
+  base::Optional<LayoutGeometryMap> geometry_map_;
   PaintLayer* root_layer_;
   PaintLayer* compositing_inputs_root_;
 };

@@ -1409,12 +1409,55 @@ util.isUnifiedMediaViewEnabled = () => {
 };
 
 /**
- * Returns true when FilesZipNoNacl is enabled.
+ * Returns true if filters in Recents view is enabled.
+ * @return {boolean}
+ */
+util.isRecentsFilterEnabled = () => {
+  return loadTimeData.getBoolean('FILTERS_IN_RECENTS_ENABLED');
+};
+
+/**
+ * Returns true when FilesZipMount feature is enabled.
  * TODO(crbug.com/912236) Remove once transition to new ZIP system is finished.
  * @return {boolean}
  */
-util.isZipNoNacl = () => {
-  return loadTimeData.getBoolean('ZIP_NO_NACL');
+util.isZipMountEnabled = () => {
+  return loadTimeData.getBoolean('ZIP_MOUNT');
+};
+
+/**
+ * Returns true when FilesZipPack feature is enabled.
+ * TODO(crbug.com/912236) Remove once transition to new ZIP system is finished.
+ * @return {boolean}
+ */
+util.isZipPackEnabled = () => {
+  return loadTimeData.getBoolean('ZIP_PACK');
+};
+
+/**
+ * Returns true when FilesZipUnpack feature is enabled.
+ * TODO(crbug.com/912236) Remove once transition to new ZIP system is finished.
+ * @return {boolean}
+ */
+util.isZipUnpackEnabled = () => {
+  return loadTimeData.getBoolean('ZIP_UNPACK');
+};
+
+/**
+ * Returns true if transfer details flag is enabled.
+ * @return {boolean}
+ */
+util.isTransferDetailsEnabled = () => {
+  return loadTimeData.getBoolean('FILES_TRANSFER_DETAILS_ENABLED');
+};
+
+/**
+ * Returns true if Drive bidirectional native messaging is enabled.
+ * @return {boolean}
+ */
+util.isDriveBidirectionalNativeMessagingEnabled = () => {
+  return loadTimeData.getBoolean(
+      'DRIVE_BIDIRECTIONAL_NATIVE_MESSAGING_ENABLED');
 };
 
 /**
@@ -1678,4 +1721,10 @@ util.setClampLine = (element, lines) => {
 util.hasOverflow = (element) => {
   return element.clientWidth < element.scrollWidth ||
       element.clientHeight < element.scrollHeight;
+};
+
+/** @return {boolean} */
+util.isSharesheetEnabled = () => {
+  return loadTimeData.valueExists('SHARESHEET_ENABLED') &&
+      loadTimeData.getBoolean('SHARESHEET_ENABLED');
 };

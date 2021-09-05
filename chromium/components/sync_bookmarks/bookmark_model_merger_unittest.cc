@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/guid.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -1997,6 +1998,59 @@ TEST(BookmarkModelMergerTest, ShouldRemoveDifferentFolderDuplicatesByGUID) {
   EXPECT_EQ(bookmark_bar_node->children().front()->children().size(), 2u);
 }
 
+// This tests ensures maximum depth of the bookmark tree is not exceeded. This
+// prevents a stack overflow.
+TEST(BookmarkModelMergerTest, ShouldEnsureLimitDepthOfTree) {
+  const std::string kLocalTitle = "local";
+  const std::string kRemoteTitle = "remote";
+  const std::string folderIdPrefix = "folder_";
+  // Maximum depth to sync bookmarks tree to protect against stack overflow.
+  // This matches |kMaxBookmarkTreeDepth| in bookmark_model_merger.cc.
+  const size_t kMaxBookmarkTreeDepth = 200;
+  const size_t kRemoteUpdatesDepth = kMaxBookmarkTreeDepth + 10;
+
+  std::unique_ptr<bookmarks::BookmarkModel> bookmark_model =
+      bookmarks::TestBookmarkClient::CreateModel();
+
+  // -------- The local model --------
+  const bookmarks::BookmarkNode* bookmark_bar_node =
+      bookmark_model->bookmark_bar_node();
+  const bookmarks::BookmarkNode* folder = bookmark_model->AddFolder(
+      /*parent=*/bookmark_bar_node, /*index=*/0,
+      base::UTF8ToUTF16(kLocalTitle));
+  ASSERT_TRUE(folder);
+
+  // -------- The remote model --------
+  syncer::UpdateResponseDataList updates;
+  updates.push_back(CreateBookmarkBarNodeUpdateData());
+
+  std::string parent_id = kBookmarkBarId;
+  // Create a tree with depth |kRemoteUpdatesDepth| to verify the limit of
+  // kMaxBookmarkTreeDepth is enforced.
+  for (size_t i = 1; i < kRemoteUpdatesDepth; ++i) {
+    std::string folder_id = folderIdPrefix + base::NumberToString(i);
+    updates.push_back(CreateUpdateResponseData(
+        /*server_id=*/folder_id, /*parent_id=*/parent_id, kRemoteTitle,
+        /*url=*/"",
+        /*is_folder=*/true, MakeRandomPosition()));
+    parent_id = folder_id;
+  }
+
+  ASSERT_THAT(updates.size(), Eq(kRemoteUpdatesDepth));
+
+  std::unique_ptr<SyncedBookmarkTracker> tracker =
+      SyncedBookmarkTracker::CreateEmpty(sync_pb::ModelTypeState());
+  testing::NiceMock<favicon::MockFaviconService> favicon_service;
+  BookmarkModelMerger(std::move(updates), bookmark_model.get(),
+                      &favicon_service, tracker.get())
+      .Merge();
+
+  // Check max depth hasn't been exceeded. Take into account root of the
+  // tracker and bookmark bar.
+  EXPECT_THAT(tracker->TrackedEntitiesCountForTest(),
+              Eq(kMaxBookmarkTreeDepth + 2));
+}
+
 TEST(BookmarkModelMergerTest, ShouldReuploadBookmarkOnEmptyGuid) {
   base::test::ScopedFeatureList override_features;
   override_features.InitAndEnableFeature(
@@ -2044,6 +2098,52 @@ TEST(BookmarkModelMergerTest, ShouldReuploadBookmarkOnEmptyGuid) {
 
   EXPECT_TRUE(tracker->GetEntityForSyncId(kFolder1Id)->IsUnsynced());
   EXPECT_FALSE(tracker->GetEntityForSyncId(kFolder2Id)->IsUnsynced());
+}
+
+TEST(BookmarkModelMergerTest, ShouldRemoveDifferentTypeDuplicatesByGUID) {
+  const std::string kTitle = "Title";
+
+  const std::string kGUID = base::GenerateGUID();
+
+  // The remote model has 2 duplicates, a folder and a URL.
+  //
+  // -------- The remote model --------
+  // bookmark_bar
+  //  |- folder1(GUID)
+  //    |- folder11
+  //  |- URL1(GUID)
+  std::unique_ptr<bookmarks::BookmarkModel> bookmark_model =
+      bookmarks::TestBookmarkClient::CreateModel();
+
+  syncer::UpdateResponseDataList updates;
+  updates.push_back(CreateBookmarkBarNodeUpdateData());
+
+  updates.push_back(CreateUpdateResponseData(
+      /*server_id=*/"Id1", /*parent_id=*/kBookmarkBarId, kTitle,
+      /*url=*/"",
+      /*is_folder=*/true, MakeRandomPosition(), kGUID));
+  updates.push_back(CreateUpdateResponseData(
+      /*server_id=*/"Id11", /*parent_id=*/"Id1", "Some title",
+      /*url=*/"", /*is_folder=*/true, MakeRandomPosition()));
+
+  updates.push_back(CreateUpdateResponseData(
+      /*server_id=*/"Id2", /*parent_id=*/kBookmarkBarId, kTitle,
+      /*url=*/"http://url1.com", /*is_folder=*/false, MakeRandomPosition(),
+      kGUID));
+
+  base::HistogramTester histogram_tester;
+  std::unique_ptr<SyncedBookmarkTracker> tracker =
+      Merge(std::move(updates), bookmark_model.get());
+  const bookmarks::BookmarkNode* bookmark_bar_node =
+      bookmark_model->bookmark_bar_node();
+  ASSERT_THAT(bookmark_bar_node->children().size(), Eq(1u));
+  histogram_tester.ExpectUniqueSample(
+      "Sync.BookmarksGUIDDuplicates",
+      /*sample=*/ExpectedBookmarksGUIDDuplicates::kDifferentTypes,
+      /*count=*/1);
+  EXPECT_THAT(tracker->GetEntityForSyncId("Id1"), NotNull());
+  EXPECT_THAT(tracker->GetEntityForSyncId("Id2"), IsNull());
+  EXPECT_EQ(bookmark_bar_node->children().front()->children().size(), 1u);
 }
 
 }  // namespace sync_bookmarks

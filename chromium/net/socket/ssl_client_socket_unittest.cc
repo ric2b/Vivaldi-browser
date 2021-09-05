@@ -44,6 +44,8 @@
 #include "net/cert/ct_verifier.h"
 #include "net/cert/do_nothing_ct_verifier.h"
 #include "net/cert/mock_cert_verifier.h"
+#include "net/cert/mock_client_cert_verifier.h"
+#include "net/cert/sct_auditing_delegate.h"
 #include "net/cert/signed_certificate_timestamp_and_status.h"
 #include "net/cert/test_root_certs.h"
 #include "net/cert/x509_util.h"
@@ -638,6 +640,16 @@ class MockRequireCTDelegate : public TransportSecurityState::RequireCTDelegate {
                                   const HashValueVector& hashes));
 };
 
+class MockSCTAuditingDelegate : public SCTAuditingDelegate {
+ public:
+  MOCK_METHOD(bool, IsSCTAuditingEnabled, ());
+  MOCK_METHOD(void,
+              MaybeEnqueueReport,
+              (const net::HostPortPair&,
+               const net::X509Certificate*,
+               const net::SignedCertificateTimestampAndStatusList&));
+};
+
 class ManySmallRecordsHttpResponse : public test_server::HttpResponse {
  public:
   static std::unique_ptr<test_server::HttpResponse> HandleRequest(
@@ -699,13 +711,14 @@ class SSLClientSocketTest : public PlatformTest, public WithTaskEnvironment {
         ct_policy_enforcer_(std::make_unique<MockCTPolicyEnforcer>()),
         ssl_client_session_cache_(std::make_unique<SSLClientSessionCache>(
             SSLClientSessionCache::Config())),
-        context_(std::make_unique<SSLClientContext>(
-            ssl_config_service_.get(),
-            cert_verifier_.get(),
-            transport_security_state_.get(),
-            ct_verifier_.get(),
-            ct_policy_enforcer_.get(),
-            ssl_client_session_cache_.get())) {
+        context_(
+            std::make_unique<SSLClientContext>(ssl_config_service_.get(),
+                                               cert_verifier_.get(),
+                                               transport_security_state_.get(),
+                                               ct_verifier_.get(),
+                                               ct_policy_enforcer_.get(),
+                                               ssl_client_session_cache_.get(),
+                                               nullptr)) {
     cert_verifier_->set_default_result(OK);
     cert_verifier_->set_async(true);
 
@@ -1530,7 +1543,7 @@ TEST_P(SSLClientSocketVersionTest, SocketDestroyedDuringVerify) {
   context_ = std::make_unique<SSLClientContext>(
       ssl_config_service_.get(), &verifier, transport_security_state_.get(),
       ct_verifier_.get(), ct_policy_enforcer_.get(),
-      ssl_client_session_cache_.get());
+      ssl_client_session_cache_.get(), nullptr);
 
   TestCompletionCallback callback;
   auto transport =
@@ -2431,23 +2444,17 @@ TEST_F(SSLClientSocketTest, PrematureApplicationData) {
 }
 
 TEST_F(SSLClientSocketTest, CipherSuiteDisables) {
-  // Rather than exhaustively disabling every AES_128_CBC ciphersuite defined at
-  // http://www.iana.org/assignments/tls-parameters/tls-parameters.xml, only
-  // disabling those cipher suites that the test server actually implements.
-  const uint16_t kCiphersToDisable[] = {
-      0x002f,  // TLS_RSA_WITH_AES_128_CBC_SHA
-      0x0033,  // TLS_DHE_RSA_WITH_AES_128_CBC_SHA
-      0xc013,  // TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
-  };
+  // TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+  static const uint16_t kTestCipher = 0xc02f;
 
-  SpawnedTestServer::SSLOptions ssl_options;
-  // Enable only AES_128_CBC on the test server.
-  ssl_options.bulk_ciphers = SpawnedTestServer::SSLOptions::BULK_CIPHER_AES128;
-  ASSERT_TRUE(StartTestServer(ssl_options));
+  SSLServerConfig server_config;
+  server_config.version_max = SSL_PROTOCOL_VERSION_TLS1_2;
+  server_config.cipher_suite_for_testing = kTestCipher;
+  ASSERT_TRUE(
+      StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, server_config));
 
   SSLContextConfig ssl_context_config;
-  for (size_t i = 0; i < base::size(kCiphersToDisable); ++i)
-    ssl_context_config.disabled_cipher_suites.push_back(kCiphersToDisable[i]);
+  ssl_context_config.disabled_cipher_suites.push_back(kTestCipher);
   ssl_config_service_->UpdateSSLConfigAndNotify(ssl_context_config);
 
   int rv;
@@ -2784,7 +2791,7 @@ TEST_F(SSLClientSocketTest, ConnectSignedCertTimestampsTLSExtension) {
   context_ = std::make_unique<SSLClientContext>(
       ssl_config_service_.get(), cert_verifier_.get(),
       transport_security_state_.get(), &ct_verifier, ct_policy_enforcer_.get(),
-      ssl_client_session_cache_.get());
+      ssl_client_session_cache_.get(), nullptr);
 
   // Check that the SCT list is extracted from the TLS extension as expected,
   // while also simulating that it was an unparsable response.
@@ -3394,9 +3401,12 @@ TEST_F(SSLClientSocketTest, NoDHE) {
 
 TEST_F(SSLClientSocketTest, RequireECDHE) {
   // Run test server without ECDHE.
-  SpawnedTestServer::SSLOptions ssl_options;
-  ssl_options.key_exchanges = SpawnedTestServer::SSLOptions::KEY_EXCHANGE_RSA;
-  ASSERT_TRUE(StartTestServer(ssl_options));
+  SSLServerConfig server_config;
+  server_config.version_max = SSL_PROTOCOL_VERSION_TLS1_2;
+  // TLS_RSA_WITH_AES_128_GCM_SHA256
+  server_config.cipher_suite_for_testing = 0x009c;
+  ASSERT_TRUE(
+      StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, server_config));
 
   SSLConfig config;
   config.require_ecdhe = true;
@@ -3725,10 +3735,11 @@ TEST_F(SSLClientSocketTest, AlpnClientDisabled) {
 
 // Connect to a server requesting client authentication, do not send
 // any client certificates. It should refuse the connection.
-TEST_F(SSLClientSocketTest, NoCert) {
-  SpawnedTestServer::SSLOptions ssl_options;
-  ssl_options.request_client_certificate = true;
-  ASSERT_TRUE(StartTestServer(ssl_options));
+TEST_P(SSLClientSocketVersionTest, NoCert) {
+  SSLServerConfig server_config = GetServerConfig();
+  server_config.client_cert_type = SSLServerConfig::OPTIONAL_CLIENT_CERT;
+  ASSERT_TRUE(
+      StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, server_config));
 
   int rv;
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
@@ -3739,13 +3750,11 @@ TEST_F(SSLClientSocketTest, NoCert) {
 
 // Connect to a server requesting client authentication, and send it
 // an empty certificate.
-TEST_F(SSLClientSocketTest, SendEmptyCert) {
-  SpawnedTestServer::SSLOptions ssl_options;
-  ssl_options.request_client_certificate = true;
-  ssl_options.client_authorities.push_back(
-      GetTestClientCertsDirectory().AppendASCII("client_1_ca.pem"));
-
-  ASSERT_TRUE(StartTestServer(ssl_options));
+TEST_P(SSLClientSocketVersionTest, SendEmptyCert) {
+  SSLServerConfig server_config = GetServerConfig();
+  server_config.client_cert_type = SSLServerConfig::OPTIONAL_CLIENT_CERT;
+  ASSERT_TRUE(
+      StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, server_config));
 
   context_->SetClientCertificate(host_port_pair(), nullptr, nullptr);
 
@@ -3760,19 +3769,26 @@ TEST_F(SSLClientSocketTest, SendEmptyCert) {
   EXPECT_FALSE(ssl_info.client_cert_sent);
 }
 
-// Connect to a server requesting client authentication. Send it a
-// matching certificate. It should allow the connection.
-TEST_F(SSLClientSocketTest, SendGoodCert) {
-  SpawnedTestServer::SSLOptions ssl_options;
-  ssl_options.request_client_certificate = true;
-  ssl_options.client_authorities.push_back(
-      GetTestClientCertsDirectory().AppendASCII("client_1_ca.pem"));
-
-  ASSERT_TRUE(StartTestServer(ssl_options));
-
+// Connect to a server requesting client authentication and send a certificate.
+TEST_P(SSLClientSocketVersionTest, SendGoodCert) {
   base::FilePath certs_dir = GetTestCertsDirectory();
+  scoped_refptr<X509Certificate> client_cert =
+      ImportCertFromFile(certs_dir, "client_1.pem");
+  ASSERT_TRUE(client_cert);
+
+  // Configure the server to only accept |client_cert|.
+  MockClientCertVerifier verifier;
+  verifier.set_default_result(ERR_CERT_INVALID);
+  verifier.AddResultForCert(client_cert.get(), OK);
+
+  SSLServerConfig server_config = GetServerConfig();
+  server_config.client_cert_type = SSLServerConfig::REQUIRE_CLIENT_CERT;
+  server_config.client_cert_verifier = &verifier;
+  ASSERT_TRUE(
+      StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, server_config));
+
   context_->SetClientCertificate(
-      host_port_pair(), ImportCertFromFile(certs_dir, "client_1.pem"),
+      host_port_pair(), client_cert,
       key_util::LoadPrivateKeyOpenSSL(certs_dir.AppendASCII("client_1.key")));
 
   int rv;
@@ -3787,6 +3803,9 @@ TEST_F(SSLClientSocketTest, SendGoodCert) {
 
   sock_->Disconnect();
   EXPECT_FALSE(sock_->IsConnected());
+
+  // Shut down the test server before |verifier| goes out of scope.
+  ASSERT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
 }
 
 // When client certificate preferences change, the session cache should be
@@ -3933,9 +3952,18 @@ TEST_P(SSLClientSocketVersionTest, PKPEnforced) {
   EXPECT_FALSE(ssl_info.pkp_bypassed);
 }
 
+namespace {
+// TLS_RSA_WITH_AES_128_GCM_SHA256's key exchange involves encrypting to the
+// server long-term key.
+const uint16_t kEncryptingCipher = 0x009c;
+// TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256's key exchange involves a signature by
+// the server long-term key.
+const uint16_t kSigningCipher = 0xc02f;
+}  // namespace
+
 struct KeyUsageTest {
-  SpawnedTestServer::SSLOptions::ServerCertificate server_cert;
-  SpawnedTestServer::SSLOptions::KeyExchange key_exchange;
+  EmbeddedTestServer::ServerCertificate server_cert;
+  uint16_t cipher_suite;
   bool known_root;
   bool success;
 };
@@ -3946,32 +3974,33 @@ class SSLClientSocketKeyUsageTest
 
 const struct KeyUsageTest kKeyUsageTests[] = {
     // Known Root: Success iff keyUsage allows the key exchange method
-    {SpawnedTestServer::SSLOptions::CERT_KEY_USAGE_RSA_ENCIPHERMENT,
-     SpawnedTestServer::SSLOptions::KEY_EXCHANGE_ECDHE_RSA, true, false},
-    {SpawnedTestServer::SSLOptions::CERT_KEY_USAGE_RSA_DIGITAL_SIGNATURE,
-     SpawnedTestServer::SSLOptions::KEY_EXCHANGE_ECDHE_RSA, true, true},
-    {SpawnedTestServer::SSLOptions::CERT_KEY_USAGE_RSA_ENCIPHERMENT,
-     SpawnedTestServer::SSLOptions::KEY_EXCHANGE_RSA, true, true},
-    {SpawnedTestServer::SSLOptions::CERT_KEY_USAGE_RSA_DIGITAL_SIGNATURE,
-     SpawnedTestServer::SSLOptions::KEY_EXCHANGE_RSA, true, false},
+    {EmbeddedTestServer::CERT_KEY_USAGE_RSA_ENCIPHERMENT, kSigningCipher, true,
+     false},
+    {EmbeddedTestServer::CERT_KEY_USAGE_RSA_DIGITAL_SIGNATURE, kSigningCipher,
+     true, true},
+    {EmbeddedTestServer::CERT_KEY_USAGE_RSA_ENCIPHERMENT, kEncryptingCipher,
+     true, true},
+    {EmbeddedTestServer::CERT_KEY_USAGE_RSA_DIGITAL_SIGNATURE,
+     kEncryptingCipher, true, false},
     // Unknown Root: Always succeeds
-    {SpawnedTestServer::SSLOptions::CERT_KEY_USAGE_RSA_ENCIPHERMENT,
-     SpawnedTestServer::SSLOptions::KEY_EXCHANGE_ECDHE_RSA, false, true},
-    {SpawnedTestServer::SSLOptions::CERT_KEY_USAGE_RSA_DIGITAL_SIGNATURE,
-     SpawnedTestServer::SSLOptions::KEY_EXCHANGE_ECDHE_RSA, false, true},
-    {SpawnedTestServer::SSLOptions::CERT_KEY_USAGE_RSA_ENCIPHERMENT,
-     SpawnedTestServer::SSLOptions::KEY_EXCHANGE_RSA, false, true},
-    {SpawnedTestServer::SSLOptions::CERT_KEY_USAGE_RSA_DIGITAL_SIGNATURE,
-     SpawnedTestServer::SSLOptions::KEY_EXCHANGE_RSA, false, true},
+    {EmbeddedTestServer::CERT_KEY_USAGE_RSA_ENCIPHERMENT, kSigningCipher, false,
+     true},
+    {EmbeddedTestServer::CERT_KEY_USAGE_RSA_DIGITAL_SIGNATURE, kSigningCipher,
+     false, true},
+    {EmbeddedTestServer::CERT_KEY_USAGE_RSA_ENCIPHERMENT, kEncryptingCipher,
+     false, true},
+    {EmbeddedTestServer::CERT_KEY_USAGE_RSA_DIGITAL_SIGNATURE,
+     kEncryptingCipher, false, true},
 };
 
 TEST_P(SSLClientSocketKeyUsageTest, RSAKeyUsageEnforcedForKnownRoot) {
   const KeyUsageTest test = GetParam();
-  SpawnedTestServer::SSLOptions ssl_options(test.server_cert);
-  ssl_options.key_exchanges = test.key_exchange;
-  ASSERT_TRUE(StartTestServer(ssl_options));
+  SSLServerConfig server_config;
+  server_config.version_max = SSL_PROTOCOL_VERSION_TLS1_2;
+  server_config.cipher_suite_for_testing = test.cipher_suite;
+  ASSERT_TRUE(StartEmbeddedTestServer(test.server_cert, server_config));
   scoped_refptr<X509Certificate> server_cert =
-      spawned_test_server()->GetCertificate();
+      embedded_test_server()->GetCertificate();
 
   // Certificate is trusted.
   CertVerifyResult verify_result;
@@ -4555,6 +4584,51 @@ TEST_P(SSLClientSocketVersionTest, PKPMoreImportantThanCT) {
   EXPECT_TRUE(ssl_info.cert_status &
               CERT_STATUS_CERTIFICATE_TRANSPARENCY_REQUIRED);
   EXPECT_FALSE(sock_->IsConnected());
+}
+
+// Tests that the SCTAuditingDelegate is called to enqueue SCT reports.
+TEST_P(SSLClientSocketVersionTest, SCTAuditingReportCollected) {
+  ASSERT_TRUE(
+      StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, GetServerConfig()));
+  scoped_refptr<X509Certificate> server_cert =
+      embedded_test_server()->GetCertificate();
+
+  // Certificate is trusted and chains to a public root.
+  CertVerifyResult verify_result;
+  verify_result.is_issued_by_known_root = true;
+  verify_result.verified_cert = server_cert;
+  verify_result.public_key_hashes =
+      MakeHashValueVector(kGoodHashValueVectorInput);
+  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
+
+  // Set up CT and auditing delegate.
+  MockRequireCTDelegate require_ct_delegate;
+  transport_security_state_->SetRequireCTDelegate(&require_ct_delegate);
+  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost(_, _, _))
+      .WillRepeatedly(Return(TransportSecurityState::RequireCTDelegate::
+                                 CTRequirementLevel::REQUIRED));
+  EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
+      .WillRepeatedly(
+          Return(ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS));
+
+  MockSCTAuditingDelegate sct_auditing_delegate;
+  context_ = std::make_unique<SSLClientContext>(
+      ssl_config_service_.get(), cert_verifier_.get(),
+      transport_security_state_.get(), ct_verifier_.get(),
+      ct_policy_enforcer_.get(), ssl_client_session_cache_.get(),
+      &sct_auditing_delegate);
+
+  EXPECT_CALL(sct_auditing_delegate, IsSCTAuditingEnabled())
+      .WillRepeatedly(Return(true));
+  EXPECT_CALL(sct_auditing_delegate,
+              MaybeEnqueueReport(host_port_pair(), server_cert.get(), _))
+      .Times(1);
+
+  SSLConfig ssl_config;
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
+  EXPECT_THAT(rv, 0);
+  EXPECT_TRUE(sock_->IsConnected());
 }
 
 // Test that handshake_failure alerts at the ServerHello are mapped to
@@ -5445,7 +5519,6 @@ class TLS13DowngradeTest
       public ::testing::WithParamInterface<
           std::tuple<SpawnedTestServer::SSLOptions::TLSMaxVersion,
                      /* simulate_tls13_downgrade */ bool,
-                     /* enable_for_local_anchors */ bool,
                      /* known_root */ bool>> {
  public:
   TLS13DowngradeTest() {}
@@ -5456,8 +5529,7 @@ class TLS13DowngradeTest
   }
 
   bool simulate_tls13_downgrade() const { return std::get<1>(GetParam()); }
-  bool enable_for_local_anchors() const { return std::get<2>(GetParam()); }
-  bool known_root() const { return std::get<3>(GetParam()); }
+  bool known_root() const { return std::get<2>(GetParam()); }
 };
 
 INSTANTIATE_TEST_SUITE_P(
@@ -5468,7 +5540,6 @@ INSTANTIATE_TEST_SUITE_P(
             SpawnedTestServer::SSLOptions::TLS_MAX_VERSION_TLS1_0,
             SpawnedTestServer::SSLOptions::TLS_MAX_VERSION_TLS1_1,
             SpawnedTestServer::SSLOptions::TLS_MAX_VERSION_TLS1_2),
-        ::testing::Values(false, true),
         ::testing::Values(false, true),
         ::testing::Values(false, true)));
 
@@ -5482,7 +5553,6 @@ TEST_P(TLS13DowngradeTest, DowngradeEnforced) {
 
   SSLContextConfig config;
   config.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
-  config.tls13_hardening_for_local_anchors_enabled = enable_for_local_anchors();
   ssl_config_service_->UpdateSSLConfigAndNotify(config);
 
   CertVerifyResult verify_result;
@@ -5491,143 +5561,15 @@ TEST_P(TLS13DowngradeTest, DowngradeEnforced) {
   cert_verifier_->ClearRules();
   cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
 
-  bool should_enforce = known_root() || enable_for_local_anchors();
-
   ssl_client_session_cache_->Flush();
   int rv;
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
-  if (should_enforce && simulate_tls13_downgrade()) {
+  if (simulate_tls13_downgrade()) {
     EXPECT_THAT(rv, IsError(ERR_TLS13_DOWNGRADE_DETECTED));
     EXPECT_FALSE(sock_->IsConnected());
   } else {
     EXPECT_THAT(rv, IsOk());
     EXPECT_TRUE(sock_->IsConnected());
-  }
-}
-
-struct TLS13DowngradeMetricsParams {
-  bool downgrade;
-  bool known_root;
-  SpawnedTestServer::SSLOptions::KeyExchange key_exchanges;
-  bool tls13_experiment_host;
-  int expect_downgrade_type;
-};
-
-const TLS13DowngradeMetricsParams kTLS13DowngradeMetricsParams[] = {
-    // Not a downgrade.
-    {false, true, SpawnedTestServer::SSLOptions::KeyExchange::KEY_EXCHANGE_ANY,
-     false, -1},
-    {false, true, SpawnedTestServer::SSLOptions::KeyExchange::KEY_EXCHANGE_ANY,
-     true, -1},
-    // Downgrades with a known root.
-    {true, true, SpawnedTestServer::SSLOptions::KeyExchange::KEY_EXCHANGE_RSA,
-     false, 0},
-    {true, true, SpawnedTestServer::SSLOptions::KeyExchange::KEY_EXCHANGE_RSA,
-     true, 0},
-    {true, true,
-     SpawnedTestServer::SSLOptions::KeyExchange::KEY_EXCHANGE_ECDHE_RSA, false,
-     1},
-    {true, true,
-     SpawnedTestServer::SSLOptions::KeyExchange::KEY_EXCHANGE_ECDHE_RSA, true,
-     1},
-    // Downgrades with an unknown root.
-    {true, false, SpawnedTestServer::SSLOptions::KeyExchange::KEY_EXCHANGE_RSA,
-     false, 2},
-    {true, false, SpawnedTestServer::SSLOptions::KeyExchange::KEY_EXCHANGE_RSA,
-     true, 2},
-    {true, false,
-     SpawnedTestServer::SSLOptions::KeyExchange::KEY_EXCHANGE_ECDHE_RSA, false,
-     3},
-    {true, false,
-     SpawnedTestServer::SSLOptions::KeyExchange::KEY_EXCHANGE_ECDHE_RSA, true,
-     3},
-};
-
-namespace {
-namespace test_default {
-#include "net/http/transport_security_state_static_unittest_default.h"
-}  // namespace test_default
-}  // namespace
-
-class TLS13DowngradeMetricsTest
-    : public SSLClientSocketTest,
-      public ::testing::WithParamInterface<TLS13DowngradeMetricsParams> {
- public:
-  TLS13DowngradeMetricsTest() {
-    // Switch the static preload list, so the tests using mail.google.com below
-    // do not trip the usual pins.
-    SetTransportSecurityStateSourceForTesting(&test_default::kHSTSSource);
-  }
-  ~TLS13DowngradeMetricsTest() {
-    SetTransportSecurityStateSourceForTesting(nullptr);
-  }
-};
-
-INSTANTIATE_TEST_SUITE_P(All,
-                         TLS13DowngradeMetricsTest,
-                         ::testing::ValuesIn(kTLS13DowngradeMetricsParams));
-
-TEST_P(TLS13DowngradeMetricsTest, Metrics) {
-  const TLS13DowngradeMetricsParams& params = GetParam();
-  base::HistogramTester histograms;
-
-  SpawnedTestServer::SSLOptions ssl_options;
-  ssl_options.simulate_tls13_downgrade = params.downgrade;
-  ssl_options.key_exchanges = params.key_exchanges;
-  ASSERT_TRUE(StartTestServer(ssl_options));
-
-  HostPortPair host_port_pair = spawned_test_server()->host_port_pair();
-  if (params.tls13_experiment_host) {
-    host_port_pair.set_host("mail.google.com");
-  }
-
-  if (params.known_root) {
-    scoped_refptr<X509Certificate> server_cert =
-        spawned_test_server()->GetCertificate();
-
-    // Certificate is trusted and chains to a public root.
-    CertVerifyResult verify_result;
-    verify_result.is_issued_by_known_root = true;
-    verify_result.verified_cert = server_cert;
-    cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
-  }
-
-  auto transport =
-      std::make_unique<TCPClientSocket>(addr(), nullptr, &log_, NetLogSource());
-  TestCompletionCallback callback;
-  int rv = callback.GetResult(transport->Connect(callback.callback()));
-  ASSERT_THAT(rv, IsOk());
-
-  SSLContextConfig config;
-  config.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
-  config.tls13_hardening_for_local_anchors_enabled = false;
-  ssl_config_service_->UpdateSSLConfigAndNotify(config);
-
-  std::unique_ptr<SSLClientSocket> ssl_socket =
-      CreateSSLClientSocket(std::move(transport), host_port_pair, SSLConfig());
-  rv = callback.GetResult(ssl_socket->Connect(callback.callback()));
-  EXPECT_THAT(rv, AnyOf(IsOk(), IsError(ERR_TLS13_DOWNGRADE_DETECTED)));
-
-  histograms.ExpectUniqueSample("Net.SSLTLS13Downgrade", params.downgrade, 1);
-  if (params.tls13_experiment_host) {
-    histograms.ExpectUniqueSample("Net.SSLTLS13DowngradeTLS13Experiment",
-                                  params.downgrade, 1);
-  } else {
-    histograms.ExpectTotalCount("Net.SSLTLS13DowngradeTLS13Experiment", 0);
-  }
-
-  if (params.downgrade) {
-    histograms.ExpectUniqueSample("Net.SSLTLS13DowngradeType",
-                                  params.expect_downgrade_type, 1);
-  } else {
-    histograms.ExpectTotalCount("Net.SSLTLS13DowngradeType", 0);
-  }
-
-  if (params.tls13_experiment_host && params.downgrade) {
-    histograms.ExpectUniqueSample("Net.SSLTLS13DowngradeTypeTLS13Experiment",
-                                  params.expect_downgrade_type, 1);
-  } else {
-    histograms.ExpectTotalCount("Net.SSLTLS13DowngradeTypeTLS13Experiment", 0);
   }
 }
 

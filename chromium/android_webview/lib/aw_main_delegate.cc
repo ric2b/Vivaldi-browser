@@ -133,6 +133,12 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   // removed entirely.  See: http://crbug.com/582750
   cl->AppendSwitch(switches::kAppCacheForceEnabled);
 
+  // We have crash dumps to diagnose regressions in remote font analysis or cc
+  // serialization errors but most of their utility is in identifying URLs where
+  // the regression occurs. This info is not available for webview so there
+  // isn't much point in having the crash dumps there.
+  cl->AppendSwitch(switches::kDisableOoprDebugCrashDump);
+
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
   if (cl->GetSwitchValueASCII(switches::kProcessType).empty()) {
     // Browser process (no type specified).
@@ -214,7 +220,8 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
 
     features.DisableIfNotSet(::features::kBackgroundFetch);
 
-    features.EnableIfNotSet(::features::kDisableSurfaceControlForWebview);
+    // SurfaceControl is not supported on webview.
+    features.DisableIfNotSet(::features::kAndroidSurfaceControl);
 
     // TODO(https://crbug.com/963653): SmsReceiver is not yet supported on
     // WebView.
@@ -232,9 +239,9 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
     // De-jelly is never supported on WebView.
     features.EnableIfNotSet(::features::kDisableDeJelly);
 
-    // COEP is not supported on WebView.
-    // See
+    // COOP/COEP is not supported on WebView. See:
     // https://groups.google.com/a/chromium.org/forum/#!topic/blink-dev/XBKAGb2_7uAi.
+    features.DisableIfNotSet(network::features::kCrossOriginOpenerPolicy);
     features.DisableIfNotSet(network::features::kCrossOriginEmbedderPolicy);
 
     features.DisableIfNotSet(::features::kInstalledApp);

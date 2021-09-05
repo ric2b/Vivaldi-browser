@@ -11,7 +11,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/public/cpp/desks_helper.h"
-#include "ash/session/session_observer.h"
+#include "ash/public/cpp/session/session_observer.h"
 #include "ash/wm/desks/desks_histogram_enums.h"
 #include "ash/wm/desks/root_window_desk_switch_animator.h"
 #include "base/containers/flat_map.h"
@@ -27,6 +27,7 @@ class Window;
 namespace ash {
 
 class Desk;
+class DeskAnimationBase;
 
 // Defines a controller for creating, destroying and managing virtual desks and
 // their windows.
@@ -167,9 +168,9 @@ class ASH_EXPORT DesksController : public DesksHelper,
   void OnFirstSessionStarted() override;
 
  private:
-  class DeskAnimationBase;
-  class DeskActivationAnimation;
-  class DeskRemovalAnimation;
+  friend class DeskAnimationBase;
+  friend class DeskActivationAnimation;
+  friend class DeskRemovalAnimation;
 
   void OnAnimationFinished(DeskAnimationBase* animation);
 

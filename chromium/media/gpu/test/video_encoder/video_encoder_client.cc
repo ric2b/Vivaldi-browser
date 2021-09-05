@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "gpu/config/gpu_preferences.h"
+#include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/gpu/gpu_video_encode_accelerator_factory.h"
 #include "media/gpu/macros.h"
@@ -41,7 +42,17 @@ void CallbackThunk(
 }
 }  // namespace
 
-VideoEncoderClientConfig::VideoEncoderClientConfig() = default;
+VideoEncoderClientConfig::VideoEncoderClientConfig(
+    const Video* video,
+    VideoCodecProfile output_profile,
+    uint32_t bitrate)
+    : output_profile(output_profile),
+      bitrate(bitrate),
+      framerate(video->FrameRate()),
+      num_frames_to_encode(video->NumFrames()) {}
+
+VideoEncoderClientConfig::VideoEncoderClientConfig(
+    const VideoEncoderClientConfig&) = default;
 
 VideoEncoderStats::VideoEncoderStats(uint32_t framerate)
     : framerate(framerate) {}
@@ -49,7 +60,13 @@ VideoEncoderStats::VideoEncoderStats(uint32_t framerate)
 uint32_t VideoEncoderStats::Bitrate() const {
   const size_t average_frame_size_in_bits =
       total_encoded_frames_size * 8 / num_encoded_frames;
-  return average_frame_size_in_bits * framerate;
+  const uint32_t average_bitrate = average_frame_size_in_bits * framerate;
+  VLOGF(2) << "encoded_frames=" << num_encoded_frames
+           << ", framerate=" << framerate
+           << ", total_encoded_frames_size=" << total_encoded_frames_size
+           << ", average_frame_size_in_bits=" << average_frame_size_in_bits
+           << ", average bitrate=" << average_bitrate;
+  return average_bitrate;
 }
 
 void VideoEncoderStats::Reset() {
@@ -60,13 +77,15 @@ void VideoEncoderStats::Reset() {
 VideoEncoderClient::VideoEncoderClient(
     const VideoEncoder::EventCallback& event_cb,
     std::vector<std::unique_ptr<BitstreamProcessor>> bitstream_processors,
+    gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory,
     const VideoEncoderClientConfig& config)
     : event_cb_(event_cb),
       bitstream_processors_(std::move(bitstream_processors)),
       encoder_client_config_(config),
       encoder_client_thread_("VDAClientEncoderThread"),
       encoder_client_state_(VideoEncoderClientState::kUninitialized),
-      current_stats_(encoder_client_config_.framerate) {
+      current_stats_(encoder_client_config_.framerate),
+      gpu_memory_buffer_factory_(gpu_memory_buffer_factory) {
   DETACH_FROM_SEQUENCE(encoder_client_sequence_checker_);
 
   weak_this_ = weak_this_factory_.GetWeakPtr();
@@ -82,9 +101,11 @@ VideoEncoderClient::~VideoEncoderClient() {
 std::unique_ptr<VideoEncoderClient> VideoEncoderClient::Create(
     const VideoEncoder::EventCallback& event_cb,
     std::vector<std::unique_ptr<BitstreamProcessor>> bitstream_processors,
+    gpu::GpuMemoryBufferFactory* const gpu_memory_buffer_factory,
     const VideoEncoderClientConfig& config) {
-  return base::WrapUnique(new VideoEncoderClient(
-      event_cb, std::move(bitstream_processors), config));
+  return base::WrapUnique(
+      new VideoEncoderClient(event_cb, std::move(bitstream_processors),
+                             gpu_memory_buffer_factory, config));
 }
 
 bool VideoEncoderClient::Initialize(const Video* video) {
@@ -184,7 +205,12 @@ void VideoEncoderClient::RequireBitstreamBuffers(
   // not starting at (0,0).
   aligned_data_helper_ = std::make_unique<AlignedDataHelper>(
       video_->Data(), video_->NumFrames(), video_->PixelFormat(),
-      gfx::Rect(video_->Resolution()), input_coded_size);
+      gfx::Rect(video_->Resolution()), input_coded_size,
+      encoder_client_config_.input_storage_type ==
+              VideoEncodeAccelerator::Config::StorageType::kDmabuf
+          ? VideoFrame::STORAGE_GPU_MEMORY_BUFFER
+          : VideoFrame::STORAGE_MOJO_SHARED_BUFFER,
+      gpu_memory_buffer_factory_);
 
   output_buffer_size_ = output_buffer_size;
 
@@ -233,6 +259,8 @@ void VideoEncoderClient::BitstreamBufferReady(
     int32_t bitstream_buffer_id,
     const BitstreamBufferMetadata& metadata) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(encoder_client_sequence_checker_);
+  DVLOGF(4) << "frame_index=" << frame_index_
+            << ", encoded image size=" << metadata.payload_size_bytes;
   {
     base::AutoLock auto_lock(stats_lock_);
     current_stats_.num_encoded_frames++;
@@ -259,6 +287,24 @@ void VideoEncoderClient::BitstreamBufferReady(
     bitstream_processor_->ProcessBitstream(bitstream_ref, frame_index_);
   }
   frame_index_++;
+  FlushDoneTaskIfNeeded();
+}
+
+void VideoEncoderClient::FlushDoneTaskIfNeeded() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(encoder_client_sequence_checker_);
+  // If the encoder does not support flushing, we have to manually call
+  // FlushDoneTask(). Invoke FlushDoneTask() when
+  // 1.) Flush is not supported by VideoEncodeAccelerator,
+  // 2.) all the frames have been returned and
+  // 3.) bitstreams of all the video frames have been output.
+  // This is only valid if we always flush at the end of the stream (not in a
+  // middle of the stream), which is the case in all of our test cases.
+  if (!encoder_->IsFlushSupported() &&
+      encoder_client_state_ == VideoEncoderClientState::kFlushing &&
+      frame_index_ == encoder_client_config_.num_frames_to_encode &&
+      num_outstanding_encode_requests_ == 0) {
+    FlushDoneTask(true);
+  }
 }
 
 void VideoEncoderClient::BitstreamBufferProcessed(int32_t bitstream_buffer_id) {
@@ -289,7 +335,10 @@ void VideoEncoderClient::CreateEncoderTask(const Video* video,
   const VideoEncodeAccelerator::Config config(
       video_->PixelFormat(), video_->Resolution(),
       encoder_client_config_.output_profile, encoder_client_config_.bitrate,
-      encoder_client_config_.framerate);
+      encoder_client_config_.framerate, base::nullopt /* gop_length */,
+      base::nullopt /* h264_output_level*/, false /* is_constrained_h264 */,
+      encoder_client_config_.input_storage_type);
+
   encoder_ = GpuVideoEncodeAcceleratorFactory::CreateVEA(config, this,
                                                          gpu::GpuPreferences());
   *success = (encoder_ != nullptr);
@@ -332,7 +381,6 @@ void VideoEncoderClient::EncodeTask() {
 void VideoEncoderClient::EncodeNextFrameTask() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(encoder_client_sequence_checker_);
   DVLOGF(4);
-
   // Stop encoding frames if we're no longer in the encoding state.
   if (encoder_client_state_ != VideoEncoderClientState::kEncoding)
     return;
@@ -368,14 +416,12 @@ void VideoEncoderClient::EncodeNextFrameTask() {
 void VideoEncoderClient::FlushTask() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(encoder_client_sequence_checker_);
   DVLOGF(4);
-
   // Changing the state to flushing will abort any pending encodes.
   encoder_client_state_ = VideoEncoderClientState::kFlushing;
 
-  // If the encoder does not support flush, immediately consider flushing done.
   if (!encoder_->IsFlushSupported()) {
     FireEvent(VideoEncoder::EncoderEvent::kFlushing);
-    FlushDoneTask(true);
+    FlushDoneTaskIfNeeded();
     return;
   }
 
@@ -403,9 +449,10 @@ void VideoEncoderClient::EncodeDoneTask(base::TimeDelta timestamp) {
   DCHECK_NE(VideoEncoderClientState::kIdle, encoder_client_state_);
   DVLOGF(4);
 
-  num_outstanding_encode_requests_--;
-
   FireEvent(VideoEncoder::EncoderEvent::kFrameReleased);
+
+  num_outstanding_encode_requests_--;
+  FlushDoneTaskIfNeeded();
 
   // Queue the next frame to be encoded.
   encoder_client_task_runner_->PostTask(

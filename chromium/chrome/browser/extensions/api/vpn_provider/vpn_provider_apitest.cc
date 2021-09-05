@@ -257,12 +257,13 @@ IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, DestroyConnectedConfig) {
 
   EXPECT_TRUE(RunExtensionTest("destroyConnectedConfigSetup"));
 
+  extensions::ResultCatcher catcher;
+
   EXPECT_TRUE(DestroyConfigForTest(kTestConfig));
   EXPECT_FALSE(DoesConfigExist(kTestConfig));
   EXPECT_FALSE(ShillProfileClient::Get()->GetTestInterface()->GetService(
       service_path, &profile_path, &properties));
 
-  extensions::ResultCatcher catcher;
   ASSERT_TRUE(catcher.GetNextResult());
 }
 
@@ -403,7 +404,7 @@ IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, CreateDisable) {
       service_path, &profile_path, &properties));
 }
 
-IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, CreateBlacklist) {
+IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, CreateBlocklist) {
   LoadVpnExtension();
   AddNetworkProfileForUser();
   EXPECT_TRUE(RunExtensionTest("createConfigSuccess"));
@@ -417,7 +418,7 @@ IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, CreateBlacklist) {
 
   extensions::ExtensionService* extension_service =
       extensions::ExtensionSystem::Get(profile())->extension_service();
-  extension_service->BlacklistExtensionForTest(extension_id_);
+  extension_service->BlocklistExtensionForTest(extension_id_);
   content::RunAllPendingInMessageLoop();
   EXPECT_FALSE(DoesConfigExist(kTestConfig));
   EXPECT_FALSE(ShillProfileClient::Get()->GetTestInterface()->GetService(

@@ -4,6 +4,7 @@
 
 #include "extensions/browser/api/crash_report_private/crash_report_private_api.h"
 
+#include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
@@ -11,7 +12,7 @@
 #include "base/task/thread_pool.h"
 #include "base/time/default_clock.h"
 #include "components/crash/core/app/client_upload_info.h"
-#include "components/feedback/anonymizer_tool.h"
+#include "components/feedback/redaction_tool.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
@@ -154,7 +155,7 @@ void ReportJavaScriptError(
     scoped_refptr<network::SharedURLLoaderFactory> loader_factory,
     const crash_report_private::ErrorInfo& error,
     base::OnceCallback<void()> callback,
-    const std::string& anonymized_message) {
+    const std::string& redacted_message) {
   const auto platform = GetPlatformInfo();
 
   const GURL source(error.url);
@@ -165,7 +166,7 @@ void ReportJavaScriptError(
   params["prod"] = net::EscapeQueryParamValue(product, /* use_plus */ false);
   params["ver"] = net::EscapeQueryParamValue(version, /* use_plus */ false);
   params["type"] = "JavascriptError";
-  params["error_message"] = anonymized_message;
+  params["error_message"] = redacted_message;
   params["browser"] = "Chrome";
   params["browser_version"] = platform.version;
   params["channel"] = platform.channel;
@@ -189,9 +190,9 @@ void ReportJavaScriptError(
   SendReport(loader_factory, url, body, std::move(callback));
 }
 
-std::string AnonymizeErrorMessage(const std::string& message) {
-  return feedback::AnonymizerTool(/*first_party_extension_ids=*/nullptr)
-      .Anonymize(message);
+std::string RedactErrorMessage(const std::string& message) {
+  return feedback::RedactionTool(/*first_party_extension_ids=*/nullptr)
+      .Redact(message);
 }
 
 }  // namespace
@@ -238,9 +239,9 @@ void CrashReportPrivateReportErrorFunction::OnConsentCheckCompleted(
       content::BrowserContext::GetDefaultStoragePartition(browser_context())
           ->GetURLLoaderFactoryForBrowserProcess();
 
-  // Don't anonymize the report on the UI thread as it can take some time.
+  // Don't redact the report on the UI thread as it can take some time.
   base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, base::BindOnce(&AnonymizeErrorMessage, info.message),
+      FROM_HERE, base::BindOnce(&RedactErrorMessage, info.message),
       base::BindOnce(
           &ReportJavaScriptError, std::move(loader_factory), std::move(info),
           base::BindOnce(

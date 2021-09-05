@@ -34,9 +34,9 @@ void EnsureRunsOnCFRunLoopEnabledThread() {
   }
 }
 
-// Blacklisted devices are identified by a characteristic trailing substring of
+// Blocked devices are identified by a characteristic trailing substring of
 // uniqueId. At the moment these are just Blackmagic devices.
-const char* kBlacklistedCamerasIdSignature[] = {"-01FDA82C8A9C"};
+const char* kBlockedCamerasIdSignature[] = {"-01FDA82C8A9C"};
 
 int32_t get_device_descriptors_retry_count = 0;
 
@@ -44,20 +44,18 @@ int32_t get_device_descriptors_retry_count = 0;
 
 namespace media {
 
-static bool IsDeviceBlacklisted(
-    const VideoCaptureDeviceDescriptor& descriptor) {
-  bool is_device_blacklisted = false;
+static bool IsDeviceBlocked(const VideoCaptureDeviceDescriptor& descriptor) {
+  bool is_device_blocked = false;
   for (size_t i = 0;
-       !is_device_blacklisted && i < base::size(kBlacklistedCamerasIdSignature);
-       ++i) {
-    is_device_blacklisted =
-        base::EndsWith(descriptor.device_id, kBlacklistedCamerasIdSignature[i],
+       !is_device_blocked && i < base::size(kBlockedCamerasIdSignature); ++i) {
+    is_device_blocked =
+        base::EndsWith(descriptor.device_id, kBlockedCamerasIdSignature[i],
                        base::CompareCase::INSENSITIVE_ASCII);
   }
-  DVLOG_IF(2, is_device_blacklisted)
-      << "Blacklisted camera: " << descriptor.display_name()
+  DVLOG_IF(2, is_device_blocked)
+      << "Blocked camera: " << descriptor.display_name()
       << ", id: " << descriptor.device_id;
-  return is_device_blacklisted;
+  return is_device_blocked;
 }
 
 VideoCaptureDeviceFactoryMac::VideoCaptureDeviceFactoryMac() {
@@ -68,13 +66,12 @@ VideoCaptureDeviceFactoryMac::~VideoCaptureDeviceFactoryMac() {
 }
 
 // static
-void VideoCaptureDeviceFactoryMac::SetGetDeviceDescriptorsRetryCount(
-    int count) {
+void VideoCaptureDeviceFactoryMac::SetGetDevicesInfoRetryCount(int count) {
   get_device_descriptors_retry_count = count;
 }
 
 // static
-int VideoCaptureDeviceFactoryMac::GetGetDeviceDescriptorsRetryCount() {
+int VideoCaptureDeviceFactoryMac::GetGetDevicesInfoRetryCount() {
   return get_device_descriptors_retry_count;
 }
 
@@ -98,12 +95,13 @@ std::unique_ptr<VideoCaptureDevice> VideoCaptureDeviceFactoryMac::CreateDevice(
   return std::unique_ptr<VideoCaptureDevice>(std::move(capture_device));
 }
 
-void VideoCaptureDeviceFactoryMac::GetDeviceDescriptors(
-    VideoCaptureDeviceDescriptors* device_descriptors) {
+void VideoCaptureDeviceFactoryMac::GetDevicesInfo(
+    GetDevicesInfoCallback callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   EnsureRunsOnCFRunLoopEnabledThread();
 
-  // Loop through all available devices and add to |device_descriptors|.
+  // Loop through all available devices and add to |devices_info|.
+  std::vector<VideoCaptureDeviceInfo> devices_info;
   NSDictionary* capture_devices;
   DVLOG(1) << "Enumerating video capture devices using AVFoundation";
   capture_devices = [VideoCaptureDeviceAVFoundation deviceNames];
@@ -123,41 +121,27 @@ void VideoCaptureDeviceFactoryMac::GetDeviceDescriptors(
         device_id, capture_api, device_transport_type);
     VideoCaptureDeviceDescriptor descriptor(
         [[[capture_devices valueForKey:key] deviceName] UTF8String], device_id,
-        model_id, capture_api, device_transport_type,
-        VideoFacingMode::MEDIA_VIDEO_FACING_NONE,
-        /*pan_tilt_zoom_supported=*/false);
-    if (IsDeviceBlacklisted(descriptor))
+        model_id, capture_api,
+        /*pan_tilt_zoom_supported=*/false, device_transport_type);
+    if (IsDeviceBlocked(descriptor))
       continue;
-    device_descriptors->push_back(descriptor);
-  }
-  // Also retrieve Blackmagic devices, if present, via DeckLink SDK API.
-  VideoCaptureDeviceDeckLinkMac::EnumerateDevices(device_descriptors);
+    devices_info.emplace_back(descriptor);
 
-  if ([capture_devices count] > 0 && device_descriptors->empty()) {
+    // Get supported formats
+    [VideoCaptureDeviceAVFoundation
+               getDevice:descriptor
+        supportedFormats:&devices_info.back().supported_formats];
+  }
+
+  // Also retrieve Blackmagic devices, if present, via DeckLink SDK API.
+  VideoCaptureDeviceDeckLinkMac::EnumerateDevices(&devices_info);
+
+  if ([capture_devices count] > 0 && devices_info.empty()) {
     video_capture::uma::LogMacbookRetryGetDeviceInfosEvent(
         video_capture::uma::AVF_DROPPED_DESCRIPTORS_AT_FACTORY);
   }
-}
 
-void VideoCaptureDeviceFactoryMac::GetSupportedFormats(
-    const VideoCaptureDeviceDescriptor& device,
-    VideoCaptureFormats* supported_formats) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  switch (device.capture_api) {
-    case VideoCaptureApi::MACOSX_AVFOUNDATION:
-      DVLOG(1) << "Enumerating video capture capabilities, AVFoundation";
-      [VideoCaptureDeviceAVFoundation getDevice:device
-                               supportedFormats:supported_formats];
-      break;
-    case VideoCaptureApi::MACOSX_DECKLINK:
-      DVLOG(1) << "Enumerating video capture capabilities "
-               << device.display_name();
-      VideoCaptureDeviceDeckLinkMac::EnumerateDeviceCapabilities(
-          device, supported_formats);
-      break;
-    default:
-      NOTREACHED();
-  }
+  std::move(callback).Run(std::move(devices_info));
 }
 
 }  // namespace media

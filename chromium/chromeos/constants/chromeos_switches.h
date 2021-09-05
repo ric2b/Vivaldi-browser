@@ -45,6 +45,8 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kArcDisableSystemDefaultApps[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kArcDisablePlayAutoInstall[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kArcEnableNativeBridge64BitSupportExperiment[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kArcForceCacheAppIcons[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kArcForceShowOptInUi[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kArcPackagesCacheMode[];
@@ -167,6 +169,8 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kHomedir[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kIgnoreUserProfileMappingForTests[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kKernelnextRestrictVMs[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kLacrosChromeAdditionalArgs[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kLacrosChromePath[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kLoginManager[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kLoginProfile[];
@@ -218,6 +222,8 @@ extern const char kWaitForInitialPolicyFetchForTest[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kWakeOnWifiPacket[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kUnfilteredBluetoothDevices[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kUpdateRequiredAueForTest[];
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -271,6 +277,11 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsUnfilteredBluetoothDevicesEnabled();
 // the user on their first login) should show tablet mode screens when the
 // device is not in tablet mode.
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool ShouldOobeUseTabletModeFirstRun();
+
+// Returns true if device policy DeviceMinimumVersion should assume that
+// Auto Update Expiration is reached. This should only be used for testing.
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+bool IsAueReachedForUpdateRequiredForTest();
 
 }  // namespace switches
 }  // namespace chromeos

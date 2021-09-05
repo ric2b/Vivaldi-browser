@@ -97,9 +97,16 @@ static_library("exo") {
     "//ui/wm/public",
   ]
 
+  assert_no_deps = [
+    "//components/arc",
+    "//content/public/browser",
+    "//content/public/common",
+  ]
+
   public_deps = [
     "//ui/base/cursor:cursor_base",
     "//ui/base/cursor/mojom:cursor_type",
+    "//ui/base/dragdrop/mojom:mojom_headers",
   ]
 
   if (is_chromeos) {
@@ -114,6 +121,9 @@ static_library("exo") {
       "client_controlled_accelerators.h",
       "client_controlled_shell_surface.cc",
       "client_controlled_shell_surface.h",
+      "gamepad.cc",
+      "gamepad.h",
+      "gamepad_observer.h",
       "gaming_seat.cc",
       "gaming_seat.h",
       "input_method_surface.cc",
@@ -132,6 +142,9 @@ static_library("exo") {
       "shell_surface_base.h",
       "text_input.cc",
       "text_input.h",
+      "toast_surface.cc",
+      "toast_surface.h",
+      "toast_surface_manager.h",
       "wm_helper_chromeos.cc",
       "wm_helper_chromeos.h",
       "xdg_shell_surface.cc",
@@ -240,6 +253,7 @@ source_set("unit_tests") {
       "data_source_unittest.cc",
       "display_unittest.cc",
       "drag_drop_operation_unittest.cc",
+      "gamepad_unittest.cc",
       "gaming_seat_unittest.cc",
       "input_method_surface_unittest.cc",
       "keyboard_unittest.cc",
@@ -252,6 +266,7 @@ source_set("unit_tests") {
       "sub_surface_unittest.cc",
       "surface_unittest.cc",
       "text_input_unittest.cc",
+      "toast_surface_unittest.cc",
       "touch_unittest.cc",
       "xdg_shell_surface_unittest.cc",
     ]
@@ -264,6 +279,7 @@ source_set("unit_tests") {
       "//chromeos/constants",
       "//ui/base:test_support",
       "//ui/base/cursor/mojom:cursor_type",
+      "//ui/base/dragdrop/mojom:mojom_shared",
     ]
   }
 
@@ -296,7 +312,7 @@ test("exo_unittests") {
 
   data_deps = []
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     deps += [ "//components/exo/wayland:unit_tests" ]
   }
 

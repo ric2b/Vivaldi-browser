@@ -33,14 +33,13 @@ class WorkletModuleResponsesMapTest : public testing::Test {
     fetcher_ = MakeGarbageCollected<ResourceFetcher>(
         ResourceFetcherInit(properties->MakeDetachable(), context,
                             base::MakeRefCounted<scheduler::FakeTaskRunner>(),
-                            MakeGarbageCollected<TestLoaderFactory>()));
+                            MakeGarbageCollected<TestLoaderFactory>(
+                                platform_->GetURLLoaderMockFactory())));
     map_ = MakeGarbageCollected<WorkletModuleResponsesMap>();
   }
 
   class ClientImpl final : public GarbageCollected<ClientImpl>,
                            public ModuleScriptFetcher::Client {
-    USING_GARBAGE_COLLECTED_MIXIN(ClientImpl);
-
    public:
     enum class Result { kInitial, kOK, kFailed };
 
@@ -71,7 +70,8 @@ class WorkletModuleResponsesMapTest : public testing::Test {
     // TODO(nhiroki): Specify worklet-specific request context (e.g.,
     // "paintworklet").
     resource_request.SetRequestContext(mojom::RequestContextType::SCRIPT);
-    FetchParameters fetch_params(std::move(resource_request));
+    FetchParameters fetch_params =
+        FetchParameters::CreateForTest(std::move(resource_request));
     WorkletModuleScriptFetcher* module_fetcher =
         MakeGarbageCollected<WorkletModuleScriptFetcher>(
             map_.Get(), ModuleScriptLoader::CreatePassKeyForTests());

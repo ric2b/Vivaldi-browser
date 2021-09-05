@@ -494,8 +494,8 @@ std::string FakeCentral::GetName() const {
 }
 
 void FakeCentral::SetName(const std::string& name,
-                          const base::Closure& callback,
-                          const ErrorCallback& error_callback) {
+                          base::OnceClosure callback,
+                          ErrorCallback error_callback) {
   NOTREACHED();
 }
 
@@ -530,8 +530,8 @@ bool FakeCentral::IsPowered() const {
 }
 
 void FakeCentral::SetPowered(bool powered,
-                             const base::Closure& callback,
-                             const ErrorCallback& error_callback) {
+                             base::OnceClosure callback,
+                             ErrorCallback error_callback) {
   NOTREACHED();
 }
 
@@ -541,8 +541,8 @@ bool FakeCentral::IsDiscoverable() const {
 }
 
 void FakeCentral::SetDiscoverable(bool discoverable,
-                                  const base::Closure& callback,
-                                  const ErrorCallback& error_callback) {
+                                  base::OnceClosure callback,
+                                  ErrorCallback error_callback) {
   NOTREACHED();
 }
 
@@ -559,23 +559,23 @@ FakeCentral::UUIDList FakeCentral::GetUUIDs() const {
 void FakeCentral::CreateRfcommService(
     const device::BluetoothUUID& uuid,
     const ServiceOptions& options,
-    const CreateServiceCallback& callback,
-    const CreateServiceErrorCallback& error_callback) {
+    CreateServiceCallback callback,
+    CreateServiceErrorCallback error_callback) {
   NOTREACHED();
 }
 
 void FakeCentral::CreateL2capService(
     const device::BluetoothUUID& uuid,
     const ServiceOptions& options,
-    const CreateServiceCallback& callback,
-    const CreateServiceErrorCallback& error_callback) {
+    CreateServiceCallback callback,
+    CreateServiceErrorCallback error_callback) {
   NOTREACHED();
 }
 
 void FakeCentral::RegisterAdvertisement(
     std::unique_ptr<device::BluetoothAdvertisement::Data> advertisement_data,
-    const CreateAdvertisementCallback& callback,
-    const AdvertisementErrorCallback& error_callback) {
+    CreateAdvertisementCallback callback,
+    AdvertisementErrorCallback error_callback) {
   NOTREACHED();
 }
 
@@ -583,13 +583,12 @@ void FakeCentral::RegisterAdvertisement(
 void FakeCentral::SetAdvertisingInterval(
     const base::TimeDelta& min,
     const base::TimeDelta& max,
-    const base::Closure& callback,
-    const AdvertisementErrorCallback& error_callback) {
+    base::OnceClosure callback,
+    AdvertisementErrorCallback error_callback) {
   NOTREACHED();
 }
-void FakeCentral::ResetAdvertising(
-    const base::Closure& callback,
-    const AdvertisementErrorCallback& error_callback) {
+void FakeCentral::ResetAdvertising(base::OnceClosure callback,
+                                   AdvertisementErrorCallback error_callback) {
   NOTREACHED();
 }
 #endif

@@ -23,7 +23,7 @@ import org.robolectric.annotation.Config;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.ActivityTabProvider;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileJni;
 import org.chromium.chrome.browser.tab.Tab;
@@ -95,10 +95,9 @@ public class SendTabToSelfShareActivityTest {
         when(mNavigationController.getVisibleEntry()).thenReturn(mNavigationEntry);
 
         // Setup the mocked object chain to get the bottom controller.
-        when(mChromeActivity.getBottomSheetController()).thenReturn(mBottomSheetController);
-
         SendTabToSelfShareActivity shareActivity = new SendTabToSelfShareActivity();
         SendTabToSelfShareActivity.setBottomSheetContentForTesting(mBottomSheetContent);
+        SendTabToSelfShareActivity.setBottomSheetControllerForTesting(mBottomSheetController);
         shareActivity.handleAction(mChromeActivity);
         verify(mBottomSheetController).requestShowContent(any(BottomSheetContent.class), eq(true));
     }

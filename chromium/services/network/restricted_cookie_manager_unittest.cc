@@ -60,13 +60,13 @@ class RecordingCookieObserver : public network::mojom::CookieAccessObserver {
   }
 
   void OnCookiesAccessed(mojom::CookieAccessDetailsPtr details) override {
-    for (const auto& cookie_and_status : details->cookie_list) {
+    for (const auto& cookie_and_access_result : details->cookie_list) {
       CookieOp op;
       op.get = details->type == mojom::CookieAccessDetails::Type::kRead;
       op.url = details->url;
       op.site_for_cookies = details->site_for_cookies.RepresentativeUrl();
-      op.cookie.push_back(cookie_and_status.cookie);
-      op.status = cookie_and_status.status;
+      op.cookie.push_back(cookie_and_access_result.cookie);
+      op.status = cookie_and_access_result.access_result.status;
       op.devtools_request_id = details->devtools_request_id;
       recorded_activity_.push_back(op);
     }
@@ -204,33 +204,31 @@ class RestrictedCookieManagerTest
   bool SetCanonicalCookie(const net::CanonicalCookie& cookie,
                           std::string source_scheme,
                           bool can_modify_httponly) {
-    net::ResultSavingCookieCallback<net::CookieInclusionStatus> callback;
+    net::ResultSavingCookieCallback<net::CookieAccessResult> callback;
     net::CookieOptions options;
     if (can_modify_httponly)
       options.set_include_httponly();
     cookie_monster_.SetCanonicalCookieAsync(
         std::make_unique<net::CanonicalCookie>(cookie),
         net::cookie_util::SimulatedCookieSource(cookie, source_scheme), options,
-        base::BindOnce(
-            &net::ResultSavingCookieCallback<net::CookieInclusionStatus>::Run,
-            base::Unretained(&callback)));
+        callback.MakeCallback());
     callback.WaitUntilDone();
-    return callback.result().IsInclude();
+    return callback.result().status.IsInclude();
   }
 
   // Set a canonical cookie directly into the store.
   // Uses a cookie options that will succeed at setting any cookie.
   bool EnsureSetCanonicalCookie(const net::CanonicalCookie& cookie) {
-    net::ResultSavingCookieCallback<net::CookieInclusionStatus> callback;
+    net::ResultSavingCookieCallback<net::CookieAccessResult> callback;
     cookie_monster_.SetCanonicalCookieAsync(
         std::make_unique<net::CanonicalCookie>(cookie),
         net::cookie_util::SimulatedCookieSource(cookie, "https"),
         net::CookieOptions::MakeAllInclusive(),
         base::BindOnce(
-            &net::ResultSavingCookieCallback<net::CookieInclusionStatus>::Run,
+            &net::ResultSavingCookieCallback<net::CookieAccessResult>::Run,
             base::Unretained(&callback)));
     callback.WaitUntilDone();
-    return callback.result().IsInclude();
+    return callback.result().status.IsInclude();
   }
 
   // Simplified helper for SetCanonicalCookie.
@@ -616,28 +614,6 @@ TEST_P(RestrictedCookieManagerTest, SetCanonicalCookieHttpOnly) {
   }
 }
 
-TEST_P(RestrictedCookieManagerTest, SetCanonicalCookieValidateDomain) {
-  GURL other_site("https://not-example.com");
-  auto cookie = net::CanonicalCookie::Create(
-      other_site, "cookie=foo;domain=not-example.com", base::Time::Now(),
-      base::nullopt);
-  ASSERT_EQ(".not-example.com", cookie->Domain());
-  EXPECT_FALSE(sync_service_->SetCanonicalCookie(
-      *cookie, GURL("https://example.com/test"), GURL("https://example.com"),
-      url::Origin::Create(GURL("https://example.com"))));
-  ASSERT_EQ(1u, recorded_activity().size());
-  EXPECT_TRUE(recorded_activity()[0].status.HasExclusionReason(
-      net::CookieInclusionStatus::EXCLUDE_DOMAIN_MISMATCH));
-
-  auto options = mojom::CookieManagerGetOptions::New();
-  options->name = "cookie";
-  options->match_type = mojom::CookieMatchType::EQUALS;
-  std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-      GURL("https://example.com/test/"), GURL("https://example.com"),
-      url::Origin::Create(GURL("https://example.com")), std::move(options));
-  EXPECT_THAT(cookies, testing::SizeIs(0));
-}
-
 TEST_P(RestrictedCookieManagerTest, SetCookieFromString) {
   EXPECT_TRUE(backend()->SetCookieFromString(
       GURL("https://example.com/test/"),
@@ -675,6 +651,19 @@ TEST_P(RestrictedCookieManagerTest, SetCanonicalCookieFromOpaqueOrigin) {
   ASSERT_TRUE(opaque_origin.opaque());
   service_->OverrideOriginForTesting(opaque_origin);
 
+  ExpectBadMessage();
+  EXPECT_FALSE(sync_service_->SetCanonicalCookie(
+      net::CanonicalCookie(
+          "new-name", "new-value", "not-example.com", "/", base::Time(),
+          base::Time(), base::Time(), /* secure = */ true,
+          /* httponly = */ false, net::CookieSameSite::NO_RESTRICTION,
+          net::COOKIE_PRIORITY_DEFAULT),
+      GURL("https://example.com/test/"), GURL("https://example.com"),
+      url::Origin::Create(GURL("https://example.com"))));
+  ASSERT_TRUE(received_bad_message());
+}
+
+TEST_P(RestrictedCookieManagerTest, SetCanonicalCookieWithMismatchingDomain) {
   ExpectBadMessage();
   EXPECT_FALSE(sync_service_->SetCanonicalCookie(
       net::CanonicalCookie(
@@ -1290,21 +1279,19 @@ TEST_P(RestrictedCookieManagerTest, ChangeNotificationIncludesAccessSemantics) {
       base::nullopt);
 
   // Set cookie directly into the CookieMonster, using all-inclusive options.
-  net::ResultSavingCookieCallback<net::CookieInclusionStatus> callback;
+  net::ResultSavingCookieCallback<net::CookieAccessResult> callback;
   cookie_monster_.SetCanonicalCookieAsync(
       std::move(cookie), cookie_url, net::CookieOptions::MakeAllInclusive(),
-      base::BindOnce(
-          &net::ResultSavingCookieCallback<net::CookieInclusionStatus>::Run,
-          base::Unretained(&callback)));
+      callback.MakeCallback());
   callback.WaitUntilDone();
-  ASSERT_TRUE(callback.result().IsInclude());
+  ASSERT_TRUE(callback.result().status.IsInclude());
 
   // The listener only receives the change because the cookie is legacy.
   listener.WaitForChange();
 
   ASSERT_THAT(listener.observed_changes(), testing::SizeIs(1));
   EXPECT_EQ(net::CookieAccessSemantics::LEGACY,
-            listener.observed_changes()[0].access_semantics);
+            listener.observed_changes()[0].access_result.access_semantics);
 }
 
 TEST_P(RestrictedCookieManagerTest, NoChangeNotificationForNonlegacyCookie) {
@@ -1345,30 +1332,24 @@ TEST_P(RestrictedCookieManagerTest, NoChangeNotificationForNonlegacyCookie) {
       base::Time::Now(), base::nullopt);
 
   // Set cookies directly into the CookieMonster, using all-inclusive options.
-  net::ResultSavingCookieCallback<net::CookieInclusionStatus> callback1;
+  net::ResultSavingCookieCallback<net::CookieAccessResult> callback1;
   cookie_monster_.SetCanonicalCookieAsync(
       std::move(unspecified_cookie), cookie_url,
-      net::CookieOptions::MakeAllInclusive(),
-      base::BindOnce(
-          &net::ResultSavingCookieCallback<net::CookieInclusionStatus>::Run,
-          base::Unretained(&callback1)));
+      net::CookieOptions::MakeAllInclusive(), callback1.MakeCallback());
   callback1.WaitUntilDone();
-  ASSERT_TRUE(callback1.result().IsInclude());
+  ASSERT_TRUE(callback1.result().status.IsInclude());
 
   // Listener doesn't receive notification because cookie is not included for
   // request URL for being unspecified and treated as lax.
   base::RunLoop().RunUntilIdle();
   ASSERT_THAT(listener.observed_changes(), testing::SizeIs(0));
 
-  net::ResultSavingCookieCallback<net::CookieInclusionStatus> callback2;
+  net::ResultSavingCookieCallback<net::CookieAccessResult> callback2;
   cookie_monster_.SetCanonicalCookieAsync(
       std::move(samesite_none_cookie), cookie_url,
-      net::CookieOptions::MakeAllInclusive(),
-      base::BindOnce(
-          &net::ResultSavingCookieCallback<net::CookieInclusionStatus>::Run,
-          base::Unretained(&callback2)));
+      net::CookieOptions::MakeAllInclusive(), callback2.MakeCallback());
   callback2.WaitUntilDone();
-  ASSERT_TRUE(callback2.result().IsInclude());
+  ASSERT_TRUE(callback2.result().status.IsInclude());
 
   // Listener only receives notification about the SameSite=None cookie.
   listener.WaitForChange();
@@ -1377,7 +1358,7 @@ TEST_P(RestrictedCookieManagerTest, NoChangeNotificationForNonlegacyCookie) {
   EXPECT_EQ("samesite_none_cookie",
             listener.observed_changes()[0].cookie.Name());
   EXPECT_EQ(net::CookieAccessSemantics::NONLEGACY,
-            listener.observed_changes()[0].access_semantics);
+            listener.observed_changes()[0].access_result.access_semantics);
 }
 
 INSTANTIATE_TEST_SUITE_P(

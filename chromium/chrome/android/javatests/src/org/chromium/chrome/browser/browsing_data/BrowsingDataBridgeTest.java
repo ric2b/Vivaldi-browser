@@ -25,7 +25,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.UserActionTester;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -242,7 +242,7 @@ public class BrowsingDataBridgeTest {
             TabState state = TabStateExtractor.from(tab);
             mActivityTestRule.getActivity().getCurrentTabModel().closeTab(tab);
             frozen[0] = mActivityTestRule.getActivity().getCurrentTabCreator().createFrozenTab(
-                    state, tab.getId(), 1);
+                    state, null, tab.getId(), 1);
             restored[0] = WebContentsStateBridge.restoreContentsFromByteBuffer(
                     TabStateExtractor.from(frozen[0]).contentsState, false);
         });

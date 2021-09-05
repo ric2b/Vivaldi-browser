@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "third_party/blink/public/web/web_swap_result.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/paint/first_meaningful_paint_detector.h"
@@ -28,7 +27,6 @@ class LocalFrame;
 // document.
 class CORE_EXPORT PaintTiming final : public GarbageCollected<PaintTiming>,
                                       public Supplement<Document> {
-  USING_GARBAGE_COLLECTED_MIXIN(PaintTiming);
   friend class FirstMeaningfulPaintDetector;
   using ReportTimeCallback =
       WTF::CrossThreadOnceFunction<void(WebSwapResult, base::TimeTicks)>;
@@ -37,6 +35,8 @@ class CORE_EXPORT PaintTiming final : public GarbageCollected<PaintTiming>,
   static const char kSupplementName[];
 
   explicit PaintTiming(Document&);
+  PaintTiming(const PaintTiming&) = delete;
+  PaintTiming& operator=(const PaintTiming&) = delete;
   virtual ~PaintTiming() = default;
 
   static PaintTiming& From(Document&);
@@ -131,6 +131,10 @@ class CORE_EXPORT PaintTiming final : public GarbageCollected<PaintTiming>,
 
   void RegisterNotifySwapTime(ReportTimeCallback);
   void ReportSwapTime(PaintEvent, WebSwapResult, base::TimeTicks timestamp);
+  void ReportFirstPaintAfterBackForwardCacheRestoreSwapTime(
+      size_t index,
+      WebSwapResult,
+      base::TimeTicks timestamp);
 
   void ReportSwapResultHistogram(WebSwapResult);
 
@@ -166,9 +170,15 @@ class CORE_EXPORT PaintTiming final : public GarbageCollected<PaintTiming>,
   void SetFirstContentfulPaintSwap(base::TimeTicks stamp);
   void SetFirstImagePaintSwap(base::TimeTicks stamp);
 
-  void SetFirstPaintAfterBackForwardCacheRestoreSwap(base::TimeTicks stamp);
+  // When quickly navigating back and forward between the pages in the cache
+  // paint events might race with navigations. Pass explicit bfcache restore
+  // index to avoid confusing the data from different navigations.
+  void SetFirstPaintAfterBackForwardCacheRestoreSwap(base::TimeTicks stamp,
+                                                     size_t index);
 
   void RegisterNotifySwapTime(PaintEvent);
+  void RegisterNotifyFirstPaintAfterBackForwardCacheRestoreSwapTime(
+      size_t index);
 
   base::TimeTicks FirstPaintRendered() const { return first_paint_; }
 
@@ -236,8 +246,6 @@ class CORE_EXPORT PaintTiming final : public GarbageCollected<PaintTiming>,
   FRIEND_TEST_ALL_PREFIXES(
       FirstMeaningfulPaintDetectorTest,
       ProvisionalTimestampChangesAfterNetworkQuietWithOutstandingSwapPromise);
-
-  DISALLOW_COPY_AND_ASSIGN(PaintTiming);
 };
 
 }  // namespace blink

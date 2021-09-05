@@ -12,7 +12,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/optional.h"
@@ -85,6 +84,8 @@ class TabStrip : public views::AccessiblePaneView,
                  public BrowserRootView::DropTarget {
  public:
   explicit TabStrip(std::unique_ptr<TabStripController> controller);
+  TabStrip(const TabStrip&) = delete;
+  TabStrip& operator=(const TabStrip&) = delete;
   ~TabStrip() override;
 
   void SetAvailableWidthCallback(
@@ -146,9 +147,9 @@ class TabStrip : public views::AccessiblePaneView,
   // Sets |stacked_layout_| and animates if necessary.
   void SetStackedLayout(bool stacked_layout);
 
-  // Returns the ideal bounds of the new tab button.
-  gfx::Rect new_tab_button_ideal_bounds() const {
-    return new_tab_button_ideal_bounds_;
+  // Returns the ideal bounds of the tab controls container.
+  gfx::Rect tab_controls_container_ideal_bounds() const {
+    return tab_controls_container_ideal_bounds_;
   }
 
   // Adds a tab at the specified index.
@@ -172,6 +173,10 @@ class TabStrip : public views::AccessiblePaneView,
 
   // Creates the views associated with a newly-created tab group.
   void OnGroupCreated(const tab_groups::TabGroupId& group);
+
+  // Opens the editor bubble for the tab |group| as a result of an explicit user
+  // action to create the |group|.
+  void OnGroupEditorOpened(const tab_groups::TabGroupId& group);
 
   // Updates the group's contents and metadata when its tab membership changes.
   // This should be called when a tab is added to or removed from a group.
@@ -232,6 +237,9 @@ class TabStrip : public views::AccessiblePaneView,
   // Returns the NewTabButton.
   NewTabButton* new_tab_button() { return new_tab_button_; }
 
+  // Returns the TabSearchButton.
+  NewTabButton* tab_search_button() { return tab_search_button_; }
+
   // Returns the index of the specified view in the model coordinate system, or
   // -1 if view is closing or not a tab.
   int GetModelIndexOf(const TabSlotView* view) const;
@@ -287,8 +295,7 @@ class TabStrip : public views::AccessiblePaneView,
   bool IsActiveTab(const Tab* tab) const override;
   bool IsTabSelected(const Tab* tab) const override;
   bool IsTabPinned(const Tab* tab) const override;
-  bool IsFirstVisibleTab(const Tab* tab) const override;
-  bool IsLastVisibleTab(const Tab* tab) const override;
+  bool IsTabFirst(const Tab* tab) const override;
   bool IsFocusInTabs() const override;
   void MaybeStartDrag(
       TabSlotView* source,
@@ -380,6 +387,8 @@ class TabStrip : public views::AccessiblePaneView,
     DropArrow(const BrowserRootView::DropIndex& index,
               bool point_down,
               views::Widget* context);
+    DropArrow(const DropArrow&) = delete;
+    DropArrow& operator=(const DropArrow&) = delete;
     ~DropArrow() override;
 
     void set_index(const BrowserRootView::DropIndex& index) { index_ = index; }
@@ -408,8 +417,6 @@ class TabStrip : public views::AccessiblePaneView,
     views::ImageView* arrow_view_ = nullptr;
 
     ScopedObserver<views::Widget, views::WidgetObserver> scoped_observer_{this};
-
-    DISALLOW_COPY_AND_ASSIGN(DropArrow);
   };
 
   void Init();
@@ -688,11 +695,15 @@ class TabStrip : public views::AccessiblePaneView,
   // Responsible for animating tabs in response to model changes.
   views::BoundsAnimator bounds_animator_{this};
 
-  // The "New Tab" button.
+  // Container that holds the |new_tab_button_| and the |tab_search_button_|.
+  views::View* tab_controls_container_ = nullptr;
   NewTabButton* new_tab_button_ = nullptr;
+  // |tab_search_button_| will be null if features::kTabSearch is disabled or if
+  // the current profile is an incognito profile.
+  NewTabButton* tab_search_button_ = nullptr;
 
-  // Ideal bounds of the new tab button.
-  gfx::Rect new_tab_button_ideal_bounds_;
+  // Ideal bounds of container holding the tab controls.
+  gfx::Rect tab_controls_container_ideal_bounds_;
 
   // If this value is defined, it is used as the width to lay out tabs
   // (instead of GetTabAreaWidth()). It is defined when closing tabs with the
@@ -784,8 +795,6 @@ class TabStrip : public views::AccessiblePaneView,
   std::unique_ptr<TabDragContextImpl> drag_context_;
 
   TabContextMenuController context_menu_controller_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(TabStrip);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_TABS_TAB_STRIP_H_

@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/css/css_property_name.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
+#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 
 namespace blink {
@@ -110,15 +111,18 @@ void MathMLElement::ParseAttribute(const AttributeModificationParams& param) {
 }
 
 base::Optional<Length> MathMLElement::AddMathLengthToComputedStyle(
-    ComputedStyle& style,
     const CSSToLengthConversionData& conversion_data,
-    const QualifiedName& attr_name) {
+    const QualifiedName& attr_name,
+    AllowPercentages allow_percentages) {
   if (!FastHasAttribute(attr_name))
     return base::nullopt;
   auto value = FastGetAttribute(attr_name);
   const CSSPrimitiveValue* parsed_value = CSSParser::ParseLengthPercentage(
-      value, StrictCSSParserContext(GetDocument().GetSecureContextMode()));
-  if (!parsed_value || parsed_value->IsCalculated())
+      value,
+      StrictCSSParserContext(GetExecutionContext()->GetSecureContextMode()));
+  if (!parsed_value || parsed_value->IsCalculated() ||
+      (parsed_value->IsPercentage() &&
+       (!value.EndsWith('%') || allow_percentages == AllowPercentages::kNo)))
     return base::nullopt;
   return parsed_value->ConvertToLength(conversion_data);
 }

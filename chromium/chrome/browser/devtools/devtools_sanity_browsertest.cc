@@ -44,6 +44,7 @@
 #include "chrome/browser/policy/developer_tools_policy_handler.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -101,8 +102,6 @@
 #include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
@@ -433,11 +432,11 @@ void TimeoutCallback(const std::string& timeout_message) {
 class DevToolsExtensionTest : public DevToolsSanityTest,
                               public content::NotificationObserver {
  public:
-  DevToolsExtensionTest() : DevToolsSanityTest() {
-    base::PathService::Get(chrome::DIR_TEST_DATA, &test_extensions_dir_);
-    test_extensions_dir_ = test_extensions_dir_.AppendASCII("devtools");
-    test_extensions_dir_ = test_extensions_dir_.AppendASCII("extensions");
-  }
+  DevToolsExtensionTest()
+      : test_extensions_dir_(
+            base::PathService::CheckedGet(chrome::DIR_TEST_DATA)
+                .AppendASCII("devtools")
+                .AppendASCII("extensions")) {}
 
  protected:
   // Load an extension from test\data\devtools\extensions\<extension_name>
@@ -605,7 +604,7 @@ class DevToolsExtensionTest : public DevToolsSanityTest,
 
   std::vector<std::unique_ptr<extensions::TestExtensionDir>>
       test_extension_dirs_;
-  base::FilePath test_extensions_dir_;
+  const base::FilePath test_extensions_dir_;
 };
 
 class DevToolsExperimentalExtensionTest : public DevToolsExtensionTest {
@@ -762,8 +761,9 @@ IN_PROC_BROWSER_TEST_F(DevToolsBeforeUnloadTest,
 
 // Tests that closing worker inspector window does not cause browser crash
 // @see http://crbug.com/323031
+// TODO(https://crbug.com/1100888): Disabled due to flakiness.
 IN_PROC_BROWSER_TEST_F(DevToolsBeforeUnloadTest,
-                       TestWorkerWindowClosing) {
+                       DISABLED_TestWorkerWindowClosing) {
   ASSERT_TRUE(spawned_test_server()->Start());
   LoadTestPage(kDebuggerTestPage);
   DevToolsWindow* devtools_window = OpenDevToolWindowOnWebContents(
@@ -841,7 +841,8 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestShowScriptsTab) {
 // hadn't been shown by the moment inspected paged refreshed.
 // @see http://crbug.com/26312
 // This test is flaky on windows and linux asan. See https://crbug.com/1013003
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) || \
+    defined(OS_CHROMEOS)
 #define MAYBE_TestScriptsTabIsPopulatedOnInspectedPageRefresh \
   DISABLED_TestScriptsTabIsPopulatedOnInspectedPageRefresh
 #else
@@ -1538,7 +1539,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest,
 // Tests that debugger works correctly if pause event occurs when DevTools
 // frontend is being loaded.
 // Flaky on win and linux: crbug.com/1092924.
-#if defined(OS_WIN) || defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_TestPauseWhenLoadingDevTools DISABLED_TestPauseWhenLoadingDevTools
 #else
 #define MAYBE_TestPauseWhenLoadingDevTools TestPauseWhenLoadingDevTools
@@ -1653,7 +1654,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, MAYBE_TestConsoleOnNavigateBack) {
   RunTest("testConsoleOnNavigateBack", kNavigateBackTestPage);
 }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 // Flaking on linux runs, see crbug.com/990692.
 #define MAYBE_TestDeviceEmulation DISABLED_TestDeviceEmulation
 #else
@@ -1693,7 +1694,7 @@ class AutofillManagerTestDelegateDevtoolsImpl
 };
 
 // Disabled. Failing on MacOS MSAN. See https://crbug.com/849129.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_TestDispatchKeyEventShowsAutoFill \
   DISABLED_TestDispatchKeyEventShowsAutoFill
 #else
@@ -2122,8 +2123,11 @@ IN_PROC_BROWSER_TEST_F(DevToolsAllowedByCommandLineSwitch,
 
 class DevToolsPixelOutputTests : public DevToolsSanityTest {
  public:
+  void SetUp() override {
+    EnablePixelOutput();
+    DevToolsSanityTest::SetUp();
+  }
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(switches::kEnablePixelOutputInTests);
     command_line->AppendSwitch(switches::kUseGpuInTests);
   }
 };
@@ -2342,13 +2346,11 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestOpenInNewTabFilter) {
 }
 
 IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, LoadNetworkResourceForFrontend) {
-  base::FilePath root_dir;
-  CHECK(base::PathService::Get(base::DIR_SOURCE_ROOT, &root_dir));
   std::string file_url =
-      "file://" +
-      root_dir.AppendASCII("content/test/data/devtools/navigation.html")
-          .NormalizePathSeparatorsTo('/')
-          .AsUTF8Unsafe();
+      "file://" + base::PathService::CheckedGet(base::DIR_SOURCE_ROOT)
+                      .AppendASCII("content/test/data/devtools/navigation.html")
+                      .NormalizePathSeparatorsTo('/')
+                      .AsUTF8Unsafe();
 
   embedded_test_server()->ServeFilesFromSourceDirectory("content/test/data");
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -2373,7 +2375,9 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, DISABLED_CreateBrowserContext) {
   DevToolsWindowTesting::CloseDevToolsWindowSync(window_);
 }
 
-IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, DisposeEmptyBrowserContext) {
+// TODO(crbug.com/1110417): Flaky.
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest,
+                       DISABLED_DisposeEmptyBrowserContext) {
   window_ = DevToolsWindowTesting::OpenDiscoveryDevToolsWindowSync(
       browser()->profile());
   RunTestMethod("testDisposeEmptyBrowserContext");
@@ -2435,6 +2439,23 @@ IN_PROC_BROWSER_TEST_F(InProcessBrowserTest, BrowserCloseWithBeforeUnload) {
   ui_test_utils::WaitForBrowserToClose(browser());
 }
 
+IN_PROC_BROWSER_TEST_F(InProcessBrowserTest,
+                       BrowserCloseWithContextMenuOpened) {
+  EXPECT_FALSE(KeepAliveRegistry::GetInstance()->IsOriginRegistered(
+      KeepAliveOrigin::REMOTE_DEBUGGING));
+  ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
+  auto callback = [](RenderViewContextMenu* context_menu) {
+    BrowserHandler handler(nullptr, std::string());
+    handler.Close();
+  };
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+  RenderViewContextMenu::RegisterMenuShownCallbackForTesting(
+      base::BindOnce(callback));
+  content::SimulateMouseClickAt(tab, 0, blink::WebMouseEvent::Button::kRight,
+                                gfx::Point(15, 15));
+  ui_test_utils::WaitForBrowserToClose(browser());
+}
+
 class KeepAliveDevToolsTest : public InProcessBrowserTest {
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -2478,7 +2499,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsPolicyTest, OpenBlackListedDevTools) {
   policy::PolicyMap policies;
   policies.Set(policy::key::kURLBlacklist, policy::POLICY_LEVEL_MANDATORY,
                policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-               blacklist.CreateDeepCopy(), nullptr);
+               blacklist.Clone(), nullptr);
   provider_.UpdateChromePolicy(policies);
 
   WebContents* wc = browser()->tab_strip_model()->GetActiveWebContents();

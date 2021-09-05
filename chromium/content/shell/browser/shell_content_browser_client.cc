@@ -208,7 +208,7 @@ void ShellContentBrowserClient::AppendExtraCommandLineSwitches(
     base::CommandLine* command_line,
     int child_process_id) {
   static const char* kForwardSwitches[] = {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     // Needed since on Mac, content_browsertests doesn't use
     // content_test_launcher.cc and instead uses shell_main.cc. So give a signal
     // to shell_main.cc that it's a browser test.
@@ -291,6 +291,9 @@ void ShellContentBrowserClient::OverrideWebkitPrefs(
   } else {
     prefs->preferred_color_scheme = blink::PreferredColorScheme::kLight;
   }
+
+  if (override_web_preferences_callback_)
+    override_web_preferences_callback_.Run(prefs);
 }
 
 base::FilePath ShellContentBrowserClient::GetFontLookupTableCacheDir() {
@@ -366,6 +369,17 @@ std::unique_ptr<LoginDelegate> ShellContentBrowserClient::CreateLoginDelegate(
     std::move(login_request_callback_).Run(is_main_frame);
   }
   return nullptr;
+}
+
+base::DictionaryValue ShellContentBrowserClient::GetNetLogConstants() {
+  base::DictionaryValue client_constants;
+  client_constants.SetString("name", "content_shell");
+  client_constants.SetString(
+      "command_line",
+      base::CommandLine::ForCurrentProcess()->GetCommandLineString());
+  base::DictionaryValue constants;
+  constants.SetKey("clientInfo", std::move(client_constants));
+  return constants;
 }
 
 base::FilePath

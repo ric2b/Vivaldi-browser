@@ -10,7 +10,6 @@
 #include "third_party/blink/renderer/core/layout/geometry/logical_offset.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_line_box_fragment_builder.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_line_height_metrics.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_text_offset.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_text_type.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_ink_overflow.h"
@@ -57,8 +56,8 @@ class CORE_EXPORT NGFragmentItem {
     //
     // If this item is a root of another IFC/BFC, children are stored normally,
     // as children of |box_fragment|.
-    //
-    // Note:|box_fragment| can be null for <span>.
+    const NGPhysicalBoxFragment* PostLayout() const;
+
     scoped_refptr<const NGPhysicalBoxFragment> box_fragment;
     wtf_size_t descendants_count;
   };
@@ -76,8 +75,9 @@ class CORE_EXPORT NGFragmentItem {
   // Create a line item.
   explicit NGFragmentItem(const NGPhysicalLineBoxFragment& line);
 
-  // The copy constructor.
+  // The copy/move constructors.
   NGFragmentItem(const NGFragmentItem&);
+  NGFragmentItem(NGFragmentItem&&);
 
   ~NGFragmentItem();
 
@@ -193,6 +193,11 @@ class CORE_EXPORT NGFragmentItem {
   const NGPhysicalBoxFragment* BoxFragment() const {
     if (Type() == kBox)
       return box_.box_fragment.get();
+    return nullptr;
+  }
+  const NGPhysicalBoxFragment* PostLayoutBoxFragment() const {
+    if (Type() == kBox)
+      return box_.PostLayout();
     return nullptr;
   }
 
@@ -372,6 +377,8 @@ class CORE_EXPORT NGFragmentItem {
   String ToString() const;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(NGFragmentItemTest, CopyMove);
+
   // Create a text item.
   NGFragmentItem(const NGInlineItem& inline_item,
                  scoped_refptr<const ShapeResultView> shape_result,
@@ -385,6 +392,15 @@ class CORE_EXPORT NGFragmentItem {
                  const PhysicalSize& size,
                  bool is_hidden_for_paint);
 
+  NGInkOverflow::Type InkOverflowType() const {
+    return static_cast<NGInkOverflow::Type>(ink_overflow_type_);
+  }
+  bool IsInkOverflowComputed() const {
+    return InkOverflowType() != NGInkOverflow::kNotSet;
+  }
+  bool HasInkOverflow() const {
+    return InkOverflowType() != NGInkOverflow::kNone;
+  }
   const LayoutBox* InkOverflowOwnerBox() const;
   LayoutBox* MutableInkOverflowOwnerBox();
 
@@ -407,7 +423,7 @@ class CORE_EXPORT NGFragmentItem {
 
   PhysicalRect rect_;
 
-  std::unique_ptr<NGInkOverflow> ink_overflow_;
+  NGInkOverflow ink_overflow_;
 
   mutable wtf_size_t fragment_id_ = 0;
 
@@ -423,8 +439,7 @@ class CORE_EXPORT NGFragmentItem {
   // |ShapeResult::Direction()|.
   unsigned text_direction_ : 1;  // TextDirection.
 
-  // Used only when |IsText()| to avoid re-computing ink overflow.
-  unsigned ink_overflow_computed_ : 1;
+  unsigned ink_overflow_type_ : 3;  // NGInkOverflow::Type
 
   mutable unsigned is_dirty_ : 1;
 

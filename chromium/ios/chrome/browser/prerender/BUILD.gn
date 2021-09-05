@@ -79,26 +79,6 @@ source_set("unit_tests") {
     "//testing/gtest",
   ]
 }
-source_set("eg_tests") {
-  defines = [ "CHROME_EARL_GREY_1" ]
-  testonly = true
-  sources = [ "prerender_egtest.mm" ]
-  deps = [
-    "//components/version_info",
-    "//ios/chrome/browser/ui/popup_menu:constants",
-    "//ios/chrome/test/app:test_support",
-    "//ios/chrome/test/earl_grey:test_support",
-    "//ios/testing/earl_grey:earl_grey_support",
-    "//ios/web/common:user_agent",
-    "//ios/web/public/test/http_server",
-    "//net:test_support",
-  ]
-  libs = [
-    "UIKit.framework",
-    "XCTest.framework",
-  ]
-  configs += [ "//build/config/compiler:enable_arc" ]
-}
 
 source_set("eg2_tests") {
   defines = [ "CHROME_EARL_GREY_2" ]
@@ -117,5 +97,5 @@ source_set("eg2_tests") {
     "//ios/web/common:user_agent",
     "//net:test_support",
   ]
-  libs = [ "UIKit.framework" ]
+  frameworks = [ "UIKit.framework" ]
 }

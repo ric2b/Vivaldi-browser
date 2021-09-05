@@ -228,14 +228,9 @@ void CookieManager::MigrateCookieStorePath() {
       GetPathInAppDirectory("Default/Cookies-journal");
 
   if (base::PathExists(old_cookie_store_path)) {
+    base::CreateDirectory(cookie_store_path_.DirName());
     base::Move(old_cookie_store_path, cookie_store_path_);
     base::Move(old_cookie_journal_path, new_cookie_journal_path);
-  } else {
-    // Some users got an incomplete version of this migration where the journal
-    // was not moved. Delete the old journal if it exists, as we can't merge
-    // them.
-    // TODO(torne): remove this in a future release (M81?)
-    base::DeleteFile(old_cookie_journal_path, false);
   }
 }
 
@@ -494,23 +489,20 @@ void CookieManager::SetCookieHelper(const GURL& host,
                           cc->IsSecure());
   }
 
-  // Note: CookieStore and network::CookieManager have different signatures: one
-  // accepts a boolean callback while the other (recently) changed to accept a
-  // CookieInclusionStatus callback. WebView only cares about boolean success,
-  // which is why we use |AdaptCookieInclusionStatusToBool|. This is temporary
+  // Note: CookieStore and network::CookieManager both accept a
+  // CookieAccessResult callback. WebView only cares about boolean success,
+  // which is why we use |AdaptCookieAccessResultToBool|. This is temporary
   // technical debt until we fully launch the Network Service code path.
   if (GetMojoCookieManager()) {
     // *cc.get() is safe, because network::CookieManager::SetCanonicalCookie
     // will make a copy before our smart pointer goes out of scope.
     GetMojoCookieManager()->SetCanonicalCookie(
         *cc.get(), new_host, net::CookieOptions::MakeAllInclusive(),
-        net::cookie_util::AdaptCookieInclusionStatusToBool(
-            std::move(callback)));
+        net::cookie_util::AdaptCookieAccessResultToBool(std::move(callback)));
   } else {
     GetCookieStore()->SetCanonicalCookieAsync(
         std::move(cc), new_host, net::CookieOptions::MakeAllInclusive(),
-        net::cookie_util::AdaptCookieInclusionStatusToBool(
-            std::move(callback)));
+        net::cookie_util::AdaptCookieAccessResultToBool(std::move(callback)));
   }
 }
 

@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Sonnenbrille</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Katalanisch</translation>
+<translation id="1172970565351728681">Noch ungefähr <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Umbenennen</translation>
 <translation id="117624967391683467"><ph name="FILE_NAME" /> wird kopiert...</translation>
 <translation id="1178581264944972037">Pause</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Eine Datei mit dem Namen "<ph name="FILENAME" />" existiert bereits. Was möchten Sie tun?</translation>
 <translation id="2121825465123208577">Größe anpassen</translation>
 <translation id="2136953289241069843">Transliteration (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">"<ph name="PATH" />" kann nicht geöffnet werden: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Ungültiges Zeichen: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Vietnamesische Tastatur (TCVN)</translation>
 <translation id="2168214441502403371">Persische Tastatur</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Die Eigentümerschaft geht auf <ph name="DESTINATION_DOMAIN" /> über.</translation>
 <translation id="3241720467332021590">Irisch</translation>
 <translation id="3245321423178950146">Unbekannter Musiker</translation>
+<translation id="3248185426436836442">Ausstehend</translation>
 <translation id="3252266817569339921">Französisch</translation>
 <translation id="3254434849914415189">Wählen Sie eine Standard-App für <ph name="FILE_TYPE" />-Dateien:</translation>
 <translation id="3264582393905923483">Kontext</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Aufnahmejahr</translation>
 <translation id="3338239663705455570">Slowenische Tastatur</translation>
 <translation id="3353984535370177728">Ordner zum Hochladen auswählen</translation>
+<translation id="3356580349448036450">Fertig</translation>
 <translation id="3399597614303179694">Mazedonische Tastatur</translation>
 <translation id="3414856743105198592">Durch die Formatierung der Wechselmedien werden alle Daten gelöscht. Möchten Sie fortfahren?</translation>
 <translation id="3437801641691368414">Erstellungszeit</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Sie sind nicht dazu berechtigt, Dateien in "<ph name="FOLDER_NAME" />" zu verschieben.</translation>
 <translation id="3786301125658655746">Sie sind offline</translation>
 <translation id="3789841737615482174">Installieren</translation>
+<translation id="3793469551756281394">Noch ungefähr <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /></translation>
 <translation id="3798449238516105146">Version</translation>
 <translation id="3801082500826908679">Färöisch</translation>
 <translation id="3809272675881623365">Kaninchen</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Dieser Ordner wird für Windows freigegeben</translation>
 <translation id="4487088045714738411">Belgische Tastatur</translation>
 <translation id="4522570452068850558">Details</translation>
+<translation id="4542387084127299777"><ph name="PATH" /> kann nicht geöffnet werden</translation>
 <translation id="4552678318981539154">Mehr Speicherplatz erwerben</translation>
 <translation id="4559767610552730302">Bokeh</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" />-Datei</translation>
@@ -511,13 +515,14 @@
 <translation id="6629841649550503054">Alle Daten wurden in <ph name="BEGIN_LINK" />Google Drive<ph name="END_LINK" /> gesichert.</translation>
 <translation id="6643016212128521049">Löschen</translation>
 <translation id="6650726141019353908">Rosa Schmetterling</translation>
-<translation id="6710213216561001401">Zurück</translation>
+<translation id="6657585470893396449">Passwort</translation>
+<translation id="6710213216561001401">Vorherige Einreichung</translation>
 <translation id="6718273304615422081">Wird gezippt...</translation>
 <translation id="6751256176799620176">1 Ordner ausgewählt</translation>
 <translation id="6760765581316020278">Vietnamesische Tastatur (VNI)</translation>
 <translation id="6790428901817661496">Wiedergabe</translation>
 <translation id="6795884519221689054">Panda</translation>
-<translation id="6806699711453372963">Freigabe über Linux verwalten</translation>
+<translation id="6806699711453372963">Linux-Freigabe verwalten</translation>
 <translation id="6808193438228982088">Fuchs</translation>
 <translation id="6820687829547641339">Gzip-komprimiertes Tar-Archiv</translation>
 <translation id="6823166707458800069">Alle in diesem Ordner gespeicherten Dateien werden automatisch online gesichert.</translation>
@@ -551,7 +556,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Installation fehlgeschlagen</translation>
 <translation id="7040138676081995583">Öffnen mit...</translation>
-<translation id="7059566040011178088">Weniger als <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> Elemente ausgewählt</translation>
 <translation id="7106346894903675391">Mehr Speicherplatz erwerben...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' – &lt;em&gt;Ablage durchsuchen&lt;/em&gt;</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">Gerätemodell</translation>
 <translation id="8208580316430297579">Artwork</translation>
 <translation id="8223479393428528563">Wenn Sie diese Dateien zur Offline-Nutzung speichern möchten, gehen Sie online, klicken Sie mit der rechten Maustaste auf die Dateien und wählen Sie die Option "<ph name="OFFLINE_CHECKBOX_NAME" />" aus.</translation>
-<translation id="8231972167769262174">Ca. <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Abbrechen</translation>
 <translation id="8261506727792406068">Löschen</translation>
 <translation id="8269755669432358899">Erweiterte Dateiinformationen minimieren</translation>
@@ -725,6 +728,7 @@
 <translation id="9065203028668620118">Bearbeiten</translation>
 <translation id="9099674669267916096">Seitenzahl</translation>
 <translation id="9110990317705400362">Wir arbeiten stets daran, das Surfen für Sie sicherer zu machen. Früher konnten Sie von jeder beliebigen Website aufgefordert werden, eine Erweiterung zu Ihrem Browser hinzuzufügen. In neueren Versionen von Google Chrome müssen Sie Chrome ausdrücklich mitteilen, dass Sie diese Erweiterungen installieren möchten, indem Sie sie über die Seite "Erweiterungen" hinzufügen. <ph name="BEGIN_LINK" />Weitere Informationen<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Entsperren</translation>
 <translation id="912419004897138677">Codec</translation>
 <translation id="9129931661813833980">Ordner anpinnen</translation>
 <translation id="9130775360844693113">Mitglieder von "<ph name="DESTINATION_NAME" />" erhalten Zugriff auf diese Dateien.</translation>

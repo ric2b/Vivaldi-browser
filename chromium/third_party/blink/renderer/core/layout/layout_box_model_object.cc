@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/core/layout/layout_geometry_map.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/layout/ng/legacy_layout_tree_walking.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
@@ -79,7 +80,10 @@ PaintLayer* FindFirstStickyBetween(LayoutObject* from, LayoutObject* to) {
 // is the next pointer associated with the key.
 typedef HashMap<const LayoutBoxModelObject*, LayoutBoxModelObject*>
     ContinuationMap;
-static ContinuationMap* g_continuation_map = nullptr;
+static ContinuationMap& GetContinuationMap() {
+  DEFINE_STATIC_LOCAL(ContinuationMap, map, ());
+  return map;
+}
 
 void LayoutBoxModelObject::ContentChanged(ContentChangeType change_type) {
   if (!HasLayer())
@@ -766,9 +770,14 @@ bool LayoutBoxModelObject::HasAutoHeightOrContainingBlockWithAutoHeight(
 
 PhysicalOffset LayoutBoxModelObject::RelativePositionOffset() const {
   DCHECK(IsRelPositioned());
-  PhysicalOffset offset = AccumulateRelativePositionOffsets();
-
   LayoutBlock* containing_block = ContainingBlock();
+
+  // If this object was placed by LayoutNG it's offset already includes the
+  // relative adjustment.
+  if (IsLayoutNGContainingBlock(containing_block))
+    return PhysicalOffset();
+
+  PhysicalOffset offset = AccumulateRelativePositionOffsets();
 
   // Objects that shrink to avoid floats normally use available line width when
   // computing containing block width. However in the case of relative
@@ -1063,7 +1072,7 @@ void LayoutBoxModelObject::UpdateStickyPositionConstraints() const {
   }
   PaintLayerScrollableArea* scrollable_area =
       Layer()->AncestorOverflowLayer()->GetScrollableArea();
-  scrollable_area->GetStickyConstraintsMap().Set(Layer(), constraints);
+  scrollable_area->AddStickyConstraints(Layer(), constraints);
 }
 
 bool LayoutBoxModelObject::IsSlowRepaintConstrainedObject() const {
@@ -1087,10 +1096,8 @@ bool LayoutBoxModelObject::IsSlowRepaintConstrainedObject() const {
     return false;
 
   // We're only smart enough to scroll viewport-constrainted objects
-  // in the compositor if they have their own backing or they paint
-  // into a grouped back (which necessarily all have the same viewport
-  // constraints).
-  return (layer->GetCompositingState() == kNotComposited);
+  // in the compositor if they are directly composited.
+  return !layer->CanBeCompositedForDirectReasons();
 }
 
 PhysicalRect LayoutBoxModelObject::ComputeStickyConstrainingRect() const {
@@ -1124,19 +1131,20 @@ PhysicalOffset LayoutBoxModelObject::StickyPositionOffset() const {
   if (!ancestor_overflow_layer || !ancestor_overflow_layer->GetScrollableArea())
     return PhysicalOffset();
 
-  StickyConstraintsMap& constraints_map =
-      ancestor_overflow_layer->GetScrollableArea()->GetStickyConstraintsMap();
-  auto it = constraints_map.find(Layer());
-  if (it == constraints_map.end())
+  auto* constraints =
+      ancestor_overflow_layer->GetScrollableArea()->GetStickyConstraints(
+          Layer());
+  if (!constraints)
     return PhysicalOffset();
-  StickyPositionScrollingConstraints* constraints = &it->value;
 
   // The sticky offset is physical, so we can just return the delta computed in
   // absolute coords (though it may be wrong with transforms).
   PhysicalRect constraining_rect = ComputeStickyConstrainingRect();
   constraining_rect.Move(PhysicalOffset::FromFloatPointRound(
       ancestor_overflow_layer->GetScrollableArea()->ScrollPosition()));
-  return constraints->ComputeStickyOffset(constraining_rect, constraints_map);
+  return constraints->ComputeStickyOffset(
+      constraining_rect,
+      ancestor_overflow_layer->GetScrollableArea()->GetStickyConstraintsMap());
 }
 
 PhysicalOffset LayoutBoxModelObject::AdjustedPositionRelativeTo(
@@ -1251,18 +1259,15 @@ LayoutUnit LayoutBoxModelObject::ContainingBlockLogicalWidthForContent() const {
 }
 
 LayoutBoxModelObject* LayoutBoxModelObject::Continuation() const {
-  return (!g_continuation_map) ? nullptr : g_continuation_map->at(this);
+  return GetContinuationMap().at(this);
 }
 
 void LayoutBoxModelObject::SetContinuation(LayoutBoxModelObject* continuation) {
   if (continuation) {
     DCHECK(continuation->IsLayoutInline() || continuation->IsLayoutBlockFlow());
-    if (!g_continuation_map)
-      g_continuation_map = new ContinuationMap;
-    g_continuation_map->Set(this, continuation);
+    GetContinuationMap().Set(this, continuation);
   } else {
-    if (g_continuation_map)
-      g_continuation_map->erase(this);
+    GetContinuationMap().erase(this);
   }
 }
 

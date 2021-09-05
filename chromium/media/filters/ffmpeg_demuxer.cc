@@ -16,6 +16,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -746,10 +747,6 @@ void FFmpegDemuxerStream::Read(ReadCB read_cb) {
   SatisfyPendingRead();
 }
 
-bool FFmpegDemuxerStream::IsReadPending() const {
-  return !read_cb_.is_null();
-}
-
 void FFmpegDemuxerStream::EnableBitstreamConverter() {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
@@ -1220,16 +1217,12 @@ static int CalculateBitrate(AVFormatContext* format_context,
 
   // See if we can approximate the bitrate as long as we have a filesize and
   // valid duration.
-  if (duration.InMicroseconds() <= 0 || duration == kInfiniteDuration ||
-      filesize_in_bytes == 0) {
+  if (duration <= base::TimeDelta() || duration == kInfiniteDuration ||
+      !filesize_in_bytes)
     return 0;
-  }
 
-  // Do math in floating point as we'd overflow an int64_t if the filesize was
-  // larger than ~1073GB.
-  double bytes = filesize_in_bytes;
-  double duration_us = duration.InMicroseconds();
-  return bytes * 8000000.0 / duration_us;
+  // Don't multiply by 8 first; it will overflow if (filesize_in_bytes >= 2^60).
+  return base::ClampRound(filesize_in_bytes * duration.ToHz() * 8);
 }
 
 void FFmpegDemuxer::OnOpenContextDone(bool result) {

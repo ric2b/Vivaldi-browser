@@ -69,7 +69,7 @@ void AppCacheQuotaClient::OnQuotaManagerDestroyed() {
 
 void AppCacheQuotaClient::GetOriginUsage(const url::Origin& origin,
                                          StorageType type,
-                                         GetUsageCallback callback) {
+                                         GetOriginUsageCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(type, blink::mojom::StorageType::kTemporary);
   DCHECK(!callback.is_null());
@@ -106,8 +106,9 @@ void AppCacheQuotaClient::GetOriginUsage(const url::Origin& origin,
       std::move(callback));
 }
 
-void AppCacheQuotaClient::GetOriginsForType(StorageType type,
-                                            GetOriginsCallback callback) {
+void AppCacheQuotaClient::GetOriginsForType(
+    StorageType type,
+    GetOriginsForTypeCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(type, blink::mojom::StorageType::kTemporary);
   DCHECK(!callback.is_null());
@@ -115,15 +116,16 @@ void AppCacheQuotaClient::GetOriginsForType(StorageType type,
   GetOriginsHelper(std::string(), std::move(callback));
 }
 
-void AppCacheQuotaClient::GetOriginsForHost(StorageType type,
-                                            const std::string& host,
-                                            GetOriginsCallback callback) {
+void AppCacheQuotaClient::GetOriginsForHost(
+    StorageType type,
+    const std::string& host,
+    GetOriginsForHostCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(type, blink::mojom::StorageType::kTemporary);
   DCHECK(!callback.is_null());
 
   if (host.empty()) {
-    std::move(callback).Run(std::set<url::Origin>());
+    std::move(callback).Run(std::vector<url::Origin>());
     return;
   }
   GetOriginsHelper(host, std::move(callback));
@@ -131,7 +133,7 @@ void AppCacheQuotaClient::GetOriginsForHost(StorageType type,
 
 void AppCacheQuotaClient::DeleteOriginData(const url::Origin& origin,
                                            StorageType type,
-                                           DeletionCallback callback) {
+                                           DeleteOriginDataCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(type, blink::mojom::StorageType::kTemporary);
   DCHECK(!callback.is_null());
@@ -183,11 +185,11 @@ void AppCacheQuotaClient::DidDeleteAppCachesForOrigin(int rv) {
 }
 
 void AppCacheQuotaClient::GetOriginsHelper(const std::string& opt_host,
-                                           GetOriginsCallback callback) {
+                                           GetOriginsForTypeCallback callback) {
   DCHECK(!callback.is_null());
 
   if (service_is_destroyed_) {
-    std::move(callback).Run(std::set<url::Origin>());
+    std::move(callback).Run(std::vector<url::Origin>());
     return;
   }
 
@@ -203,13 +205,13 @@ void AppCacheQuotaClient::GetOriginsHelper(const std::string& opt_host,
       base::BindOnce(
           [](base::WeakPtr<AppCacheServiceImpl> service,
              const std::string& opt_host) {
-            std::set<url::Origin> origins;
+            std::vector<url::Origin> origins;
             if (!service)
               return origins;
 
             for (const auto& pair : service->storage()->usage_map()) {
               if (opt_host.empty() || pair.first.host() == opt_host)
-                origins.insert(pair.first);
+                origins.push_back(pair.first);
             }
             return origins;
           },

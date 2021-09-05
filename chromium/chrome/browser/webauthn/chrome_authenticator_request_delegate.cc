@@ -18,6 +18,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webauthn/authenticator_request_dialog.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
@@ -28,13 +29,14 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/device_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "device/fido/features.h"
 #include "device/fido/fido_authenticator.h"
 #include "device/fido/fido_discovery_factory.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "device/fido/mac/authenticator.h"
 #include "device/fido/mac/credential_metadata.h"
 #endif
@@ -86,7 +88,7 @@ bool CopyBytestring(std::array<uint8_t, N>* out,
   return true;
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 const char kWebAuthnTouchIdMetadataSecretPrefName[] =
     "webauthn.touchid.metadata_secret";
 #endif
@@ -109,7 +111,7 @@ const char kPairingPrefPSKGenKey[] = "psk_gen_key";
 // static
 void ChromeAuthenticatorRequestDelegate::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   registry->RegisterStringPref(kWebAuthnTouchIdMetadataSecretPrefName,
                                std::string());
 #endif
@@ -263,11 +265,21 @@ bool ChromeAuthenticatorRequestDelegate::ShouldPermitIndividualAttestation(
 void ChromeAuthenticatorRequestDelegate::ShouldReturnAttestation(
     const std::string& relying_party_id,
     const device::FidoAuthenticator* authenticator,
+    bool is_enterprise_attestation,
     base::OnceCallback<void(bool)> callback) {
   if (IsWebauthnRPIDListedInEnterprisePolicy(browser_context(),
                                              relying_party_id)) {
+    // Enterprise attestations should have been approved already and not reach
+    // this point.
+    DCHECK(!is_enterprise_attestation);
     std::move(callback).Run(true);
     return;
+  }
+
+  if (is_enterprise_attestation) {
+    // This will require additional UI that is not yet ready. Therefore, at this
+    // stage, it is always rejected.
+    std::move(callback).Run(false);
   }
 
   // Cryptotoken displays its own attestation consent prompt.
@@ -296,29 +308,44 @@ bool ChromeAuthenticatorRequestDelegate::SupportsResidentKeys() {
   return true;
 }
 
-bool ChromeAuthenticatorRequestDelegate::ShouldPermitCableExtension(
-    const url::Origin& origin) {
-  // Because the future of the caBLE extension might be that we transition
-  // everything to QR-code or sync-based pairing, we don't want use of the
-  // extension to spread without consideration. Therefore it's limited to
-  // origins that are already depending on it and test sites.
-  if (origin.DomainIs("google.com")) {
-    return true;
+void ChromeAuthenticatorRequestDelegate::ConfigureCable(
+    const url::Origin& origin,
+    base::span<const device::CableDiscoveryData> pairings_from_extension,
+    device::FidoDiscoveryFactory* discovery_factory) {
+  std::vector<device::CableDiscoveryData> pairings;
+  if (ShouldPermitCableExtension(origin)) {
+    pairings.insert(pairings.end(), pairings_from_extension.begin(),
+                    pairings_from_extension.end());
+  }
+  const bool cable_extension_provided = !pairings.empty();
+
+  base::Optional<device::QRGeneratorKey> qr_generator_key;
+  bool have_paired_phones = false;
+  if (base::FeatureList::IsEnabled(device::kWebAuthPhoneSupport)) {
+    qr_generator_key.emplace(device::CableDiscoveryData::NewQRKey());
+    auto paired_phones = GetCablePairings();
+    have_paired_phones = !paired_phones.empty();
+    pairings.insert(pairings.end(), paired_phones.begin(), paired_phones.end());
+
+    mojo::Remote<device::mojom::UsbDeviceManager> usb_device_manager;
+    content::GetDeviceService().BindUsbDeviceManager(
+        usb_device_manager.BindNewPipeAndPassReceiver());
+    discovery_factory->set_usb_device_manager(std::move(usb_device_manager));
+    discovery_factory->set_network_context(
+        SystemNetworkContextManager::GetInstance()->GetContext());
   }
 
-  const GURL test_site("https://webauthndemo.appspot.com");
-  DCHECK(test_site.is_valid());
-  return origin.IsSameOriginWith(url::Origin::Create(test_site));
-}
+  if (pairings.empty() && !qr_generator_key) {
+    return;
+  }
 
-bool ChromeAuthenticatorRequestDelegate::SetCableTransportInfo(
-    bool cable_extension_provided,
-    bool have_paired_phones,
-    base::Optional<device::QRGeneratorKey> qr_generator_key) {
-  weak_dialog_model_->set_cable_transport_info(cable_extension_provided,
-                                               have_paired_phones,
-                                               std::move(qr_generator_key));
-  return true;
+  weak_dialog_model_->set_cable_transport_info(
+      cable_extension_provided, have_paired_phones, qr_generator_key);
+  discovery_factory->set_cable_data(std::move(pairings), qr_generator_key);
+
+  discovery_factory->set_cable_pairing_callback(base::BindRepeating(
+      &ChromeAuthenticatorRequestDelegate::StoreNewCablePairingInPrefs,
+      weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ChromeAuthenticatorRequestDelegate::SelectAccount(
@@ -347,7 +374,7 @@ bool ChromeAuthenticatorRequestDelegate::IsFocused() {
   return web_contents->GetVisibility() == content::Visibility::VISIBLE;
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 static constexpr char kTouchIdKeychainAccessGroup[] =
     "EQHXZ8M8AV.com.google.Chrome.webauthn";
 
@@ -397,7 +424,7 @@ bool ChromeAuthenticatorRequestDelegate::IsWebAuthnUIEnabled() {
   return !disable_ui_;
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 base::Optional<ChromeAuthenticatorRequestDelegate::TouchIdAuthenticatorConfig>
 ChromeAuthenticatorRequestDelegate::GetTouchIdAuthenticatorConfig() {
   // Touch ID is available in Incognito but not Guest windows.
@@ -407,7 +434,7 @@ ChromeAuthenticatorRequestDelegate::GetTouchIdAuthenticatorConfig() {
   return TouchIdAuthenticatorConfigForProfile(
       Profile::FromBrowserContext(browser_context()));
 }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
 void ChromeAuthenticatorRequestDelegate::OnTransportAvailabilityEnumerated(
     device::FidoRequestHandlerBase::TransportAvailabilityInfo data) {
@@ -544,6 +571,29 @@ void ChromeAuthenticatorRequestDelegate::OnCancelRequest() {
   std::move(cancel_callback_).Run();
 }
 
+base::Optional<device::FidoTransportProtocol>
+ChromeAuthenticatorRequestDelegate::GetLastTransportUsed() const {
+  PrefService* prefs =
+      Profile::FromBrowserContext(browser_context())->GetPrefs();
+  return device::ConvertToFidoTransportProtocol(
+      prefs->GetString(kWebAuthnLastTransportUsedPrefName));
+}
+
+bool ChromeAuthenticatorRequestDelegate::ShouldPermitCableExtension(
+    const url::Origin& origin) {
+  // Because the future of the caBLE extension might be that we transition
+  // everything to QR-code or sync-based pairing, we don't want use of the
+  // extension to spread without consideration. Therefore it's limited to
+  // origins that are already depending on it and test sites.
+  if (origin.DomainIs("google.com")) {
+    return true;
+  }
+
+  const GURL test_site("https://webauthndemo.appspot.com");
+  DCHECK(test_site.is_valid());
+  return origin.IsSameOriginWith(url::Origin::Create(test_site));
+}
+
 std::vector<device::CableDiscoveryData>
 ChromeAuthenticatorRequestDelegate::GetCablePairings() {
   std::vector<device::CableDiscoveryData> ret;
@@ -580,21 +630,6 @@ ChromeAuthenticatorRequestDelegate::GetCablePairings() {
   }
 
   return ret;
-}
-
-base::Optional<device::FidoTransportProtocol>
-ChromeAuthenticatorRequestDelegate::GetLastTransportUsed() const {
-  PrefService* prefs =
-      Profile::FromBrowserContext(browser_context())->GetPrefs();
-  return device::ConvertToFidoTransportProtocol(
-      prefs->GetString(kWebAuthnLastTransportUsedPrefName));
-}
-
-void ChromeAuthenticatorRequestDelegate::CustomizeDiscoveryFactory(
-    device::FidoDiscoveryFactory* discovery_factory) {
-  discovery_factory->set_cable_pairing_callback(base::BindRepeating(
-      &ChromeAuthenticatorRequestDelegate::StoreNewCablePairingInPrefs,
-      weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ChromeAuthenticatorRequestDelegate::StoreNewCablePairingInPrefs(

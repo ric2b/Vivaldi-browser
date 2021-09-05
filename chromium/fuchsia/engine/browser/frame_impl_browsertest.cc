@@ -23,6 +23,7 @@
 #include "fuchsia/base/string_util.h"
 #include "fuchsia/base/test_navigation_listener.h"
 #include "fuchsia/base/url_request_rewrite_test_util.h"
+#include "fuchsia/engine/browser/fake_semantics_manager.h"
 #include "fuchsia/engine/browser/frame_impl.h"
 #include "fuchsia/engine/switches.h"
 #include "fuchsia/engine/test/test_data.h"
@@ -117,10 +118,46 @@ class FrameImplTest : public cr_fuchsia::WebEngineBrowserTest {
     return WebEngineBrowserTest::CreateFrame(&navigation_listener_);
   }
 
+  // Dummy SemanticsManager to satisfy tests that call CreateView().
+  FakeSemanticsManager fake_semantics_manager_;
+
   cr_fuchsia::TestNavigationListener navigation_listener_;
 
   DISALLOW_COPY_AND_ASSIGN(FrameImplTest);
 };
+
+std::string GetDocumentVisibilityState(fuchsia::web::Frame* frame) {
+  auto visibility = base::MakeRefCounted<base::RefCountedData<std::string>>();
+  base::RunLoop loop;
+  frame->ExecuteJavaScript(
+      {"*"},
+      cr_fuchsia::MemBufferFromString("document.visibilityState;", "test"),
+      [visibility, quit_loop = loop.QuitClosure()](
+          fuchsia::web::Frame_ExecuteJavaScript_Result result) {
+        ASSERT_TRUE(result.is_response());
+        visibility->data = StringFromMemBufferOrDie(result.response().result);
+        quit_loop.Run();
+      });
+  loop.Run();
+  return visibility->data;
+}
+
+// Verifies that Frames are initially "hidden".
+IN_PROC_BROWSER_TEST_F(FrameImplTest, VisibilityState) {
+  fuchsia::web::FramePtr frame = CreateFrame();
+
+  fuchsia::web::NavigationControllerPtr controller;
+  frame->GetNavigationController(controller.NewRequest());
+
+  // Navigate to a page and wait for it to finish loading.
+  ASSERT_TRUE(cr_fuchsia::LoadUrlAndExpectResponse(
+      controller.get(), fuchsia::web::LoadUrlParams(), url::kAboutBlankURL));
+  navigation_listener_.RunUntilUrlAndTitleEquals(GURL(url::kAboutBlankURL),
+                                                 url::kAboutBlankURL);
+
+  // Query the document.visibilityState before creating a View.
+  EXPECT_EQ(GetDocumentVisibilityState(frame.get()), "\"hidden\"");
+}
 
 void VerifyCanGoBackAndForward(fuchsia::web::NavigationController* controller,
                                bool can_go_back_expected,
@@ -237,11 +274,15 @@ IN_PROC_BROWSER_TEST_F(FrameImplTest, ContextDeletedBeforeFrame) {
 IN_PROC_BROWSER_TEST_F(FrameImplTest, ContextDeletedBeforeFrameWithView) {
   fuchsia::web::FramePtr frame = CreateFrame();
   EXPECT_TRUE(frame);
+  FrameImpl* frame_impl = context_impl()->GetFrameImplForTest(&frame);
+
+  // CreateView() will cause the AccessibilityBridge to be created.
+  frame_impl->set_semantics_manager_for_test(&fake_semantics_manager_);
 
   auto view_tokens = scenic::ViewTokenPair::New();
-
   frame->CreateView(std::move(view_tokens.view_token));
   base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(frame_impl->has_view_for_test());
 
   base::RunLoop run_loop;
   frame.set_error_handler([&run_loop](zx_status_t status) {
@@ -1469,6 +1510,9 @@ IN_PROC_BROWSER_TEST_F(FrameImplTest, RecreateView) {
   ASSERT_TRUE(frame_impl);
   EXPECT_FALSE(frame_impl->has_view_for_test());
 
+  // CreateView() will cause the AccessibilityBridge to be created.
+  frame_impl->set_semantics_manager_for_test(&fake_semantics_manager_);
+
   fuchsia::web::NavigationControllerPtr controller;
   frame->GetNavigationController(controller.NewRequest());
 
@@ -1479,11 +1523,8 @@ IN_PROC_BROWSER_TEST_F(FrameImplTest, RecreateView) {
   navigation_listener_.RunUntilUrlAndTitleEquals(page1_url, kPage1Title);
 
   // Request a View from the Frame, and pump the loop to process the request.
-  zx::eventpair owner_token, frame_token;
-  ASSERT_EQ(zx::eventpair::create(0, &owner_token, &frame_token), ZX_OK);
-  fuchsia::ui::views::ViewToken view_token;
-  view_token.value = std::move(frame_token);
-  frame->CreateView(std::move(view_token));
+  auto view_tokens = scenic::ViewTokenPair::New();
+  frame->CreateView(std::move(view_tokens.view_token));
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(frame_impl->has_view_for_test());
 
@@ -1494,11 +1535,8 @@ IN_PROC_BROWSER_TEST_F(FrameImplTest, RecreateView) {
   navigation_listener_.RunUntilUrlAndTitleEquals(page2_url, kPage2Title);
 
   // Create new View tokens and request a new view.
-  zx::eventpair owner_token2, frame_token2;
-  ASSERT_EQ(zx::eventpair::create(0, &owner_token2, &frame_token2), ZX_OK);
-  fuchsia::ui::views::ViewToken view_token2;
-  view_token2.value = std::move(frame_token2);
-  frame->CreateView(std::move(view_token2));
+  auto view_tokens2 = scenic::ViewTokenPair::New();
+  frame->CreateView(std::move(view_tokens2.view_token));
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(frame_impl->has_view_for_test());
 

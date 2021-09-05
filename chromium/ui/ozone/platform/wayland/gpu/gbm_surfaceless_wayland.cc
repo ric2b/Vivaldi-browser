@@ -13,6 +13,7 @@
 #include "ui/gfx/gpu_fence.h"
 #include "ui/ozone/common/egl_util.h"
 #include "ui/ozone/platform/wayland/gpu/wayland_buffer_manager_gpu.h"
+#include "ui/ozone/public/mojom/wayland/wayland_overlay_config.mojom.h"
 
 namespace ui {
 
@@ -114,7 +115,7 @@ void GbmSurfacelessWayland::SwapBuffersAsync(
 
   if (!use_egl_fence_sync_ || !frame->schedule_planes_succeeded) {
     frame->ready = true;
-    SubmitFrame();
+    MaybeSubmitFrames();
     return;
   }
 
@@ -216,33 +217,40 @@ void GbmSurfacelessWayland::PendingFrame::Flush() {
     overlay.Flush();
 }
 
-void GbmSurfacelessWayland::SubmitFrame() {
-  DCHECK(!unsubmitted_frames_.empty());
-
-  if (unsubmitted_frames_.front()->ready && !submitted_frame_) {
-    submitted_frame_ = std::move(unsubmitted_frames_.front());
+void GbmSurfacelessWayland::MaybeSubmitFrames() {
+  while (!unsubmitted_frames_.empty() && unsubmitted_frames_.front()->ready) {
+    auto submitted_frame = std::move(unsubmitted_frames_.front());
     unsubmitted_frames_.erase(unsubmitted_frames_.begin());
 
-    if (!submitted_frame_->schedule_planes_succeeded) {
+    if (!submitted_frame->schedule_planes_succeeded) {
       last_swap_buffers_result_ = false;
 
-      std::move(submitted_frame_->completion_callback)
+      std::move(submitted_frame->completion_callback)
           .Run(gfx::SwapCompletionResult(gfx::SwapResult::SWAP_FAILED));
       // Notify the caller, the buffer is never presented on a screen.
-      std::move(submitted_frame_->presentation_callback)
+      std::move(submitted_frame->presentation_callback)
           .Run(gfx::PresentationFeedback::Failure());
 
-      submitted_frame_.reset();
+      submitted_frame.reset();
       return;
     }
 
-    DCHECK_EQ(submitted_frame_->planes.size(), 1u);
-    submitted_frame_->buffer_id = submitted_frame_->planes.back().buffer_id;
-    buffer_manager_->CommitBuffer(widget_,
-                                  submitted_frame_->planes.back().buffer_id,
-                                  submitted_frame_->damage_region_);
+    std::vector<ui::ozone::mojom::WaylandOverlayConfigPtr> overlay_configs;
+    for (const auto& plane : submitted_frame->planes) {
+      overlay_configs.push_back(
+          ui::ozone::mojom::WaylandOverlayConfig::From(plane.plane));
+      overlay_configs.back()->buffer_id = plane.buffer_id;
+      if (plane.plane.z_order == 0) {
+        overlay_configs.back()->damage_region = submitted_frame->damage_region_;
+        submitted_frame->buffer_id = plane.buffer_id;
+      }
+    }
+    buffer_manager_->CommitOverlays(widget_, std::move(overlay_configs));
 
-    submitted_frame_->planes.clear();
+    submitted_frame->unacked_submissions = submitted_frame->planes.size();
+    submitted_frame->unacked_presentations = submitted_frame->planes.size();
+    submitted_frame->planes.clear();
+    submitted_frames_.push_back(std::move(submitted_frame));
   }
 }
 
@@ -251,12 +259,12 @@ EGLSyncKHR GbmSurfacelessWayland::InsertFence(bool implicit) {
                                 EGL_SYNC_PRIOR_COMMANDS_IMPLICIT_EXTERNAL_ARM,
                                 EGL_NONE};
   return eglCreateSyncKHR(GetDisplay(), EGL_SYNC_FENCE_KHR,
-                          implicit ? attrib_list : NULL);
+                          implicit ? attrib_list : nullptr);
 }
 
 void GbmSurfacelessWayland::FenceRetired(PendingFrame* frame) {
   frame->ready = true;
-  SubmitFrame();
+  MaybeSubmitFrames();
 }
 
 void GbmSurfacelessWayland::SetNoGLFlushForTests() {
@@ -265,28 +273,61 @@ void GbmSurfacelessWayland::SetNoGLFlushForTests() {
 
 void GbmSurfacelessWayland::OnSubmission(uint32_t buffer_id,
                                          const gfx::SwapResult& swap_result) {
-  submitted_frame_->overlays.clear();
+  // submitted_frames_ may temporarily have more than one buffer in it if
+  // buffers are released out of order by the Wayland server.
+  DCHECK(!submitted_frames_.empty());
+  if (--submitted_frames_.front()->unacked_submissions)
+    return;
 
-  DCHECK_EQ(submitted_frame_->buffer_id, buffer_id);
-  std::move(submitted_frame_->completion_callback)
+  auto submitted_frame = std::move(submitted_frames_.front());
+  submitted_frames_.erase(submitted_frames_.begin());
+  submitted_frame->overlays.clear();
+
+  std::move(submitted_frame->completion_callback)
       .Run(gfx::SwapCompletionResult(swap_result));
 
-  pending_presentation_frames_.push_back(std::move(submitted_frame_));
+  pending_presentation_frames_.push_back(std::move(submitted_frame));
 
   if (swap_result != gfx::SwapResult::SWAP_ACK) {
     last_swap_buffers_result_ = false;
     return;
   }
 
-  SubmitFrame();
+  MaybeSubmitFrames();
 }
 
 void GbmSurfacelessWayland::OnPresentation(
     uint32_t buffer_id,
     const gfx::PresentationFeedback& feedback) {
-  DCHECK(!pending_presentation_frames_.empty());
+  // Items in |submitted_frames_| will not be moved to
+  // |pending_presentation_frames_| until |unacked_submissions| decrements to 0.
+  // Example:
+  //    A SwapBuffers that submitted 2 buffers (buffer_1 and buffer_2) will push
+  //    a submitted_frame expecting 2 submission feedbacks and 2 presentation
+  //    feedbacks.
+  //    If IPCs comes in the order of:
+  //      buffer_1:submission > buffer_2:submission > buffer_1:presentation >
+  //      buffer_2:presentation
+  //    We are fine without below logic. However, this can happen:
+  //      buffer_1:submission > buffer_1:presentation > buffer_2:submission >
+  //      buffer_2:presentation
+  //    In this case, we have to find the item in |submitted_frames_| and
+  //    decrement |unacked_presentations| there.
+  // TODO(fangzhoug): This solution is sub-optimal and confusing. It increases
+  // the number of IPCs from browser to gpu. The barrier logic should be in the
+  // browser process.
+  if (pending_presentation_frames_.empty()) {
+    auto it = submitted_frames_.begin();
+    for (; !(*it)->unacked_presentations; ++it)
+      ;
+    --(*it)->unacked_presentations;
+    return;
+  }
+
   auto* frame = pending_presentation_frames_.front().get();
-  DCHECK_EQ(frame->buffer_id, buffer_id);
+  if (--frame->unacked_presentations)
+    return;
+
   std::move(frame->presentation_callback).Run(feedback);
   pending_presentation_frames_.erase(pending_presentation_frames_.begin());
 }

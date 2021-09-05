@@ -21,12 +21,11 @@
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#include "net/url_request/url_request_interceptor.h"
-#include "net/url_request/url_request_job_factory.h"
 #include "services/content/public/mojom/navigable_contents_factory.mojom-forward.h"
 #include "services/network/public/mojom/cors_origin_pattern.mojom-forward.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
 #include "third_party/blink/public/mojom/blob/blob.mojom-forward.h"
+#include "third_party/blink/public/mojom/push_messaging/push_messaging.mojom-forward.h"
 #include "third_party/blink/public/mojom/push_messaging/push_messaging_status.mojom-forward.h"
 
 #if !defined(OS_ANDROID)
@@ -69,10 +68,6 @@ class VariationsClient;
 
 namespace content {
 
-namespace mojom {
-enum class PushDeliveryStatus;
-}
-
 class BackgroundFetchDelegate;
 class BackgroundSyncController;
 class BlobHandle;
@@ -94,16 +89,6 @@ class StorageNotificationService;
 class StoragePartition;
 class StoragePartitionConfig;
 class SSLHostStateDelegate;
-
-// A mapping from the scheme name to the protocol handler that services its
-// content.
-using ProtocolHandlerMap =
-    std::map<std::string,
-             std::unique_ptr<net::URLRequestJobFactory::ProtocolHandler>>;
-
-// A owning vector of protocol interceptors.
-using URLRequestInterceptorScopedVector =
-    std::vector<std::unique_ptr<net::URLRequestInterceptor>>;
 
 // This class holds the context needed for a browsing session.
 // It lives on the UI thread. All these methods must only be called on the UI
@@ -207,7 +192,18 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
       int64_t service_worker_registration_id,
       const std::string& message_id,
       base::Optional<std::string> payload,
-      base::OnceCallback<void(blink::mojom::PushDeliveryStatus)> callback);
+      base::OnceCallback<void(blink::mojom::PushEventStatus)> callback);
+
+  // Fires a push subscription change event to the Service Worker identified by
+  // |origin| and |service_worker_registration_id| with |new_subscription| and
+  // |old_subscription| as event information.
+  static void FirePushSubscriptionChangeEvent(
+      BrowserContext* browser_context,
+      const GURL& origin,
+      int64_t service_worker_registration_id,
+      blink::mojom::PushSubscriptionPtr new_subscription,
+      blink::mojom::PushSubscriptionPtr old_subscription,
+      base::OnceCallback<void(blink::mojom::PushEventStatus)> callback);
 
   static void NotifyWillBeDestroyed(BrowserContext* browser_context);
 
@@ -240,6 +236,11 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // ResourceContext) is posted, so that the classes that hung on
   // StoragePartition can have time to do necessary cleanups on IO thread.
   void ShutdownStoragePartitions();
+
+  // Returns true if shutdown has been initiated via a
+  // NotifyWillBeDestroyed() call. This is a signal that the object will be
+  // destroyed soon and no new references to this object should be created.
+  bool ShutdownStarted() { return was_notify_will_be_destroyed_called_; }
 
 #if !defined(OS_ANDROID)
   // Creates a delegate to initialize a HostZoomMap and persist its information.

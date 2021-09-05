@@ -13,6 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "build/chromecast_buildflags.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
@@ -27,6 +28,7 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "third_party/blink/public/common/features.h"
+#include "ui/accessibility/accessibility_switches.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_tree.h"
 
@@ -66,6 +68,14 @@ class CrossPlatformAccessibilityBrowserTest : public ContentBrowserTest {
   void SetUpOnMainThread() override;
   void TearDownOnMainThread() override;
 
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    ContentBrowserTest::SetUpCommandLine(command_line);
+    // kDisableAXMenuList is true on Chrome OS by default. Make it consistent
+    // for these cross-platform tests.
+    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+        switches::kDisableAXMenuList, "false");
+  }
+
  protected:
   void LoadInitialAccessibilityTreeFromUrl(
       const GURL& url,
@@ -91,6 +101,36 @@ class CrossPlatformAccessibilityBrowserTest : public ContentBrowserTest {
     WebContentsImpl* web_contents =
         static_cast<WebContentsImpl*>(shell()->web_contents());
     return web_contents->GetRootBrowserAccessibilityManager();
+  }
+
+  BrowserAccessibility* FindNode(const std::string& name_or_value) {
+    return FindNodeInSubtree(*GetManager()->GetRoot(), name_or_value);
+  }
+
+  BrowserAccessibility* FindNodeInSubtree(BrowserAccessibility& node,
+                                          const std::string& name_or_value) {
+    const std::string& name =
+        node.GetStringAttribute(ax::mojom::StringAttribute::kName);
+    // Note that in the case of a text field, "BrowserAccessibility::GetValue"
+    // has the added functionality of computing the value of an ARIA text box
+    // from its inner text.
+    //
+    // <div contenteditable="true" role="textbox">Hello world.</div>
+    // Will expose no HTML value attribute, but some screen readers, such as
+    // Jaws, VoiceOver and Talkback, require one to be computed.
+    const std::string& value = base::UTF16ToUTF8(node.GetValue());
+    if ((name == name_or_value || value == name_or_value)) {
+      return &node;
+    }
+
+    for (unsigned int i = 0; i < node.PlatformChildCount(); ++i) {
+      BrowserAccessibility* result =
+          FindNodeInSubtree(*node.PlatformGetChild(i), name_or_value);
+      if (result)
+        return result;
+    }
+
+    return nullptr;
   }
 
   std::string GetAttr(const ui::AXNode* node,
@@ -427,6 +467,103 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
       GetAttr(button3->node(), ax::mojom::StringAttribute::kName).c_str());
 }
 
+// Android's text representation is different, so disable the test there.
+#if !defined(OS_ANDROID)
+IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
+                       AXNodePositionTreeBoundary) {
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ui::kAXModeComplete,
+                                         ax::mojom::Event::kLoadComplete);
+  GURL url(
+      "data:text/html,"
+      "<!doctype html><html><body>"
+      "Text before iframe"
+      "<iframe src='data:text/html,"
+      "<!doctype html><html><body>Text in iframe</body></html>"
+      "'></iframe>"
+      "Text after iframe"
+      "</body></html>");
+
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+  waiter.WaitForNotification();
+  WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
+                                                "Text in iframe");
+
+  const BrowserAccessibility* root = GetManager()->GetRoot();
+  ASSERT_NE(root, nullptr);
+  const BrowserAccessibility* body = root->PlatformGetChild(0);
+  ASSERT_NE(body, nullptr);
+  const BrowserAccessibility* text_before_iframe =
+      FindNode("Text before iframe");
+  ASSERT_NE(text_before_iframe, nullptr);
+  const BrowserAccessibility* iframe = body->PlatformGetChild(1);
+  ASSERT_NE(iframe, nullptr);
+  const BrowserAccessibility* sub_document = iframe->PlatformGetChild(0);
+  ASSERT_NE(sub_document, nullptr);
+  const BrowserAccessibility* sub_body = sub_document->PlatformGetChild(0);
+  ASSERT_NE(sub_body, nullptr);
+
+  const BrowserAccessibility* text_in_iframe = FindNode("Text in iframe");
+  ASSERT_NE(text_in_iframe, nullptr);
+  const BrowserAccessibility* text_after_iframe = FindNode("Text after iframe");
+  ASSERT_NE(text_after_iframe, nullptr);
+
+  // Start at the beginning of the document. Anchor IDs can vary across
+  // platforms and test runs, so only check text offsets and tree IDs. In this
+  // case, the tree ID of position should match test_position since a tree
+  // boundary is not crossed.
+  ui::AXNodePosition::AXPositionInstance position =
+      text_before_iframe->CreateTextPositionAt(1);
+  EXPECT_EQ(position->text_offset(), 1);
+  EXPECT_FALSE(position->AtStartOfAXTree());
+  EXPECT_FALSE(position->AtEndOfAXTree());
+  ui::AXNodePosition::AXPositionInstance test_position =
+      position->CreatePositionAtStartOfAXTree();
+  EXPECT_EQ(test_position->tree_id(), position->tree_id());
+  EXPECT_EQ(test_position->text_offset(), 0);
+  EXPECT_TRUE(test_position->AtStartOfAXTree());
+  EXPECT_FALSE(test_position->AtEndOfAXTree());
+  test_position = position->CreatePositionAtEndOfAXTree();
+  EXPECT_EQ(test_position->tree_id(), position->tree_id());
+  EXPECT_EQ(test_position->text_offset(), 17);
+  EXPECT_FALSE(test_position->AtStartOfAXTree());
+  EXPECT_TRUE(test_position->AtEndOfAXTree());
+
+  // Test inside iframe.
+  position = text_in_iframe->CreateTextPositionAt(3);
+  EXPECT_EQ(position->text_offset(), 3);
+  EXPECT_NE(test_position->tree_id(), position->tree_id());
+  EXPECT_FALSE(position->AtStartOfAXTree());
+  EXPECT_FALSE(position->AtEndOfAXTree());
+  test_position = position->CreatePositionAtStartOfAXTree();
+  EXPECT_TRUE(test_position->AtStartOfAXTree());
+  EXPECT_FALSE(test_position->AtEndOfAXTree());
+  EXPECT_EQ(test_position->tree_id(), position->tree_id());
+  EXPECT_EQ(test_position->text_offset(), 0);
+  test_position = position->CreatePositionAtEndOfAXTree();
+  EXPECT_EQ(test_position->tree_id(), position->tree_id());
+  EXPECT_EQ(test_position->text_offset(), 14);
+  EXPECT_FALSE(test_position->AtStartOfAXTree());
+  EXPECT_TRUE(test_position->AtEndOfAXTree());
+
+  // Test after iframe.
+  position = text_after_iframe->CreateTextPositionAt(3);
+  EXPECT_FALSE(position->AtStartOfAXTree());
+  EXPECT_FALSE(position->AtEndOfAXTree());
+  EXPECT_NE(test_position->tree_id(), position->tree_id());
+  test_position = position->CreatePositionAtStartOfAXTree();
+  EXPECT_EQ(test_position->tree_id(), position->tree_id());
+  EXPECT_EQ(test_position->text_offset(), 0);
+  EXPECT_TRUE(test_position->AtStartOfAXTree());
+  EXPECT_FALSE(test_position->AtEndOfAXTree());
+  test_position = position->CreatePositionAtEndOfAXTree();
+  EXPECT_EQ(test_position->tree_id(), position->tree_id());
+  EXPECT_EQ(test_position->text_offset(), 17);
+  EXPECT_FALSE(test_position->AtStartOfAXTree());
+  EXPECT_TRUE(test_position->AtEndOfAXTree());
+}
+#endif
+
 IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
                        PlatformIterator) {
   AccessibilityNotificationWaiter waiter(shell()->web_contents(),
@@ -634,7 +771,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
 }
 
 // TODO(https://crbug.com/1020456) re-enable when crashing on linux is resolved.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_LocalizedRoleDescription DISABLED_LocalizedRoleDescription
 #else
 #define MAYBE_LocalizedRoleDescription LocalizedRoleDescription
@@ -826,7 +963,7 @@ IN_PROC_BROWSER_TEST_F(
 
 // On Android root scroll offset is handled by the Java layer. The final rect
 // bounds is device specific.
-#ifndef OS_ANDROID
+#if !defined(OS_ANDROID)
 IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
                        GetBoundsRectUnclippedRootFrameFromIFrame) {
   // Start by loading a document with iframes.
@@ -935,6 +1072,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
   const char url_str[] =
       R"HTML(data:text/html,<!DOCTYPE html>
         <html>
+          <div style="margin-top: 100px;"></div>
           <input type="datetime-local" aria-label="datetime"
                  aria-controls="button1">
           <button id="button1">button</button>
@@ -999,6 +1137,13 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
         manager->GetFromID(controls_ids[1]);
     ASSERT_NE(nullptr, popup_area);
     EXPECT_EQ(ax::mojom::Role::kRootWebArea, popup_area->GetRole());
+
+#if !BUILDFLAG(IS_CHROMECAST)
+    // Ensure that the bounding box of the popup area is at least 100
+    // pixels down the page.
+    gfx::Rect popup_bounds = popup_area->GetUnclippedRootFrameBoundsRect();
+    EXPECT_GT(popup_bounds.y(), 100);
+#endif
   }
 }
 
@@ -1148,7 +1293,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
               root_accessibility_manager->GetFocus());
   }
 }
-#endif  // ifndef OS_ANDROID
+#endif  // !defined(OS_ANDROID)
 
 class CrossPlatformAccessibilityBrowserTestWithImplicitRootScrolling
     : public CrossPlatformAccessibilityBrowserTest {

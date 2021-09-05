@@ -268,4 +268,47 @@ TEST_F(AnimationThroughputReporterTest, EndDetachedNoReportNoLeak) {
   // AnimationTracker in |reporter| should not leak in asan.
 }
 
+// Tests animation throughput are reported if there was a previous animation
+// preempted under IMMEDIATELY_ANIMATE_TO_NEW_TARGET strategy.
+TEST_F(AnimationThroughputReporterTest, ReportForAnimateToNewTarget) {
+  auto layer = std::make_unique<Layer>();
+  layer->SetOpacity(0.f);
+  layer->SetBounds(gfx::Rect(0, 0, 1, 2));
+  root_layer()->Add(layer.get());
+
+  LayerAnimator* animator = layer->GetAnimator();
+
+  // Schedule an animation that will be preempted. No report should happen.
+  {
+    AnimationThroughputReporter reporter(
+        animator, base::BindLambdaForTesting(
+                      [&](cc::FrameSequenceMetrics::ThroughputData) {
+                        ADD_FAILURE() << "No report for aborted animations.";
+                      }));
+
+    ScopedLayerAnimationSettings settings(animator);
+    settings.SetTransitionDuration(base::TimeDelta::FromMilliseconds(50));
+    layer->SetOpacity(0.5f);
+    layer->SetBounds(gfx::Rect(0, 0, 3, 4));
+  }
+
+  // Animate to new target. Report should happen.
+  base::RunLoop run_loop;
+  {
+    AnimationThroughputReporter reporter(
+        animator, base::BindLambdaForTesting(
+                      [&](cc::FrameSequenceMetrics::ThroughputData) {
+                        run_loop.Quit();
+                      }));
+
+    ScopedLayerAnimationSettings settings(animator);
+    settings.SetPreemptionStrategy(
+        LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+    settings.SetTransitionDuration(base::TimeDelta::FromMilliseconds(50));
+    layer->SetOpacity(1.0f);
+    layer->SetBounds(gfx::Rect(0, 0, 5, 6));
+  }
+  run_loop.Run();
+}
+
 }  // namespace ui

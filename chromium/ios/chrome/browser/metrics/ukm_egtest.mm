@@ -5,9 +5,8 @@
 #include "base/ios/ios_util.h"
 #include "base/macros.h"
 #import "ios/chrome/browser/metrics/metrics_app_interface.h"
+#import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui.h"
-#import "ios/chrome/browser/ui/authentication/signin_earlgrey_utils.h"
-#import "ios/chrome/browser/ui/authentication/signin_earlgrey_utils_app_interface.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
@@ -63,7 +62,7 @@ using chrome_test_util::SettingsDoneButton;
   // Note: URL-keyed anonymized data collection is turned on as part of the
   // flow to Sign in to Chrome and Turn sync on. This matches the main user
   // flow that enables UKM.
-  [SigninEarlGreyUI signinWithFakeIdentity:[SigninEarlGreyUtils fakeIdentity1]];
+  [SigninEarlGreyUI signinWithFakeIdentity:[SigninEarlGrey fakeIdentity1]];
   [ChromeEarlGrey waitForSyncInitialized:YES
                              syncTimeout:syncher::kSyncUKMOperationsTimeout];
 
@@ -93,9 +92,7 @@ using chrome_test_util::SettingsDoneButton;
   // Note: URL-keyed anonymized data collection is turned off as part of the
   // flow to Sign out of Chrome and Turn sync off. This matches the main user
   // flow that disables UKM.
-  if (![SigninEarlGreyUtilsAppInterface isSignedOut]) {
-    [SigninEarlGreyUtilsAppInterface signOut];
-  }
+  [SigninEarlGrey signOut];
 
   [ChromeEarlGrey waitForSyncInitialized:NO
                              syncTimeout:syncher::kSyncUKMOperationsTimeout];
@@ -148,15 +145,14 @@ using chrome_test_util::SettingsDoneButton;
 #pragma mark - Tests
 
 // The tests in this file should correspond to the tests in //chrome/browser/
-// metrics/ukm_browsertest.cc and //chrome/android/javatests/src/org/chromium/
-// chrome/browser/sync/UkmTest.java.
+// metrics/ukm_browsertest.cc.
 
 // Make sure that UKM is disabled while an incognito tab is open.
 //
 // Corresponds to RegularPlusIncognitoCheck in //chrome/browser/metrics/
 // ukm_browsertest.cc.
-// TODO(crbug.com/1096582) Re-enable the test.
-- (void)DISABLED_testRegularPlusIncognito {
+- (void)testRegularPlusIncognito {
+  // Note: Tests begin with an open regular tab. This tab is opened in setUp.
   const uint64_t originalClientID = [MetricsAppInterface UKMClientID];
 
   [self openNewIncognitoTab];
@@ -176,7 +172,24 @@ using chrome_test_util::SettingsDoneButton;
   GREYAssert([MetricsAppInterface checkUKMRecordingEnabled:NO],
              @"Failed to assert that UKM was not enabled.");
 
-  [self closeAllIncognitoTabs];
+  // Open a new regular tab to switch from incognito mode to normal mode. Then,
+  // close this newly-opened regular tab plus the regular tab that was opened
+  // after the first incognito tab was opened.
+  //
+  // TODO(crbug.com/640977): Due to continuous animations, it is not feasible
+  // (i) to use the tab switcher to switch between modes or (ii) to omit the
+  // below code block and simply call [ChromeEarlGrey closeAllIncognitoTabs];
+  // from incognito mode.
+  [self openNewRegularTab];
+  [ChromeEarlGrey closeCurrentTab];
+  [ChromeEarlGrey closeCurrentTab];
+  GREYAssert([MetricsAppInterface checkUKMRecordingEnabled:NO],
+             @"Failed to assert that UKM was not enabled.");
+
+  // At this point, there is one open regular tab and one open incognito tab.
+  [ChromeEarlGrey closeAllIncognitoTabs];
+
+  // All incognito tabs have been closed, so UKM should be enabled.
   GREYAssert([MetricsAppInterface checkUKMRecordingEnabled:YES],
              @"Failed to assert that UKM was enabled.");
 
@@ -189,13 +202,18 @@ using chrome_test_util::SettingsDoneButton;
 //
 // Corresponds to IncognitoPlusRegularCheck in //chrome/browser/metrics/
 // ukm_browsertest.cc.
-// TODO(crbug.com/1033726): This test is flaky on iOS 12 and 13.
-- (void)DISABLED_testIncognitoPlusRegular {
+- (void)testIncognitoPlusRegular {
+  // Note: Tests begin with an open regular tab. This tab is opened in setUp.
   const uint64_t originalClientID = [MetricsAppInterface UKMClientID];
-  [ChromeEarlGrey closeAllTabs];
-  [ChromeEarlGrey waitForMainTabCount:0];
 
+  // TODO(crbug.com/640977): Due to continuous animations, it is not feasible
+  // to close the regular tab that is already open. The functions closeAllTabs,
+  // closeCurrentTab, and closeAllTabsInCurrentMode close the tab and then hang.
+  //
+  // As a workaround, we open an incognito tab and then close the regular tab to
+  // get to a state in which a single incognito tab is open.
   [self openNewIncognitoTab];
+  [ChromeEarlGrey closeAllNormalTabs];
   GREYAssert([MetricsAppInterface checkUKMRecordingEnabled:NO],
              @"Failed to assert that UKM was not enabled.");
 
@@ -205,7 +223,6 @@ using chrome_test_util::SettingsDoneButton;
              @"Failed to assert that UKM was not enabled.");
 
   [ChromeEarlGrey closeAllIncognitoTabs];
-  [ChromeEarlGrey waitForIncognitoTabCount:0];
   GREYAssert([MetricsAppInterface checkUKMRecordingEnabled:YES],
              @"Failed to assert that UKM was enabled.");
 
@@ -221,8 +238,7 @@ using chrome_test_util::SettingsDoneButton;
 // Make sure that UKM is disabled when metrics consent is revoked.
 //
 // Corresponds to MetricsConsentCheck in //chrome/browser/metrics/
-// ukm_browsertest.cc and to testMetricConsent in //chrome/android/javatests/
-// src/org/chromium/chrome/browser/sync/UkmTest.java.
+// ukm_browsertest.cc.
 - (void)testMetricsConsent {
 #if defined(CHROME_EARL_GREY_1)
   // TODO(crbug.com/1033726): EG1 Test fails on iOS 12.
@@ -253,10 +269,9 @@ using chrome_test_util::SettingsDoneButton;
 // Make sure that providing metrics consent doesn't enable UKM w/o sync.
 //
 // Corresponds to ConsentAddedButNoSyncCheck in //chrome/browser/metrics/
-// ukm_browsertest.cc and to consentAddedButNoSyncCheck in //chrome/android/
-// javatests/src/org/chromium/chrome/browser/sync/UkmTest.java.
+// ukm_browsertest.cc.
 - (void)testConsentAddedButNoSync {
-  [SigninEarlGreyUtilsAppInterface signOut];
+  [SigninEarlGrey signOut];
   [MetricsAppInterface setMetricsAndCrashReportingForTesting:NO];
   GREYAssert([MetricsAppInterface checkUKMRecordingEnabled:NO],
              @"Failed to assert that UKM was not enabled.");
@@ -265,7 +280,7 @@ using chrome_test_util::SettingsDoneButton;
   GREYAssert([MetricsAppInterface checkUKMRecordingEnabled:NO],
              @"Failed to assert that UKM was not enabled.");
 
-  [SigninEarlGreyUI signinWithFakeIdentity:[SigninEarlGreyUtils fakeIdentity1]];
+  [SigninEarlGreyUI signinWithFakeIdentity:[SigninEarlGrey fakeIdentity1]];
   GREYAssert([MetricsAppInterface checkUKMRecordingEnabled:YES],
              @"Failed to assert that UKM was enabled.");
 }
@@ -273,8 +288,7 @@ using chrome_test_util::SettingsDoneButton;
 // Make sure that UKM is disabled when sync is disabled.
 //
 // Corresponds to ConsentAddedButNoSyncCheck in //chrome/browser/metrics/
-// ukm_browsertest.cc and to consentAddedButNoSyncCheck in //chrome/android/
-// javatests/src/org/chromium/chrome/browser/sync/UkmTest.java.
+// ukm_browsertest.cc.
 - (void)testSingleDisableSync {
 #if defined(CHROME_EARL_GREY_1)
   // TODO(crbug.com/1033726): EG1 Test fails on iOS 12.
@@ -320,8 +334,7 @@ using chrome_test_util::SettingsDoneButton;
 // Make sure that UKM is disabled when sync is not enabled.
 //
 // Corresponds to SingleSyncSignoutCheck in //chrome/browser/metrics/
-// ukm_browsertest.cc and to singleSyncSignoutCheck in //chrome/android/
-// javatests/src/org/chromium/chrome/browser/sync/UkmTest.java.
+// ukm_browsertest.cc.
 - (void)testSingleSyncSignout {
 #if defined(CHROME_EARL_GREY_1)
   // TODO(crbug.com/1033726): EG1 Test fails on iOS 12.
@@ -331,7 +344,7 @@ using chrome_test_util::SettingsDoneButton;
 #endif
   const uint64_t clientID1 = [MetricsAppInterface UKMClientID];
 
-  [SigninEarlGreyUtilsAppInterface signOut];
+  [SigninEarlGrey signOut];
 
   GREYAssert([MetricsAppInterface checkUKMRecordingEnabled:NO],
              @"Failed to assert that UKM was not enabled.");
@@ -340,7 +353,7 @@ using chrome_test_util::SettingsDoneButton;
                      @"Client ID was not reset.");
 
   const uint64_t clientID2 = [MetricsAppInterface UKMClientID];
-  [SigninEarlGreyUI signinWithFakeIdentity:[SigninEarlGreyUtils fakeIdentity1]];
+  [SigninEarlGreyUI signinWithFakeIdentity:[SigninEarlGrey fakeIdentity1]];
 
   GREYAssert([MetricsAppInterface checkUKMRecordingEnabled:YES],
              @"Failed to assert that UKM was enabled.");

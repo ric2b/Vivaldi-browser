@@ -16,13 +16,21 @@
 
 namespace blink {
 
+static IntRect GraphicsLayerVisualRect(const GraphicsLayer& graphics_layer) {
+  return IntRect(graphics_layer.GetOffsetFromTransformNode(),
+                 IntSize(graphics_layer.Size()));
+}
+
 GraphicsLayerDisplayItem::GraphicsLayerDisplayItem(
     const GraphicsLayer& graphics_layer)
-    : DisplayItem(graphics_layer, kGraphicsLayerWrapper, sizeof(*this)),
+    : DisplayItem(graphics_layer,
+                  kGraphicsLayerWrapper,
+                  sizeof(*this),
+                  GraphicsLayerVisualRect(graphics_layer)),
       graphics_layer_(graphics_layer) {}
 
 bool GraphicsLayerDisplayItem::Equals(const DisplayItem& other) const {
-  return GetType() == other.GetType() &&
+  return DisplayItem::Equals(other) &&
          GetGraphicsLayer() ==
              static_cast<const GraphicsLayerDisplayItem&>(other)
                  .GetGraphicsLayer();
@@ -31,7 +39,7 @@ bool GraphicsLayerDisplayItem::Equals(const DisplayItem& other) const {
 #if DCHECK_IS_ON()
 void GraphicsLayerDisplayItem::PropertiesAsJSON(JSONObject& json) const {
   DisplayItem::PropertiesAsJSON(json);
-  json.SetInteger("layer", graphics_layer_.CcLayer()->id());
+  json.SetInteger("layer", graphics_layer_.CcLayer().id());
   FloatPoint offset(graphics_layer_.GetOffsetFromTransformNode());
   json.SetDouble("offset_x", offset.X());
   json.SetDouble("offset_y", offset.Y());
@@ -45,15 +53,14 @@ void RecordGraphicsLayer(GraphicsContext& context,
   // extraneous layers are still attached. In future we will disable all
   // those layer hierarchy code so we won't need this line.
   DCHECK(!RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
-  graphics_layer.CcLayer()->RemoveAllChildren();
+  graphics_layer.CcLayer().RemoveAllChildren();
 
   PaintController& paint_controller = context.GetPaintController();
 
   // This is like ScopedPaintChunkProperties but uses null id because graphics
   // layer chunk doesn't need an id nor a client.
-  const PropertyTreeState& properties = graphics_layer.GetPropertyTreeState();
-  PropertyTreeState previous_properties(
-      paint_controller.CurrentPaintChunkProperties());
+  const auto& properties = graphics_layer.GetPropertyTreeState();
+  auto previous_properties = paint_controller.CurrentPaintChunkProperties();
   paint_controller.UpdateCurrentPaintChunkProperties(nullptr, properties);
   paint_controller.CreateAndAppend<GraphicsLayerDisplayItem>(graphics_layer);
   paint_controller.UpdateCurrentPaintChunkProperties(nullptr,

@@ -72,6 +72,23 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 
 @implementation ChromeEarlGreyImpl
 
+#pragma mark - Test Utilities
+
+- (void)waitForMatcher:(id<GREYMatcher>)matcher {
+  ConditionBlock condition = ^{
+    NSError* error = nil;
+    [[EarlGrey selectElementWithMatcher:matcher] assertWithMatcher:grey_notNil()
+                                                             error:&error];
+    return error == nil;
+  };
+  NSString* errorString =
+      [NSString stringWithFormat:@"Waiting for matcher %@ failed.", matcher];
+  EG_TEST_HELPER_ASSERT_TRUE(
+      base::test::ios::WaitUntilConditionOrTimeout(
+          base::test::ios::kWaitForUIElementTimeout, condition),
+      errorString);
+}
+
 #pragma mark - Device Utilities
 
 - (void)rotateDeviceToOrientation:(UIDeviceOrientation)deviceOrientation
@@ -159,7 +176,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 
   // After clearing browsing history via code, wait for the UI to be done
   // with any updates. This includes icons from the new tab page being removed.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  GREYWaitForAppToIdle(@"App failed to idle");
 }
 
 - (NSInteger)getBrowsingHistoryEntryCount {
@@ -210,7 +227,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
   [ChromeEarlGreyAppInterface selectTabAtIndex:index];
   // Tab changes are initiated through |WebStateList|. Need to wait its
   // obeservers to complete UI changes at app.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  GREYWaitForAppToIdle(@"App failed to idle");
 }
 
 - (BOOL)isIncognitoMode {
@@ -221,7 +238,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
   [ChromeEarlGreyAppInterface closeTabAtIndex:index];
   // Tab changes are initiated through |WebStateList|. Need to wait its
   // obeservers to complete UI changes at app.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  GREYWaitForAppToIdle(@"App failed to idle");
 }
 
 - (NSUInteger)mainTabCount {
@@ -230,6 +247,10 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 
 - (NSUInteger)incognitoTabCount {
   return [ChromeEarlGreyAppInterface incognitoTabCount];
+}
+
+- (NSUInteger)browserCount {
+  return [ChromeEarlGreyAppInterface browserCount];
 }
 
 - (NSUInteger)evictedMainTabCount {
@@ -266,7 +287,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 - (void)openNewTab {
   [ChromeEarlGreyAppInterface openNewTab];
   [self waitForPageToFinishLoading];
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  GREYWaitForAppToIdle(@"App failed to idle");
 }
 
 - (void)simulateExternalAppURLOpening {
@@ -283,48 +304,48 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
   EG_TEST_HELPER_ASSERT_TRUE(pageLoaded, kWaitForPageToStartLoadingError);
   // Wait until the page is loaded.
   [self waitForPageToFinishLoading];
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  GREYWaitForAppToIdle(@"App failed to idle");
 }
 
 - (void)simulateAddAccountFromWeb {
   [ChromeEarlGreyAppInterface simulateAddAccountFromWeb];
   [self waitForPageToFinishLoading];
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  GREYWaitForAppToIdle(@"App failed to idle");
 }
 
 - (void)closeCurrentTab {
   [ChromeEarlGreyAppInterface closeCurrentTab];
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  GREYWaitForAppToIdle(@"App failed to idle");
 }
 
 - (void)openNewIncognitoTab {
   [ChromeEarlGreyAppInterface openNewIncognitoTab];
   [self waitForPageToFinishLoading];
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  GREYWaitForAppToIdle(@"App failed to idle");
 }
 
 - (void)closeAllTabsInCurrentMode {
   [ChromeEarlGreyAppInterface closeAllTabsInCurrentMode];
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  GREYWaitForAppToIdle(@"App failed to idle");
 }
 
 - (void)closeAllNormalTabs {
   EG_TEST_HELPER_ASSERT_NO_ERROR(
       [ChromeEarlGreyAppInterface closeAllNormalTabs]);
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  GREYWaitForAppToIdle(@"App failed to idle");
 }
 
 - (void)closeAllIncognitoTabs {
   EG_TEST_HELPER_ASSERT_NO_ERROR(
       [ChromeEarlGreyAppInterface closeAllIncognitoTabs]);
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  GREYWaitForAppToIdle(@"App failed to idle");
 }
 
 - (void)closeAllTabs {
   [ChromeEarlGreyAppInterface closeAllTabs];
   // Tab changes are initiated through |WebStateList|. Need to wait its
   // obeservers to complete UI changes at app.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  GREYWaitForAppToIdle(@"App failed to idle");
 }
 
 - (void)waitForPageToFinishLoading {
@@ -474,7 +495,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
       stringWithFormat:@"Waiting for main tab count to become %" PRIuNS, count];
 
   // Allow the UI to become idle, in case any tabs are being opened or closed.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  GREYWaitForAppToIdle(@"App failed to idle");
 
   GREYCondition* tabCountCheck = [GREYCondition
       conditionWithName:conditionName
@@ -497,7 +518,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
           @"Failed waiting for incognito tab count to become %" PRIuNS, count];
 
   // Allow the UI to become idle, in case any tabs are being opened or closed.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  GREYWaitForAppToIdle(@"App failed to idle");
 
   GREYCondition* tabCountCheck = [GREYCondition
       conditionWithName:errorString
@@ -507,6 +528,30 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
                   }];
   bool tabCountEqual = [tabCountCheck waitWithTimeout:kWaitForUIElementTimeout];
   EG_TEST_HELPER_ASSERT_TRUE(tabCountEqual, errorString);
+}
+
+- (void)waitForBrowserCount:(NSUInteger)count {
+  __block NSUInteger actualCount = [ChromeEarlGreyAppInterface browserCount];
+  NSString* conditionName = [NSString
+      stringWithFormat:@"Waiting for window count to become %" PRIuNS, count];
+
+  // Allow the UI to become idle, in case any tabs are being opened or closed.
+  GREYWaitForAppToIdle(@"App failed to idle");
+
+  GREYCondition* browserCountCheck = [GREYCondition
+      conditionWithName:conditionName
+                  block:^{
+                    actualCount = [ChromeEarlGreyAppInterface browserCount];
+                    return actualCount == count;
+                  }];
+  bool browserCountEqual =
+      [browserCountCheck waitWithTimeout:kWaitForUIElementTimeout];
+
+  NSString* errorString = [NSString
+      stringWithFormat:@"Failed waiting for window count to become %" PRIuNS
+                        "; actual count: %" PRIuNS,
+                       count, actualCount];
+  EG_TEST_HELPER_ASSERT_TRUE(browserCountEqual, errorString);
 }
 
 - (NSUInteger)indexOfActiveNormalTab {
@@ -605,7 +650,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 
 - (void)triggerRestoreViaTabGridRemoveAllUndo {
   [ChromeEarlGrey showTabSwitcher];
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  GREYWaitForAppToIdle(@"App failed to idle");
   [ChromeEarlGrey
       waitForAndTapButton:chrome_test_util::TabGridCloseAllButton()];
   [ChromeEarlGrey
@@ -805,15 +850,11 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
                              @"Failed waiting for identities to be cleared");
 }
 
-- (void)signOutAndClearAccounts {
-  [self signOutAndClearIdentities];
-}
+#pragma mark - Bookmarks Utilities (EG2)
 
 - (void)addBookmarkWithSyncPassphrase:(NSString*)syncPassphrase {
   [ChromeEarlGreyAppInterface addBookmarkWithSyncPassphrase:syncPassphrase];
 }
-
-#pragma mark - Bookmarks Utilities (EG2)
 
 - (void)waitForBookmarksToFinishLoading {
   EG_TEST_HELPER_ASSERT_NO_ERROR(
@@ -898,6 +939,10 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 
 - (BOOL)isCustomWebKitLoadedIfRequested {
   return [ChromeEarlGreyAppInterface isCustomWebKitLoadedIfRequested];
+}
+
+- (BOOL)isMobileModeByDefault {
+  return [ChromeEarlGreyAppInterface isMobileModeByDefault];
 }
 
 #pragma mark - ScopedBlockPopupsPref

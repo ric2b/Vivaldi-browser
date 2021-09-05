@@ -7,6 +7,8 @@
 
 #include <string>
 
+#include "base/optional.h"
+#include "base/time/time.h"
 #include "chrome/browser/chromeos/input_method/input_method_engine_base.h"
 #include "chrome/browser/chromeos/input_method/suggester.h"
 #include "chrome/browser/chromeos/input_method/suggestion_enums.h"
@@ -128,7 +130,9 @@ class PersonalInfoSuggester : public Suggester {
   std::vector<ui::ime::AssistiveWindowButton> buttons_;
   int highlighted_index_;
   ui::ime::AssistiveWindowButton suggestion_button_;
-  ui::ime::AssistiveWindowButton link_button_;
+  ui::ime::AssistiveWindowButton settings_button_;
+
+  base::TimeTicks session_start_;
 };
 
 }  // namespace chromeos

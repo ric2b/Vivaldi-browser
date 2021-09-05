@@ -262,7 +262,7 @@ TEST_F(FilePathWatcherTest, DeletedFile) {
   ASSERT_TRUE(SetupWatch(test_file(), &watcher, delegate.get(), false));
 
   // Now make sure we get notified if the file is deleted.
-  base::DeleteFile(test_file(), false);
+  base::DeleteFile(test_file());
   ASSERT_TRUE(WaitForEvents());
 }
 
@@ -343,7 +343,7 @@ TEST_F(FilePathWatcherTest, NonExistentDirectory) {
   VLOG(1) << "Waiting for file change";
   ASSERT_TRUE(WaitForEvents());
 
-  ASSERT_TRUE(base::DeleteFile(file, false));
+  ASSERT_TRUE(base::DeleteFile(file));
   VLOG(1) << "Waiting for file deletion";
   ASSERT_TRUE(WaitForEvents());
 }
@@ -389,7 +389,7 @@ TEST_F(FilePathWatcherTest, DisappearingDirectory) {
   std::unique_ptr<TestDelegate> delegate(new TestDelegate(collector()));
   ASSERT_TRUE(SetupWatch(file, &watcher, delegate.get(), false));
 
-  ASSERT_TRUE(base::DeleteFileRecursively(dir));
+  ASSERT_TRUE(base::DeletePathRecursively(dir));
   ASSERT_TRUE(WaitForEvents());
 }
 
@@ -400,7 +400,7 @@ TEST_F(FilePathWatcherTest, DeleteAndRecreate) {
   std::unique_ptr<TestDelegate> delegate(new TestDelegate(collector()));
   ASSERT_TRUE(SetupWatch(test_file(), &watcher, delegate.get(), false));
 
-  ASSERT_TRUE(base::DeleteFile(test_file(), false));
+  ASSERT_TRUE(base::DeleteFile(test_file()));
   VLOG(1) << "Waiting for file deletion";
   ASSERT_TRUE(WaitForEvents());
 
@@ -425,14 +425,14 @@ TEST_F(FilePathWatcherTest, WatchDirectory) {
   VLOG(1) << "Waiting for file1 creation";
   ASSERT_TRUE(WaitForEvents());
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
   // Mac implementation does not detect files modified in a directory.
   ASSERT_TRUE(WriteFile(file1, "content v2"));
   VLOG(1) << "Waiting for file1 modification";
   ASSERT_TRUE(WaitForEvents());
-#endif  // !OS_MACOSX
+#endif  // !OS_APPLE
 
-  ASSERT_TRUE(base::DeleteFile(file1, false));
+  ASSERT_TRUE(base::DeleteFile(file1));
   VLOG(1) << "Waiting for file1 deletion";
   ASSERT_TRUE(WaitForEvents());
 
@@ -493,13 +493,13 @@ TEST_F(FilePathWatcherTest, RecursiveWatch) {
 
 // Mac and Win don't generate events for Touch.
 // Android TouchFile returns false.
-#if !(defined(OS_MACOSX) || defined(OS_WIN) || defined(OS_ANDROID))
+#if !(defined(OS_APPLE) || defined(OS_WIN) || defined(OS_ANDROID))
   // Touch "$dir".
   Time access_time;
   ASSERT_TRUE(Time::FromString("Wed, 16 Nov 1994, 00:00:00", &access_time));
   ASSERT_TRUE(base::TouchFile(dir, access_time, access_time));
   ASSERT_TRUE(WaitForEvents());
-#endif  // !(defined(OS_MACOSX) || defined(OS_WIN) || defined(OS_ANDROID))
+#endif  // !(defined(OS_APPLE) || defined(OS_WIN) || defined(OS_ANDROID))
 
   // Create "$dir/subdir/subdir_file1".
   FilePath subdir_file1(subdir.AppendASCII("subdir_file1"));
@@ -532,11 +532,11 @@ TEST_F(FilePathWatcherTest, RecursiveWatch) {
 #endif
 
   // Delete "$dir/subdir/subdir_file1".
-  ASSERT_TRUE(base::DeleteFile(subdir_file1, false));
+  ASSERT_TRUE(base::DeleteFile(subdir_file1));
   ASSERT_TRUE(WaitForEvents());
 
   // Delete "$dir/subdir/subdir_child_dir/child_dir_file1".
-  ASSERT_TRUE(base::DeleteFile(child_dir_file1, false));
+  ASSERT_TRUE(base::DeleteFile(child_dir_file1));
   ASSERT_TRUE(WaitForEvents());
 }
 
@@ -576,7 +576,7 @@ TEST_F(FilePathWatcherTest, RecursiveWithSymLink) {
   // Link change.
   FilePath target2(temp_dir_.GetPath().AppendASCII("target2"));
   ASSERT_TRUE(base::CreateDirectory(target2));
-  ASSERT_TRUE(base::DeleteFile(symlink, false));
+  ASSERT_TRUE(base::DeleteFile(symlink));
   ASSERT_TRUE(base::CreateSymbolicLink(target2, symlink));
   ASSERT_TRUE(WaitForEvents());
 
@@ -658,7 +658,7 @@ TEST_F(FilePathWatcherTest, DeleteLink) {
   ASSERT_TRUE(SetupWatch(test_link(), &watcher, delegate.get(), false));
 
   // Now make sure we get notified if the link is deleted.
-  ASSERT_TRUE(base::DeleteFile(test_link(), false));
+  ASSERT_TRUE(base::DeleteFile(test_link()));
   ASSERT_TRUE(WaitForEvents());
 }
 
@@ -702,7 +702,7 @@ TEST_F(FilePathWatcherTest, DeleteTargetLinkedFile) {
   ASSERT_TRUE(SetupWatch(test_link(), &watcher, delegate.get(), false));
 
   // Now make sure we get notified if the target file is deleted.
-  ASSERT_TRUE(base::DeleteFile(test_file(), false));
+  ASSERT_TRUE(base::DeleteFile(test_file()));
   ASSERT_TRUE(WaitForEvents());
 }
 
@@ -729,7 +729,7 @@ TEST_F(FilePathWatcherTest, LinkedDirectoryPart1) {
   VLOG(1) << "Waiting for file change";
   ASSERT_TRUE(WaitForEvents());
 
-  ASSERT_TRUE(base::DeleteFile(file, false));
+  ASSERT_TRUE(base::DeleteFile(file));
   VLOG(1) << "Waiting for file deletion";
   ASSERT_TRUE(WaitForEvents());
 }
@@ -758,7 +758,7 @@ TEST_F(FilePathWatcherTest, LinkedDirectoryPart2) {
   VLOG(1) << "Waiting for file change";
   ASSERT_TRUE(WaitForEvents());
 
-  ASSERT_TRUE(base::DeleteFile(file, false));
+  ASSERT_TRUE(base::DeleteFile(file));
   VLOG(1) << "Waiting for file deletion";
   ASSERT_TRUE(WaitForEvents());
 }
@@ -785,7 +785,7 @@ TEST_F(FilePathWatcherTest, LinkedDirectoryPart3) {
   VLOG(1) << "Waiting for file change";
   ASSERT_TRUE(WaitForEvents());
 
-  ASSERT_TRUE(base::DeleteFile(file, false));
+  ASSERT_TRUE(base::DeleteFile(file));
   VLOG(1) << "Waiting for file deletion";
   ASSERT_TRUE(WaitForEvents());
 }
@@ -798,7 +798,7 @@ enum Permission {
   Execute
 };
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 bool ChangeFilePermissions(const FilePath& path, Permission perm, bool allow) {
   struct stat stat_buf;
 
@@ -827,9 +827,9 @@ bool ChangeFilePermissions(const FilePath& path, Permission perm, bool allow) {
   }
   return chmod(path.value().c_str(), stat_buf.st_mode) == 0;
 }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_APPLE)
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 // Linux implementation of FilePathWatcher doesn't catch attribute changes.
 // http://crbug.com/78043
 // Windows implementation of FilePathWatcher catches attribute changes that
@@ -864,7 +864,7 @@ TEST_F(FilePathWatcherTest, DirAttributesChanged) {
   ASSERT_TRUE(ChangeFilePermissions(test_dir1, Execute, true));
 }
 
-#endif  // OS_MACOSX
+#endif  // OS_APPLE
 }  // namespace
 
 }  // namespace base

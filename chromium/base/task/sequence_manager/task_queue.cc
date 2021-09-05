@@ -183,6 +183,7 @@ void TaskQueue::ShutdownTaskQueue() {
       internal::TaskQueueImpl::OnTaskStartedHandler());
   impl_->SetOnTaskCompletedHandler(
       internal::TaskQueueImpl::OnTaskCompletedHandler());
+  impl_->SetOnTaskPostedHandler(internal::TaskQueueImpl::OnTaskPostedHandler());
   sequence_manager_->UnregisterTaskQueueImpl(TakeTaskQueueImpl());
 }
 
@@ -318,13 +319,6 @@ bool TaskQueue::BlockedByFence() const {
   if (!impl_)
     return false;
   return impl_->BlockedByFence();
-}
-
-EnqueueOrder TaskQueue::GetEnqueueOrderAtWhichWeBecameUnblocked() const {
-  DCHECK_CALLED_ON_VALID_THREAD(associated_thread_->thread_checker);
-  if (!impl_)
-    return EnqueueOrder();
-  return impl_->GetEnqueueOrderAtWhichWeBecameUnblocked();
 }
 
 const char* TaskQueue::GetName() const {

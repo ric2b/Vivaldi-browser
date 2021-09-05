@@ -4,12 +4,21 @@
 
 #include "chrome/browser/ui/webui/webui_util.h"
 
+#include "build/build_config.h"
 #include "chrome/common/buildflags.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/resources/grit/webui_resources.h"
 #include "ui/resources/grit/webui_resources_map.h"
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
+#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#elif defined(OS_WIN) || defined(OS_MAC)
+#include "base/enterprise_util.h"
+#endif
 
 namespace webui {
 
@@ -19,6 +28,8 @@ void SetupPolymer3Defaults(content::WebUIDataSource* source) {
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources chrome://test 'self';");
+  // TODO(crbug.com/1098690): Trusted Type Polymer
+  source->DisableTrustedTypesCSP();
   source->UseStringsJs();
   source->EnableReplaceI18nInJS();
   source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER);
@@ -70,6 +81,18 @@ void AddResourcePathsBulk(content::WebUIDataSource* source,
                           base::span<const GritResourceMap> resources) {
   for (const auto& resource : resources)
     source->AddResourcePath(resource.name, resource.value);
+}
+
+bool IsEnterpriseManaged() {
+#if defined(OS_CHROMEOS)
+  policy::BrowserPolicyConnectorChromeOS* connector =
+      g_browser_process->platform_part()->browser_policy_connector_chromeos();
+  return connector->IsEnterpriseManaged();
+#elif defined(OS_WIN) || defined(OS_MAC)
+  return base::IsMachineExternallyManaged();
+#else
+  return false;
+#endif
 }
 
 }  // namespace webui

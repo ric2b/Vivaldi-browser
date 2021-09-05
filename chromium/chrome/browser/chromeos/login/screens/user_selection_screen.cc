@@ -474,6 +474,8 @@ class UserSelectionScreen::TpmLockedChecker {
           device::mojom::WakeLockReason::kOther, kWakeLockReason,
           wake_lock_.BindNewPipeAndPassReceiver());
     }
+    // The |wake_lock_| is released once TpmLockedChecker is destroyed.
+    // It happens after successful login.
     wake_lock_->RequestWakeLock();
   }
 
@@ -713,21 +715,6 @@ void UserSelectionScreen::Init(const user_manager::UserList& users) {
   tpm_locked_checker_->Check();
 }
 
-void UserSelectionScreen::OnBeforeUserRemoved(const AccountId& account_id) {
-  for (auto it = users_.cbegin(); it != users_.cend(); ++it) {
-    if ((*it)->GetAccountId() == account_id) {
-      users_.erase(it);
-      break;
-    }
-  }
-}
-
-void UserSelectionScreen::OnUserRemoved(const AccountId& account_id) {
-  if (!handler_)
-    return;
-  handler_->OnUserRemoved(account_id, users_.empty());
-}
-
 void UserSelectionScreen::OnUserImageChanged(const user_manager::User& user) {
   if (!handler_)
     return;
@@ -876,7 +863,6 @@ void UserSelectionScreen::OnUserStatusChecked(
     TokenHandleUtil::TokenHandleStatus status) {
   if (status == TokenHandleUtil::INVALID) {
     RecordReauthReason(account_id, ReauthReason::INVALID_TOKEN_HANDLE);
-    token_handle_util_->MarkHandleInvalid(account_id);
     SetAuthType(account_id, proximity_auth::mojom::AuthType::ONLINE_SIGN_IN,
                 base::string16());
   }

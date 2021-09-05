@@ -15,6 +15,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_out_of_flow_layout_part.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_box_fragment_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 
@@ -128,7 +129,8 @@ NGConstraintSpace LayoutNGMixin<Base>::ConstraintSpaceForMinMaxSizes() const {
   // Table cells borders may be collapsed, we can't calculate these directly
   // from the style.
   if (Base::IsTableCell()) {
-    builder.SetIsTableCell(true);
+    DCHECK(Base::IsTableCellLegacy());
+    builder.SetIsTableCell(true, /* is_legacy_table_cell */ true);
     builder.SetTableCellBorders({Base::BorderStart(), Base::BorderEnd(),
                                  Base::BorderBefore(), Base::BorderAfter()});
   }
@@ -160,7 +162,7 @@ void LayoutNGMixin<Base>::UpdateOutOfFlowBlockLayout() {
       container_node.CreatesNewFormattingContext());
 
   NGFragmentGeometry fragment_geometry;
-  fragment_geometry.border = ComputeBorders(constraint_space, *container_style);
+  fragment_geometry.border = ComputeBorders(constraint_space, container_node);
   fragment_geometry.scrollbar =
       ComputeScrollbars(constraint_space, container_node);
   fragment_geometry.padding =
@@ -220,8 +222,8 @@ void LayoutNGMixin<Base>::UpdateOutOfFlowBlockLayout() {
   // should get laid out by the actual containing block.
   NGOutOfFlowLayoutPart(css_container->CanContainAbsolutePositionObjects(),
                         css_container->CanContainFixedPositionObjects(),
-                        *container_style, constraint_space, border_scrollbar,
-                        &container_builder, initial_containing_block_fixed_size)
+                        *container_style, constraint_space, &container_builder,
+                        initial_containing_block_fixed_size)
       .Run(/* only_layout */ this);
   scoped_refptr<const NGLayoutResult> result =
       container_builder.ToBoxFragment();

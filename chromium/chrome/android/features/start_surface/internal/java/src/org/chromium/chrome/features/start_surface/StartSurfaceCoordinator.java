@@ -9,7 +9,9 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tasks.TasksSurface;
 import org.chromium.chrome.browser.tasks.TasksSurfaceProperties;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegate.TabSwitcherType;
@@ -20,6 +22,7 @@ import org.chromium.chrome.features.start_surface.StartSurfaceMediator.SurfaceMo
 import org.chromium.chrome.start_surface.R;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
+import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
@@ -87,11 +90,12 @@ public class StartSurfaceCoordinator implements StartSurface {
     private FeedLoadingCoordinator mFeedLoadingCoordinator;
 
     // TODO(http://crbug.com/1093421): Remove dependency on ChromeActivity.
-    public StartSurfaceCoordinator(ChromeActivity activity, ScrimCoordinator scrimCoordinator) {
+    public StartSurfaceCoordinator(ChromeActivity activity, ScrimCoordinator scrimCoordinator,
+            BottomSheetController sheetController) {
         mActivity = activity;
         mScrimCoordinator = scrimCoordinator;
         mSurfaceMode = computeSurfaceMode();
-        mBottomSheetController = mActivity.getBottomSheetController();
+        mBottomSheetController = sheetController;
 
         boolean excludeMVTiles = StartSurfaceConfiguration.START_SURFACE_EXCLUDE_MV_TILES.getValue()
                 || mSurfaceMode == SurfaceMode.OMNIBOX_ONLY
@@ -113,7 +117,7 @@ public class StartSurfaceCoordinator implements StartSurface {
                 mSurfaceMode == SurfaceMode.SINGLE_PANE ? this::initializeSecondaryTasksSurface
                                                         : null,
                 mSurfaceMode, mActivity.getNightModeStateProvider(),
-                mActivity.getFullscreenManager(), this::isActivityFinishingOrDestroyed,
+                mActivity.getBrowserControlsManager(), this::isActivityFinishingOrDestroyed,
                 excludeMVTiles,
                 StartSurfaceConfiguration.START_SURFACE_SHOW_STACK_TAB_SWITCHER.getValue());
 
@@ -187,7 +191,8 @@ public class StartSurfaceCoordinator implements StartSurface {
                         : null,
                 mExploreSurfaceCoordinator != null
                         ? mExploreSurfaceCoordinator.getFeedSurfaceCreator()
-                        : null);
+                        : null,
+                UserPrefs.get(Profile.getLastUsedRegularProfile()));
 
         if (mTabSwitcher != null) {
             mTabSwitcher.initWithNative(mActivity, mActivity.getTabContentManager(),
@@ -226,8 +231,24 @@ public class StartSurfaceCoordinator implements StartSurface {
     }
 
     @Override
-    public TabSwitcher.TabDialogDelegation getTabDialogDelegate() {
-        return mTabSwitcher.getTabGridDialogDelegation();
+    public Supplier<Boolean> getTabGridDialogVisibilitySupplier() {
+        // If TabSwitcher has been created directly, use the TabGridDialogVisibilitySupplier from
+        // TabSwitcher.
+        if (mTabSwitcher != null) {
+            return mTabSwitcher.getTabGridDialogVisibilitySupplier();
+        }
+        return () -> {
+            // Return true if either mTasksSurface or mSecondaryTasksSurface has a visible dialog.
+            assert mTasksSurface != null;
+            if (mTasksSurface.getTabGridDialogVisibilitySupplier() != null) {
+                if (mTasksSurface.getTabGridDialogVisibilitySupplier().get()) return true;
+            }
+            if (mSecondaryTasksSurface != null
+                    && mSecondaryTasksSurface.getTabGridDialogVisibilitySupplier() != null) {
+                if (mSecondaryTasksSurface.getTabGridDialogVisibilitySupplier().get()) return true;
+            }
+            return false;
+        };
     }
 
     @Override

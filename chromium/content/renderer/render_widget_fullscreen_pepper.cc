@@ -116,13 +116,12 @@ void FullscreenMouseLockDispatcher::SendLockMouseRequest(
     bool request_unadjusted_movement) {
   bool has_transient_user_activation =
       requester_frame ? requester_frame->HasTransientUserActivation() : false;
-  auto* host = widget_->GetInputHandlerHost();
-  if (host) {
-    host->RequestMouseLock(has_transient_user_activation, /*privileged=*/true,
-                           request_unadjusted_movement,
-                           base::BindOnce(&MouseLockDispatcher::OnLockMouseACK,
-                                          weak_ptr_factory_.GetWeakPtr()));
-  }
+
+  widget_->GetWebWidget()->RequestMouseLock(
+      has_transient_user_activation, /*privileged=*/true,
+      request_unadjusted_movement,
+      base::BindOnce(&MouseLockDispatcher::OnLockMouseACK,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 }  // anonymous namespace
@@ -162,27 +161,17 @@ class PepperExternalWidgetClient : public blink::WebExternalWidgetClient {
     widget_->DidInitiatePaint();
   }
 
-  void GetWidgetInputHandler(
-      blink::CrossVariantMojoReceiver<
-          blink::mojom::WidgetInputHandlerInterfaceBase> widget_input_receiver,
-      blink::CrossVariantMojoRemote<
-          blink::mojom::WidgetInputHandlerHostInterfaceBase>
-          widget_input_host_remote) override {
-    widget_->GetWidgetInputHandler(std::move(widget_input_receiver),
-                                   std::move(widget_input_host_remote));
-  }
-
-  void SendCompositionRangeChanged(
-      const gfx::Range& range,
-      const std::vector<gfx::Rect>& character_bounds) override {
-    return widget_->SendCompositionRangeChanged(range, character_bounds);
-  }
-
-  bool HasCurrentImeGuard(bool request_to_show_virtual_keyboard) override {
-    return widget_->HasCurrentImeGuard(request_to_show_virtual_keyboard);
-  }
-
   void FocusChanged(bool enabled) override { widget_->FocusChanged(enabled); }
+
+  void UpdateVisualProperties(
+      const blink::VisualProperties& visual_properties) override {
+    widget_->UpdateVisualProperties(visual_properties);
+  }
+
+  void UpdateScreenRects(const gfx::Rect& widget_screen_rect,
+                         const gfx::Rect& window_screen_rect) override {
+    widget_->UpdateScreenRects(widget_screen_rect, window_screen_rect);
+  }
 
  private:
   RenderWidgetFullscreenPepper* widget_;
@@ -193,7 +182,7 @@ RenderWidgetFullscreenPepper* RenderWidgetFullscreenPepper::Create(
     int32_t routing_id,
     RenderWidget::ShowCallback show_callback,
     CompositorDependencies* compositor_deps,
-    const ScreenInfo& screen_info,
+    const blink::ScreenInfo& screen_info,
     PepperPluginInstanceImpl* plugin,
     const blink::WebURL& local_main_frame_url,
     mojo::PendingAssociatedRemote<blink::mojom::WidgetHost> blink_widget_host,
@@ -371,7 +360,7 @@ WebInputEventResult RenderWidgetFullscreenPepper::ProcessInputEvent(
     send_context_menu_event =
         mouse_event.GetType() == WebInputEvent::Type::kMouseUp &&
         mouse_event.button == WebMouseEvent::Button::kRight;
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
     send_context_menu_event =
         mouse_event.GetType() == WebInputEvent::Type::kMouseDown &&
         (mouse_event.button == WebMouseEvent::Button::kRight ||

@@ -138,7 +138,9 @@ class TestPasswordProtectionService : public MockPasswordProtectionService {
                                       nullptr),
         cache_manager_(
             std::make_unique<VerdictCacheManager>(nullptr,
-                                                  content_setting_map.get())) {}
+                                                  content_setting_map.get())) {
+    cache_manager_->StopCleanUpTimerForTesting();
+  }
 
   void RequestFinished(
       PasswordProtectionRequest* request,
@@ -282,6 +284,8 @@ class PasswordProtectionServiceTest : public ::testing::TestWithParam<bool> {
     EXPECT_CALL(*password_protection_service_,
                 GetPasswordProtectionWarningTriggerPref(_))
         .WillRepeatedly(Return(PASSWORD_PROTECTION_OFF));
+    EXPECT_CALL(*password_protection_service_, IsUserMBBOptedIn())
+        .WillRepeatedly(Return(true));
     url_ = PasswordProtectionService::GetPasswordProtectionRequestUrl();
   }
 
@@ -1089,6 +1093,7 @@ TEST_P(PasswordProtectionServiceTest,
 
   const LoginReputationClientRequest* actual_request =
       password_protection_service_->GetLatestRequestProto();
+  EXPECT_TRUE(actual_request->population().is_mbb_enabled());
   EXPECT_EQ(kTargetUrl, actual_request->page_url());
   EXPECT_EQ(LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
             actual_request->trigger_type());
@@ -1126,6 +1131,7 @@ TEST_P(PasswordProtectionServiceTest,
 
   const LoginReputationClientRequest* actual_request =
       password_protection_service_->GetLatestRequestProto();
+  EXPECT_TRUE(actual_request->population().is_mbb_enabled());
   ASSERT_TRUE(actual_request->has_password_reuse_event());
   const auto& reuse_event = actual_request->password_reuse_event();
   EXPECT_FALSE(reuse_event.is_chrome_signin_password());
@@ -1168,13 +1174,7 @@ TEST_P(PasswordProtectionServiceTest, VerifyShouldShowModalWarning) {
 
   reused_password_account_type.set_account_type(
       ReusedPasswordAccountType::SAVED_PASSWORD);
-  EXPECT_FALSE(password_protection_service_->ShouldShowModalWarning(
-      LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
-      reused_password_account_type,
-      LoginReputationClientResponse::LOW_REPUTATION));
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      safe_browsing::kPasswordProtectionForSavedPasswords);
+
   EXPECT_TRUE(password_protection_service_->ShouldShowModalWarning(
       LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
       reused_password_account_type,
@@ -1337,25 +1337,24 @@ TEST_P(PasswordProtectionServiceTest, VerifyIsSupportedPasswordTypeForPinging) {
 
   EXPECT_TRUE(password_protection_service_->IsSupportedPasswordTypeForPinging(
       PasswordType::PRIMARY_ACCOUNT_PASSWORD));
+#if defined(OS_ANDROID)
   EXPECT_FALSE(password_protection_service_->IsSupportedPasswordTypeForPinging(
       PasswordType::OTHER_GAIA_PASSWORD));
+#else
+  EXPECT_TRUE(password_protection_service_->IsSupportedPasswordTypeForPinging(
+      PasswordType::OTHER_GAIA_PASSWORD));
+#endif
   EXPECT_TRUE(password_protection_service_->IsSupportedPasswordTypeForPinging(
       PasswordType::ENTERPRISE_PASSWORD));
-  EXPECT_FALSE(password_protection_service_->IsSupportedPasswordTypeForPinging(
+  EXPECT_TRUE(password_protection_service_->IsSupportedPasswordTypeForPinging(
       PasswordType::SAVED_PASSWORD));
   {
     base::test::ScopedFeatureList feature_list;
-    feature_list.InitAndEnableFeature(
+    feature_list.InitAndDisableFeature(
         safe_browsing::kPasswordProtectionForSignedInUsers);
-    EXPECT_TRUE(password_protection_service_->IsSupportedPasswordTypeForPinging(
-        PasswordType::OTHER_GAIA_PASSWORD));
-  }
-  {
-    base::test::ScopedFeatureList feature_list;
-    feature_list.InitAndEnableFeature(
-        safe_browsing::kPasswordProtectionForSavedPasswords);
-    EXPECT_TRUE(password_protection_service_->IsSupportedPasswordTypeForPinging(
-        PasswordType::SAVED_PASSWORD));
+    EXPECT_FALSE(
+        password_protection_service_->IsSupportedPasswordTypeForPinging(
+            PasswordType::OTHER_GAIA_PASSWORD));
   }
 }
 

@@ -16,9 +16,9 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/current_thread.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "components/viz/common/features.h"
@@ -1089,7 +1089,7 @@ void WebContentsViewAura::StartDragging(
   int result_op = 0;
   {
     gfx::NativeView content_native_view = GetContentNativeView();
-    base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
+    base::CurrentThread::ScopedNestableTaskAllower allow;
     result_op = aura::client::GetDragDropClient(root_window)
                     ->StartDragAndDrop(
                         std::move(data), root_window, content_native_view,
@@ -1234,8 +1234,7 @@ void WebContentsViewAura::OnWindowTargetVisibilityChanged(bool visible) {
 }
 
 void WebContentsViewAura::OnWindowOcclusionChanged(
-    aura::Window::OcclusionState occlusion_state,
-    const SkRegion&) {
+    aura::Window::OcclusionState occlusion_state) {
   UpdateWebContentsVisibility();
 }
 
@@ -1260,7 +1259,7 @@ void WebContentsViewAura::OnMouseEvent(ui::MouseEvent* event) {
     // Linux window managers like to handle raise-on-click themselves.  If we
     // raise-on-click manually, this may override user settings that prevent
     // focus-stealing.
-#if !defined(USE_X11)
+#if !defined(OS_LINUX) && !defined(OS_CHROMEOS)
     // It is possible for the web-contents to be destroyed while it is being
     // activated. Use a weak-ptr to track whether that happened or not.
     // More in https://crbug.com/1040725

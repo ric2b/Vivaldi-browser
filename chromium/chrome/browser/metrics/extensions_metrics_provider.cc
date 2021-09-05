@@ -214,7 +214,7 @@ ExtensionInstallProto::BackgroundScriptType GetBackgroundScriptType(
   return ExtensionInstallProto::NO_BACKGROUND_SCRIPT;
 }
 
-static_assert(extensions::disable_reason::DISABLE_REASON_LAST == (1LL << 19),
+static_assert(extensions::disable_reason::DISABLE_REASON_LAST == (1LL << 20),
               "Adding a new disable reason? Be sure to include the new reason "
               "below, update the test to exercise it, and then adjust this "
               "value for DISABLE_REASON_LAST");
@@ -253,6 +253,8 @@ std::vector<ExtensionInstallProto::DisableReason> GetDisableReasons(
        ExtensionInstallProto::BLOCKED_BY_POLICY},
       {extensions::disable_reason::DISABLE_REMOTELY_FOR_MALWARE,
        ExtensionInstallProto::DISABLE_REMOTELY_FOR_MALWARE},
+      {extensions::disable_reason::DISABLE_REINSTALL,
+       ExtensionInstallProto::REINSTALL},
   };
 
   int disable_reasons = prefs->GetDisableReasons(id);
@@ -277,19 +279,19 @@ std::vector<ExtensionInstallProto::DisableReason> GetDisableReasons(
 ExtensionInstallProto::BlacklistState GetBlacklistState(
     const extensions::ExtensionId& id,
     extensions::ExtensionPrefs* prefs) {
-  extensions::BlacklistState state = prefs->GetExtensionBlacklistState(id);
+  extensions::BlocklistState state = prefs->GetExtensionBlocklistState(id);
   switch (state) {
-    case extensions::NOT_BLACKLISTED:
+    case extensions::NOT_BLOCKLISTED:
       return ExtensionInstallProto::NOT_BLACKLISTED;
-    case extensions::BLACKLISTED_MALWARE:
+    case extensions::BLOCKLISTED_MALWARE:
       return ExtensionInstallProto::BLACKLISTED_MALWARE;
-    case extensions::BLACKLISTED_SECURITY_VULNERABILITY:
+    case extensions::BLOCKLISTED_SECURITY_VULNERABILITY:
       return ExtensionInstallProto::BLACKLISTED_SECURITY_VULNERABILITY;
-    case extensions::BLACKLISTED_CWS_POLICY_VIOLATION:
+    case extensions::BLOCKLISTED_CWS_POLICY_VIOLATION:
       return ExtensionInstallProto::BLACKLISTED_CWS_POLICY_VIOLATION;
-    case extensions::BLACKLISTED_POTENTIALLY_UNWANTED:
+    case extensions::BLOCKLISTED_POTENTIALLY_UNWANTED:
       return ExtensionInstallProto::BLACKLISTED_POTENTIALLY_UNWANTED;
-    case extensions::BLACKLISTED_UNKNOWN:
+    case extensions::BLOCKLISTED_UNKNOWN:
       return ExtensionInstallProto::BLACKLISTED_UNKNOWN;
   }
   NOTREACHED();

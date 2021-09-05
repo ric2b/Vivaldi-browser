@@ -35,7 +35,9 @@ class UpdateRequiredScreen : public BaseScreen,
  public:
   static UpdateRequiredScreen* Get(ScreenManager* manager);
 
-  UpdateRequiredScreen(UpdateRequiredView* view, ErrorScreen* error_screen);
+  UpdateRequiredScreen(UpdateRequiredView* view,
+                       ErrorScreen* error_screen,
+                       base::RepeatingClosure exit_callback);
   ~UpdateRequiredScreen() override;
 
   // Called when the being destroyed. This should call Unbind() on the
@@ -55,6 +57,9 @@ class UpdateRequiredScreen : public BaseScreen,
       const VersionUpdater::UpdateInfo& update_info) override;
   void FinishExitUpdate(VersionUpdater::Result result) override;
 
+  // Exit the screen.
+  void Exit();
+
   VersionUpdater* GetVersionUpdaterForTesting();
 
   // Set a base clock (used to set current time) for testing EOL.
@@ -70,7 +75,7 @@ class UpdateRequiredScreen : public BaseScreen,
 
   void EnsureScreenIsShown();
 
-  // Callback for changes to chromeos::kMinimumChromeVersionEolMessage.
+  // Callback for changes to chromeos::kMinimumChromeVersionAueMessage.
   void OnEolMessageChanged();
 
   void OnSelectNetworkButtonClicked();
@@ -103,6 +108,7 @@ class UpdateRequiredScreen : public BaseScreen,
 
   UpdateRequiredView* view_ = nullptr;
   ErrorScreen* error_screen_;
+  base::RepeatingClosure exit_callback_;
   std::unique_ptr<ErrorScreensHistogramHelper> histogram_helper_;
 
   // Whether the screen is shown.

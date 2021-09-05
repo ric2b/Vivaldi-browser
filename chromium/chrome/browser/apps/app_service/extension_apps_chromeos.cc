@@ -171,16 +171,16 @@ void ExtensionAppsChromeOs::Initialize() {
   profile_pref_change_registrar_.Init(profile()->GetPrefs());
   profile_pref_change_registrar_.Add(
       prefs::kHideWebStoreIcon,
-      base::Bind(&ExtensionAppsBase::OnHideWebStoreIconPrefChanged,
-                 GetWeakPtr()));
+      base::BindRepeating(&ExtensionAppsBase::OnHideWebStoreIconPrefChanged,
+                          GetWeakPtr()));
 
   auto* local_state = g_browser_process->local_state();
   if (local_state) {
     local_state_pref_change_registrar_.Init(local_state);
     local_state_pref_change_registrar_.Add(
         policy::policy_prefs::kSystemFeaturesDisableList,
-        base::Bind(&ExtensionAppsBase::OnSystemFeaturesPrefChanged,
-                   GetWeakPtr()));
+        base::BindRepeating(&ExtensionAppsBase::OnSystemFeaturesPrefChanged,
+                            GetWeakPtr()));
     OnSystemFeaturesPrefChanged();
   }
 }
@@ -198,83 +198,6 @@ void ExtensionAppsChromeOs::LaunchAppWithIntent(
     // Add a flag to remember this tab originated in the ARC context.
     tab->SetUserData(&arc::ArcWebContentsData::kArcTransitionFlag,
                      std::make_unique<arc::ArcWebContentsData>());
-  }
-}
-
-void ExtensionAppsChromeOs::Uninstall(const std::string& app_id,
-                                      bool clear_site_data,
-                                      bool report_abuse) {
-  // TODO(crbug.com/1009248): We need to add the error code, which could be used
-  // by ExtensionFunction, ManagementUninstallFunctionBase on the callback
-  // OnExtensionUninstallDialogClosed
-  scoped_refptr<const extensions::Extension> extension =
-      extensions::ExtensionRegistry::Get(profile())->GetInstalledExtension(
-          app_id);
-  if (!extension.get()) {
-    return;
-  }
-
-  base::string16 error;
-  extensions::ExtensionSystem::Get(profile())
-      ->extension_service()
-      ->UninstallExtension(app_id, extensions::UNINSTALL_REASON_USER_INITIATED,
-                           &error);
-
-  if (extension->from_bookmark()) {
-    if (!clear_site_data) {
-      UMA_HISTOGRAM_ENUMERATION(
-          "Webapp.UninstallDialogAction",
-          extensions::ExtensionUninstallDialog::CLOSE_ACTION_UNINSTALL,
-          extensions::ExtensionUninstallDialog::CLOSE_ACTION_LAST);
-      return;
-    }
-
-    UMA_HISTOGRAM_ENUMERATION(
-        "Webapp.UninstallDialogAction",
-        extensions::ExtensionUninstallDialog::
-            CLOSE_ACTION_UNINSTALL_AND_CHECKBOX_CHECKED,
-        extensions::ExtensionUninstallDialog::CLOSE_ACTION_LAST);
-
-    constexpr bool kClearCookies = true;
-    constexpr bool kClearStorage = true;
-    constexpr bool kClearCache = true;
-    constexpr bool kAvoidClosingConnections = false;
-    content::ClearSiteData(
-        base::BindRepeating(
-            [](content::BrowserContext* browser_context) {
-              return browser_context;
-            },
-            base::Unretained(profile())),
-        url::Origin::Create(
-            extensions::AppLaunchInfo::GetFullLaunchURL(extension.get())),
-        kClearCookies, kClearStorage, kClearCache, kAvoidClosingConnections,
-        base::DoNothing());
-  } else {
-    if (!report_abuse) {
-      UMA_HISTOGRAM_ENUMERATION(
-          "Extensions.UninstallDialogAction",
-          extensions::ExtensionUninstallDialog::CLOSE_ACTION_UNINSTALL,
-          extensions::ExtensionUninstallDialog::CLOSE_ACTION_LAST);
-      return;
-    }
-
-    UMA_HISTOGRAM_ENUMERATION(
-        "Extensions.UninstallDialogAction",
-        extensions::ExtensionUninstallDialog::
-            CLOSE_ACTION_UNINSTALL_AND_CHECKBOX_CHECKED,
-        extensions::ExtensionUninstallDialog::CLOSE_ACTION_LAST);
-
-    // If the extension specifies a custom uninstall page via
-    // chrome.runtime.setUninstallURL, then at uninstallation its uninstall
-    // page opens. To ensure that the CWS Report Abuse page is the active
-    // tab at uninstallation, navigates to the url to report abuse.
-    constexpr char kReferrerId[] = "chrome-remove-extension-dialog";
-    NavigateParams params(
-        profile(),
-        extension_urls::GetWebstoreReportAbuseUrl(app_id, kReferrerId),
-        ui::PAGE_TRANSITION_LINK);
-    params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-    Navigate(&params);
   }
 }
 
@@ -733,8 +656,13 @@ IconEffects ExtensionAppsChromeOs::GetIconEffects(
     const extensions::Extension* extension,
     bool paused) {
   IconEffects icon_effects = IconEffects::kNone;
-  icon_effects =
-      static_cast<IconEffects>(icon_effects | IconEffects::kResizeAndPad);
+  if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
+    icon_effects =
+        static_cast<IconEffects>(icon_effects | IconEffects::kCrOsStandardIcon);
+  } else {
+    icon_effects =
+        static_cast<IconEffects>(icon_effects | IconEffects::kResizeAndPad);
+  }
   if (extensions::util::ShouldApplyChromeBadge(profile(), extension->id())) {
     icon_effects =
         static_cast<IconEffects>(icon_effects | IconEffects::kChromeBadge);
@@ -778,10 +706,6 @@ void ExtensionAppsChromeOs::SetIconEffect(const std::string& app_id) {
 
 bool ExtensionAppsChromeOs::ShouldRecordAppWindowActivity(
     extensions::AppWindow* app_window) {
-  if (!base::FeatureList::IsEnabled(features::kAppServiceInstanceRegistry)) {
-    return false;
-  }
-
   DCHECK(app_window);
 
   const extensions::Extension* extension = app_window->GetExtension();

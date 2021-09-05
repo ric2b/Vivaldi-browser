@@ -62,6 +62,7 @@ class NetLogProxySink;
 class NetworkContext;
 class NetworkService;
 class NetworkUsageAccumulator;
+class SCTAuditingCache;
 
 // DataPipeUseTracker tracks the mojo data pipe usage in the network
 // service.
@@ -195,7 +196,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   void SetCryptConfig(mojom::CryptConfigPtr crypt_config) override;
 #endif
-#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_WIN) || defined(OS_MAC)
   void SetEncryptionKey(const std::string& encryption_key) override;
 #endif
   void AddCorbExceptionForPlugin(int32_t process_id) override;
@@ -213,6 +214,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
       std::vector<mojom::EnvironmentVariablePtr> environment) override;
   void SetTrustTokenKeyCommitments(const std::string& raw_commitments,
                                    base::OnceClosure done) override;
+#if BUILDFLAG(IS_CT_SUPPORTED)
+  void ClearSCTAuditingCache() override;
+#endif
 
 #if defined(OS_ANDROID)
   void DumpWithoutCrashing(base::Time dump_request_time) override;
@@ -282,6 +286,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   const TrustTokenKeyCommitments* trust_token_key_commitments() const {
     return trust_token_key_commitments_.get();
   }
+
+#if BUILDFLAG(IS_CT_SUPPORTED)
+  SCTAuditingCache* sct_auditing_cache() { return sct_auditing_cache_.get(); }
+#endif
 
   void OnDataPipeCreated(DataPipeUser user);
   void OnDataPipeDropped(DataPipeUser user);
@@ -406,6 +414,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   std::unique_ptr<TrustTokenKeyCommitments> trust_token_key_commitments_;
 
   std::unique_ptr<DelayedDohProbeActivator> doh_probe_activator_;
+
+#if BUILDFLAG(IS_CT_SUPPORTED)
+  std::unique_ptr<SCTAuditingCache> sct_auditing_cache_;
+#endif
 
   // Map from a renderer process id, to the set of plugin origins embedded by
   // that renderer process (the renderer will proxy requests from PPAPI - such

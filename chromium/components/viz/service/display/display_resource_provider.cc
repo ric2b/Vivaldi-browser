@@ -24,6 +24,7 @@
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/ipc/scheduler_sequence.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "ui/gl/trace_util.h"
 
 using gpu::gles2::GLES2Interface;
@@ -180,47 +181,6 @@ bool DisplayResourceProvider::OnMemoryDump(
   }
 
   return true;
-}
-
-void DisplayResourceProvider::SendPromotionHints(
-    const std::map<ResourceId, gfx::RectF>& promotion_hints,
-    const ResourceIdSet& requestor_set) {
-#if defined(OS_ANDROID)
-  GLES2Interface* gl = ContextGL();
-  if (!gl)
-    return;
-
-  for (const auto& id : requestor_set) {
-    auto it = resources_.find(id);
-    if (it == resources_.end())
-      continue;
-
-    if (it->second.marked_for_deletion)
-      continue;
-
-    const ChildResource* resource = LockForRead(id, false /* overlay_only */);
-    // TODO(ericrk): We should never fail LockForRead, but we appear to be
-    // doing so on Android in rare cases. Handle this gracefully until a better
-    // solution can be found. https://crbug.com/811858
-    if (!resource)
-      return;
-
-    DCHECK(resource->transferable.wants_promotion_hint);
-
-    // Insist that this is backed by a GPU texture.
-    if (resource->is_gpu_resource_type()) {
-      DCHECK(resource->gl_id);
-      auto iter = promotion_hints.find(id);
-      bool promotable = iter != promotion_hints.end();
-      gl->OverlayPromotionHintCHROMIUM(resource->gl_id, promotable,
-                                       promotable ? iter->second.x() : 0,
-                                       promotable ? iter->second.y() : 0,
-                                       promotable ? iter->second.width() : 0,
-                                       promotable ? iter->second.height() : 0);
-    }
-    UnlockForRead(id, false /* overlay_only */);
-  }
-#endif
 }
 
 #if defined(OS_ANDROID)
@@ -851,17 +811,11 @@ void DisplayResourceProvider::TryFlushBatchedResources() {
 void DisplayResourceProvider::SetBatchReturnResources(bool batch) {
   if (batch) {
     DCHECK_GE(batch_return_resources_lock_count_, 0);
-    if (!scoped_batch_read_access_) {
-      scoped_batch_read_access_ =
-          std::make_unique<ScopedBatchReadAccess>(ContextGL());
-    }
     batch_return_resources_lock_count_++;
   } else {
     DCHECK_GT(batch_return_resources_lock_count_, 0);
     batch_return_resources_lock_count_--;
     if (batch_return_resources_lock_count_ == 0) {
-      DCHECK(scoped_batch_read_access_);
-      scoped_batch_read_access_.reset();
       TryFlushBatchedResources();
     }
   }
@@ -1046,7 +1000,7 @@ DisplayResourceProvider::LockSetForExternalUse::~LockSetForExternalUse() {
 ExternalUseClient::ImageContext*
 DisplayResourceProvider::LockSetForExternalUse::LockResource(
     ResourceId id,
-    bool is_video_plane) {
+    bool use_skia_color_conversion) {
   auto it = resource_provider_->resources_.find(id);
   DCHECK(it != resource_provider_->resources_.end());
 
@@ -1059,9 +1013,10 @@ DisplayResourceProvider::LockSetForExternalUse::LockResource(
 
     if (!resource.image_context) {
       sk_sp<SkColorSpace> image_color_space;
-      // Video color conversion is handled externally in SkiaRenderer using a
-      // special color filter.
-      if (!is_video_plane)
+      // Video (YUV with PQ or half float RGBA with linear HDR) color conversion
+      // is handled externally in SkiaRenderer using a special color filter, and
+      // |use_skia_color_conversion| is false in that case.
+      if (use_skia_color_conversion)
         image_color_space = resource.transferable.color_space.ToSkColorSpace();
       resource.image_context =
           resource_provider_->external_use_client_->CreateImageContext(
@@ -1182,18 +1137,6 @@ void DisplayResourceProvider::ChildResource::UpdateSyncToken(
   // the gpu process or in case of context loss.
   sync_token_ = sync_token;
   synchronization_state_ = sync_token.HasData() ? NEEDS_WAIT : SYNCHRONIZED;
-}
-
-DisplayResourceProvider::ScopedBatchReadAccess::ScopedBatchReadAccess(
-    gpu::gles2::GLES2Interface* gl)
-    : gl_(gl) {
-  if (gl_)
-    gl_->BeginBatchReadAccessSharedImageCHROMIUM();
-}
-
-DisplayResourceProvider::ScopedBatchReadAccess::~ScopedBatchReadAccess() {
-  if (gl_)
-    gl_->EndBatchReadAccessSharedImageCHROMIUM();
 }
 
 }  // namespace viz

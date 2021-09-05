@@ -60,7 +60,7 @@ export {BlockingRequestManager} from './autofill_page/blocking_request_manager.j
 export {PaymentsManager, PaymentsManagerImpl} from './autofill_page/payments_section.js';
 // <if expr="_google_chrome and is_win">
 export {ChromeCleanupIdleReason} from './chrome_cleanup_page/chrome_cleanup_page.js';
-export {ChromeCleanupProxyImpl} from './chrome_cleanup_page/chrome_cleanup_proxy.js';
+export {ChromeCleanupProxy, ChromeCleanupProxyImpl} from './chrome_cleanup_page/chrome_cleanup_proxy.js';
 export {CHROME_CLEANUP_DEFAULT_ITEMS_TO_SHOW} from './chrome_cleanup_page/items_to_remove_list.js';
 // </if>
 export {ClearBrowsingDataBrowserProxyImpl} from './clear_browsing_data_dialog/clear_browsing_data_browser_proxy.js';
@@ -68,18 +68,21 @@ export {DownloadsBrowserProxyImpl} from './downloads_page/downloads_browser_prox
 // <if expr="_google_chrome and is_win">
 export {IncompatibleApplication, IncompatibleApplicationsBrowserProxyImpl} from './incompatible_applications_page/incompatible_applications_browser_proxy.js';
 // </if>
-export {LanguagesBrowserProxyImpl} from './languages_page/languages_browser_proxy.m.js';
+export {LanguagesBrowserProxy, LanguagesBrowserProxyImpl} from './languages_page/languages_browser_proxy.m.js';
+// <if expr="chromeos">
+export {LanguagesMetricsProxy, LanguagesMetricsProxyImpl, LanguagesPageInteraction} from './languages_page/languages_metrics_proxy.js';
+// </if>
 export {kMenuCloseDelay} from './languages_page/languages_page.js';
 // <if expr="not chromeos">
 export {ImportDataBrowserProxyImpl, ImportDataStatus} from './people_page/import_data_browser_proxy.js';
 export {ManageProfileBrowserProxyImpl, ProfileShortcutStatus} from './people_page/manage_profile_browser_proxy.js';
 // </if>
-export {SafeBrowsingBrowserProxy, SafeBrowsingBrowserProxyImpl, SafeBrowsingRadioManagedState} from './privacy_page/safe_browsing_browser_proxy.js';
 export {BioEnrollDialogPage} from './privacy_page/security_keys_bio_enroll_dialog.js';
 export {Ctap2Status, SampleStatus, SecurityKeysBioEnrollProxyImpl, SecurityKeysCredentialBrowserProxyImpl, SecurityKeysPINBrowserProxyImpl, SecurityKeysResetBrowserProxyImpl} from './privacy_page/security_keys_browser_proxy.js';
 export {CredentialManagementDialogPage} from './privacy_page/security_keys_credential_management_dialog.js';
 export {ResetDialogPage} from './privacy_page/security_keys_reset_dialog.js';
 export {SetPINDialogPage} from './privacy_page/security_keys_set_pin_dialog.js';
+export {SafeBrowsingSetting} from './privacy_page/security_page.js';
 // <if expr="chromeos">
 export {AndroidInfoBrowserProxyImpl} from './site_settings/android_info_browser_proxy.js';
 // </if>

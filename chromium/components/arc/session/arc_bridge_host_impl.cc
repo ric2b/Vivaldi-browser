@@ -41,6 +41,7 @@
 #include "components/arc/mojom/notifications.mojom.h"
 #include "components/arc/mojom/obb_mounter.mojom.h"
 #include "components/arc/mojom/oemcrypto.mojom.h"
+#include "components/arc/mojom/payment_app.mojom.h"
 #include "components/arc/mojom/pip.mojom.h"
 #include "components/arc/mojom/policy.mojom.h"
 #include "components/arc/mojom/power.mojom.h"
@@ -49,6 +50,7 @@
 #include "components/arc/mojom/property.mojom.h"
 #include "components/arc/mojom/rotation_lock.mojom.h"
 #include "components/arc/mojom/screen_capture.mojom.h"
+#include "components/arc/mojom/sensor.mojom.h"
 #include "components/arc/mojom/storage_manager.mojom.h"
 #include "components/arc/mojom/timer.mojom.h"
 #include "components/arc/mojom/tracing.mojom.h"
@@ -264,6 +266,12 @@ void ArcBridgeHostImpl::OnOemCryptoInstanceReady(
                   std::move(oemcrypto_remote));
 }
 
+void ArcBridgeHostImpl::OnPaymentAppInstanceReady(
+    mojo::PendingRemote<mojom::PaymentAppInstance> payment_app_remote) {
+  OnInstanceReady(arc_bridge_service_->payment_app(),
+                  std::move(payment_app_remote));
+}
+
 void ArcBridgeHostImpl::OnPipInstanceReady(
     mojo::PendingRemote<mojom::PipInstance> pip_remote) {
   OnInstanceReady(arc_bridge_service_->pip(), std::move(pip_remote));
@@ -305,6 +313,11 @@ void ArcBridgeHostImpl::OnScreenCaptureInstanceReady(
     mojo::PendingRemote<mojom::ScreenCaptureInstance> screen_capture_remote) {
   OnInstanceReady(arc_bridge_service_->screen_capture(),
                   std::move(screen_capture_remote));
+}
+
+void ArcBridgeHostImpl::OnSensorInstanceReady(
+    mojo::PendingRemote<mojom::SensorInstance> sensor_remote) {
+  OnInstanceReady(arc_bridge_service_->sensor(), std::move(sensor_remote));
 }
 
 void ArcBridgeHostImpl::OnSmartCardManagerInstanceReady(

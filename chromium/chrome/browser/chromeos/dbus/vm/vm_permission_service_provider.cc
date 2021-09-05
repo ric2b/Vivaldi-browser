@@ -6,10 +6,11 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/feature_list.h"
-#include "base/guid.h"
 #include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_manager.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_manager_factory.h"
@@ -23,12 +24,40 @@
 #include "dbus/message.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
+namespace {
+
+base::UnguessableToken TokenFromString(const std::string& str) {
+  static constexpr int kBytesPerUint64 = sizeof(uint64_t) / sizeof(uint8_t);
+  static constexpr int kMaxBytesPerToken = 2 * kBytesPerUint64;
+
+  std::vector<uint8_t> bytes;
+  if (!base::HexStringToBytes(str, &bytes) || bytes.size() == 0 ||
+      bytes.size() > kMaxBytesPerToken) {
+    return base::UnguessableToken();
+  }
+
+  uint64_t high = 0, low = 0;
+  int count = 0;
+  std::for_each(std::rbegin(bytes), std::rend(bytes), [&](auto byte) {
+    auto* p = count < kBytesPerUint64 ? &low : &high;
+    int pos = count < kBytesPerUint64 ? count : count - kBytesPerUint64;
+    *p += static_cast<uint64_t>(byte) << (pos * 8);
+    count++;
+  });
+
+  return base::UnguessableToken::Deserialize(high, low);
+}
+
+}  // namespace
+
 namespace chromeos {
 
-VmPermissionServiceProvider::VmInfo::VmInfo(std::string owner_id,
-                                            std::string name,
-                                            VmType type)
-    : owner_id_(std::move(owner_id)), name_(std::move(name)), type_(type) {}
+VmPermissionServiceProvider::VmInfo::VmInfo(std::string vm_owner_id,
+                                            std::string vm_name,
+                                            VmType vm_type)
+    : owner_id(std::move(vm_owner_id)),
+      name(std::move(vm_name)),
+      type(vm_type) {}
 
 VmPermissionServiceProvider::VmInfo::~VmInfo() = default;
 
@@ -40,7 +69,7 @@ VmPermissionServiceProvider::VmMap::iterator
 VmPermissionServiceProvider::FindVm(const std::string& owner_id,
                                     const std::string& name) {
   return std::find_if(vms_.begin(), vms_.end(), [&](const auto& vm) {
-    return vm.second->owner_id_ == owner_id && vm.second->name_ == name;
+    return vm.second->owner_id == owner_id && vm.second->name == name;
   });
 }
 
@@ -126,11 +155,11 @@ void VmPermissionServiceProvider::RegisterVm(
   // to re-launch the VM, we do not need to update them after this.
   UpdateVmPermissions(vm.get());
 
-  const std::string token(base::GenerateGUID());
+  const base::UnguessableToken token(base::UnguessableToken::Create());
   vms_[token] = std::move(vm);
 
   vm_permission_service::RegisterVmResponse payload;
-  payload.set_token(token);
+  payload.set_token(token.ToString());
 
   dbus::MessageWriter writer(response.get());
   writer.AppendProtoAsArrayOfBytes(payload);
@@ -199,7 +228,7 @@ void VmPermissionServiceProvider::SetPermissions(
   }
 
   base::flat_map<VmInfo::PermissionType, bool> new_permissions(
-      iter->second->permissions_);
+      iter->second->permission_to_enabled_map);
   for (const auto& p : request.permissions()) {
     VmInfo::PermissionType kind;
     if (p.kind() == vm_permission_service::Permission::CAMERA) {
@@ -219,7 +248,7 @@ void VmPermissionServiceProvider::SetPermissions(
   }
 
   // Commit final version of permissions.
-  iter->second->permissions_ = std::move(new_permissions);
+  iter->second->permission_to_enabled_map = std::move(new_permissions);
 
   std::move(response_sender).Run(std::move(response));
 }
@@ -242,9 +271,18 @@ void VmPermissionServiceProvider::GetPermissions(
     return;
   }
 
-  auto iter = vms_.find(request.token());
+  auto token = TokenFromString(request.token());
+  if (!token) {
+    LOG(ERROR) << "Malformed token '" << request.token() << "'";
+    std::move(response_sender)
+        .Run(dbus::ErrorResponse::FromMethodCall(
+            method_call, DBUS_ERROR_INVALID_ARGS, "Malformed token"));
+    return;
+  }
+
+  auto iter = vms_.find(token);
   if (iter == vms_.end()) {
-    LOG(ERROR) << "Invalid token " << request.token();
+    LOG(ERROR) << "Invalid token " << token;
     std::move(response_sender)
         .Run(dbus::ErrorResponse::FromMethodCall(
             method_call, DBUS_ERROR_INVALID_ARGS, "Invalid token"));
@@ -252,7 +290,7 @@ void VmPermissionServiceProvider::GetPermissions(
   }
 
   vm_permission_service::GetPermissionsResponse payload;
-  for (auto permission : iter->second->permissions_) {
+  for (auto permission : iter->second->permission_to_enabled_map) {
     auto* p = payload.add_permissions();
     switch (permission.first) {
       case VmInfo::PermissionCamera:
@@ -271,8 +309,8 @@ void VmPermissionServiceProvider::GetPermissions(
 }
 
 void VmPermissionServiceProvider::UpdateVmPermissions(VmInfo* vm) {
-  vm->permissions_.clear();
-  switch (vm->type_) {
+  vm->permission_to_enabled_map.clear();
+  switch (vm->type) {
     case VmInfo::PluginVm:
       UpdatePluginVmPermissions(vm);
       break;
@@ -284,7 +322,7 @@ void VmPermissionServiceProvider::UpdateVmPermissions(VmInfo* vm) {
 void VmPermissionServiceProvider::UpdatePluginVmPermissions(VmInfo* vm) {
   Profile* profile = ProfileManager::GetPrimaryUserProfile();
   if (!profile || chromeos::ProfileHelper::GetUserIdHashFromProfile(profile) !=
-                      vm->owner_id_) {
+                      vm->owner_id) {
     return;
   }
 
@@ -294,14 +332,14 @@ void VmPermissionServiceProvider::UpdatePluginVmPermissions(VmInfo* vm) {
   if (base::FeatureList::IsEnabled(
           chromeos::features::kPluginVmShowCameraPermissions) &&
       prefs->GetBoolean(prefs::kVideoCaptureAllowed)) {
-    vm->permissions_[VmInfo::PermissionCamera] =
+    vm->permission_to_enabled_map[VmInfo::PermissionCamera] =
         PluginVmManager->GetPermission(plugin_vm::PermissionType::kCamera);
   }
 
   if (base::FeatureList::IsEnabled(
           chromeos::features::kPluginVmShowMicrophonePermissions) &&
       prefs->GetBoolean(prefs::kAudioCaptureAllowed)) {
-    vm->permissions_[VmInfo::PermissionMicrophone] =
+    vm->permission_to_enabled_map[VmInfo::PermissionMicrophone] =
         PluginVmManager->GetPermission(plugin_vm::PermissionType::kMicrophone);
   }
 }

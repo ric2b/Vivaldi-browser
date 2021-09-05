@@ -393,7 +393,7 @@ public class SearchWidgetProvider extends AppWidgetProvider {
 
     static boolean shouldShowFullString() {
         if (ChromeApplication.isVivaldi()) return true;
-        boolean freIsNotNecessary = !FirstRunFlowSequencer.checkIfFirstRunIsNecessary(null, false);
+        boolean freIsNotNecessary = !FirstRunFlowSequencer.checkIfFirstRunIsNecessary(false, false);
         boolean noNeedToCheckForSearchDialog =
                 !LocaleManager.getInstance().needToCheckForSearchEnginePromo();
         return freIsNotNecessary && noNeedToCheckForSearchDialog;

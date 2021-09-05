@@ -21,12 +21,14 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/stop_find_action.h"
+#include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/guest_view/web_view/web_view_content_script_manager.h"
 #include "extensions/common/api/web_view_internal.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "extensions/common/script_constants.h"
 #include "extensions/common/user_script.h"
 
 #include "app/vivaldi_apptools.h"
@@ -195,8 +197,13 @@ std::unique_ptr<extensions::UserScript> ParseContentScript(
   }
 
   // match_about_blank:
-  if (script_value.match_about_blank)
-    script->set_match_about_blank(*script_value.match_about_blank);
+  if (script_value.match_about_blank) {
+    script->set_match_origin_as_fallback(
+        *script_value.match_about_blank
+            ? extensions::MatchOriginAsFallbackBehavior::
+                  kMatchForAboutSchemeAndClimbTree
+            : extensions::MatchOriginAsFallbackBehavior::kNever);
+  }
 
   // css:
   if (script_value.css) {
@@ -317,9 +324,9 @@ WebViewInternalCaptureVisibleRegionFunction::Run() {
 
   return RespondNow(Error(GetErrorMessage(capture_result)));
 }
-bool WebViewInternalCaptureVisibleRegionFunction::IsScreenshotEnabled() const {
-  // TODO(wjmaclean): Is it ok to always return true here?
-  return true;
+bool WebViewInternalCaptureVisibleRegionFunction::IsScreenshotEnabled(
+    content::WebContents* web_contents) const {
+  return !ExtensionsBrowserClient::Get()->IsScreenshotRestricted(web_contents);
 }
 
 bool WebViewInternalCaptureVisibleRegionFunction::ClientAllowsTransparency() {
@@ -356,8 +363,7 @@ std::string WebViewInternalCaptureVisibleRegionFunction::GetErrorMessage(
       reason_description = "view is invisible";
       break;
     case FAILURE_REASON_SCREEN_SHOTS_DISABLED:
-      NOTREACHED() << "WebViewInternalCaptureVisibleRegionFunction always have "
-                      "screenshots enabled";
+      reason_description = "screenshot has been disabled";
       break;
     case OK:
       NOTREACHED()

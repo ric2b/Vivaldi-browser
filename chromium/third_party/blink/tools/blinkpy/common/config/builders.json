@@ -14,16 +14,6 @@
         "port_name": "linux-trusty",
         "specifiers": ["Trusty", "Debug"]
     },
-    "Mac10.10 Tests": {
-        "master": "chromium.mac",
-        "port_name": "mac-mac10.10",
-        "specifiers": ["Mac10.10", "Release"]
-    },
-    "Mac10.11 Tests": {
-        "master": "chromium.mac",
-        "port_name": "mac-mac10.11",
-        "specifiers": ["Mac10.11", "Release"]
-    },
     "Mac10.12 Tests": {
         "master": "chromium.mac",
         "port_name": "mac-mac10.12",
@@ -33,11 +23,6 @@
         "master": "chromium.mac",
         "port_name": "mac-mac10.13",
         "specifiers": ["Mac10.13", "Release"]
-    },
-    "WebKit Mac10.13 (retina)": {
-        "master": "chromium.mac",
-        "port_name": "mac-retina",
-        "specifiers": ["Retina", "Release"]
     },
     "Mac10.13 Tests (dbg)": {
         "master": "chromium.mac",
@@ -77,18 +62,6 @@
         "has_webdriver_tests": true,
         "is_try_builder": true
     },
-    "mac10.10-blink-rel": {
-        "master": "tryserver.blink",
-        "port_name": "mac-mac10.10",
-        "specifiers": ["Mac10.10", "Release"],
-        "is_try_builder": true
-    },
-    "mac10.11-blink-rel": {
-        "master": "tryserver.blink",
-        "port_name": "mac-mac10.11",
-        "specifiers": ["Mac10.11", "Release"],
-        "is_try_builder": true
-    },
     "mac10.12-blink-rel": {
         "master": "tryserver.blink",
         "port_name": "mac-mac10.12",
@@ -99,12 +72,6 @@
         "master": "tryserver.blink",
         "port_name": "mac-mac10.13",
         "specifiers": ["Mac10.13", "Release"],
-        "is_try_builder": true
-    },
-    "mac10.13_retina-blink-rel": {
-        "master": "tryserver.blink",
-        "port_name": "mac-retina",
-        "specifiers": ["Retina", "Release"],
         "is_try_builder": true
     },
     "mac10.14-blink-rel": {

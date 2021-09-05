@@ -110,7 +110,7 @@ void AppendToFileThenDelete(const base::FilePath& source_path,
 
   // Now that it has been copied, delete the source file.
   source_file.reset();
-  base::DeleteFile(source_path, false);
+  base::DeleteFile(source_path);
 }
 
 base::FilePath SiblingInprogressDirectory(const base::FilePath& log_path) {
@@ -481,8 +481,7 @@ FileNetLogObserver::FileNetLogObserver(
       write_queue_(std::move(write_queue)),
       file_writer_(std::move(file_writer)) {
   if (!constants)
-    constants = base::DictionaryValue::From(
-        base::Value::ToUniquePtrValue(GetNetConstants()));
+    constants = base::Value::ToUniquePtrValue(GetNetConstants());
   file_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&FileNetLogObserver::FileWriter::Initialize,
                                 base::Unretained(file_writer_.get()),
@@ -628,13 +627,13 @@ void FileNetLogObserver::FileWriter::DeleteAllFiles() {
 
   if (IsBounded()) {
     current_event_file_.Close();
-    base::DeleteFileRecursively(inprogress_dir_path_);
+    base::DeletePathRecursively(inprogress_dir_path_);
   }
 
   // Only delete |final_log_file_| if it was created internally.
   // (If it was provided as a base::File by the caller, don't try to delete it).
   if (!final_log_path_.empty())
-    base::DeleteFile(final_log_path_, false);
+    base::DeleteFile(final_log_path_);
 }
 
 void FileNetLogObserver::FileWriter::FlushThenStop(
@@ -763,7 +762,7 @@ void FileNetLogObserver::FileWriter::StitchFinalLogFile() {
 
   // Delete the inprogress directory (and anything that may still be left inside
   // it).
-  base::DeleteFileRecursively(inprogress_dir_path_);
+  base::DeletePathRecursively(inprogress_dir_path_);
 }
 
 void FileNetLogObserver::FileWriter::CreateInprogressDirectory() {

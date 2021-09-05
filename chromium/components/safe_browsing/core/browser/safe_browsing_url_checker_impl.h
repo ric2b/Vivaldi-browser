@@ -89,12 +89,16 @@ class SafeBrowsingUrlCheckerImpl : public mojom::SafeBrowsingUrlChecker,
       bool can_check_db,
       base::WeakPtr<RealTimeUrlLookupServiceBase> url_lookup_service_on_ui);
 
-  // Constructor that takes only a ResourceType and a UrlCheckerDelegate,
-  // omitting other arguments that never have non-default values on iOS.
+  // Constructor that takes only a ResourceType, a UrlCheckerDelegate, and
+  // real-time lookup-related arguments, omitting other arguments that never
+  // have non-default values on iOS.
   SafeBrowsingUrlCheckerImpl(
       ResourceType resource_type,
       scoped_refptr<UrlCheckerDelegate> url_checker_delegate,
-      const base::RepeatingCallback<web::WebState*()>& web_state_getter);
+      const base::RepeatingCallback<web::WebState*()>& web_state_getter,
+      bool real_time_lookup_enabled,
+      bool can_rt_check_subresource_url,
+      base::WeakPtr<RealTimeUrlLookupServiceBase> url_lookup_service_on_ui);
 
   ~SafeBrowsingUrlCheckerImpl() override;
 
@@ -189,8 +193,18 @@ class SafeBrowsingUrlCheckerImpl : public mojom::SafeBrowsingUrlChecker,
   // Called when the |response| from the real-time lookup service is received.
   // |is_rt_lookup_successful| is true if the response code is OK and the
   // response body is successfully parsed.
+  // |is_cached_response| is true if the response is a cache hit. In such a
+  // case, fall back to hash-based checks if the cached verdict is |SAFE|.
   void OnRTLookupResponse(bool is_rt_lookup_successful,
+                          bool is_cached_response,
                           std::unique_ptr<RTLookupResponse> response);
+
+  // Logs |request| on any open chrome://safe-browsing pages.
+  void LogRTLookupRequest(const RTLookupRequest& request,
+                          const std::string& oauth_token);
+
+  // Logs |response| on any open chrome://safe-browsing pages.
+  void LogRTLookupResponse(const RTLookupResponse& response);
 
   void SetWebUIToken(int token);
 

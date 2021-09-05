@@ -20,7 +20,6 @@
 #include "chrome/browser/extensions/api/extension_action/test_extension_action_api_observer.h"
 #include "chrome/browser/extensions/api/extension_action/test_icon_image_observer.h"
 #include "chrome/browser/extensions/extension_action_icon_factory.h"
-#include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -51,6 +50,7 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_action.h"
+#include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_host_observer.h"
 #include "extensions/browser/extension_registry.h"
@@ -144,7 +144,7 @@ class BrowserActionApiCanvasTest : public BrowserActionApiTest {
  public:
   void SetUp() override {
     EnablePixelOutput();
-    ExtensionApiTest::SetUp();
+    BrowserActionApiTest::SetUp();
   }
 };
 
@@ -157,14 +157,11 @@ enum TestFlags {
 class BrowserActionApiLazyTest : public BrowserActionApiTest,
                                  public testing::WithParamInterface<int> {
  public:
-  void SetUp() override {
-    BrowserActionApiTest::SetUp();
+  BrowserActionApiLazyTest() {
     // Service Workers are currently only available on certain channels, so set
     // the channel for those tests.
-    if ((GetParam() & kUseServiceWorker) != 0) {
-      current_channel_ =
-          std::make_unique<extensions::ScopedWorkerBasedExtensionsChannel>();
-    }
+    if ((GetParam() & kUseServiceWorker) != 0)
+      current_channel_ = std::make_unique<ScopedWorkerBasedExtensionsChannel>();
 
     if ((GetParam() & kUseExtensionsMenuUi) != 0) {
       feature_list_.InitAndEnableFeature(features::kExtensionsToolbarMenu);
@@ -282,7 +279,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiCanvasTest, DynamicBrowserAction) {
   const Extension* extension = GetSingleLoadedExtension();
   ASSERT_TRUE(extension) << message_;
 
-#if defined (OS_MACOSX)
+#if defined(OS_MAC)
   // We need this on mac so we don't loose 2x representations from browser icon
   // in transformations gfx::ImageSkia -> NSImage -> gfx::ImageSkia.
   std::vector<ui::ScaleFactor> supported_scale_factors;
@@ -640,7 +637,14 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, BrowserActionRemovePopup) {
       << "a specific tab id.";
 }
 
-IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, IncognitoBasic) {
+#if defined(OS_WIN) || defined(OS_LINUX)
+// Flaky: https://crbug.com/1113904
+#define MAYBE_IncognitoBasic DISABLED_IncognitoBasic
+#else
+#define MAYBE_IncognitoBasic IncognitoBasic
+#endif
+
+IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, MAYBE_IncognitoBasic) {
   ExtensionTestMessageListener ready_listener("ready", false);
   ASSERT_TRUE(embedded_test_server()->Start());
   scoped_refptr<const Extension> extension = LoadExtensionWithParamFlags(
@@ -962,42 +966,6 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, BrowserActionWithRectangularIcon) {
   gfx::Image next_icon = GetBrowserActionsBar()->GetIcon(0);
   ASSERT_FALSE(next_icon.IsEmpty());
   EXPECT_FALSE(gfx::test::AreImagesEqual(first_icon, next_icon));
-}
-
-// Test that we don't try and show a browser action popup with
-// browserAction.openPopup if there is no toolbar (e.g., for web popup windows).
-// Regression test for crbug.com/584747.
-IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, BrowserActionOpenPopupOnPopup) {
-  // Open a new web popup window.
-  NavigateParams params(browser(), GURL("http://www.google.com/"),
-                        ui::PAGE_TRANSITION_LINK);
-  params.disposition = WindowOpenDisposition::NEW_POPUP;
-  params.window_action = NavigateParams::SHOW_WINDOW;
-  ui_test_utils::NavigateToURL(&params);
-  Browser* popup_browser = params.browser;
-  // Verify it is a popup, and it is the active window.
-  ASSERT_TRUE(popup_browser);
-  // The window isn't considered "active" on MacOSX for odd reasons. The more
-  // important test is that it *is* considered the last active browser, since
-  // that's what we check when we try to open the popup.
-#if !defined(OS_MACOSX)
-  EXPECT_TRUE(popup_browser->window()->IsActive());
-#endif
-  EXPECT_FALSE(browser()->window()->IsActive());
-  EXPECT_FALSE(popup_browser->SupportsWindowFeature(Browser::FEATURE_TOOLBAR));
-  EXPECT_EQ(popup_browser,
-            chrome::FindLastActiveWithProfile(browser()->profile()));
-
-  // Load up the extension, which will call chrome.browserAction.openPopup()
-  // when it is loaded and verify that the popup didn't open.
-  ExtensionTestMessageListener listener("ready", true);
-  EXPECT_TRUE(LoadExtension(
-      test_data_dir_.AppendASCII("browser_action/open_popup_on_reply")));
-  EXPECT_TRUE(listener.WaitUntilSatisfied());
-
-  ResultCatcher catcher;
-  listener.Reply(std::string());
-  EXPECT_TRUE(catcher.GetNextResult()) << message_;
 }
 
 // Verify video can enter and exit Picture-in_Picture when browser action icon

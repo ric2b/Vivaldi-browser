@@ -459,11 +459,6 @@ RenderWidgetHostViewBase::CreateBrowserAccessibilityManager(
   return nullptr;
 }
 
-void RenderWidgetHostViewBase::AccessibilityShowMenu(const gfx::Point& point) {
-  if (host())
-    host()->ShowContextMenuAtPoint(point, ui::MENU_SOURCE_NONE);
-}
-
 gfx::AcceleratedWidget
     RenderWidgetHostViewBase::AccessibilityGetAcceleratedWidget() {
   return gfx::kNullAcceleratedWidget;
@@ -555,12 +550,12 @@ base::WeakPtr<RenderWidgetHostViewBase> RenderWidgetHostViewBase::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
-void RenderWidgetHostViewBase::GetScreenInfo(ScreenInfo* screen_info) {
+void RenderWidgetHostViewBase::GetScreenInfo(blink::ScreenInfo* screen_info) {
   DisplayUtil::GetNativeViewScreenInfo(screen_info, GetNativeView());
 }
 
 float RenderWidgetHostViewBase::GetDeviceScaleFactor() {
-  ScreenInfo screen_info;
+  blink::ScreenInfo screen_info;
   GetScreenInfo(&screen_info);
   return screen_info.device_scale_factor;
 }
@@ -938,6 +933,11 @@ bool RenderWidgetHostViewBase::TransformPointToLocalCoordSpace(
   RenderWidgetHostViewBase* target_view =
       router->FindViewFromFrameSinkId(target_frame_sink_id);
   DCHECK(target_view);
+  if (!target_view) {
+    // NOTE(igor@vivaldi.com): a workaround for VB-71972
+    LOG(ERROR) << "Failed to find target view with id " << target_frame_sink_id;
+    return false;
+  }
 
   return TransformPointToTargetCoordSpace(original_view, target_view, point,
                                           transformed_point);

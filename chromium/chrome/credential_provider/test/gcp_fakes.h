@@ -6,14 +6,18 @@
 #define CHROME_CREDENTIAL_PROVIDER_TEST_GCP_FAKES_H_
 
 #include <deque>
+#include <list>
 #include <map>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "base/strings/string16.h"
+#include "base/synchronization/waitable_event.h"
 #include "base/test/test_reg_util_win.h"
 #include "base/win/scoped_handle.h"
+#include "chrome/credential_provider/extension/os_service_manager.h"
 #include "chrome/credential_provider/gaiacp/associated_user_validator.h"
 #include "chrome/credential_provider/gaiacp/chrome_availability_checker.h"
 #include "chrome/credential_provider/gaiacp/device_policies_manager.h"
@@ -28,6 +32,7 @@
 #include "chrome/credential_provider/gaiacp/scoped_user_profile.h"
 #include "chrome/credential_provider/gaiacp/user_policies_manager.h"
 #include "chrome/credential_provider/gaiacp/win_http_url_fetcher.h"
+#include "chrome/credential_provider/setup/gcpw_files.h"
 
 namespace base {
 class WaitableEvent;
@@ -632,6 +637,76 @@ class FakeDevicePoliciesManager : public DevicePoliciesManager {
   DevicePoliciesManager* original_manager_ = nullptr;
   DevicePolicies device_policies_;
 };
+
+///////////////////////////////////////////////////////////////////////////////
+
+class FakeGCPWFiles : public GCPWFiles {
+ public:
+  FakeGCPWFiles();
+  ~FakeGCPWFiles() override;
+
+  std::vector<base::FilePath::StringType> GetEffectiveInstallFiles() override;
+
+ private:
+  GCPWFiles* original_files = nullptr;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+class FakeOSServiceManager : public extension::OSServiceManager {
+ public:
+  FakeOSServiceManager();
+  ~FakeOSServiceManager() override;
+
+  DWORD GetServiceStatus(SERVICE_STATUS* service_status) override;
+
+  DWORD InstallService(const base::FilePath& service_binary_path,
+                       extension::ScopedScHandle* sc_handle) override;
+
+  DWORD StartServiceCtrlDispatcher(
+      LPSERVICE_MAIN_FUNCTION service_main) override;
+
+  DWORD RegisterCtrlHandler(
+      LPHANDLER_FUNCTION handler_proc,
+      SERVICE_STATUS_HANDLE* service_status_handle) override;
+
+  DWORD SetServiceStatus(SERVICE_STATUS_HANDLE service_status_handle,
+                         SERVICE_STATUS service) override;
+
+  void SendControlRequestForTesting(DWORD control_request) {
+    std::unique_lock<std::mutex> lock(m);
+    queue.push_back(control_request);
+    cv.notify_one();
+  }
+
+  DWORD DeleteService() override;
+
+ private:
+  DWORD GetControlRequestForTesting() {
+    std::unique_lock<std::mutex> lock(m);
+    cv.wait(lock, [&]() { return !queue.empty(); });
+    DWORD result = queue.front();
+    queue.pop_front();
+    return result;
+  }
+
+  struct ServiceInfo {
+    LPHANDLER_FUNCTION control_handler_cb_;
+    SERVICE_STATUS service_status_;
+  };
+
+  // Primitives that are used to synchronize with the thread running service
+  // main and the thread testing the code.
+  std::list<DWORD> queue;
+  std::mutex m;
+  std::condition_variable cv;
+
+  // Original instance of OSServiceManager.
+  extension::OSServiceManager* os_service_manager_ = nullptr;
+  std::map<base::string16, ServiceInfo> service_lookup_from_name_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
 
 }  // namespace credential_provider
 

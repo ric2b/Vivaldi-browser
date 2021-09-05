@@ -49,6 +49,11 @@ class TestRunnerError(Error):
   pass
 
 
+class DeviceError(TestRunnerError):
+  """Base class for physical device related errors."""
+  pass
+
+
 class AppLaunchError(TestRunnerError):
   """The app failed to launch."""
   pass
@@ -61,21 +66,21 @@ class AppNotFoundError(TestRunnerError):
       'App does not exist: %s' % app_path)
 
 
-class SystemAlertPresentError(TestRunnerError):
+class SystemAlertPresentError(DeviceError):
   """System alert is shown on the device."""
   def __init__(self):
     super(SystemAlertPresentError, self).__init__(
       'System alert is shown on the device.')
 
 
-class DeviceDetectionError(TestRunnerError):
+class DeviceDetectionError(DeviceError):
   """Unexpected number of devices detected."""
   def __init__(self, udids):
     super(DeviceDetectionError, self).__init__(
       'Expected one device, found %s:\n%s' % (len(udids), '\n'.join(udids)))
 
 
-class DeviceRestartError(TestRunnerError):
+class DeviceRestartError(DeviceError):
   """Error restarting a device."""
   def __init__(self):
     super(DeviceRestartError, self).__init__('Error restarting a device')
@@ -95,7 +100,7 @@ class SimulatorNotFoundError(TestRunnerError):
         'Simulator does not exist: %s' % iossim_path)
 
 
-class TestDataExtractionError(TestRunnerError):
+class TestDataExtractionError(DeviceError):
   """Error extracting test data or crash reports from a device."""
   def __init__(self):
     super(TestDataExtractionError, self).__init__('Failed to extract test data')
@@ -517,10 +522,8 @@ class TestRunner(object):
       GTestResult instance.
     """
     result = gtest_utils.GTestResult(cmd)
-    if self.xctest:
-      parser = xctest_utils.XCTestLogParser()
-    else:
-      parser = gtest_utils.GTestLogParser()
+
+    parser = gtest_utils.GTestLogParser()
 
     # TODO(crbug.com/812705): Implement test sharding for unit tests.
     # TODO(crbug.com/812712): Use thread pool for DeviceTestRunner as well.
@@ -536,9 +539,6 @@ class TestRunner(object):
     LOGGER.debug('Stdout flushed after test process.')
     returncode = proc.returncode
 
-    if self.xctest and parser.SystemAlertPresent():
-      raise SystemAlertPresentError()
-
     LOGGER.debug('Processing test results.')
     for test in parser.FailedTests(include_flaky=True):
       # Test cases are named as <test group>.<test case>. If the test case
@@ -551,9 +551,8 @@ class TestRunner(object):
     result.passed_tests.extend(parser.PassedTests(include_flaky=True))
 
     # Only GTest outputs compiled tests in a json file.
-    if not self.xctest:
-      result.disabled_tests_from_compiled_tests_file.extend(
-          parser.DisabledTestsFromCompiledTestsFile())
+    result.disabled_tests_from_compiled_tests_file.extend(
+        parser.DisabledTestsFromCompiledTestsFile())
 
     LOGGER.info('%s returned %s\n', cmd[0], returncode)
 
@@ -566,8 +565,11 @@ class TestRunner(object):
     """Launches the test app."""
     self.set_up()
     destination = 'id=%s' % self.udid
+    # When current |launch| method is invoked, this is running a unit test
+    # target. For simulators, '--xctest' is passed to test runner scripts to
+    # make it run XCTest based unit test.
     if self.xctest:
-      test_app = test_apps.EgtestsApp(
+      test_app = test_apps.SimulatorXCTestUnitTestsApp(
           self.app_path,
           included_tests=self.test_cases,
           env_vars=self.env_vars,

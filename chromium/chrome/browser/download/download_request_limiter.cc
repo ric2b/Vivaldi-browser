@@ -205,9 +205,9 @@ void DownloadRequestLimiter::TabDownloadState::DidFinishNavigation(
 }
 
 void DownloadRequestLimiter::TabDownloadState::DidGetUserInteraction(
-    const blink::WebInputEvent::Type type) {
+    const blink::WebInputEvent& event) {
   if (is_showing_prompt() ||
-      type == blink::WebInputEvent::Type::kGestureScrollBegin) {
+      event.GetType() == blink::WebInputEvent::Type::kGestureScrollBegin) {
     // Don't change state if a prompt is showing or if the user has scrolled.
     return;
   }
@@ -235,7 +235,10 @@ void DownloadRequestLimiter::TabDownloadState::PromptUserForDownload(
   permissions::PermissionRequestManager* permission_request_manager =
       permissions::PermissionRequestManager::FromWebContents(web_contents_);
   if (permission_request_manager) {
+    // TODO(https://crbug.com/1061899): We should pass the frame which initiated
+    // the action instead of assuming that it was the current main frame.
     permission_request_manager->AddRequest(
+        web_contents_->GetMainFrame(),
         new DownloadPermissionRequest(factory_.GetWeakPtr(), request_origin));
   } else {
     // Call CancelOnce() so we don't set the content settings.
@@ -343,7 +346,7 @@ void DownloadRequestLimiter::TabDownloadState::OnContentSettingChanged(
     return;
 
   GURL origin = origin_.GetURL();
-  // Analogous to TabSpecificContentSettings::OnContentSettingChanged:
+  // Analogous to PageSpecificContentSettings::OnContentSettingChanged:
   const ContentSettingsDetails details(primary_pattern, secondary_pattern,
                                        content_type, resource_identifier);
 

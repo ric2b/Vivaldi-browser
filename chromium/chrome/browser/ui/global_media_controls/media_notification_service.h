@@ -17,10 +17,12 @@
 #include "chrome/browser/media/router/presentation/web_contents_presentation_manager.h"
 #include "chrome/browser/ui/global_media_controls/cast_media_notification_provider.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_container_observer.h"
+#include "chrome/browser/ui/global_media_controls/media_notification_device_provider.h"
 #include "chrome/browser/ui/global_media_controls/overlay_media_notifications_manager_impl.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/media_message_center/media_notification_controller.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "media/audio/audio_device_description.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/media_session/public/mojom/audio_focus.mojom.h"
@@ -69,13 +71,15 @@ class MediaNotificationService
       media_session::mojom::MediaSessionAction action) override;
 
   // MediaNotificationContainerObserver implementation.
-  void OnContainerExpanded(bool expanded) override {}
+  void OnContainerSizeChanged() override {}
   void OnContainerMetadataChanged() override {}
   void OnContainerActionsChanged() override {}
   void OnContainerClicked(const std::string& id) override;
   void OnContainerDismissed(const std::string& id) override;
   void OnContainerDestroyed(const std::string& id) override;
   void OnContainerDraggedOut(const std::string& id, gfx::Rect bounds) override;
+  void OnAudioSinkChosen(const std::string& id,
+                         const std::string& sink_id) override;
 
   // KeyedService implementation.
   void Shutdown() override;
@@ -103,6 +107,16 @@ class MediaNotificationService
 
   // Called by a |MediaNotificationService::Session| when it becomes inactive.
   void OnSessionBecameInactive(const std::string& id);
+
+  // Used by a |MediaNotificationAudioDeviceSelectorView| to query the system
+  // for connected audio output devices.
+  std::unique_ptr<MediaNotificationDeviceProvider::
+                      GetOutputDevicesCallbackList::Subscription>
+  RegisterAudioOutputDeviceDescriptionsCallback(
+      MediaNotificationDeviceProvider::GetOutputDevicesCallback callback);
+
+  void set_device_provider_for_testing(
+      std::unique_ptr<MediaNotificationDeviceProvider> device_provider);
 
  private:
   friend class MediaNotificationServiceTest;
@@ -185,6 +199,8 @@ class MediaNotificationService
 
     bool IsPlaying();
 
+    void SetAudioSinkId(const std::string& id);
+
    private:
     static void RecordDismissReason(GlobalMediaControlsDismissReason reason);
 
@@ -220,6 +236,9 @@ class MediaNotificationService
     // Used to receive updates to the Media Session playback state.
     mojo::Receiver<media_session::mojom::MediaControllerObserver>
         observer_receiver_{this};
+
+    // Used to request audio output be routed to a different device
+    mojo::Remote<media_session::mojom::MediaController> controller_;
 
     base::WeakPtr<media_router::WebContentsPresentationManager>
         presentation_manager_;
@@ -279,6 +298,8 @@ class MediaNotificationService
   // Tracks the number of times we have recorded an action for a specific
   // source. We use this to cap the number of UKM recordings per site.
   std::map<ukm::SourceId, int> actions_recorded_to_ukm_;
+
+  std::unique_ptr<MediaNotificationDeviceProvider> device_provider_;
 
   base::WeakPtrFactory<MediaNotificationService> weak_ptr_factory_{this};
 };

@@ -39,8 +39,10 @@ class PlayerCompositorDelegate {
   PlayerCompositorDelegate(const PlayerCompositorDelegate&) = delete;
   PlayerCompositorDelegate& operator=(const PlayerCompositorDelegate&) = delete;
 
+  void SetCompressOnClose(bool compress) { compress_on_close_ = compress; }
+
   virtual void OnCompositorReady(
-      mojom::PaintPreviewCompositor::Status status,
+      mojom::PaintPreviewCompositor::BeginCompositeStatus status,
       mojom::PaintPreviewBeginCompositeResponsePtr composite_response) {}
 
   // Called when there is a request for a new bitmap. When the bitmap
@@ -49,7 +51,7 @@ class PlayerCompositorDelegate {
       const base::UnguessableToken& frame_guid,
       const gfx::Rect& clip_rect,
       float scale_factor,
-      base::OnceCallback<void(mojom::PaintPreviewCompositor::Status,
+      base::OnceCallback<void(mojom::PaintPreviewCompositor::BitmapStatus,
                               const SkBitmap&)> callback);
 
   // Called on touch event on a frame.
@@ -73,6 +75,7 @@ class PlayerCompositorDelegate {
 
   PaintPreviewBaseService* paint_preview_service_;
   DirectoryKey key_;
+  bool compress_on_close_;
   std::unique_ptr<PaintPreviewCompositorService>
       paint_preview_compositor_service_;
   std::unique_ptr<PaintPreviewCompositorClient>

@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">목록 항목</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">손가락 두 개를 사용하여 오른쪽으로 스와이프</translation>
+<translation id="1016393160682012902">쿼티 키, 새로고침할 수 있는 점자 키 또는 터치 동작을 눌러 기능을 학습합니다. 종료하려면 ctrl과 w 또는 Esc를 함께 누릅니다.</translation>
 <translation id="1022586497894531524">ChromeVox 음성 피드백을 처음 사용하시나요? 이 빠른 가이드에서 ChromeVox를 시작하기 위한 기본사항을 알아볼 수 있습니다.</translation>
 <translation id="1025074108959230262">고정 모드 사용 중지됨</translation>
 <translation id="1031961866430398710">플러스</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">내부 링크</translation>
 <translation id="4909019435900810068">한 단어 뒤로 이동</translation>
 <translation id="4911349081560453449">이전 체크박스가 없습니다</translation>
-<translation id="4915087353619183190">학습 모드를 시작합니다. 쿼티 키, 새로고침할 수 있는 점자 키, 터치 동작을 눌러 기능을 확인하세요. Control 키와 W를 누르거나 Esc 키로 종료하세요.</translation>
 <translation id="492295894462528572">서문</translation>
 <translation id="495046168593986294">위로 스크롤</translation>
 <translation id="495170559598752135">작업</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">녹색</translation>
 <translation id="602001110135236999">왼쪽으로 스크롤</translation>
 <translation id="6034000775414344507">연한 회색</translation>
+<translation id="6036135911048686884">터치하여 탐색</translation>
 <translation id="6037602951055904232">앞으로 이동</translation>
 <translation id="6044160928851315051">화면을 어둡게 합니다.</translation>
 <translation id="6082768461603900813">기본 탐색</translation>
@@ -692,7 +693,7 @@
 <translation id="6452403590345320472">목차</translation>
 <translation id="6468049171101508116">다음 버튼</translation>
 <translation id="646954774886932461">색인</translation>
-<translation id="6475604559827479857">단어 하이라이트 색상:</translation>
+<translation id="6475604559827479857">단어 강조표시 색상:</translation>
 <translation id="6493991254603208962">어둡게</translation>
 <translation id="6501595918865591267">터코이즈</translation>
 <translation id="6508059270146105198">점자 디스플레이를 페이지 하단으로 이동합니다.</translation>
@@ -922,6 +923,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{파운드 기호}other{파운드 기호 #개}}</translation>
 <translation id="8378855320830505539">지역</translation>
 <translation id="8382679411218029383">자동완성 본문 및 목록</translation>
+<translation id="8394908167088220973">미디어 재생/일시중지</translation>
 <translation id="8428213095426709021">설정</translation>
 <translation id="8428603554127842284">수준 <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -966,6 +968,7 @@
 <translation id="8770473310765924354">구조화된 콘텐츠(예: 표) 종료</translation>
 <translation id="8779057862865475116">이전 링크가 없습니다</translation>
 <translation id="8796411681063377102">다음 수준 3 제목</translation>
+<translation id="8823311177246872527"><ph name="TOTALPAGES" />페이지 중 <ph name="CURRENTPAGE" />페이지</translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8882002077197914455">행 헤더</translation>

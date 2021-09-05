@@ -6,6 +6,7 @@
 
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_pref_names.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
@@ -75,7 +76,9 @@ const std::vector<SearchConcept>& GetAndroidSettingsSearchConcepts() {
        mojom::SearchResultIcon::kGooglePlay,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kManageAndroidPreferences}},
+       {.setting = mojom::Setting::kManageAndroidPreferences},
+       {IDS_OS_SETTINGS_TAG_ANDROID_SETTINGS_WITH_PLAY_STORE_ALT1,
+        SearchConcept::kAltTagEnd}},
   });
   return *tags;
 }
@@ -87,7 +90,8 @@ const std::vector<SearchConcept>& GetAndroidNoPlayStoreSearchConcepts() {
        mojom::SearchResultIcon::kAndroid,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kManageAndroidPreferences}},
+       {.setting = mojom::Setting::kManageAndroidPreferences},
+       {IDS_OS_SETTINGS_TAG_ANDROID_SETTINGS_ALT1, SearchConcept::kAltTagEnd}},
   });
   return *tags;
 }
@@ -325,6 +329,11 @@ void AppsSection::AddPluginVmLoadTimeData(
 
   html_source->AddBoolean("showPluginVm",
                           ShowPluginVm(profile(), *pref_service_));
+  html_source->AddString(
+      "pluginVmSharedPathsInstructionsLocate",
+      l10n_util::GetStringFUTF16(
+          IDS_SETTINGS_APPS_PLUGIN_VM_SHARED_PATHS_INSTRUCTIONS_LOCATE,
+          base::UTF8ToUTF16(plugin_vm::kChromeOSBaseDirectoryDisplayText)));
   html_source->AddBoolean(
       "showPluginVmCameraPermissions",
       base::FeatureList::IsEnabled(

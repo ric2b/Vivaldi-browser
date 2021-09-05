@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Ochelari de soare</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Catalană</translation>
+<translation id="1172970565351728681">Au mai rămas aproximativ <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Redenumește</translation>
 <translation id="117624967391683467">Se copiază <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">Întrerupe</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Există deja un fișier numit „<ph name="FILENAME" />”. Ce doriți să faceți?</translation>
 <translation id="2121825465123208577">Redimensionează</translation>
 <translation id="2136953289241069843">Transliterație (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Nu se poate deschide „<ph name="PATH" />”: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Caracter nevalid: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Tastatură vietnameză (TCVN)</translation>
 <translation id="2168214441502403371">Tastatură persană</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Calitatea de proprietar va fi transferată către <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">Irlandeză</translation>
 <translation id="3245321423178950146">Artist necunoscut</translation>
+<translation id="3248185426436836442">În așteptare</translation>
 <translation id="3252266817569339921">Franceză</translation>
 <translation id="3254434849914415189">Alegeți aplicația prestabilită pentru fișierele <ph name="FILE_TYPE" />:</translation>
 <translation id="3264582393905923483">Context</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Anul înregistrării</translation>
 <translation id="3338239663705455570">Tastatură slovenă</translation>
 <translation id="3353984535370177728">Selectați un dosar de încărcat</translation>
+<translation id="3356580349448036450">Finalizat</translation>
 <translation id="3399597614303179694">Tastatură macedoneană</translation>
 <translation id="3414856743105198592">Formatarea suportului media amovibil va șterge toate datele. Doriți să continuați?</translation>
 <translation id="3437801641691368414">Ora creării</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Nu ai permisiunea să muți fișierele în „<ph name="FOLDER_NAME" />”.</translation>
 <translation id="3786301125658655746">Ești offline</translation>
 <translation id="3789841737615482174">Instalează</translation>
+<translation id="3793469551756281394">Au mai rămas aproximativ <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /></translation>
 <translation id="3798449238516105146">Versiune</translation>
 <translation id="3801082500826908679">Feroeză</translation>
 <translation id="3809272675881623365">Iepure</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Windows are acces la acest dosar</translation>
 <translation id="4487088045714738411">Tastatură bulgară</translation>
 <translation id="4522570452068850558">Detalii</translation>
+<translation id="4542387084127299777">Nu se poate deschide „<ph name="PATH" />”</translation>
 <translation id="4552678318981539154">Cumpărați mai mult spațiu de stocare</translation>
 <translation id="4559767610552730302">Bokeh</translation>
 <translation id="4572815280350369984">Fișier <ph name="FILE_TYPE" /></translation>
@@ -511,6 +515,7 @@
 <translation id="6629841649550503054">Toate fișierele cu backup pe <ph name="BEGIN_LINK" />Google Drive!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Șterge</translation>
 <translation id="6650726141019353908">Fluture roz</translation>
+<translation id="6657585470893396449">Parolă</translation>
 <translation id="6710213216561001401">Înapoi</translation>
 <translation id="6718273304615422081">Se arhivează...</translation>
 <translation id="6751256176799620176">Un dosar selectat</translation>
@@ -551,7 +556,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Instalarea nu a reușit.</translation>
 <translation id="7040138676081995583">Deschideți cu...</translation>
-<translation id="7059566040011178088">Mai puțin de <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> elemente selectate</translation>
 <translation id="7106346894903675391">Cumpărați mai mult spațiu de stocare...</translation>
 <translation id="7126604456862387217">„&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;” – &lt;em&gt;căutați în Google Drive&lt;/em&gt;</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">Modelul dispozitivului</translation>
 <translation id="8208580316430297579">Grafică</translation>
 <translation id="8223479393428528563">Pentru a salva aceste fișiere pentru utilizare offline, revino online, dă clic dreapta pe fișiere și selectează opțiunea <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Aproximativ <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Abandonați</translation>
 <translation id="8261506727792406068">Șterge</translation>
 <translation id="8269755669432358899">Restrânge panourile cu feedback privind fișierele</translation>
@@ -725,6 +728,7 @@
 <translation id="9065203028668620118">Editează</translation>
 <translation id="9099674669267916096">Numărul de pagini</translation>
 <translation id="9110990317705400362">Google caută mereu modalități de a face navigarea mai sigură. Înainte, orice site îți putea solicita să adaugi o extensie în browser. În ultimele versiuni Google Chrome, trebuie să indici explicit că dorești să instalezi aceste extensii, adăugându-le în pagina Extensii. <ph name="BEGIN_LINK" />Află mai multe<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Deblochează</translation>
 <translation id="912419004897138677">Codec</translation>
 <translation id="9129931661813833980">Fixează dosarul</translation>
 <translation id="9130775360844693113">Membrii „<ph name="DESTINATION_NAME" />” vor obține acces la aceste articole.</translation>

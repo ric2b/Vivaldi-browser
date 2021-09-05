@@ -25,7 +25,7 @@ namespace gfx {
 namespace {
 
 gfx::AcceleratedWidget CastToAcceleratedWidget(int i) {
-#if defined(USE_OZONE) || defined(USE_X11) || defined(OS_MACOSX)
+#if defined(USE_OZONE) || defined(USE_X11) || defined(OS_APPLE)
   return static_cast<gfx::AcceleratedWidget>(i);
 #else
   return reinterpret_cast<gfx::AcceleratedWidget>(i);
@@ -170,14 +170,14 @@ TEST_F(StructTraitsTest, GpuMemoryBufferHandle) {
   base::UnsafeSharedMemoryRegion output_memory = std::move(output.region);
   EXPECT_TRUE(output_memory.Map().IsValid());
 
-#if defined(OS_LINUX) || defined(USE_OZONE)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(USE_OZONE)
   gfx::GpuMemoryBufferHandle handle2;
   const uint64_t kSize = kOffset + kStride;
   handle2.type = gfx::NATIVE_PIXMAP;
   handle2.id = kId;
   handle2.offset = kOffset;
   handle2.stride = kStride;
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   const uint64_t kModifier = 2;
   base::ScopedFD buffer_handle;
   handle2.native_pixmap_handle.modifier = kModifier;
@@ -192,7 +192,7 @@ TEST_F(StructTraitsTest, GpuMemoryBufferHandle) {
                                                    std::move(buffer_handle));
   remote->EchoGpuMemoryBufferHandle(std::move(handle2), &output);
   EXPECT_EQ(gfx::NATIVE_PIXMAP, output.type);
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   EXPECT_EQ(kModifier, output.native_pixmap_handle.modifier);
 #elif defined(OS_FUCHSIA)
   EXPECT_EQ(handle2.native_pixmap_handle.buffer_collection_id,

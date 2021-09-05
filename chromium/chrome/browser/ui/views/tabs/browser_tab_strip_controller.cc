@@ -12,7 +12,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
-#include "base/macros.h"
+#include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "build/build_config.h"
@@ -36,6 +36,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_drag_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_groups_iph_controller.h"
@@ -43,7 +44,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "components/feature_engagement/buildflags.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/prefs/pref_service.h"
@@ -65,11 +65,6 @@
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/widget/widget.h"
 #include "url/origin.h"
-
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-#include "chrome/browser/feature_engagement/new_tab/new_tab_tracker.h"
-#include "chrome/browser/feature_engagement/new_tab/new_tab_tracker_factory.h"
-#endif
 
 using base::UserMetricsAction;
 using content::WebContents;
@@ -114,10 +109,15 @@ class BrowserTabStripController::TabContextMenuContents
         tab_groups_iph_controller_(tab_groups_iph_controller) {
     model_ = controller_->menu_model_factory_->Create(
         this, controller->model_, controller->tabstrip_->GetModelIndexOf(tab));
-    menu_runner_ = std::make_unique<views::MenuRunner>(
-        model_.get(),
-        views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU);
+
+    // Because we use "new" badging for feature promos, we cannot use system-
+    // native context menus. (See crbug.com/1109256.)
+    const int run_flags =
+        views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU;
+    menu_runner_ = std::make_unique<views::MenuRunner>(model_.get(), run_flags);
   }
+  TabContextMenuContents(const TabContextMenuContents&) = delete;
+  TabContextMenuContents& operator=(const TabContextMenuContents&) = delete;
 
   void Cancel() { controller_ = nullptr; }
 
@@ -179,8 +179,6 @@ class BrowserTabStripController::TabContextMenuContents
   BrowserTabStripController* controller_;
 
   TabGroupsIPHController* const tab_groups_iph_controller_;
-
-  DISALLOW_COPY_AND_ASSIGN(TabContextMenuContents);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -403,8 +401,11 @@ bool BrowserTabStripController::ToggleTabGroupCollapsedState(
   }
 
   std::vector<int> tabs_in_group = ListTabsInGroup(group);
-  for (int i : tabs_in_group)
+  for (int i : tabs_in_group) {
     tabstrip_->tab_at(i)->SetVisible(is_currently_collapsed);
+    if (base::FeatureList::IsEnabled(features::kTabGroupsCollapseFreezing))
+      model_->GetWebContentsAt(i)->SetPageFrozen(!is_currently_collapsed);
+  }
 
   tab_groups::TabGroupVisualData new_data(
       GetGroupTitle(group), GetGroupColorId(group), !is_currently_collapsed);
@@ -446,14 +447,6 @@ void BrowserTabStripController::CreateNewTab() {
   reopen_tab_iph->NewTabOpened();
 
   model_->delegate()->AddTabAt(GURL(), -1, true);
-
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-  auto* new_tab_tracker =
-      feature_engagement::NewTabTrackerFactory::GetInstance()->GetForProfile(
-          browser_view_->browser()->profile());
-  new_tab_tracker->OnNewTabOpened();
-  new_tab_tracker->CloseBubble();
-#endif
 }
 
 void BrowserTabStripController::CreateNewTabWithLocation(
@@ -671,6 +664,10 @@ void BrowserTabStripController::OnTabGroupChanged(
       tabstrip_->OnGroupCreated(change.group);
       break;
     }
+    case TabGroupChange::kEditorOpened: {
+      tabstrip_->OnGroupEditorOpened(change.group);
+      break;
+    }
     case TabGroupChange::kContentsChanged: {
       tabstrip_->OnGroupContentsChanged(change.group);
       break;
@@ -710,6 +707,7 @@ void BrowserTabStripController::TabBlockedStateChanged(WebContents* contents,
 
 void BrowserTabStripController::TabGroupedStateChanged(
     base::Optional<tab_groups::TabGroupId> group,
+    content::WebContents* contents,
     int index) {
   tabstrip_->AddTabToGroup(std::move(group), index);
 }

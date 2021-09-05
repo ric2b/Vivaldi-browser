@@ -33,7 +33,7 @@
 #include "net/third_party/quiche/src/quic/core/quic_tag.h"
 #include "net/third_party/quiche/src/spdy/core/spdy_protocol.h"
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
 #include "base/mac/mac_util.h"
 #endif
 
@@ -162,6 +162,12 @@ void ConfigureHttp2Params(const base::CommandLine& command_line,
     params->greased_http2_frame =
         base::Optional<net::SpdySessionPool::GreasedHttp2Frame>(
             {type, flags, payload});
+  }
+
+  if (command_line.HasSwitch(switches::kHttp2EndStreamWithDataFrame) ||
+      GetVariationParam(http2_trial_params,
+                        "http2_end_stream_with_data_frame") == "true") {
+    params->http2_end_stream_with_data_frame = true;
   }
 
   params->enable_websocket_over_http2 =
@@ -351,6 +357,12 @@ bool ShouldQuicDisableTlsZeroRtt(const VariationParameters& quic_trial_params) {
       GetVariationParam(quic_trial_params, "disable_tls_zero_rtt"), "true");
 }
 
+bool ShouldQuicDisableGQuicZeroRtt(
+    const VariationParameters& quic_trial_params) {
+  return base::LowerCaseEqualsASCII(
+      GetVariationParam(quic_trial_params, "disable_gquic_zero_rtt"), "true");
+}
+
 int GetQuicRetransmittableOnWireTimeoutMilliseconds(
     const VariationParameters& quic_trial_params) {
   int value;
@@ -537,6 +549,9 @@ void ConfigureQuicParams(base::StringPiece quic_trial_group,
     quic_params->disable_tls_zero_rtt =
         ShouldQuicDisableTlsZeroRtt(quic_trial_params);
 
+    quic_params->disable_gquic_zero_rtt =
+        ShouldQuicDisableGQuicZeroRtt(quic_trial_params);
+
     int retransmittable_on_wire_timeout_milliseconds =
         GetQuicRetransmittableOnWireTimeoutMilliseconds(quic_trial_params);
     if (retransmittable_on_wire_timeout_milliseconds > 0) {
@@ -706,10 +721,10 @@ net::URLRequestContextBuilder::HttpCacheParams::Type ChooseCacheType() {
   // muddles the experiment data, but as this was written to be considered for
   // backport, having it behave differently than in stable would be a bigger
   // problem.
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
   if (base::mac::IsAtLeastOS10_14())
     return net::URLRequestContextBuilder::HttpCacheParams::DISK_SIMPLE;
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+#endif  // defined(OS_MAC)
 
   if (base::StartsWith(experiment_name, "ExperimentYes",
                        base::CompareCase::INSENSITIVE_ASCII)) {

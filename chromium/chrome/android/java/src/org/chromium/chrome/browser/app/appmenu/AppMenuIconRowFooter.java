@@ -22,6 +22,8 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuDelegate;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * A {@link LinearLayout} that displays a horizontal row of icons for page actions.
  */
@@ -34,6 +36,8 @@ public class AppMenuIconRowFooter extends LinearLayout implements View.OnClickLi
     private ImageButton mDownloadButton;
     private ImageButton mPageInfoButton;
     private ImageButton mReloadButton;
+
+    private ImageButton mBackwardButton;
 
     public AppMenuIconRowFooter(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -49,12 +53,21 @@ public class AppMenuIconRowFooter extends LinearLayout implements View.OnClickLi
         mBookmarkButton = findViewById(R.id.bookmark_this_page_id);
         mBookmarkButton.setOnClickListener(this);
 
+        if (ChromeApplication.isVivaldi()) {
+            mBackwardButton = findViewById(R.id.backward_menu_id);
+            if (mBackwardButton != null)
+                mBackwardButton.setOnClickListener(this);
+
+            ImageButton homeButton = findViewById(R.id.home_menu_id);
+            if (homeButton != null)
+                homeButton.setOnClickListener(this);
+        } else {
         mDownloadButton = findViewById(R.id.offline_page_id);
         mDownloadButton.setOnClickListener(this);
 
         mPageInfoButton = findViewById(R.id.info_menu_id);
         mPageInfoButton.setOnClickListener(this);
-
+        }
         mReloadButton = findViewById(R.id.reload_menu_id);
         mReloadButton.setOnClickListener(this);
 
@@ -84,6 +97,9 @@ public class AppMenuIconRowFooter extends LinearLayout implements View.OnClickLi
 
         updateBookmarkMenuItem(bookmarkBridge, currentTab);
 
+        if (ChromeApplication.isVivaldi())
+            if (mBackwardButton != null) mBackwardButton.setEnabled(currentTab.canGoBack());
+        else
         mDownloadButton.setEnabled(DownloadUtils.isAllowedToDownloadPage(currentTab));
 
         loadingStateChanged(currentTab.isLoading());
@@ -109,6 +125,10 @@ public class AppMenuIconRowFooter extends LinearLayout implements View.OnClickLi
     }
 
     private void updateBookmarkMenuItem(BookmarkBridge bookmarkBridge, Tab currentTab) {
+        // Vivaldi
+        if (currentTab.isNativePage() || currentTab.getWebContents() == null)
+            mBookmarkButton.setEnabled(false);
+        else
         mBookmarkButton.setEnabled(bookmarkBridge.isEditBookmarksEnabled());
 
         if (bookmarkBridge.hasBookmarkIdForTab(currentTab)) {

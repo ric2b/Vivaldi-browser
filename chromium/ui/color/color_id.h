@@ -31,6 +31,8 @@
     NativeTheme::kColorId_BubbleFooterBackground) \
   E(kColorButtonBackground, NativeTheme::kColorId_ButtonColor) \
   E(kColorButtonBorder, NativeTheme::kColorId_ButtonBorderColor) \
+  E(kColorButtonDisabledBorder, \
+    NativeTheme::kColorId_DisabledButtonBorderColor) \
   E(kColorButtonDisabledForeground, NativeTheme::kColorId_ButtonDisabledColor) \
   E(kColorButtonForeground, NativeTheme::kColorId_ButtonEnabledColor) \
   /* TODO(https://crbug.com/1003612): Map this to old color id. */ \
@@ -85,6 +87,7 @@
   E(kColorMenuSeparator, NativeTheme::kColorId_MenuSeparatorColor) \
   E(kColorTabContentSeparator, NativeTheme::kColorId_TabBottomBorder) \
   E(kColorTabForeground, NativeTheme::kColorId_TabTitleColorInactive) \
+  E(kColorTabSelectedBorder, NativeTheme::kColorId_TabSelectedBorderColor) \
   E(kColorTabSelectedForeground, \
     NativeTheme::kColorId_TabTitleColorActive) \
   E(kColorTableBackground, NativeTheme::kColorId_TableBackground) \
@@ -165,7 +168,7 @@
   E(kColorNativeWindowText, COLOR_WINDOWTEXT)
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #define MACOSX_COLOR_IDS \
   E(kColorTableBackgroundAlternate, \
     NativeTheme::kColorId_TableBackgroundAlternate)
@@ -175,7 +178,7 @@
 #define COLOR_IDS \
   CROSS_PLATFORM_COLOR_IDS \
   WIN_COLOR_IDS
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
 #define COLOR_IDS \
   CROSS_PLATFORM_COLOR_IDS \
   MACOSX_COLOR_IDS

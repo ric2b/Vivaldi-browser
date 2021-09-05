@@ -13,8 +13,6 @@
 #include "base/scoped_observer.h"
 #include "chrome/browser/ui/toolbar/app_menu_icon_controller.h"
 #include "chrome/browser/ui/views/frame/app_menu_button.h"
-#include "components/feature_engagement/buildflags.h"
-#include "ui/base/pointer/touch_ui_controller.h"
 #include "ui/views/view.h"
 
 class ToolbarView;
@@ -45,23 +43,10 @@ class BrowserAppMenuButton : public AppMenuButton {
   // noticeable color, and the menu item appearance may be affected.
   void SetPromoFeature(base::Optional<InProductHelpFeature> promo_feature);
 
-  // views::MenuButton:
-  void OnThemeChanged() override;
-
-  // Updates the presentation according to |severity_| and the theme provider.
-  void UpdateIcon();
-
   // Opens the app menu immediately during a drag-and-drop operation.
   // Used only in testing.
   static bool g_open_app_immediately_for_testing;
 
- protected:
-  // If the button is being used as an anchor for a promo, returns the best
-  // promo color given the current background color. Otherwise, returns the
-  // standard ToolbarButton foreground color for the given |state|.
-  SkColor GetForegroundColor(ButtonState state) const override;
-
- private:
   // AppMenuButton:
   const char* GetClassName() const override;
   bool GetDropFormats(int* formats,
@@ -77,8 +62,20 @@ class BrowserAppMenuButton : public AppMenuButton {
   std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override;
   SkColor GetInkDropBaseColor() const override;
   base::string16 GetTooltipText(const gfx::Point& p) const override;
+  void OnThemeChanged() override;
+  // Updates the presentation according to |severity_| and the theme provider.
+  void UpdateIcon() override;
 
+ protected:
+  // If the button is being used as an anchor for a promo, returns the best
+  // promo color given the current background color. Otherwise, returns the
+  // standard ToolbarButton foreground color for the given |state|.
+  SkColor GetForegroundColor(ButtonState state) const override;
+
+ private:
   void OnTouchUiChanged();
+
+  void UpdateTextAndHighlightColor();
 
   AppMenuIconController::TypeAndSeverity type_and_severity_{
       AppMenuIconController::IconType::NONE,

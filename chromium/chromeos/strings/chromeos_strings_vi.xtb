@@ -9,6 +9,7 @@
 <translation id="150962533380566081">PUK không hợp lệ.</translation>
 <translation id="1510238584712386396">Trình chạy</translation>
 <translation id="1644574205037202324">Lịch sử</translation>
+<translation id="1662989795263954667">Đã dừng – Hết mực</translation>
 <translation id="1734367976349034509">Thiết bị này do doanh nghiệp quản lý</translation>
 <translation id="1905710495812624430">Đã vượt quá số lần thử tối đa được phép.</translation>
 <translation id="1930797645656624981">Dịch vụ cung cấp phương thức nhập trên Chrome OS</translation>
@@ -34,21 +35,27 @@
 <translation id="3838338534323494292">Mật khẩu mới</translation>
 <translation id="4003259559679196451"><ph name="ENROLLMENT_DOMAIN" /> quản lý thiết bị này và có quyền truy cập vào tất cả hoạt động của người dùng, bao gồm cả các trang web đã truy cập, mật khẩu và email.</translation>
 <translation id="4003384961948020559">Không thành công – Khay đầu ra đã đầy</translation>
+<translation id="4027485274696301677"><ph name="DEVICE_TYPE" /> này do <ph name="ENROLLMENT_DOMAIN" /> quản lý. Quản trị viên có thể định cấu hình từ xa thiết bị này.</translation>
 <translation id="4034824040120875894">Máy in</translation>
 <translation id="4227825898293920515">Mật khẩu sẽ hết hạn sau <ph name="TIME" /></translation>
 <translation id="4238516577297848345">Không có lệnh in nào đang xử lý</translation>
 <translation id="428217921675623177">Các lệnh in quá 90 ngày sẽ bị xóa</translation>
+<translation id="4297501883039923494">Đã dừng – Lỗi không xác định</translation>
 <translation id="4429881212383817840">Phiếu Kerberos sẽ sớm hết hạn</translation>
 <translation id="445059817448385655">Mật khẩu cũ</translation>
 <translation id="4627232916386272576"><ph name="DOCUMENT_TITLE" />, <ph name="PRINTER_NAME" />, <ph name="CREATION_TIME" />, <ph name="PRINTED_PAGE_NUMBER" />/<ph name="TOTAL_PAGE_NUMBER" />. Hãy nhấn để hủy lệnh in.</translation>
 <translation id="467510802200863975">Mật khẩu không khớp</translation>
+<translation id="4691278870498629773">Đã dừng – Thiếu khay</translation>
 <translation id="4731797938093519117">Quyền truy cập của cha mẹ</translation>
+<translation id="4773299976671772492">Đã dừng</translation>
 <translation id="4808449224298348341">Đã hủy lệnh in <ph name="DOCUMENT_TITLE" /></translation>
 <translation id="4890353053343094602">Chọn ngay một mật khẩu mới</translation>
+<translation id="4917889632206600977">Đã dừng – Hết giấy</translation>
 <translation id="4932733599132424254">Ngày Tháng</translation>
 <translation id="5212543919916444558">Tôi không tìm thấy nội dung nào trên màn hình để có thể trợ giúp cho bạn.
 Hãy thử nhấn vào micrô để hỏi tôi bất cứ điều gì.</translation>
 <translation id="5222676887888702881">Đăng xuất</translation>
+<translation id="5267975978099728568"><ph name="DOCUMENT_TITLE" />, <ph name="PRINTER_NAME" />, <ph name="CREATION_TIME" />, <ph name="ERROR_STATUS" /></translation>
 <translation id="5317780077021120954">Lưu</translation>
 <translation id="5326394068492324457"><ph name="DOCUMENT_TITLE" />, <ph name="PRINTER_NAME" />, <ph name="CREATION_TIME" />, <ph name="COMPLETION_STATUS" /></translation>
 <translation id="5332948983412042822">Chọn ngay một mật khẩu mới</translation>
@@ -60,9 +67,12 @@ Hãy thử nhấn vào micrô để hỏi tôi bất cứ điều gì.</translat
 <translation id="6058625436358447366">Để hoàn tất, hãy nhập cả mật khẩu cũ và mật khẩu mới của bạn</translation>
 <translation id="6106186594183574873">Để hoàn tất, hãy nhập mật khẩu cũ của bạn</translation>
 <translation id="6146993107019042706">Để hoàn tất, hãy nhập mật khẩu mới của bạn</translation>
+<translation id="636850387210749493">Đăng ký doanh nghiệp</translation>
+<translation id="649050271426829538">Đã dừng – Kẹt giấy</translation>
 <translation id="6517239166834772319">Khám phá</translation>
 <translation id="6564646048574748301">Không thành công – Không thể kết nối với máy in</translation>
 <translation id="6643016212128521049">Xóa</translation>
+<translation id="6747215703636344499">Đã dừng – Khay giấy ra đã đầy</translation>
 <translation id="7162487448488904999">Thư viện</translation>
 <translation id="7274587244503383581"><ph name="PRINTED_PAGES_NUMBER" />/<ph name="TOTAL_PAGES_NUMBER" /></translation>
 <translation id="7561454561030345039">Quản trị viên của bạn quản lý thao tác này</translation>
@@ -74,6 +84,7 @@ Hãy thử nhấn vào micrô để hỏi tôi bất cứ điều gì.</translat
 <translation id="8347227221149377169">Lệnh in</translation>
 <translation id="8701136875688985581"><ph name="ENROLLMENT_DOMAIN" /> quản lý người dùng này. Miền này có thể quản lý từ xa các tùy chọn cài đặt và giám sát hoạt động của người dùng.</translation>
 <translation id="871560550817059752">Không thành công – Hết mực</translation>
+<translation id="8726019395068607495">Đã dừng – Cửa máy in đang mở</translation>
 <translation id="8747900814994928677">Xác nhận thay đổi</translation>
 <translation id="8919837981463578619">Không thành công – Thiếu khay</translation>
 <translation id="8928727111548978589">Không thành công – Hết giấy</translation>

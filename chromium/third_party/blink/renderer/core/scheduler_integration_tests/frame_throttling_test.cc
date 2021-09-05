@@ -7,8 +7,6 @@
 #include "third_party/blink/public/web/web_frame_content_dumper.h"
 #include "third_party/blink/public/web/web_hit_test_result.h"
 #include "third_party/blink/public/web/web_settings.h"
-#include "third_party/blink/renderer/bindings/core/v8/sanitize_script_errors.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -20,8 +18,10 @@
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
+#include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/core/script/classic_script.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_compositor.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_request.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_test.h"
@@ -963,8 +963,9 @@ TEST_P(FrameThrottlingTest, DumpThrottledFrame) {
   EXPECT_TRUE(frame_element->contentDocument()->View()->CanThrottleRendering());
 
   LocalFrame* local_frame = To<LocalFrame>(frame_element->ContentFrame());
-  local_frame->GetScriptController().ExecuteScriptInMainWorld(
-      "document.body.innerHTML = 'throttled'");
+  ClassicScript::CreateUnspecifiedScript(
+      ScriptSourceCode("document.body.innerHTML = 'throttled'"))
+      ->RunScript(local_frame);
   EXPECT_FALSE(Compositor().NeedsBeginFrame());
 
   // The dumped contents should not include the throttled frame.
@@ -1191,12 +1192,16 @@ TEST_P(FrameThrottlingTest, SynchronousLayoutInAnimationFrameCallback) {
       To<HTMLIFrameElement>(GetDocument().getElementById("second"));
   LocalFrame* local_frame =
       To<LocalFrame>(second_frame_element->ContentFrame());
-  local_frame->GetScriptController().ExecuteScriptInMainWorld(
-      "window.requestAnimationFrame(function() {\n"
-      "  var throttledFrame = window.parent.frames.first;\n"
-      "  throttledFrame.document.documentElement.style = 'margin: 50px';\n"
-      "  throttledFrame.document.querySelector('#d').getBoundingClientRect();\n"
-      "});\n");
+  ClassicScript::CreateUnspecifiedScript(
+      ScriptSourceCode(
+          "window.requestAnimationFrame(function() {\n"
+          "  var throttledFrame = window.parent.frames.first;\n"
+          "  throttledFrame.document.documentElement.style = 'margin: 50px';\n"
+          "  "
+          "throttledFrame.document.querySelector('#d').getBoundingClientRect();"
+          "\n"
+          "});\n"))
+      ->RunScript(local_frame);
   CompositeFrame();
 }
 
@@ -1226,9 +1231,8 @@ TEST_P(FrameThrottlingTest, AllowOneAnimationFrame) {
   LocalFrame* local_frame = To<LocalFrame>(frame_element->ContentFrame());
   v8::HandleScope scope(v8::Isolate::GetCurrent());
   v8::Local<v8::Value> result =
-      local_frame->GetScriptController().ExecuteScriptInMainWorldAndReturnValue(
-          ScriptSourceCode("window.didRaf;"), KURL(),
-          SanitizeScriptErrors::kSanitize);
+      ClassicScript::CreateUnspecifiedScript(ScriptSourceCode("window.didRaf;"))
+          ->RunScriptAndReturnValue(local_frame);
   EXPECT_TRUE(result->IsTrue());
 }
 
@@ -1410,7 +1414,7 @@ TEST_P(FrameThrottlingTest, RebuildCompositedLayerTreeOnLayerRemoval) {
     EXPECT_TRUE(
         frame_element->contentDocument()->View()->ShouldThrottleRendering());
   }
-  EXPECT_EQ(DocumentLifecycle::kCompositingClean,
+  EXPECT_EQ(DocumentLifecycle::kCompositingAssignmentsClean,
             frame_element->contentDocument()->Lifecycle().GetState());
 }
 
@@ -1528,15 +1532,15 @@ TEST_P(FrameThrottlingTest, NestedFramesInRemoteFrameHiddenAndShown) {
   child_frame_resource.Complete("");
 
   ViewportIntersectionState intersection;
-  intersection.main_frame_document_intersection = WebRect(0, 0, 100, 100);
+  intersection.main_frame_intersection = WebRect(0, 0, 100, 100);
   intersection.main_frame_viewport_size = WebSize(100, 100);
   intersection.viewport_intersection = WebRect(0, 0, 100, 100);
   LocalFrameRoot().FrameWidget()->Resize(WebSize(300, 200));
   LocalFrameRoot().FrameWidget()->SetRemoteViewportIntersection(intersection);
 
-  auto* root_document = LocalFrameRoot().GetFrame()->GetDocument();
+  auto* root_frame = LocalFrameRoot().GetFrame();
   auto* frame_document =
-      To<HTMLIFrameElement>(root_document->getElementById("frame"))
+      To<HTMLIFrameElement>(root_frame->GetDocument()->getElementById("frame"))
           ->contentDocument();
   auto* frame_view = frame_document->View();
   auto* child_document =
@@ -1548,8 +1552,17 @@ TEST_P(FrameThrottlingTest, NestedFramesInRemoteFrameHiddenAndShown) {
   EXPECT_FALSE(frame_view->CanThrottleRendering());
   EXPECT_FALSE(child_view->CanThrottleRendering());
 
-  // Hide the frame without any other change.
+  // Hide the frame without any other change. The new throttling state will not
+  // be computed until the next lifecycle update; but merely hiding the frame
+  // will not schedule an update, so we must force one for the purpose of
+  // testing.
   LocalFrameRoot().WasHidden();
+  root_frame->View()->ScheduleAnimation();
+  CompositeFrame();
+  EXPECT_EQ(root_frame->RemoteViewportIntersection(), IntRect(0, 0, 100, 100));
+  EXPECT_TRUE(root_frame->View()->CanThrottleRenderingForPropagation());
+  EXPECT_EQ(root_frame->GetOcclusionState(),
+            FrameOcclusionState::kPossiblyOccluded);
   EXPECT_TRUE(frame_view->CanThrottleRendering());
   EXPECT_TRUE(child_view->CanThrottleRendering());
   EXPECT_FALSE(Compositor().NeedsBeginFrame());
@@ -1565,6 +1578,10 @@ TEST_P(FrameThrottlingTest, NestedFramesInRemoteFrameHiddenAndShown) {
   LocalFrameRoot().WasShown();
   LocalFrameRoot().FrameWidget()->SetRemoteViewportIntersection(intersection);
   CompositeFrame();
+  EXPECT_EQ(root_frame->RemoteViewportIntersection(), IntRect(0, 0, 100, 100));
+  EXPECT_FALSE(root_frame->View()->CanThrottleRenderingForPropagation());
+  EXPECT_NE(root_frame->GetOcclusionState(),
+            FrameOcclusionState::kPossiblyOccluded);
   EXPECT_FALSE(frame_view->CanThrottleRendering());
   // The child frame's throtting status is not updated because the parent
   // document has pending visual update.

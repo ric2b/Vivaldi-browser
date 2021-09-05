@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "components/printing/common/print.mojom-forward.h"
@@ -25,17 +24,16 @@ class DictionaryValue;
 }
 
 class MockPrinter;
-struct PrintHostMsg_DidPreviewPage_Params;
-struct PrintHostMsg_DidPrintDocument_Params;
 struct PrintHostMsg_PreviewIds;
 struct PrintHostMsg_ScriptedPrint_Params;
 struct PrintMsg_PrintPages_Params;
-struct PrintMsg_Print_Params;
 
 // Extends content::MockRenderThread to know about printing
 class PrintMockRenderThread : public content::MockRenderThread {
  public:
   PrintMockRenderThread();
+  PrintMockRenderThread(const PrintMockRenderThread&) = delete;
+  PrintMockRenderThread& operator=(const PrintMockRenderThread&) = delete;
   ~PrintMockRenderThread() override;
 
   // content::RenderThread overrides.
@@ -65,25 +63,26 @@ class PrintMockRenderThread : public content::MockRenderThread {
   const std::vector<std::pair<int, uint32_t>>& print_preview_pages() const;
 #endif
 
+  MockPrinter* GetPrinter() { return printer_.get(); }
+
  private:
   // Overrides base class implementation to add custom handling for print
   bool OnMessageReceived(const IPC::Message& msg) override;
 
 #if BUILDFLAG(ENABLE_PRINTING)
   // PrintRenderFrameHelper expects default print settings.
-  void OnGetDefaultPrintSettings(PrintMsg_Print_Params* setting);
+  void OnGetDefaultPrintSettings(printing::mojom::PrintParams* setting);
 
   // PrintRenderFrameHelper expects final print settings from the user.
   void OnScriptedPrint(const PrintHostMsg_ScriptedPrint_Params& params,
                        PrintMsg_PrintPages_Params* settings);
 
-  void OnDidGetPrintedPagesCount(int cookie, int number_pages);
-  void OnDidPrintDocument(const PrintHostMsg_DidPrintDocument_Params& params,
+  void OnDidPrintDocument(const printing::mojom::DidPrintDocumentParams& params,
                           IPC::Message* reply_msg);
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   void OnDidStartPreview(const printing::mojom::DidStartPreviewParams& params,
                          const PrintHostMsg_PreviewIds& ids);
-  void OnDidPreviewPage(const PrintHostMsg_DidPreviewPage_Params& params,
+  void OnDidPreviewPage(const printing::mojom::DidPreviewPageParams& params,
                         const PrintHostMsg_PreviewIds& ids);
   void OnCheckForCancel(const PrintHostMsg_PreviewIds& ids, bool* cancel);
 #endif
@@ -112,8 +111,6 @@ class PrintMockRenderThread : public content::MockRenderThread {
 #endif
 
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
-
-  DISALLOW_COPY_AND_ASSIGN(PrintMockRenderThread);
 };
 
 #endif  // COMPONENTS_PRINTING_TEST_PRINT_MOCK_RENDER_THREAD_H_

@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "ash/assistant/model/assistant_alarm_timer_model_observer.h"
-#include "ash/public/mojom/assistant_controller.mojom.h"
 #include "base/time/time.h"
 
 namespace ash {
@@ -74,20 +73,6 @@ const AssistantTimer* AssistantAlarmTimerModel::GetTimerById(
     const std::string& id) const {
   auto it = timers_.find(id);
   return it != timers_.end() ? it->second.get() : nullptr;
-}
-
-void AssistantAlarmTimerModel::Tick() {
-  if (timers_.empty())
-    return;
-
-  for (auto& pair : timers_) {
-    AssistantTimer* timer = pair.second.get();
-    if (timer->state == AssistantTimerState::kPaused)
-      continue;
-
-    timer->remaining_time = timer->fire_time - base::Time::Now();
-    NotifyTimerUpdated(*timer);
-  }
 }
 
 void AssistantAlarmTimerModel::NotifyTimerAdded(const AssistantTimer& timer) {

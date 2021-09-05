@@ -10,7 +10,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
@@ -25,6 +24,7 @@
 #include "components/omnibox/browser/autocomplete_provider_listener.h"
 #include "components/omnibox/browser/autocomplete_result.h"
 
+class ClipboardProvider;
 class DocumentProvider;
 class HistoryURLProvider;
 class KeywordProvider;
@@ -85,6 +85,8 @@ class AutocompleteController : public AutocompleteProviderListener,
       std::unique_ptr<AutocompleteProviderClient> provider_client,
       int provider_types);
   ~AutocompleteController() override;
+  AutocompleteController(const AutocompleteController&) = delete;
+  AutocompleteController& operator=(const AutocompleteController&) = delete;
 
   // UI elements that need to be notified when the results get updated should
   // be added as an |observer|. So far there is no need for a RemoveObserver
@@ -159,6 +161,7 @@ class AutocompleteController : public AutocompleteProviderListener,
   }
   KeywordProvider* keyword_provider() const { return keyword_provider_; }
   SearchProvider* search_provider() const { return search_provider_; }
+  ClipboardProvider* clipboard_provider() const { return clipboard_provider_; }
 
   const AutocompleteInput& input() const { return input_; }
   const AutocompleteResult& result() const { return result_; }
@@ -175,7 +178,9 @@ class AutocompleteController : public AutocompleteProviderListener,
                            RedundantKeywordsIgnoredInResult);
   FRIEND_TEST_ALL_PREFIXES(AutocompleteProviderTest, UpdateAssistedQueryStats);
   FRIEND_TEST_ALL_PREFIXES(OmniboxPopupContentsViewTest,
-                           EmitTextChangedAccessibilityEvent);
+                           EmitAccessibilityEvents);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupContentsViewTest,
+                           EmitAccessibilityEventsOnButtonFocusHint);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewTest, DoesNotUpdateAutocompleteOnBlur);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, CloseOmniboxPopupOnTextDrag);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, FriendlyAccessibleLabel);
@@ -194,6 +199,10 @@ class AutocompleteController : public AutocompleteProviderListener,
                            PopupStepSelectionWithHiddenGroupIds);
   FRIEND_TEST_ALL_PREFIXES(OmniboxPopupModelTest,
                            PopupInlineAutocompleteAndTemporaryText);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupModelSuggestionButtonRowTest,
+                           PopupStepSelectionWithButtonRow);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupModelSuggestionButtonRowTest,
+                           PopupStepSelectionWithButtonRowAndKeywordButton);
   FRIEND_TEST_ALL_PREFIXES(OmniboxPopupContentsViewTest,
                            EmitSelectedChildrenChangedAccessibilityEvent);
 
@@ -289,6 +298,8 @@ class AutocompleteController : public AutocompleteProviderListener,
 
   OnDeviceHeadProvider* on_device_head_provider_;
 
+  ClipboardProvider* clipboard_provider_;
+
   // Input passed to Start.
   AutocompleteInput input_;
 
@@ -338,8 +349,6 @@ class AutocompleteController : public AutocompleteProviderListener,
   bool search_service_worker_signal_sent_;
 
   TemplateURLService* template_url_service_;
-
-  DISALLOW_COPY_AND_ASSIGN(AutocompleteController);
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_CONTROLLER_H_

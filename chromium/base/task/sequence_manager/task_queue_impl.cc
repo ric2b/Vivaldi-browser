@@ -297,11 +297,6 @@ void TaskQueueImpl::PostImmediateTaskImpl(PostedTask task,
     any_thread_.immediate_incoming_queue.push_back(Task(
         std::move(task), delayed_run_time, sequence_number, sequence_number));
 
-    if (any_thread_.on_task_ready_handler) {
-      any_thread_.on_task_ready_handler.Run(
-          any_thread_.immediate_incoming_queue.back(), &lazy_now);
-    }
-
 #if DCHECK_IS_ON()
     any_thread_.immediate_incoming_queue.back().cross_thread_ =
         (current_thread == TaskQueueImpl::CurrentThread::kNotMainThread);
@@ -311,6 +306,10 @@ void TaskQueueImpl::PostImmediateTaskImpl(PostedTask task,
         &any_thread_.immediate_incoming_queue.back(), name_);
     MaybeReportIpcTaskQueuedFromAnyThreadLocked(
         &any_thread_.immediate_incoming_queue.back(), name_);
+    if (!any_thread_.on_task_posted_handler.is_null()) {
+      any_thread_.on_task_posted_handler.Run(
+          any_thread_.immediate_incoming_queue.back());
+    }
 
     // If this queue was completely empty, then the SequenceManager needs to be
     // informed so it can reload the work queue and add us to the
@@ -583,9 +582,6 @@ void TaskQueueImpl::MoveReadyDelayedTasksToWorkQueue(LazyNow* lazy_now) {
     ActivateDelayedFenceIfNeeded(GetTaskDesiredExecutionTime(*task));
     DCHECK(!task->enqueue_order_set());
     task->set_enqueue_order(sequence_manager_->GetNextSequenceNumber());
-
-    if (main_thread_only().on_task_ready_handler)
-      main_thread_only().on_task_ready_handler.Run(*task, lazy_now);
 
     delayed_work_queue_task_pusher.Push(task);
     main_thread_only().delayed_incoming_queue.pop();
@@ -888,10 +884,6 @@ bool TaskQueueImpl::HasActiveFence() {
   return !!main_thread_only().current_fence;
 }
 
-EnqueueOrder TaskQueueImpl::GetEnqueueOrderAtWhichWeBecameUnblocked() const {
-  return main_thread_only().enqueue_order_at_which_we_became_unblocked;
-}
-
 bool TaskQueueImpl::CouldTaskRun(EnqueueOrder enqueue_order) const {
   if (!IsQueueEnabled())
     return false;
@@ -1157,16 +1149,6 @@ bool TaskQueueImpl::HasPendingImmediateWorkLocked() {
          !any_thread_.immediate_incoming_queue.empty();
 }
 
-void TaskQueueImpl::SetOnTaskReadyHandler(
-    TaskQueueImpl::OnTaskReadyHandler handler) {
-  DCHECK(should_notify_observers_ || handler.is_null());
-  main_thread_only().on_task_ready_handler = handler;
-
-  base::internal::CheckedAutoLock lock(any_thread_lock_);
-  DCHECK_NE(!!any_thread_.on_task_ready_handler, !!handler);
-  any_thread_.on_task_ready_handler = std::move(handler);
-}
-
 void TaskQueueImpl::SetOnTaskStartedHandler(
     TaskQueueImpl::OnTaskStartedHandler handler) {
   DCHECK(should_notify_observers_ || handler.is_null());
@@ -1197,6 +1179,12 @@ void TaskQueueImpl::OnTaskCompleted(const Task& task,
 bool TaskQueueImpl::RequiresTaskTiming() const {
   return !main_thread_only().on_task_started_handler.is_null() ||
          !main_thread_only().on_task_completed_handler.is_null();
+}
+
+void TaskQueueImpl::SetOnTaskPostedHandler(OnTaskPostedHandler handler) {
+  DCHECK(should_notify_observers_ || handler.is_null());
+  base::internal::CheckedAutoLock lock(any_thread_lock_);
+  any_thread_.on_task_posted_handler = std::move(handler);
 }
 
 bool TaskQueueImpl::IsUnregistered() const {

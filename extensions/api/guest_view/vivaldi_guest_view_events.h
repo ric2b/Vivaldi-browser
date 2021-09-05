@@ -20,6 +20,7 @@
     {webview::kEventContentAllowed, events::VIVALDI_EXTENSION_EVENT},
     {webview::kEventContentBlocked, events::VIVALDI_EXTENSION_EVENT},
     {webview::kEventWebContentsCreated, events::VIVALDI_EXTENSION_EVENT},
+    {webview::kEventWindowBlocked, events::VIVALDI_EXTENSION_EVENT},
 // clang-format on
 
 // };

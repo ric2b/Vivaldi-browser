@@ -13,6 +13,7 @@
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "base/macros.h"
+#include "chrome/browser/apps/app_service/app_service_metrics.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
@@ -64,7 +65,6 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
-#include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "ui/aura/window.h"
 #include "ui/base/base_window.h"
 #include "ui/base/page_transition_types.h"
@@ -112,8 +112,6 @@ constexpr std::pair<arc::mojom::ChromePage, const char*> kOSSettingsMapping[] =
       chromeos::settings::mojom::kPrintingDetailsSubpagePath},
      {ChromePage::DATETIME, chromeos::settings::mojom::kDateAndTimeSectionPath},
      {ChromePage::DISPLAY, chromeos::settings::mojom::kDisplaySubpagePath},
-     {ChromePage::DOWNLOADEDCONTENT,
-      chromeos::settings::mojom::kDlcSubpagePath},
      {ChromePage::ETHERNET,
       chromeos::settings::mojom::kEthernetDetailsSubpagePath},
      {ChromePage::EXTERNALSTORAGE,
@@ -130,8 +128,12 @@ constexpr std::pair<arc::mojom::ChromePage, const char*> kOSSettingsMapping[] =
       chromeos::settings::mojom::kLanguagesAndInputSectionPath},
      {ChromePage::OSLANGUAGESDETAILS,
       chromeos::settings::mojom::kLanguagesAndInputDetailsSubpagePath},
+     {ChromePage::OSLANGUAGESINPUT,
+      chromeos::settings::mojom::kInputSubpagePath},
      {ChromePage::OSLANGUAGESINPUTMETHODS,
       chromeos::settings::mojom::kManageInputMethodsSubpagePath},
+     {ChromePage::OSLANGUAGESLANGUAGES,
+      chromeos::settings::mojom::kLanguagesSubpagePath},
      {ChromePage::OSLANGUAGESSMARTINPUTS,
       chromeos::settings::mojom::kSmartInputsSubpagePath},
      {ChromePage::LOCKSCREEN,
@@ -193,6 +195,7 @@ constexpr std::pair<arc::mojom::ChromePage, const char*> kAboutPagesMapping[] =
      {ChromePage::ABOUTHISTORY, "about:history"}};
 
 constexpr arc::mojom::ChromePage kDeprecatedPages[] = {
+    ChromePage::DEPRECATED_DOWNLOADEDCONTENT,
     ChromePage::DEPRECATED_PLUGINVMDETAILS,
     ChromePage::DEPRECATED_CROSTINIDISKRESIZE};
 
@@ -347,7 +350,6 @@ void ChromeNewWindowClient::OpenFileManager() {
   Profile* const profile = ProfileManager::GetActiveUserProfile();
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile);
-  DCHECK(proxy);
   proxy->AppRegistryCache().ForOneApp(
       file_manager::kFileManagerAppId, [proxy](const apps::AppUpdate& update) {
         if (update.Readiness() == apps::mojom::Readiness::kReady) {
@@ -481,7 +483,6 @@ void ChromeNewWindowClient::OpenWebAppFromArc(const GURL& url) {
 
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile);
-  DCHECK(proxy);
   proxy->LaunchAppWithUrl(*app_id, event_flags, url,
                           apps::mojom::LaunchSource::kFromArc,
                           display::kInvalidDisplayId);
@@ -510,20 +511,17 @@ void ChromeNewWindowClient::OpenWebAppFromArc(const GURL& url) {
 void ChromeNewWindowClient::OpenArcCustomTab(
     const GURL& url,
     int32_t task_id,
-    int32_t surface_id,
-    int32_t top_margin,
     arc::mojom::IntentHelperHost::OnOpenCustomTabCallback callback) {
   GURL url_to_open = ConvertArcUrlToExternalFileUrlIfNeeded(url);
   Profile* profile = ProfileManager::GetActiveUserProfile();
 
   aura::Window* arc_window = arc::GetArcWindow(task_id);
   if (!arc_window) {
-    std::move(callback).Run(nullptr);
+    std::move(callback).Run(mojo::NullRemote());
     return;
   }
 
-  auto custom_tab =
-      std::make_unique<arc::CustomTab>(arc_window, surface_id, top_margin);
+  auto custom_tab = std::make_unique<arc::CustomTab>(arc_window);
   auto web_contents = arc::CreateArcCustomTabWebContents(profile, url);
 
   // |custom_tab_browser| will be destroyed when its tab strip becomes empty,
@@ -538,9 +536,9 @@ void ChromeNewWindowClient::OpenArcCustomTab(
   // TODO(crbug.com/955171): Remove this temporary conversion to InterfacePtr
   // once OnOpenCustomTab from //components/arc/mojom/intent_helper.mojom could
   // take pending_remote directly. Refer to crrev.com/c/1868870.
-  mojo::InterfacePtr<arc::mojom::CustomTabSession> custom_tab_ptr(
+  auto custom_tab_remote(
       CustomTabSessionImpl::Create(std::move(custom_tab), custom_tab_browser));
-  std::move(callback).Run(std::move(custom_tab_ptr));
+  std::move(callback).Run(std::move(custom_tab_remote));
 }
 
 content::WebContents* ChromeNewWindowClient::OpenUrlImpl(
@@ -624,6 +622,9 @@ void ChromeNewWindowClient::LaunchCameraApp(const std::string& queries,
   apps::LaunchPlatformAppWithUrl(profile, extension,
                                  /*handler_id=*/std::string(), url,
                                  /*referrer_url=*/GURL());
+
+  apps::RecordAppLaunch(extension_misc::kCameraAppId,
+                        apps::mojom::LaunchSource::kFromArc);
 }
 
 void ChromeNewWindowClient::CloseCameraApp() {

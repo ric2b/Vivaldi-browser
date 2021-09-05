@@ -20,17 +20,6 @@ namespace base {
 
 namespace {
 
-// Jank analysis uncovered that Windows uses native ::PeekMessage calls as an
-// opportunity to yield to other threads according to some heuristics (e.g.
-// presumably when there's no input but perhaps a single WM_USER message posted
-// later than another thread was readied). MessagePumpForUI doesn't intend to
-// give this opportunity to the kernel when invoking ::PeekMessage however. This
-// experiment attempts to regain control of the pump (behind an experiment
-// because of how fragile this code is -- experiments help external contributors
-// diagnose regressions, e.g. crbug.com/1078475).
-const Feature kPreventMessagePumpHangs{"PreventMessagePumpHangs",
-                                       FEATURE_DISABLED_BY_DEFAULT};
-
 enum MessageLoopProblems {
   MESSAGE_POST_ERROR,
   COMPLETION_POST_ERROR,
@@ -510,7 +499,7 @@ bool MessagePumpForUI::ProcessMessageHelper(const MSG& msg) {
 
   TRACE_EVENT1("base,toplevel", "MessagePumpForUI::ProcessMessageHelper",
                "message", msg.message);
-  if (WM_QUIT == msg.message) {
+  if (msg.message == WM_QUIT) {
     // WM_QUIT is the standard way to exit a ::GetMessage() loop. Our
     // MessageLoop has its own quit mechanism, so WM_QUIT should only terminate
     // it if |enable_wm_quit_| is explicitly set (and is generally unexpected
@@ -552,32 +541,28 @@ bool MessagePumpForUI::ProcessPumpReplacementMessage() {
   // that peeked replacement. Note that the re-post of kMsgHaveWork may be
   // asynchronous to this thread!!
 
-  // Bump the work id since ::PeekMessage may process internal events.
-  state_->delegate->BeforeDoInternalWork();
-
-  // The system headers don't define this; it's equivalent to PM_QS_INPUT |
-  // PM_QS_PAINT | PM_QS_POSTMESSAGE. i.e., anything but QS_SENDMESSAGE. Since
-  // we're looking to replace our kMsgHaveWork posted message, we can ignore
-  // sent messages (which never compete with posted messages in the initial
-  // PeekMessage call).
-  constexpr auto PM_QS_ALLEVENTS = QS_ALLEVENTS << 16;
-  static_assert(
-      PM_QS_ALLEVENTS == (PM_QS_INPUT | PM_QS_PAINT | PM_QS_POSTMESSAGE), "");
-  static_assert((PM_QS_ALLEVENTS & PM_QS_SENDMESSAGE) == 0, "");
-
   MSG msg;
   bool have_message = false;
   {
+    // Bump the work id since ::PeekMessage may process internal events.
+    state_->delegate->BeforeDoInternalWork();
+
     TRACE_EVENT0("base",
                  "MessagePumpForUI::ProcessPumpReplacementMessage PeekMessage");
 
-    static const auto peek_replacement_message_modifier =
-        base::FeatureList::IsEnabled(kPreventMessagePumpHangs) ? PM_QS_ALLEVENTS
-                                                               : 0;
+    // The system headers don't define PM_QS_ALLEVENTS; it's equivalent to
+    // PM_QS_INPUT | PM_QS_PAINT | PM_QS_POSTMESSAGE. i.e., anything but
+    // QS_SENDMESSAGE.
+    // Since we're looking to replace our kMsgHaveWork posted message, we can
+    // ignore sent messages (which never compete with posted messages in the
+    // initial PeekMessage call).
+    constexpr auto PM_QS_ALLEVENTS = QS_ALLEVENTS << 16;
+    static_assert(
+        PM_QS_ALLEVENTS == (PM_QS_INPUT | PM_QS_PAINT | PM_QS_POSTMESSAGE), "");
+    static_assert((PM_QS_ALLEVENTS & PM_QS_SENDMESSAGE) == 0, "");
 
-    have_message =
-        ::PeekMessage(&msg, nullptr, 0, 0,
-                      PM_REMOVE | peek_replacement_message_modifier) != FALSE;
+    have_message = ::PeekMessage(&msg, nullptr, 0, 0,
+                                 PM_REMOVE | PM_QS_ALLEVENTS) != FALSE;
   }
 
   // Expect no message or a message different than kMsgHaveWork.
@@ -592,7 +577,7 @@ bool MessagePumpForUI::ProcessPumpReplacementMessage() {
   if (!have_message)
     return false;
 
-  if (WM_QUIT == msg.message) {
+  if (msg.message == WM_QUIT) {
     // If we're in a nested ::GetMessage() loop then we must let that loop see
     // the WM_QUIT in order for it to exit. If we're in DoRunLoop then the re-
     // posted WM_QUIT will be either ignored, or handled, by
@@ -610,6 +595,20 @@ bool MessagePumpForUI::ProcessPumpReplacementMessage() {
 
     // The return value is mostly irrelevant but return true like we would after
     // processing a QuitClosure() task.
+    return true;
+  } else if (msg.message == WM_TIMER &&
+             msg.wParam == reinterpret_cast<UINT_PTR>(this)) {
+    // This happens when a native nested loop invokes HandleWorkMessage() =>
+    // ProcessPumpReplacementMessage() which finds the WM_TIMER message
+    // installed by ScheduleNativeTimer(). That message needs to be handle
+    // directly as handing it off to ProcessMessageHelper() below would cause an
+    // unnecessary BeforeDoInternalWork() which may incorrectly lead the
+    // Delegate's heuristics to conclude that the DoWork() in
+    // HandleTimerMessage() is nested inside a native task. It's also safe to
+    // skip the below ScheduleWork() as it is not mandatory before invoking
+    // DoWork() and HandleTimerMessage() handles re-installing the necessary
+    // followup messages.
+    HandleTimerMessage();
     return true;
   }
 

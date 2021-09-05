@@ -8,6 +8,7 @@ import android.view.View;
 
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -16,7 +17,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -87,12 +88,8 @@ public class AutofillTest {
         }
 
         public void waitForCallback() {
-            CriteriaHelper.pollInstrumentationThread(new Criteria() {
-                @Override
-                public boolean isSatisfied() {
-                    return mGotPopupSelection.get();
-                }
-            }, CALLBACK_TIMEOUT_MS, CHECK_INTERVAL_MS);
+            CriteriaHelper.pollInstrumentationThread(
+                    mGotPopupSelection::get, CALLBACK_TIMEOUT_MS, CHECK_INTERVAL_MS);
         }
 
         @Override
@@ -106,24 +103,24 @@ public class AutofillTest {
 
     private AutofillSuggestion[] createTwoAutofillSuggestionArray() {
         return new AutofillSuggestion[] {
-                new AutofillSuggestion("Sherlock Holmes", "221B Baker Street", DropdownItem.NO_ICON,
-                        false, 42, false, false, false),
-                new AutofillSuggestion("Arthur Dent", "West Country", DropdownItem.NO_ICON,
-                        false, 43, false, false, false),
+                new AutofillSuggestion("Sherlock Holmes", "221B Baker Street", /*itemTag=*/"",
+                        DropdownItem.NO_ICON, false, 42, false, false, false),
+                new AutofillSuggestion("Arthur Dent", "West Country", /*itemTag=*/"",
+                        DropdownItem.NO_ICON, false, 43, false, false, false),
         };
     }
 
     private AutofillSuggestion[] createFiveAutofillSuggestionArray() {
         return new AutofillSuggestion[] {
-                new AutofillSuggestion("Sherlock Holmes", "221B Baker Street", DropdownItem.NO_ICON,
-                        false, 42, false, false, false),
-                new AutofillSuggestion("Arthur Dent", "West Country", DropdownItem.NO_ICON,
-                        false, 43, false, false, false),
-                new AutofillSuggestion("Arthos", "France", DropdownItem.NO_ICON,
+                new AutofillSuggestion("Sherlock Holmes", "221B Baker Street", /*itemTag=*/"",
+                        DropdownItem.NO_ICON, false, 42, false, false, false),
+                new AutofillSuggestion("Arthur Dent", "West Country", /*itemTag=*/"",
+                        DropdownItem.NO_ICON, false, 43, false, false, false),
+                new AutofillSuggestion("Arthos", "France", /*itemTag=*/"", DropdownItem.NO_ICON,
                         false, 44, false, false, false),
-                new AutofillSuggestion("Porthos", "France", DropdownItem.NO_ICON,
+                new AutofillSuggestion("Porthos", "France", /*itemTag=*/"", DropdownItem.NO_ICON,
                         false, 45, false, false, false),
-                new AutofillSuggestion("Aramis", "France", DropdownItem.NO_ICON,
+                new AutofillSuggestion("Aramis", "France", /*itemTag=*/"", DropdownItem.NO_ICON,
                         false, 46, false, false, false),
         };
     }
@@ -133,11 +130,9 @@ public class AutofillTest {
                 ()
                         -> mAutofillPopup.filterAndShow(
                                 suggestions, /* isRtl= */ false, /* isRefresh= */ false));
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return mAutofillPopup.getListView().getChildCount() > 0;
-            }
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            Criteria.checkThat(
+                    mAutofillPopup.getListView().getChildCount(), Matchers.greaterThan(0));
         });
     }
 

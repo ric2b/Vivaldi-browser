@@ -22,18 +22,20 @@
 #include "chrome/browser/lookalikes/lookalike_url_controller_client.h"
 #include "chrome/browser/lookalikes/lookalike_url_service.h"
 #include "chrome/browser/lookalikes/lookalike_url_tab_storage.h"
-#include "chrome/browser/prerender/prerender_contents.h"
+#include "chrome/browser/prerender/chrome_prerender_contents_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/reputation/safety_tips_config.h"
 #include "chrome/common/chrome_features.h"
 #include "components/lookalikes/core/features.h"
+#include "components/lookalikes/core/lookalike_url_ui_util.h"
 #include "components/lookalikes/core/lookalike_url_util.h"
+#include "components/prerender/browser/prerender_contents.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "components/url_formatter/spoof_checks/top_domains/top500_domains.h"
 #include "components/url_formatter/spoof_checks/top_domains/top_domain_util.h"
 #include "content/public/browser/navigation_handle.h"
-#include "third_party/blink/public/mojom/referrer.mojom.h"
+#include "third_party/blink/public/mojom/loader/referrer.mojom.h"
 
 namespace {
 
@@ -136,15 +138,26 @@ ThrottleCheckResult LookalikeUrlNavigationThrottle::HandleThrottleRequest(
     return content::NavigationThrottle::PROCEED;
   }
 
-  // If the URL is in the component updater allowlist, don't show any warning.
+  // Fetch the component allowlist.
   const auto* proto = GetSafetyTipsRemoteConfigProto();
-  if (proto &&
-      IsUrlAllowlistedBySafetyTipsComponent(proto, url.GetWithEmptyPath())) {
+
+  // When there's no proto (like at browser start), fail-safe and don't block.
+  if (!proto) {
     return content::NavigationThrottle::PROCEED;
   }
 
-  // If the URL is in the allowlist, don't show any warning.
+  // If the URL is in the component allowlist, don't show any warning.
+  if (IsUrlAllowlistedBySafetyTipsComponent(proto, url.GetWithEmptyPath())) {
+    return content::NavigationThrottle::PROCEED;
+  }
+
+  // If the URL is in the local temporary allowlist, don't show any warning.
   if (tab_storage->IsDomainAllowed(url.host())) {
+    return content::NavigationThrottle::PROCEED;
+  }
+
+  // If the host is allowlisted by policy, don't show any warning.
+  if (IsAllowedByEnterprisePolicy(profile_->GetPrefs(), url)) {
     return content::NavigationThrottle::PROCEED;
   }
 
@@ -254,7 +267,8 @@ LookalikeUrlNavigationThrottle::MaybeCreateNavigationThrottle(
     content::NavigationHandle* navigation_handle) {
   // If the tab is being prerendered, stop here before it breaks metrics
   content::WebContents* web_contents = navigation_handle->GetWebContents();
-  if (prerender::PrerenderContents::FromWebContents(web_contents)) {
+  if (prerender::ChromePrerenderContentsDelegate::FromWebContents(
+          web_contents)) {
     return nullptr;
   }
 
@@ -276,18 +290,6 @@ void LookalikeUrlNavigationThrottle::PerformChecksDeferred(
   }
 
   CancelDeferredNavigation(result);
-}
-
-bool ShouldBlockBySpoofCheckResult(
-    url_formatter::IDNSpoofChecker::Result spoof_check_result) {
-  // Here, only a subset of spoof checks that cause an IDN to fallback to
-  // punycode are configured to show an interstitial.
-  return spoof_check_result ==
-             url_formatter::IDNSpoofChecker::Result::kUnsafeMiddleDot ||
-         spoof_check_result ==
-             url_formatter::IDNSpoofChecker::Result::kICUSpoofChecks ||
-         spoof_check_result ==
-             url_formatter::IDNSpoofChecker::Result::kTLDSpecificCharacters;
 }
 
 ThrottleCheckResult LookalikeUrlNavigationThrottle::PerformChecks(
@@ -361,7 +363,7 @@ ThrottleCheckResult LookalikeUrlNavigationThrottle::PerformChecks(
       return ShowInterstitial(suggested_url, url, source_id, match_type);
     }
     // Interstitial normally records UKM, but still record when it's not shown.
-    LookalikeUrlBlockingPage::RecordUkmEvent(
+    RecordUkmForLookalikeUrlBlockingPage(
         source_id, match_type,
         LookalikeUrlBlockingPageUserAction::kInterstitialNotShown);
     return content::NavigationThrottle::PROCEED;
@@ -369,8 +371,7 @@ ThrottleCheckResult LookalikeUrlNavigationThrottle::PerformChecks(
 
   if (base::FeatureList::IsEnabled(
           lookalikes::features::kLookalikeInterstitialForPunycode) &&
-      ShouldBlockBySpoofCheckResult(
-          navigated_domain.idn_result.spoof_check_result)) {
+      ShouldBlockBySpoofCheckResult(navigated_domain)) {
     match_type = LookalikeUrlMatchType::kFailedSpoofChecks;
     RecordUMAFromMatchType(match_type);
     return ShowInterstitial(GURL(), url, source_id, match_type);

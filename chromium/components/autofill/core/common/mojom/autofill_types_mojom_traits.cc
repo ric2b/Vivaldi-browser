@@ -168,8 +168,6 @@ bool StructTraits<autofill::mojom::FormFieldDataPredictionsDataView,
                   autofill::FormFieldDataPredictions>::
     Read(autofill::mojom::FormFieldDataPredictionsDataView data,
          autofill::FormFieldDataPredictions* out) {
-  if (!data.ReadField(&out->field))
-    return false;
   if (!data.ReadSignature(&out->signature))
     return false;
   if (!data.ReadHeuristicType(&out->heuristic_type))
@@ -233,7 +231,6 @@ bool StructTraits<autofill::mojom::PasswordFormFillDataDataView,
 
   out->uses_account_store = data.uses_account_store();
   out->wait_for_username = data.wait_for_username();
-  out->has_renderer_ids = data.has_renderer_ids();
   out->username_may_use_prefilled_placeholder =
       data.username_may_use_prefilled_placeholder();
 
@@ -282,8 +279,6 @@ bool StructTraits<
       !data.ReadSubmissionEvent(&out->submission_event))
     return false;
 
-  out->username_marked_by_site = data.username_marked_by_site();
-
   if (!data.ReadUsernameValue(&out->username_value) ||
       !data.ReadAllPossibleUsernames(&out->all_possible_usernames) ||
       !data.ReadAllPossiblePasswords(&out->all_possible_passwords) ||
@@ -297,8 +292,6 @@ bool StructTraits<
       !data.ReadNewPasswordValue(&out->new_password_value))
     return false;
 
-  out->new_password_marked_by_site = data.new_password_marked_by_site();
-
   if (!data.ReadConfirmationPasswordElement(
           &out->confirmation_password_element))
     return false;
@@ -307,7 +300,7 @@ bool StructTraits<
       !data.ReadDateSynced(&out->date_synced))
     return false;
 
-  out->blacklisted_by_user = data.blacklisted_by_user();
+  out->blocked_by_user = data.blocked_by_user();
 
   if (!data.ReadType(&out->type))
     return false;

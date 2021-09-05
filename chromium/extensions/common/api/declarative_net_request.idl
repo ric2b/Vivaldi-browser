@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 // The <code>chrome.declarativeNetRequest</code> API is used to block or modify
-// network requests by specifying declarative rules.
+// network requests by specifying declarative rules. This lets extensions
+// modify network requests without intercepting them and viewing their content,
+// thus providing more privacy.
 [generate_error_messages]
 namespace declarativeNetRequest {
   // This describes the resource type of the network request.
@@ -34,13 +36,14 @@ namespace declarativeNetRequest {
   };
 
   // This describes the possible operations for a "modifyHeaders" rule.
-  // TODO(crbug.com/947591): Add documentation once implementation is complete.
-  [nodoc]
   enum HeaderOperation {
     // Adds a new entry for the specified header. This operation is not
     // supported for request headers.
     append,
+    // Sets a new value for the specified header, removing any existing headers
+    // with the same name.
     set,
+    // Removes all entries for the specified header.
     remove
   };
 
@@ -57,9 +60,6 @@ namespace declarativeNetRequest {
     // or ftp.
     upgradeScheme,
     // Modify request/response headers from the network request.
-    // TODO(crbug.com/947591): Add documentation once implementation is
-    // complete.
-    [nodoc]
     modifyHeaders,
     // Allow all requests within a frame hierarchy, including the frame request
     // itself.
@@ -233,11 +233,15 @@ namespace declarativeNetRequest {
     DomainType? domainType;
   };
 
-  // TODO(crbug.com/947591): Add documentation once implementation is complete.
-  [nodoc]
   dictionary ModifyHeaderInfo {
+    // The name of the header to be modified.
     DOMString header;
+
+    // The operation to be performed on a header.
     HeaderOperation operation;
+
+    // The new value for the header. Must be specified for <code>append</code>
+    // and <code>set</code> operations.
     DOMString? value;
   };
 
@@ -252,16 +256,10 @@ namespace declarativeNetRequest {
 
     // The request headers to modify for the request. Only valid if
     // RuleActionType is "modifyHeaders".
-    // TODO(crbug.com/947591): Add documentation once implementation is
-    // complete.
-    [nodoc]
     ModifyHeaderInfo[]? requestHeaders;
 
     // The response headers to modify for the request. Only valid if
     // RuleActionType is "modifyHeaders".
-    // TODO(crbug.com/947591): Add documentation once implementation is
-    // complete.
-    [nodoc]
     ModifyHeaderInfo[]? responseHeaders;
   };
 
@@ -358,6 +356,15 @@ namespace declarativeNetRequest {
 
     // Details about the request for which the rule was matched.
     RequestDetails request;
+  };
+
+  [nodoc]
+  dictionary DNRInfo {
+    Ruleset[] rule_resources;
+  };
+
+  dictionary ManifestKeys {
+    DNRInfo declarative_net_request;
   };
 
   callback EmptyCallback = void();

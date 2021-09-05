@@ -21,6 +21,7 @@ import android.view.View;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -38,22 +39,20 @@ import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ShortcutHelper;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
 import org.chromium.chrome.browser.engagement.SiteEngagementService;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
-import org.chromium.chrome.browser.infobar.InfoBarContainer.InfoBarAnimationListener;
 import org.chromium.chrome.browser.infobar.InstallableAmbientBadgeInfoBar;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabUtils;
-import org.chromium.chrome.browser.ui.messages.infobar.InfoBar;
-import org.chromium.chrome.browser.ui.messages.infobar.InfoBarUiItem;
 import org.chromium.chrome.browser.webapps.WebappDataStorage;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -62,6 +61,9 @@ import org.chromium.chrome.test.util.InfoBarUtil;
 import org.chromium.chrome.test.util.browser.TabLoadObserver;
 import org.chromium.chrome.test.util.browser.TabTitleObserver;
 import org.chromium.chrome.test.util.browser.webapps.WebappTestPage;
+import org.chromium.components.infobars.InfoBar;
+import org.chromium.components.infobars.InfoBarAnimationListener;
+import org.chromium.components.infobars.InfoBarUiItem;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
@@ -199,6 +201,7 @@ public class AppBannerManagerTest {
         ThreadUtils.runOnUiThreadBlocking(
                 () -> { AppBannerManager.setAppDetailsDelegate(mDetailsDelegate); });
 
+        AppBannerManager.ignoreChromeChannelForTesting();
         AppBannerManager.setTotalEngagementForTesting(10);
         mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         mUiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
@@ -222,12 +225,7 @@ public class AppBannerManagerTest {
     }
 
     private void waitForBannerManager(Tab tab) {
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return !getAppBannerManager(tab).isRunningForTesting();
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> !getAppBannerManager(tab).isRunningForTesting());
     }
 
     private void navigateToUrlAndWaitForBannerManager(
@@ -239,26 +237,21 @@ public class AppBannerManagerTest {
 
     private void waitUntilAppDetailsRetrieved(
             ChromeActivityTestRule<? extends ChromeActivity> rule, final int numExpected) {
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                AppBannerManager manager = getAppBannerManager(rule.getActivity().getActivityTab());
-                return mDetailsDelegate.mNumRetrieved == numExpected
-                        && !manager.isRunningForTesting();
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            AppBannerManager manager = getAppBannerManager(rule.getActivity().getActivityTab());
+            Criteria.checkThat(mDetailsDelegate.mNumRetrieved, Matchers.is(numExpected));
+            Criteria.checkThat(manager.isRunningForTesting(), Matchers.is(false));
         });
     }
 
     private void waitUntilAmbientBadgeInfoBarAppears(
             ChromeActivityTestRule<? extends ChromeActivity> rule) {
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.INSTALLABLE_AMBIENT_BADGE_INFOBAR)) {
-            CriteriaHelper.pollUiThread(new Criteria() {
-                @Override
-                public boolean isSatisfied() {
-                    List<InfoBar> infobars = rule.getInfoBars();
-                    if (infobars.size() != 1) return false;
-                    return infobars.get(0) instanceof InstallableAmbientBadgeInfoBar;
-                }
+            CriteriaHelper.pollUiThread(() -> {
+                List<InfoBar> infobars = rule.getInfoBars();
+                Criteria.checkThat(infobars.size(), Matchers.is(1));
+                Criteria.checkThat(
+                        infobars.get(0), Matchers.instanceOf(InstallableAmbientBadgeInfoBar.class));
             });
         }
     }
@@ -386,11 +379,8 @@ public class AppBannerManagerTest {
         });
 
         // Make sure that the splash screen icon was downloaded.
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return dataStorageFactory.mSplashImage != null;
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(dataStorageFactory.mSplashImage, Matchers.notNullValue());
         });
 
         // Test that bitmap sizes match expectations.
@@ -430,11 +420,8 @@ public class AppBannerManagerTest {
         });
 
         // Make sure that the splash screen icon was downloaded.
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return dataStorageFactory.mSplashImage != null;
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(dataStorageFactory.mSplashImage, Matchers.notNullValue());
         });
 
         // Test that bitmap sizes match expectations.
@@ -549,6 +536,7 @@ public class AppBannerManagerTest {
     @Test
     @SmallTest
     @Feature({"AppBanners"})
+    @FlakyTest(message = "crbug.com/1062843")
     public void testModalNativeAppBannerCanBeTriggeredMultipleTimesCustomTab() throws Exception {
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
                 CustomTabsTestUtils.createMinimalCustomTabIntent(

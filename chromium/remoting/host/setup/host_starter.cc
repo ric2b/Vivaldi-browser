@@ -39,11 +39,10 @@ HostStarter::HostStarter(
 HostStarter::~HostStarter() = default;
 
 std::unique_ptr<HostStarter> HostStarter::Create(
-    const std::string& remoting_server_endpoint,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
   return base::WrapUnique(new HostStarter(
       std::make_unique<gaia::GaiaOAuthClient>(url_loader_factory),
-      std::make_unique<remoting::ServiceClient>(remoting_server_endpoint),
+      std::make_unique<remoting::ServiceClient>(url_loader_factory),
       remoting::DaemonController::Create()));
 }
 
@@ -60,7 +59,7 @@ void HostStarter::StartHost(
   host_name_ = host_name;
   host_pin_ = host_pin;
   consent_to_data_collection_ = consent_to_data_collection;
-  on_done_ = on_done;
+  on_done_ = std::move(on_done);
   oauth_client_info_.client_id =
       google_apis::GetOAuth2ClientID(google_apis::CLIENT_REMOTING);
   oauth_client_info_.client_secret =
@@ -185,7 +184,7 @@ void HostStarter::StartHostProcess() {
   config->SetString("host_secret_hash", host_secret_hash);
   daemon_controller_->SetConfigAndStart(
       std::move(config), consent_to_data_collection_,
-      base::Bind(&HostStarter::OnHostStarted, base::Unretained(this)));
+      base::BindOnce(&HostStarter::OnHostStarted, base::Unretained(this)));
 }
 
 void HostStarter::OnHostStarted(DaemonController::AsyncResult result) {

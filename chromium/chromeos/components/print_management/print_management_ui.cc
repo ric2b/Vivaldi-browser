@@ -4,13 +4,12 @@
 
 #include "chromeos/components/print_management/print_management_ui.h"
 
-#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "chromeos/components/print_management/mojom/printing_manager.mojom.h"
 #include "chromeos/components/print_management/url_constants.h"
 #include "chromeos/components/web_applications/manifest_request_filter.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/grit/chromeos_print_management_resources.h"
+#include "chromeos/grit/chromeos_print_management_resources_map.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -23,6 +22,26 @@ namespace chromeos {
 namespace printing {
 namespace printing_manager {
 namespace {
+
+constexpr char kGeneratedPath[] =
+    "@out_folder@/gen/chromeos/components/print_management/resources/";
+
+void SetUpWebUIDataSource(content::WebUIDataSource* source,
+                          base::span<const GritResourceMap> resources,
+                          const std::string& generated_path,
+                          int default_resource) {
+  for (const auto& resource : resources) {
+    std::string path = resource.name;
+    if (path.rfind(generated_path, 0) == 0) {
+      path = path.substr(generated_path.size());
+    }
+    source->AddResourcePath(path, resource.value);
+  }
+  source->SetDefaultResource(default_resource);
+  source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER);
+  source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER);
+}
+
 void AddPrintManagementStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"completionStatusCanceled",
@@ -47,6 +66,8 @@ void AddPrintManagementStrings(content::WebUIDataSource* html_source) {
        IDS_PRINT_MANAGEMENT_PRINTED_PAGES_PROGRESS_FRACTION},
       {"completePrintJobLabel", IDS_PRINT_MANAGEMENT_COMPLETED_JOB_ARIA_LABEL},
       {"ongoingPrintJobLabel", IDS_PRINT_MANAGEMENT_ONGOING_JOB_ARIA_LABEL},
+      {"stoppedOngoingPrintJobLabel",
+       IDS_PRINT_MANAGEMENT_STOPPED_ONGOING_JOB_ARIA_LABEL},
       {"paperJam", IDS_PRINT_MANAGEMENT_PAPER_JAM_ERROR_STATUS},
       {"outOfPaper", IDS_PRINT_MANAGEMENT_OUT_OF_PAPER_ERROR_STATUS},
       {"outOfInk", IDS_PRINT_MANAGEMENT_OUT_OF_INK_ERROR_STATUS},
@@ -58,6 +79,18 @@ void AddPrintManagementStrings(content::WebUIDataSource* html_source) {
       {"stopped", IDS_PRINT_MANAGEMENT_STOPPED_ERROR_STATUS},
       {"filterFailed", IDS_PRINT_MANAGEMENT_FILTERED_FAILED_ERROR_STATUS},
       {"unknownPrinterError", IDS_PRINT_MANAGEMENT_UNKNOWN_ERROR_STATUS},
+      {"paperJamStopped", IDS_PRINT_MANAGEMENT_PAPER_JAM_STOPPED_ERROR_STATUS},
+      {"outOfPaperStopped",
+       IDS_PRINT_MANAGEMENT_OUT_OF_PAPER_STOPPED_ERROR_STATUS},
+      {"outOfInkStopped", IDS_PRINT_MANAGEMENT_OUT_OF_INK_STOPPED_ERROR_STATUS},
+      {"doorOpenStopped", IDS_PRINT_MANAGEMENT_DOOR_OPEN_STOPPED_ERROR_STATUS},
+      {"trayMissingStopped",
+       IDS_PRINT_MANAGEMENT_TRAY_MISSING_STOPPED_ERROR_STATUS},
+      {"outputFullStopped",
+       IDS_PRINT_MANAGEMENT_OUTPUT_FULL_STOPPED_ERROR_STATUS},
+      {"stoppedGeneric", IDS_PRINT_MANAGEMENT_GENERIC_STOPPED_ERROR_STATUS},
+      {"unknownPrinterErrorStopped",
+       IDS_PRINT_MANAGEMENT_UNKNOWN_STOPPED_ERROR_STATUS},
       {"noPrintJobInProgress",
        IDS_PRINT_MANAGEMENT_NO_PRINT_JOBS_IN_PROGRESS_MESSAGE},
       {"clearAllPrintJobPolicyIndicatorToolTip",
@@ -85,49 +118,20 @@ PrintManagementUI::PrintManagementUI(
   html_source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources chrome://test 'self';");
+  html_source->DisableTrustedTypesCSP();
 
-  html_source->AddResourcePath("print_management.js", IDR_PRINT_MANAGEMENT_JS);
-  html_source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER);
-  html_source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER);
+  const auto resources = base::make_span(kChromeosPrintManagementResources,
+                                         kChromeosPrintManagementResourcesSize);
+  SetUpWebUIDataSource(html_source.get(), resources, kGeneratedPath,
+                       IDR_PRINT_MANAGEMENT_INDEX_HTML);
+
   html_source->AddResourcePath("printing_manager.mojom-lite.js",
                                IDR_PRINTING_MANAGER_MOJO_LITE_JS);
-  html_source->AddResourcePath("mojo_interface_provider.js",
-                               IDR_PRINT_MANAGEMENT_MOJO_INTERFACE_PROVIDER_JS);
-  html_source->AddResourcePath("pwa.html", IDR_PRINT_MANAGEMENT_PWA_HTML);
-  html_source->AddResourcePath("manifest.json", IDR_PRINT_MANAGEMENT_MANIFEST);
-  html_source->AddResourcePath("printing_app_icon.svg",
-                               IDR_PRINT_MANAGEMENT_ICON);
-  html_source->AddResourcePath("print_job_entry.html",
-                               IDR_PRINT_MANAGEMENT_PRINT_JOB_ENTRY_HTML);
-  html_source->AddResourcePath("print_job_entry.js",
-                               IDR_PRINT_MANAGEMENT_PRINT_JOB_ENTRY_JS);
-  html_source->AddResourcePath("print_management_fonts_css.html",
-                               IDR_PRINT_MANAGEMENT_FONTS_CSS_HTML);
-  html_source->AddResourcePath("print_management_fonts_css.js",
-                               IDR_PRINT_MANAGEMENT_FONTS_CSS_JS);
-  html_source->AddResourcePath("print_management_shared_css.html",
-                               IDR_PRINT_MANAGEMENT_SHARED_CSS_HTML);
-  html_source->AddResourcePath("print_management_shared_css.js",
-                               IDR_PRINT_MANAGEMENT_SHARED_CSS_JS);
-  html_source->AddResourcePath(
-      "print_job_clear_history_dialog.html",
-      IDR_PRINT_MANAGEMENT_PRINT_JOB_CLEAR_HISTORY_DIALOG_HTML);
-  html_source->AddResourcePath(
-      "print_job_clear_history_dialog.js",
-      IDR_PRINT_MANAGEMENT_PRINT_JOB_CLEAR_HISTORY_DIALOG_JS);
-  html_source->AddResourcePath("icons.html", IDR_PRINT_MANAGEMENT_ICONS_HTML);
-  html_source->AddResourcePath("icons.js", IDR_PRINT_MANAGEMENT_ICONS_JS);
-  html_source->SetDefaultResource(IDR_PRINT_MANAGEMENT_INDEX_HTML);
 
   AddPrintManagementStrings(html_source.get());
   web_app::SetManifestRequestFilter(html_source.get(),
                                     IDR_PRINT_MANAGEMENT_MANIFEST,
                                     IDS_PRINT_MANAGEMENT_APP_NAME);
-
-  if (base::FeatureList::IsEnabled(chromeos::features::kScanningUI)) {
-    html_source->AddResourcePath("scanning.html", IDR_SCANNING_HTML);
-    html_source->AddResourcePath("scanning_page.js", IDR_SCANNING_PAGE_JS);
-  }
 
   content::WebUIDataSource::Add(web_ui->GetWebContents()->GetBrowserContext(),
                                 html_source.release());

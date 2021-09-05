@@ -16,8 +16,10 @@
 #include "gn/commands.h"
 #include "gn/config.h"
 #include "gn/desc_builder.h"
+#include "gn/rust_variables.h"
 #include "gn/setup.h"
 #include "gn/standard_out.h"
+#include "gn/swift_variables.h"
 #include "gn/switches.h"
 #include "gn/target.h"
 #include "gn/variables.h"
@@ -301,6 +303,10 @@ std::map<std::string, DescHandlerFunc> GetHandlers() {
           {variables::kWalkKeys, DefaultHandler},
           {variables::kWeakFrameworks, DefaultHandler},
           {variables::kWriteOutputConversion, DefaultHandler},
+          {variables::kRustCrateName, DefaultHandler},
+          {variables::kRustCrateRoot, DefaultHandler},
+          {variables::kSwiftModuleName, DefaultHandler},
+          {variables::kSwiftBridgeHeader, DefaultHandler},
           {"runtime_deps", DefaultHandler}};
 }
 
@@ -351,12 +357,16 @@ bool PrintTarget(const Target* target,
   // Entries with DefaultHandler are present to enforce order
   HandleProperty("type", handler_map, v, dict);
   HandleProperty("toolchain", handler_map, v, dict);
+  HandleProperty(variables::kSwiftModuleName, handler_map, v, dict);
+  HandleProperty(variables::kRustCrateName, handler_map, v, dict);
+  HandleProperty(variables::kRustCrateRoot, handler_map, v, dict);
   HandleProperty(variables::kVisibility, handler_map, v, dict);
   HandleProperty(variables::kMetadata, handler_map, v, dict);
   HandleProperty(variables::kTestonly, handler_map, v, dict);
   HandleProperty(variables::kCheckIncludes, handler_map, v, dict);
   HandleProperty(variables::kAllowCircularIncludesFrom, handler_map, v, dict);
   HandleProperty(variables::kSources, handler_map, v, dict);
+  HandleProperty(variables::kSwiftBridgeHeader, handler_map, v, dict);
   HandleProperty(variables::kPublic, handler_map, v, dict);
   HandleProperty(variables::kInputs, handler_map, v, dict);
   HandleProperty(variables::kConfigs, handler_map, v, dict);
@@ -374,6 +384,7 @@ bool PrintTarget(const Target* target,
   HandleProperty(variables::kCflagsCC, handler_map, v, dict);
   HandleProperty(variables::kCflagsObjC, handler_map, v, dict);
   HandleProperty(variables::kCflagsObjCC, handler_map, v, dict);
+  HandleProperty(variables::kSwiftflags, handler_map, v, dict);
   HandleProperty(variables::kDefines, handler_map, v, dict);
   HandleProperty(variables::kFrameworkDirs, handler_map, v, dict);
   HandleProperty(variables::kFrameworks, handler_map, v, dict);
@@ -439,6 +450,7 @@ bool PrintConfig(const Config* config,
   HandleProperty(variables::kCflagsCC, handler_map, v, dict);
   HandleProperty(variables::kCflagsObjC, handler_map, v, dict);
   HandleProperty(variables::kCflagsObjCC, handler_map, v, dict);
+  HandleProperty(variables::kSwiftflags, handler_map, v, dict);
   HandleProperty(variables::kDefines, handler_map, v, dict);
   HandleProperty(variables::kFrameworkDirs, handler_map, v, dict);
   HandleProperty(variables::kFrameworks, handler_map, v, dict);

@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">عینک آفتابی</translation>
 <translation id="115443833402798225">هانگول آهنماتائه</translation>
 <translation id="1155759005174418845">کاتالان</translation>
+<translation id="1172970565351728681">تقریباً <ph name="REMAINING_TIME" /> باقی مانده است</translation>
 <translation id="1173894706177603556">تغییر نام</translation>
 <translation id="117624967391683467">درحال کپی <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">مکث</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">فایلی با نام «<ph name="FILENAME" />» از قبل وجود دارد. می‌خواهید چه کاری انجام دهید؟</translation>
 <translation id="2121825465123208577">تغییر اندازه</translation>
 <translation id="2136953289241069843">‏نویسه‌گردانی (namaste ← ‏नमस्कार)</translation>
-<translation id="2138867954865495510">«<ph name="PATH" />» باز نشد: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">نویسه نامعتبر: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">‏صفحه‌کلید ویتنامی (TCVN)</translation>
 <translation id="2168214441502403371">صفحه‌کلید فارسی</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">مالکیت به <ph name="DESTINATION_DOMAIN" /> منتقل می‌شود.</translation>
 <translation id="3241720467332021590">ایرلندی</translation>
 <translation id="3245321423178950146">هنرمند ناشناس</translation>
+<translation id="3248185426436836442">درانتظار</translation>
 <translation id="3252266817569339921">فرانسوی</translation>
 <translation id="3254434849914415189">برنامه پیش‌فرض را برای فایل‌های <ph name="FILE_TYPE" /> انتخاب کنید:</translation>
 <translation id="3264582393905923483">زمینه</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">سال ضبط</translation>
 <translation id="3338239663705455570">صفحه‌کلید اسلوونیایی</translation>
 <translation id="3353984535370177728">انتخاب یک پوشه برای بارگذاری</translation>
+<translation id="3356580349448036450">کامل</translation>
 <translation id="3399597614303179694">صفحه‌کلید مقدونی</translation>
 <translation id="3414856743105198592">قالب‌بندی رسانه حذف شدنی سبب پاک شدن تمام داده‌ها می‌شود. ادامه می‌دهید؟</translation>
 <translation id="3437801641691368414">زمان ایجاد</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">اجازه ندارید فایل‌ها را به «<ph name="FOLDER_NAME" />» منتقل کنید.</translation>
 <translation id="3786301125658655746">شما آفلاین هستید</translation>
 <translation id="3789841737615482174">نصب</translation>
+<translation id="3793469551756281394">تقریباً <ph name="REMAINING_TIME_HOUR" /> و <ph name="REMAINING_TIME_MINUTE" /> باقی مانده است</translation>
 <translation id="3798449238516105146">نسخه</translation>
 <translation id="3801082500826908679">فاروئی</translation>
 <translation id="3809272675881623365">خرگوش</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">‏این پوشه با Windows هم‌رسانی شده است</translation>
 <translation id="4487088045714738411">صفحه‌کلید بلژیکی</translation>
 <translation id="4522570452068850558">جزئیات</translation>
+<translation id="4542387084127299777">«<ph name="PATH" />» باز نشد</translation>
 <translation id="4552678318981539154">خرید فضای ذخیره بیشتر</translation>
 <translation id="4559767610552730302">بوکه</translation>
 <translation id="4572815280350369984">فایل <ph name="FILE_TYPE" /></translation>
@@ -511,6 +515,7 @@
 <translation id="6629841649550503054">‏همه در <ph name="BEGIN_LINK" />Google Drive<ph name="END_LINK" /> پشتیبان گرفته شدند</translation>
 <translation id="6643016212128521049">پاک کردن</translation>
 <translation id="6650726141019353908">پروانه صورتی</translation>
+<translation id="6657585470893396449">گذرواژه</translation>
 <translation id="6710213216561001401">قبلی</translation>
 <translation id="6718273304615422081">در حال فشرده سازی ...</translation>
 <translation id="6751256176799620176">۱ پوشه انتخاب شد</translation>
@@ -544,14 +549,13 @@
 <translation id="6965382102122355670">قبول</translation>
 <translation id="6970230597523682626">بلغاری</translation>
 <translation id="6973630695168034713">پوشه‌ها</translation>
-<translation id="6978611942794658017">‏این فایل برای رایانه‌ای که از نرم‌افزار Windows استفاده می‌کند طراحی شده است. این فایل با دستگاه شما که سیستم عامل Chrome را اجرا می‌کند، سازگار نیست. لطفاً «نت‌بازار Chrome» را برای یک برنامه جایگزین مناسب جستجو کنید.</translation>
+<translation id="6978611942794658017">‏این فایل برای رایانه‌ای که از نرم‌افزار Windows استفاده می‌کند طراحی شده است. این فایل با دستگاه شما که Chrome OS را اجرا می‌کند، سازگار نیست. لطفاً «نت‌بازار Chrome» را برای یک برنامه جایگزین مناسب جستجو کنید.</translation>
 <translation id="6979158407327259162">Google Drive</translation>
 <translation id="6990081529015358884">فضای شما تمام شده است</translation>
 <translation id="6998711733709403587"><ph name="SELCTED_FOLDERS_COUNT" /> پوشه‌ انتخاب شد</translation>
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">نصب انجام نشد.</translation>
 <translation id="7040138676081995583">باز کردن با...</translation>
-<translation id="7059566040011178088">کمتر از <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> مورد انتخاب شدند</translation>
 <translation id="7106346894903675391">خرید فضای ذخیره بیشتر...</translation>
 <translation id="7126604456862387217">‏'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;جستجوی Drive&lt;/em&gt;</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">مدل دستگاه</translation>
 <translation id="8208580316430297579">کار هنری</translation>
 <translation id="8223479393428528563">برای ذخیره این فایل‌ها جهت استفاده آفلاین، دوباره آنلاین شوید، روی فایل‌ها کلیک راست کنید و گزینه <ph name="OFFLINE_CHECKBOX_NAME" /> را انتخاب کنید.</translation>
-<translation id="8231972167769262174">حدود <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">لغو</translation>
 <translation id="8261506727792406068">حذف</translation>
 <translation id="8269755669432358899">کوچک کردن پانل بازخورد فایل‌ها</translation>
@@ -725,12 +728,13 @@
 <translation id="9065203028668620118">ویرایش</translation>
 <translation id="9099674669267916096">تعداد صفحه</translation>
 <translation id="9110990317705400362">‏همواره به دنبال راه‌هایی هستیم تا مرورتان را ایمن‌تر کنیم. قبلاً هر وب‌سایتی از شما می‌خواست برنامه‌افزودنی‌ای را در مرورگرتان اضافه کنید. در جدیدترین نسخه Google Chrome، باید به Chrome صراحتاً بگویید که می‌خواهید با افزودن این برنامه‌های افزودنی از طریق صفحه افزونه‌ها آنها را نصب کنید. <ph name="BEGIN_LINK" />بیشتر بدانید<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">باز کردن قفل</translation>
 <translation id="912419004897138677">کدک</translation>
 <translation id="9129931661813833980">پین کردن پوشه</translation>
 <translation id="9130775360844693113">اعضای «<ph name="DESTINATION_NAME" />» به این موارد دسترسی پیدا می‌کنند.</translation>
 <translation id="9131598836763251128">انتخاب یک یا چند فایل</translation>
 <translation id="9133055936679483811">فشرده‌سازی انجام نشد. <ph name="ERROR_MESSAGE" /></translation>
-<translation id="9134524245363717059">‏این فایل برای رایانه‌ای که از نرم‌افزار Macintosh استفاده می‌کند طراحی شده است. با دستگاه شما که سیستم عامل Chrome را اجرا می‌کند، سازگار نیست. لطفاً به «نت‌بازار Chrome» بروید تا برنامه جایگزین مناسبی پیدا کنید.</translation>
+<translation id="9134524245363717059">‏این فایل برای رایانه‌ای که از نرم‌افزار Macintosh استفاده می‌کند طراحی شده است. با دستگاه شما که Chrome OS را اجرا می‌کند، سازگار نیست. لطفاً به «نت‌بازار Chrome» بروید تا برنامه جایگزین مناسبی پیدا کنید.</translation>
 <translation id="913758436357682283">صفحه‌کلید میانسان میانماری</translation>
 <translation id="9148058034647219655">خروج</translation>
 <translation id="9153744823707037316">روش ورودی آرایه</translation>

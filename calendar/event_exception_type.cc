@@ -10,6 +10,8 @@
 
 namespace calendar {
 
+EventExceptionType::~EventExceptionType() {}
+
 EventExceptionType::EventExceptionType() {}
 
 EventExceptionType::EventExceptionType(const EventExceptionType& other) =

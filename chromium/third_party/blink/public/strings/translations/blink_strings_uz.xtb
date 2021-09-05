@@ -16,6 +16,7 @@
 <translation id="1335095011850992622">mualliflar</translation>
 <translation id="1342835525016946179">article</translation>
 <translation id="1359897965706325498">banner</translation>
+<translation id="1480676835519562650">multitanlovli, <ph name="SELECTED" /> / <ph name="COUNT" /> tanlandi.</translation>
 <translation id="1589122976691792535">hudud</translation>
 <translation id="1591562245178063882">Bu oy</translation>
 <translation id="1637811476055996098">Fayllarni tanlash</translation>
@@ -51,6 +52,7 @@
 <translation id="248395913932153421">Kun</translation>
 <translation id="2507943997699731163">Bu maydonni to‘ldiring.</translation>
 <translation id="2508569020611168319">sahifalar ro‘yxati</translation>
+<translation id="2530182415807757784">multi-tanlov, hech biri tanlanmagan.</translation>
 <translation id="2561842179657104141">yana boshqa boshqaruv elementlari</translation>
 <translation id="2572483411312390101">ijro etish</translation>
 <translation id="2613802280814924224">Yaroqli qiymat kiriting. Eng yaqin yaroqli qiymat: <ph name="VALID_VALUE" />.</translation>
@@ -102,7 +104,6 @@
 <translation id="4248100235867064564">menyu paneli</translation>
 <translation id="4360991593054037559">Yaroqli qiymat kiriting. Eng yaqin yaroqli qiymatlar: <ph name="VALID_VALUE_LOW" /> va <ph name="VALID_VALUE_HIGHER" /></translation>
 <translation id="4384583879834880242">Savol-javoblar</translation>
-<translation id="4413860115965805769">menyu tugmasi</translation>
 <translation id="4444765639179266822">Bunday yozilgan shekilli: <ph name="OCR_TEXT" /></translation>
 <translation id="4446524499724042288">lug‘at havolasi</translation>
 <translation id="4522570452068850558">Tafsilotlar</translation>

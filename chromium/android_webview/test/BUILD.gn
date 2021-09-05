@@ -43,6 +43,8 @@ python_library("system_webview_wpt") {
 }
 
 android_apk("webview_instrumentation_apk") {
+  # TODO(crbug.com/1099536): Fix tests that break when this is increased.
+  target_sdk_version = 24
   deps = [
     ":webview_instrumentation_apk_assets",
     ":webview_instrumentation_apk_resources",
@@ -57,6 +59,7 @@ android_apk("webview_instrumentation_apk") {
     "//components/heap_profiling/multi_process:heap_profiling_java_test_support",
     "//components/policy/android:policy_java_test_support",
     "//content/public/android:content_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_support_test_runner:runner_java",
     "//third_party/junit",
     "//ui/android:ui_java",
@@ -98,7 +101,7 @@ android_resources("webview_instrumentation_apk_resources") {
     "shell/res/raw/resource_icon.png",
     "shell/res/values/config.xml",
   ]
-  custom_package = "org.chromium.android_webview.shell"
+  create_srcjar = false
 }
 
 android_assets("webview_instrumentation_apk_assets") {
@@ -157,6 +160,7 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
   apk_under_test = ":webview_instrumentation_apk"
   android_manifest = "../javatests/AndroidManifest.xml"
   min_sdk_version = 21
+
   deps = [
     ":webview_instrumentation_test_utils_java",
     "//android_webview:android_webview_java",
@@ -195,9 +199,15 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "//net/android:net_javatests",
     "//services/device/public/java:geolocation_java",
     "//services/device/public/java:geolocation_java_test_support",
+    "//third_party/android_deps:androidx_activity_activity_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
+    "//third_party/android_deps:androidx_core_core_java",
+    "//third_party/android_deps:androidx_fragment_fragment_java",
+    "//third_party/android_deps:androidx_test_runner_java",
+    "//third_party/android_deps:com_google_code_findbugs_jsr305_java",
     "//third_party/android_deps:com_google_guava_failureaccess_java",
-    "//third_party/android_deps:com_google_protobuf_protobuf_javalite_java",
     "//third_party/android_deps:espresso_java",
+    "//third_party/android_deps:protobuf_lite_runtime_java",
     "//third_party/android_support_test_runner:rules_java",
     "//third_party/android_support_test_runner:runner_java",
     "//third_party/blink/public/mojom:web_feature_mojo_bindings_java",
@@ -207,6 +217,7 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "//third_party/metrics_proto:metrics_proto_java",
     "//third_party/mockito:mockito_java",
     "//ui/android:ui_java",
+    "//ui/android:ui_java_test_support",
     "//url:gurl_java",
   ]
   sources = [
@@ -308,6 +319,9 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/common/variations/VariationsUtilsTest.java",
     "../javatests/src/org/chromium/android_webview/test/devui/AwNonembeddedUmaRecorderTest.java",
     "../javatests/src/org/chromium/android_webview/test/devui/DeveloperUiTest.java",
+    "../javatests/src/org/chromium/android_webview/test/devui/DeveloperUiTestUtils.java",
+    "../javatests/src/org/chromium/android_webview/test/devui/FlagsFragmentTest.java",
+    "../javatests/src/org/chromium/android_webview/test/devui/HomeFragmentTest.java",
     "../javatests/src/org/chromium/android_webview/test/devui/util/CrashBugUrlFactoryTest.java",
     "../javatests/src/org/chromium/android_webview/test/devui/util/UnuploadedFilesStateLoaderTest.java",
     "../javatests/src/org/chromium/android_webview/test/devui/util/UploadedCrashesInfoLoaderTest.java",
@@ -450,7 +464,7 @@ test("android_webview_unittests") {
     "../browser/permission/media_access_permission_request_unittest.cc",
     "../browser/permission/permission_request_handler_unittest.cc",
     "../browser/renderer_host/auto_login_parser_unittest.cc",
-    "../browser/safe_browsing/aw_safe_browsing_whitelist_manager_unittest.cc",
+    "../browser/safe_browsing/aw_safe_browsing_allowlist_manager_unittest.cc",
     "../browser/scoped_add_feature_flags_unittests.cc",
     "../browser/state_serializer_unittest.cc",
     "../lib/webview_tests.cc",
@@ -487,6 +501,7 @@ generate_jni("android_webview_unittests_jni") {
 # robolectric tests
 junit_binary("android_webview_junit_tests") {
   sources = [
+    "../junit/src/org/chromium/android_webview/robolectric/AwDisplayCutoutControllerTest.java",
     "../junit/src/org/chromium/android_webview/robolectric/AwLayoutSizerTest.java",
     "../junit/src/org/chromium/android_webview/robolectric/AwScrollOffsetManagerTest.java",
     "../junit/src/org/chromium/android_webview/robolectric/FindAddressTest.java",
@@ -503,7 +518,8 @@ junit_binary("android_webview_junit_tests") {
     "//base:base_java_test_support",
     "//base:base_junit_test_support",
     "//content/public/test/android:content_java_test_support",
-    "//third_party/android_deps:com_google_protobuf_protobuf_javalite_java",
+    "//third_party/android_deps:androidx_test_runner_java",
+    "//third_party/android_deps:protobuf_lite_runtime_java",
     "//third_party/android_support_test_runner:runner_java",
   ]
 

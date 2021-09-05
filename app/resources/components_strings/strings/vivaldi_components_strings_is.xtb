@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">óþekkt nafn</translation>
 <translation id="1089439967362294234">Breyta lykilorði</translation>
 <translation id="1110994991967754504">Veldu leyfi fyrir <ph name="PERMISSION_NAME" /></translation>
-<translation id="1152921474424827756">Skoða <ph name="BEGIN_LINK" />afrit<ph name="END_LINK" /> geymt á <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> missti óvænt samband.</translation>
 <translation id="1161325031994447685">Endurtengjast þráðlausu neti</translation>
 <translation id="1175364870820465910">&amp;Prenta...</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">Þessi síða inniheldur hættuleg forrit</translation>
 <translation id="1916770123977586577">Til þess að uppfæra stillingar á þessari síðu þarftu að endurhlaða henni</translation>
 <translation id="1919345977826869612">Auglýsingar</translation>
-<translation id="194030505837763158">Heimsæktu <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Nánar</translation>
-<translation id="2030481566774242610">Áttir þú við <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Athuga proxy og eldvegginn<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Hljóð</translation>
 <translation id="2119505898009119320">Útgefið af: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -128,7 +125,6 @@
 <translation id="5287240709317226393">Sýna vafrakökur</translation>
 <translation id="5355557959165512791">Þú getur ekki heimsótt <ph name="SITE" /> núna þar sem að vottorð síðunnar hefur verið endurkalla. Tengi vandamál og netárásir eru yfirleitt tímabundnar þannnig að síðan mun líklega virka aftur síðar.</translation>
 <translation id="5386426401304769735">Vottorðskeðjan fyrir þessa síðu inniheldur vottorð undirritað með SHA-1.</translation>
-<translation id="5431657950005405462">Skráin þín var ekki fundin</translation>
 <translation id="5452270690849572955">Þessi <ph name="HOST_NAME" /> síða var ekki fundin</translation>
 <translation id="5457113250005438886">Ógilt</translation>
 <translation id="5492298309214877701">Þessi síða á innra neti fyrirtækis, stofnunar eða skóla er með sama netfang og almenn vefsíða
@@ -174,7 +170,6 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="6897140037006041989">Kennistrengur</translation>
 <translation id="7053983685419859001">Hamla</translation>
 <translation id="7079718277001814089">Þessi síða inniheldur spilliforrit</translation>
-<translation id="7090678807593890770">Leitaðu á Google að <ph name="LINK" /></translation>
 <translation id="7108819624672055576">Leyfi fengið gegnum viðbót</translation>
 <translation id="7111012039238467737">(Gilt)</translation>
 <translation id="7113310725918019676">Leyfa <ph name="BLOCKED_TYPE" />frá <ph name="DOMAIN" /></translation>
@@ -198,7 +193,6 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="7716424297397655342">Þessari síðu getur ekki verið hlaðið upp úr skyndimynni</translation>
 <translation id="7758069387465995638">Eldveggur eða vírusvörn gæti hafa hamlað tengingu.</translation>
 <translation id="7800304661137206267">Tengingin er dulrituð með <ph name="CIPHER" />, með <ph name="MAC" /> fyrir auðkenni skilaboða og <ph name="KX" /> sem aðferð til að flytja lykil á milli.</translation>
-<translation id="7802523362929240268">Síða er lögmæt</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> notar yfirleitt dulkóðun til þess að vernda persónuupplýsingar. Þegar Vivaldi reyndi að tengjast <ph name="SITE" /> í þetta sinn, sendi vefsíðan óvenjuleg eða röng skilríki. Þetta getur gerst þegar hakkari reynir að þykjast vera <ph name="SITE" />, eða þegar innskráningargluggi fyrir þráðlaust netsamband truflar tenginguna. Þínar persónuupplýsingar eru samt sem áður öruggar því Vivaldi stöðvaði tenginuna áður en gögn voru send.</translation>
 <translation id="7878562273885520351">Lykilorðinu þínu gæti hafa verið lekið</translation>
 <translation id="7951415247503192394">(32-bit)</translation>

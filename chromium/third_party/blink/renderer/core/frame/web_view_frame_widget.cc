@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/frame/web_view_frame_widget.h"
 
+#include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/local_frame_ukm_aggregator.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
@@ -23,13 +24,15 @@ WebViewFrameWidget::WebViewFrameWidget(
     CrossVariantMojoAssociatedRemote<mojom::blink::WidgetHostInterfaceBase>
         widget_host,
     CrossVariantMojoAssociatedReceiver<mojom::blink::WidgetInterfaceBase>
-        widget)
+        widget,
+    bool is_for_nested_main_frame)
     : WebFrameWidgetBase(client,
                          std::move(frame_widget_host),
                          std::move(frame_widget),
                          std::move(widget_host),
                          std::move(widget)),
       web_view_(&web_view),
+      is_for_nested_main_frame_(is_for_nested_main_frame),
       self_keep_alive_(PERSISTENT_FROM_HERE, this) {
   web_view_->SetMainFrameWidgetBase(this);
 }
@@ -37,14 +40,13 @@ WebViewFrameWidget::WebViewFrameWidget(
 WebViewFrameWidget::~WebViewFrameWidget() = default;
 
 void WebViewFrameWidget::Close(
-    scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner,
-    base::OnceCallback<void()> cleanup_task) {
+    scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner) {
   GetPage()->WillCloseAnimationHost(nullptr);
   // Closing the WebViewFrameWidget happens in response to the local main frame
   // being detached from the Page/WebViewImpl.
   web_view_->SetMainFrameWidgetBase(nullptr);
   web_view_ = nullptr;
-  WebFrameWidgetBase::Close(std::move(cleanup_runner), std::move(cleanup_task));
+  WebFrameWidgetBase::Close(std::move(cleanup_runner));
   self_keep_alive_.Clear();
 }
 
@@ -54,14 +56,6 @@ WebSize WebViewFrameWidget::Size() {
 
 void WebViewFrameWidget::Resize(const WebSize& size) {
   web_view_->Resize(size);
-}
-
-void WebViewFrameWidget::DidEnterFullscreen() {
-  web_view_->DidEnterFullscreen();
-}
-
-void WebViewFrameWidget::DidExitFullscreen() {
-  web_view_->DidExitFullscreen();
 }
 
 void WebViewFrameWidget::SetSuppressFrameRequestsWorkaroundFor704763Only(
@@ -175,6 +169,18 @@ void WebViewFrameWidget::FocusChanged(bool enable) {
   Client()->FocusChanged(enable);
 }
 
+float WebViewFrameWidget::GetDeviceScaleFactorForTesting() {
+  return device_scale_factor_for_testing_;
+}
+
+gfx::Rect WebViewFrameWidget::ViewportVisibleRect() {
+  return widget_base_->CompositorViewportRect();
+}
+
+bool WebViewFrameWidget::ShouldHandleImeEvents() {
+  return HasFocus();
+}
+
 bool WebViewFrameWidget::SelectionBounds(WebRect& anchor,
                                          WebRect& focus) const {
   return web_view_->SelectionBounds(anchor, focus);
@@ -186,6 +192,15 @@ WebURL WebViewFrameWidget::GetURLForDebugTrace() {
 
 WebString WebViewFrameWidget::GetLastToolTipTextForTesting() const {
   return GetPage()->GetChromeClient().GetLastToolTipTextForTesting();
+}
+
+void WebViewFrameWidget::EnableDeviceEmulation(
+    const DeviceEmulationParams& parameters) {
+  Client()->EnableDeviceEmulation(parameters);
+}
+
+void WebViewFrameWidget::DisableDeviceEmulation() {
+  Client()->DisableDeviceEmulation();
 }
 
 void WebViewFrameWidget::DidDetachLocalFrameTree() {
@@ -239,6 +254,104 @@ LocalFrameView* WebViewFrameWidget::GetLocalFrameViewForAnimationScrolling() {
   // cause ownership of the timeline and animation host.
   // See ScrollingCoordinator::AnimationHostInitialized.
   return nullptr;
+}
+
+void WebViewFrameWidget::SetZoomLevelForTesting(double zoom_level) {
+  DCHECK_NE(zoom_level, -INFINITY);
+  zoom_level_for_testing_ = zoom_level;
+  SetZoomLevel(zoom_level);
+}
+
+void WebViewFrameWidget::ResetZoomLevelForTesting() {
+  zoom_level_for_testing_ = -INFINITY;
+  SetZoomLevel(0);
+}
+
+void WebViewFrameWidget::SetDeviceScaleFactorForTesting(float factor) {
+  DCHECK_GE(factor, 0.f);
+
+  device_scale_factor_for_testing_ = factor;
+
+  // Receiving a 0 is used to reset between tests, it removes the override in
+  // order to listen to the browser for the next test.
+  if (!factor)
+    return;
+
+  // We are changing the device scale factor from the renderer, so allocate a
+  // new viz::LocalSurfaceId to avoid surface invariants violations in tests.
+  widget_base_->LayerTreeHost()->RequestNewLocalSurfaceId();
+}
+
+void WebViewFrameWidget::SetZoomLevel(double zoom_level) {
+  // Override the zoom level with the testing one if necessary
+  if (zoom_level_for_testing_ != -INFINITY)
+    zoom_level = zoom_level_for_testing_;
+  WebFrameWidgetBase::SetZoomLevel(zoom_level);
+}
+
+void WebViewFrameWidget::SetAutoResizeMode(bool auto_resize,
+                                           const gfx::Size& min_window_size,
+                                           const gfx::Size& max_window_size,
+                                           float device_scale_factor) {
+  if (auto_resize) {
+    if (!Platform::Current()->IsUseZoomForDSFEnabled())
+      device_scale_factor = 1.f;
+    web_view_->EnableAutoResizeMode(
+        gfx::ScaleToCeiledSize(min_window_size, device_scale_factor),
+        gfx::ScaleToCeiledSize(max_window_size, device_scale_factor));
+  } else if (web_view_->AutoResizeMode()) {
+    web_view_->DisableAutoResizeMode();
+  }
+}
+
+void WebViewFrameWidget::SetIsNestedMainFrameWidget(bool is_nested) {
+  is_for_nested_main_frame_ = is_nested;
+}
+
+void WebViewFrameWidget::SetPageScaleStateAndLimits(
+    float page_scale_factor,
+    bool is_pinch_gesture_active,
+    float minimum,
+    float maximum) {
+  WebFrameWidgetBase::SetPageScaleStateAndLimits(
+      page_scale_factor, is_pinch_gesture_active, minimum, maximum);
+
+  // If page scale hasn't changed, then just return without notifying
+  // the remote frames.
+  if (page_scale_factor == page_scale_factor_in_mainframe_ &&
+      is_pinch_gesture_active == is_pinch_gesture_active_in_mainframe_) {
+    return;
+  }
+
+  NotifyPageScaleFactorChanged(page_scale_factor, is_pinch_gesture_active);
+}
+
+void WebViewFrameWidget::DidAutoResize(const gfx::Size& size) {
+  WebRect new_size_in_window(0, 0, size.width(), size.height());
+  Client()->ConvertViewportToWindow(&new_size_in_window);
+
+  // TODO(ccameron): Note that this destroys any information differentiating
+  // |size| from the compositor's viewport size. Also note that the
+  // calculation of |new_compositor_viewport_pixel_rect| does not appear to
+  // take into account device emulation.
+  widget_base_->LayerTreeHost()->RequestNewLocalSurfaceId();
+  gfx::Rect new_compositor_viewport_pixel_rect =
+      gfx::Rect(gfx::ScaleToCeiledSize(
+          gfx::Rect(new_size_in_window).size(),
+          widget_base_->GetScreenInfo().device_scale_factor));
+  widget_base_->UpdateCompositorViewportRect(
+      new_compositor_viewport_pixel_rect);
+}
+
+void WebViewFrameWidget::SetDeviceColorSpaceForTesting(
+    const gfx::ColorSpace& color_space) {
+  // We are changing the device color space from the renderer, so allocate a
+  // new viz::LocalSurfaceId to avoid surface invariants violations in tests.
+  widget_base_->LayerTreeHost()->RequestNewLocalSurfaceId();
+
+  blink::ScreenInfo info = widget_base_->GetScreenInfo();
+  info.display_color_spaces = gfx::DisplayColorSpaces(color_space);
+  widget_base_->UpdateScreenInfo(info);
 }
 
 }  // namespace blink

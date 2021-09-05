@@ -129,7 +129,7 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
   LayoutUnit LineHeight(
       bool first_line,
       LineDirectionMode,
-      LinePositionMode = kPositionOnContainingLine) const final;
+      LinePositionMode = kPositionOnContainingLine) const override;
   LayoutUnit BaselinePosition(
       FontBaseline,
       bool first_line,
@@ -450,7 +450,6 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
   void AddLayoutOverflowFromBlockChildren();
 
  protected:
-  void AddVisualOverflowFromTheme();
   virtual void ComputeVisualOverflow(
       bool recompute_floats);
   virtual void ComputeLayoutOverflow(LayoutUnit old_client_after_edge,
@@ -518,7 +517,6 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
 
  protected:
   void InvalidatePaint(const PaintInvalidatorContext&) const override;
-  void ClearPreviousVisualRects() override;
 
   void ImageChanged(WrappedImagePtr, CanDeferInvalidation) override;
 

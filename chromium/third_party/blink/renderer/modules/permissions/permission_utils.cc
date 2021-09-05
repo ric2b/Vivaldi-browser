@@ -229,11 +229,20 @@ PermissionDescriptorPtr ParsePermissionDescriptor(
     return CreatePermissionDescriptor(PermissionName::STORAGE_ACCESS);
   }
   if (name == "window-placement") {
-    if (!RuntimeEnabledFeatures::WindowPlacementEnabled()) {
+    if (!RuntimeEnabledFeatures::WindowPlacementEnabled(
+            ExecutionContext::From(script_state))) {
       exception_state.ThrowTypeError("Window Placement is not enabled.");
       return nullptr;
     }
     return CreatePermissionDescriptor(PermissionName::WINDOW_PLACEMENT);
+  }
+  if (name == "font-access") {
+    if (!RuntimeEnabledFeatures::FontAccessEnabled(
+            ExecutionContext::From(script_state))) {
+      exception_state.ThrowTypeError("Font Access is not enabled.");
+      return nullptr;
+    }
+    return CreatePermissionDescriptor(PermissionName::FONT_ACCESS);
   }
   return nullptr;
 }

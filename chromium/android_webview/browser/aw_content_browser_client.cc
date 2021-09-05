@@ -11,7 +11,6 @@
 
 #include "android_webview/browser/aw_browser_context.h"
 #include "android_webview/browser/aw_browser_main_parts.h"
-#include "android_webview/browser/aw_content_browser_overlay_manifest.h"
 #include "android_webview/browser/aw_contents.h"
 #include "android_webview/browser/aw_contents_client_bridge.h"
 #include "android_webview/browser/aw_contents_io_thread_client.h"
@@ -58,7 +57,7 @@
 #include "components/navigation_interception/intercept_navigation_delegate.h"
 #include "components/page_load_metrics/browser/metrics_navigation_throttle.h"
 #include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
-#include "components/policy/content/policy_blacklist_navigation_throttle.h"
+#include "components/policy/content/policy_blocklist_navigation_throttle.h"
 #include "components/policy/core/browser/browser_policy_connector_base.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/content/browser/browser_url_loader_throttle.h"
@@ -457,11 +456,14 @@ AwContentBrowserClient::CreateQuotaPermissionContext() {
 content::GeneratedCodeCacheSettings
 AwContentBrowserClient::GetGeneratedCodeCacheSettings(
     content::BrowserContext* context) {
-  // If we pass 0 for size, disk_cache will pick a default size using the
-  // heuristics based on available disk size. These are implemented in
-  // disk_cache::PreferredCacheSize in net/disk_cache/cache_util.cc.
+  // WebView limits the main HTTP cache to 20MB; we need to set a comparable
+  // limit for the code cache since the source file needs to be in the HTTP
+  // cache for the code cache entry to be used. There are two code caches that
+  // both use this value, so we pass 10MB to keep the total disk usage to
+  // roughly 2x what it was before the code cache was implemented.
+  // TODO(crbug/893318): webview should have smarter cache sizing logic.
   AwBrowserContext* browser_context = static_cast<AwBrowserContext*>(context);
-  return content::GeneratedCodeCacheSettings(true, 0,
+  return content::GeneratedCodeCacheSettings(true, 10 * 1024 * 1024,
                                              browser_context->GetCacheDir());
 }
 
@@ -629,7 +631,7 @@ AwContentBrowserClient::CreateThrottlesForNavigation(
     throttles.push_back(
         navigation_interception::InterceptNavigationDelegate::CreateThrottleFor(
             navigation_handle, navigation_interception::SynchronyMode::kSync));
-    throttles.push_back(std::make_unique<PolicyBlacklistNavigationThrottle>(
+    throttles.push_back(std::make_unique<PolicyBlocklistNavigationThrottle>(
         navigation_handle, AwBrowserContext::FromWebContents(
                                navigation_handle->GetWebContents())));
     throttles.push_back(
@@ -641,13 +643,6 @@ AwContentBrowserClient::CreateThrottlesForNavigation(
 content::DevToolsManagerDelegate*
 AwContentBrowserClient::GetDevToolsManagerDelegate() {
   return new AwDevToolsManagerDelegate();
-}
-
-base::Optional<service_manager::Manifest>
-AwContentBrowserClient::GetServiceManifestOverlay(base::StringPiece name) {
-  if (name == content::mojom::kBrowserServiceName)
-    return GetAWContentBrowserOverlayManifest();
-  return base::nullopt;
 }
 
 bool AwContentBrowserClient::BindAssociatedReceiverFromFrame(
@@ -748,7 +743,7 @@ AwContentBrowserClient::GetSafeBrowsingUrlCheckerDelegate() {
     safe_browsing_url_checker_delegate_ = new AwUrlCheckerDelegateImpl(
         AwBrowserProcess::GetInstance()->GetSafeBrowsingDBManager(),
         AwBrowserProcess::GetInstance()->GetSafeBrowsingUIManager(),
-        AwBrowserProcess::GetInstance()->GetSafeBrowsingWhitelistManager());
+        AwBrowserProcess::GetInstance()->GetSafeBrowsingAllowlistManager());
   }
 
   return safe_browsing_url_checker_delegate_;
@@ -888,11 +883,11 @@ bool AwContentBrowserClient::ShouldEnableStrictSiteIsolation() {
   return false;
 }
 
-bool AwContentBrowserClient::ShouldLockToOrigin(
+bool AwContentBrowserClient::ShouldLockProcess(
     content::BrowserContext* browser_context,
     const GURL& effective_url) {
   // TODO(lukasza): https://crbug.cmo/869494: Once Android WebView supports
-  // OOPIFs, we should remove this ShouldLockToOrigin overload.  Till then,
+  // OOPIFs, we should remove this ShouldLockProcess overload.  Till then,
   // returning false helps avoid accidentally applying citadel-style Site
   // Isolation enforcement to Android WebView (and causing incorrect renderer
   // kills).
@@ -947,7 +942,7 @@ bool AwContentBrowserClient::WillCreateURLLoaderFactory(
         base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kDisableWebSecurity);
     const auto& preferences =
-        frame->GetRenderViewHost()->GetWebkitPreferences();
+        WebContents::FromRenderFrameHost(frame)->GetOrCreateWebPreferences();
     // See also //android_webview/docs/cors-and-webview-api.md to understand how
     // each settings affect CORS behaviors on file:// and content://.
     if (request_initiator.scheme() == url::kFileScheme) {

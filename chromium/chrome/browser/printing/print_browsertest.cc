@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
 #include <memory>
 
 #include "base/auto_reset.h"
@@ -37,7 +38,6 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
-#include "content/public/test/no_renderer_crashes_assertion.h"
 #include "extensions/common/extension.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "net/dns/mock_host_resolver.h"
@@ -127,8 +127,8 @@ class NupPrintingTestDelegate : public PrintingMessageFilter::TestDelegate {
   }
 
   // PrintingMessageFilter::TestDelegate:
-  PrintMsg_Print_Params GetPrintParams() override {
-    PrintMsg_Print_Params params;
+  mojom::PrintParams GetPrintParams() override {
+    mojom::PrintParams params;
     params.page_size = gfx::Size(612, 792);
     params.content_size = gfx::Size(540, 720);
     params.printable_area = gfx::Rect(612, 792);
@@ -405,6 +405,10 @@ class IsolateOriginsPrintBrowserTest : public PrintBrowserTest {
 class BackForwardCachePrintBrowserTest : public PrintBrowserTest {
  public:
   BackForwardCachePrintBrowserTest() = default;
+  BackForwardCachePrintBrowserTest(const BackForwardCachePrintBrowserTest&) =
+      delete;
+  BackForwardCachePrintBrowserTest& operator=(
+      const BackForwardCachePrintBrowserTest&) = delete;
   ~BackForwardCachePrintBrowserTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -417,7 +421,7 @@ class BackForwardCachePrintBrowserTest : public PrintBrowserTest {
             {"TimeToLiveInBackForwardCacheInSeconds", "3600"},
         });
 
-    InProcessBrowserTest::SetUpCommandLine(command_line);
+    PrintBrowserTest::SetUpCommandLine(command_line);
   }
 
   content::WebContents* web_contents() const {
@@ -449,8 +453,6 @@ class BackForwardCachePrintBrowserTest : public PrintBrowserTest {
         << location.ToString();
   }
 
-  base::HistogramTester histogram_tester_;
-
  private:
   void AddSampleToBuckets(std::vector<base::Bucket>* buckets,
                           base::HistogramBase::Sample sample) {
@@ -464,10 +466,9 @@ class BackForwardCachePrintBrowserTest : public PrintBrowserTest {
     }
   }
 
+  base::HistogramTester histogram_tester_;
   std::vector<base::Bucket> expected_blocklisted_features_;
   base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(BackForwardCachePrintBrowserTest);
 };
 
 constexpr char IsolateOriginsPrintBrowserTest::kIsolatedSite[];
@@ -725,9 +726,21 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessPrintBrowserTest,
 
   KillPrintRenderFrame frame_content(subframe_rph);
   frame_content.OverrideBinderForTesting(subframe);
-  content::ScopedAllowRendererCrashes allow_renderer_crashes(subframe_rph);
 
-  PrintAndWaitUntilPreviewIsReady(/*print_only_selection=*/false);
+  // Waits for the renderer to be down.
+  content::RenderProcessHostWatcher process_watcher(
+      subframe_rph, content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+
+  // Adds the observer to get the status for the preview.
+  PrintPreviewObserver print_preview_observer(/*wait_for_loaded=*/false);
+  StartPrint(browser()->tab_strip_model()->GetActiveWebContents(),
+             /*print_renderer=*/mojo::NullAssociatedRemote(),
+             /*print_preview_disabled=*/false, /*has_selection*/ false);
+
+  // Makes sure that |subframe_rph| is terminated.
+  process_watcher.Wait();
+  // Confirms that the preview pages are rendered.
+  print_preview_observer.WaitUntilPreviewIsReady();
 }
 
 // Printing preview a web page with an iframe from an isolated origin.
@@ -778,7 +791,8 @@ IN_PROC_BROWSER_TEST_F(BackForwardCachePrintBrowserTest, DisableCaching) {
   ASSERT_TRUE(embedded_test_server()->Started());
 
   // 1) Navigate to A and trigger printing.
-  GURL url(embedded_test_server()->GetURL("a.com", "/printing/test1.html"));
+  GURL url(embedded_test_server()->GetURL(
+      "a.com", "/back_forward_cache/no-favicon.html"));
   ui_test_utils::NavigateToURL(browser(), url);
   content::RenderFrameHost* rfh_a = current_frame_host();
   content::RenderFrameDeletedObserver delete_observer_rfh_a(rfh_a);
@@ -786,7 +800,8 @@ IN_PROC_BROWSER_TEST_F(BackForwardCachePrintBrowserTest, DisableCaching) {
 
   // 2) Navigate to B.
   // The first page is not cached because printing preview was open.
-  GURL url_2(embedded_test_server()->GetURL("b.com", "/printing/test2.html"));
+  GURL url_2(embedded_test_server()->GetURL(
+      "b.com", "/back_forward_cache/no-favicon.html"));
   ui_test_utils::NavigateToURL(browser(), url_2);
   delete_observer_rfh_a.WaitUntilDeleted();
 
@@ -880,8 +895,7 @@ IN_PROC_BROWSER_TEST_F(PrintBrowserTest, PDFPluginNotKeyboardFocusable) {
     const select_tag = document.getElementsByTagName('print-preview-app')[0]
                            .$['sidebar']
                            .$['destinationSettings']
-                           .$['destinationSelect']
-                           .$$('select');
+                           .$['destinationSelect'];
     select_tag.addEventListener('focus', () => {
       window.domAutomationController.send(true);
     });

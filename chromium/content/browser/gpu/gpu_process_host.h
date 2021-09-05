@@ -57,7 +57,7 @@ class Thread;
 namespace content {
 class BrowserChildProcessHostImpl;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 class CATransactionGPUCoordinator;
 #endif
 
@@ -72,7 +72,7 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   // Returns null on failure. It is not safe to store the pointer once control
   // has returned to the message loop as it can be destroyed. Instead store the
   // associated GPU host ID.  This could return NULL if GPU access is not
-  // allowed (blacklisted).
+  // allowed (blocklisted).
   CONTENT_EXPORT static GpuProcessHost* Get(
       GpuProcessKind kind = GPU_PROCESS_KIND_SANDBOXED,
       bool force_create = true);
@@ -254,7 +254,7 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   std::unique_ptr<BrowserChildProcessHostImpl> process_;
   std::unique_ptr<base::Thread> in_process_gpu_thread_;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   scoped_refptr<CATransactionGPUCoordinator> ca_transaction_gpu_coordinator_;
 #endif
 

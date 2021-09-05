@@ -48,13 +48,6 @@
 
 namespace blink {
 
-namespace {
-
-constexpr char kInterfaceMapLabel[] =
-    "V8PerIsolateData::interface_template_map_for_v8_context_snapshot_";
-
-}  // namespace
-
 // Function defined in third_party/blink/public/web/blink.h.
 v8::Isolate* MainThreadIsolate() {
   return V8PerIsolateData::MainThreadIsolate();
@@ -81,14 +74,11 @@ V8PerIsolateData::V8PerIsolateData(
                          : gin::IsolateHolder::kAllowAtomicsWait,
           IsMainThread() ? gin::IsolateHolder::IsolateType::kBlinkMainThread
                          : gin::IsolateHolder::IsolateType::kBlinkWorkerThread),
-      interface_template_map_for_v8_context_snapshot_(GetIsolate(),
-                                                      kInterfaceMapLabel),
       string_cache_(std::make_unique<StringCache>(GetIsolate())),
       private_property_(std::make_unique<V8PrivateProperty>()),
       constructor_mode_(ConstructorMode::kCreateNewObject),
       use_counter_disabled_(false),
       is_handling_recursion_level_error_(false),
-      is_reporting_exception_(false),
       runtime_call_stats_(base::DefaultTickClock::GetInstance()) {
   // FIXME: Remove once all v8::Isolate::GetCurrent() calls are gone.
   GetIsolate()->Enter();
@@ -107,13 +97,11 @@ V8PerIsolateData::V8PerIsolateData()
                       gin::IsolateHolder::kAllowAtomicsWait,
                       gin::IsolateHolder::IsolateType::kBlinkMainThread,
                       gin::IsolateHolder::IsolateCreationMode::kCreateSnapshot),
-      interface_template_map_for_v8_context_snapshot_(GetIsolate()),
       string_cache_(std::make_unique<StringCache>(GetIsolate())),
       private_property_(std::make_unique<V8PrivateProperty>()),
       constructor_mode_(ConstructorMode::kCreateNewObject),
       use_counter_disabled_(false),
       is_handling_recursion_level_error_(false),
-      is_reporting_exception_(false),
       runtime_call_stats_(base::DefaultTickClock::GetInstance()) {
   CHECK(IsMainThread());
 
@@ -248,11 +236,6 @@ v8::Local<v8::FunctionTemplate> V8PerIsolateData::FindOrCreateOperationTemplate(
 v8::Local<v8::FunctionTemplate> V8PerIsolateData::FindInterfaceTemplate(
     const DOMWrapperWorld& world,
     const void* key) {
-  if (GetV8ContextSnapshotMode() == V8ContextSnapshotMode::kTakeSnapshot) {
-    const WrapperTypeInfo* type = reinterpret_cast<const WrapperTypeInfo*>(key);
-    return interface_template_map_for_v8_context_snapshot_.Get(type);
-  }
-
   auto& map = SelectInterfaceTemplateMap(world);
   auto result = map.find(key);
   if (result != map.end())
@@ -264,18 +247,16 @@ void V8PerIsolateData::SetInterfaceTemplate(
     const DOMWrapperWorld& world,
     const void* key,
     v8::Local<v8::FunctionTemplate> value) {
-  if (GetV8ContextSnapshotMode() == V8ContextSnapshotMode::kTakeSnapshot) {
-    auto& map = interface_template_map_for_v8_context_snapshot_;
-    const WrapperTypeInfo* type = reinterpret_cast<const WrapperTypeInfo*>(key);
-    map.Set(type, value);
-  } else {
-    auto& map = SelectInterfaceTemplateMap(world);
-    map.insert(key, v8::Eternal<v8::FunctionTemplate>(GetIsolate(), value));
-  }
+  auto& map = SelectInterfaceTemplateMap(world);
+  map.insert(key, v8::Eternal<v8::FunctionTemplate>(GetIsolate(), value));
 }
 
 void V8PerIsolateData::ClearPersistentsForV8ContextSnapshot() {
-  interface_template_map_for_v8_context_snapshot_.Clear();
+  interface_template_map_for_main_world_.clear();
+  interface_template_map_for_non_main_world_.clear();
+  operation_template_map_for_main_world_.clear();
+  operation_template_map_for_non_main_world_.clear();
+  eternal_name_cache_.clear();
   private_property_.reset();
 }
 
@@ -308,8 +289,10 @@ v8::Local<v8::Context> V8PerIsolateData::EnsureScriptRegexpContext() {
     LEAK_SANITIZER_DISABLED_SCOPE;
     v8::Local<v8::Context> context(v8::Context::New(GetIsolate()));
     script_regexp_script_state_ = MakeGarbageCollected<ScriptState>(
-        context, DOMWrapperWorld::Create(GetIsolate(),
-                                         DOMWrapperWorld::WorldType::kRegExp));
+        context,
+        DOMWrapperWorld::Create(GetIsolate(),
+                                DOMWrapperWorld::WorldType::kRegExp),
+        /* execution_context = */ nullptr);
   }
   return script_regexp_script_state_->GetContext();
 }

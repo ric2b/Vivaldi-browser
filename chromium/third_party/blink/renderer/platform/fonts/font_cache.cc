@@ -116,11 +116,11 @@ FontCache::FontCache()
 #endif
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 FontPlatformData* FontCache::SystemFontPlatformData(
     const FontDescription& font_description) {
   const AtomicString& family = FontCache::SystemFontFamily();
-#if defined(OS_LINUX) || defined(OS_FUCHSIA)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_FUCHSIA)
   if (family.IsEmpty() || family == font_family_names::kSystemUi)
     return nullptr;
 #else
@@ -142,7 +142,7 @@ FontPlatformData* FontCache::GetFontPlatformData(
     PlatformInit();
   }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   if (creation_params.CreationType() == kCreateFontByFamily &&
       creation_params.Family() == font_family_names::kSystemUi) {
     return SystemFontPlatformData(font_description);
@@ -241,7 +241,7 @@ std::unique_ptr<FontPlatformData> FontCache::ScaleFontPlatformData(
     float font_size) {
   TRACE_EVENT0("fonts,ui", "FontCache::ScaleFontPlatformData");
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   return CreateFontPlatformData(font_description, creation_params, font_size);
 #else
   return std::make_unique<FontPlatformData>(font_platform_data, font_size);

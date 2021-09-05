@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Vivaldia</title>
+
+    <meta name="viewport" content="width=device-width, user-scalable=no" />
+    <link rel="manifest" href="manifest.json">
+
+    <style>
+        html, body {
+            overflow: hidden;
+        }
+
+        html {
+            height: 100%;
+            width: 100%;
+            display: table;
+        }
+
+        body {
+            text-align: center;
+            vertical-align: middle;
+            display: table-cell;
+            cursor: crosshair;
+            background: #000;
+            position: relative; /* cuz of no scroll - u no remove! */
+        }
+
+        canvas {
+            background: #fff; /* blending fix, must be white! */
+            image-rendering: pixelated;
+            display: none;
+        }
+
+        button {
+            position: absolute;
+            width: 70px;
+            height: 70px;
+            background-size: cover;
+            background-color: transparent;
+            border: none;
+            opacity: 0.5;
+            image-rendering: pixelated;
+            display: none;
+        }
+
+        button:focus {
+            outline: none;
+        }
+
+        #button_stick1,
+        #button_stick2 {
+            width: 140px;
+            height: 140px;
+            bottom: 0;
+        }
+
+        #button_stick1 {
+            left: 0;
+            background-image: url(assets/interface/button-stick.png);
+        }
+
+        #button_stick2 {
+            right: 0;
+            background-image: url(assets/interface/button-shots.png);
+        }
+
+        #button_leftright {
+            background-image: url(assets/interface/button-arrow-left-right-down.png);
+            left: 0;
+            bottom: 0;
+            width: 136px;
+            height: 84px;
+        }
+
+        #button_up {
+            right: 0;
+            bottom: 0;
+            background-image: url(assets/interface/button-arrow-up.png);
+        }
+
+        #button_action1 {
+            right: 70px;
+            bottom: 0;
+            background-image: url(assets/interface/button-shot-front.png);
+        }
+
+        #button_action2 {
+            right: 0;
+            bottom: 70px;
+            background-image: url(assets/interface/button-shot-45-angle.png);
+        }
+
+        #button_action3 {
+            right: 70px;
+            bottom: 70px;
+            background-image: url(assets/interface/button-shot-up.png);
+        }
+
+        #select_controller1,
+        #select_controller2 {
+            bottom: 10px;
+            left: 50%;
+            width: 64px;
+            margin-left: -32px;
+            height: 30px;
+            background-image: url(assets/interface/select-controller1.png);
+        }
+
+        #select_controller2 {
+            background-image: url(assets/interface/select-controller2.png);
+        }
+
+        #button_fullscreen {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            left: 0;
+            top: 0;
+            background-image: url(assets/interface/fullscreen-toggle.png);
+        }
+
+        #message {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 200px;
+            margin-left: -100px;
+            color: red;
+        }
+
+    </style>
+
+</head>
+<body>
+
+<p id="message">Loading...</p>
+
+<canvas width="320" height="200"></canvas>
+
+<button id="button_stick1"></button>
+<button id="button_stick2"></button>
+
+<button id="button_leftright"></button>
+<button id="button_up"></button>
+<button id="button_action1"></button>
+<button id="button_action2"></button>
+<button id="button_action3"></button>
+
+<button id="select_controller1"></button>
+<button id="select_controller2"></button>
+
+<button id="button_fullscreen"></button>
+
+<script src="vivaldia-main.js"></script>
+
+</body>
+</html>

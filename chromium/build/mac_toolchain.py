@@ -33,10 +33,10 @@ MAC_BINARIES_LABEL = 'infra_internal/ios/xcode/xcode_binaries/mac-amd64'
 MAC_BINARIES_TAG = {
     # This contains binaries from Xcode 11.2.1, along with the 10.15 SDKs (aka
     # 11B53).
-    'default': 'X5ZbqG_UKa-N64_XSBkAwShWPtzskeXhQRfpzc_1KUYC',
-    # This contains binaries from Xcode (Universal) 12 beta, along with the
-    # 11 SDK (aka 12A8158a).
-    'xcode_12_beta': '_tvvMQXaruqACKkcaZmqHR_7S-S2pHrXgcjTWfbI1qoC',
+    'default': 'wXywrnOhzFxwLYlwO62UzRxVCjnu6DoSI2D2jrCd00gC',
+    # This contains binaries from Xcode 12 beta 5, along with the
+    # 11 SDK (aka 12A8189h).
+    'xcode_12_beta': 'MzSaRpqZju2_boJy04DQnw5xpGgiQdPU53iHdst_dHQC',
 }
 
 # The toolchain will not be downloaded if the minimum OS version is not met.
@@ -60,8 +60,10 @@ PARANOID_MODE = '$ParanoidMode CheckIntegrity\n'
 
 
 def PlatformMeetsHermeticXcodeRequirements(version):
+  if sys.platform != 'darwin':
+    return True
   needed = MAC_MINIMUM_OS_VERSION[version]
-  major_version = map(int, platform.release().split('.')[:len(needed)])
+  major_version = [int(v) for v in platform.release().split('.')[:len(needed)]]
   return major_version >= needed
 
 
@@ -101,7 +103,7 @@ def PrintError(message):
   sys.stderr.flush()
 
 
-def InstallXcodeBinaries(version):
+def InstallXcodeBinaries(version, binaries_root=None):
   """Installs the Xcode binaries needed to build Chrome and accepts the license.
 
   This is the replacement for InstallXcode that installs a trimmed down version
@@ -109,7 +111,8 @@ def InstallXcodeBinaries(version):
   """
   # First make sure the directory exists. It will serve as the cipd root. This
   # also ensures that there will be no conflicts of cipd root.
-  binaries_root = os.path.join(TOOLCHAIN_ROOT, 'xcode_binaries')
+  if binaries_root is None:
+    binaries_root = os.path.join(TOOLCHAIN_ROOT, 'xcode_binaries')
   if not os.path.exists(binaries_root):
     os.makedirs(binaries_root)
 
@@ -128,6 +131,9 @@ def InstallXcodeBinaries(version):
     print(stderr)
     RequestCipdAuthentication()
     return 1
+
+  if sys.platform != 'darwin':
+    return 0
 
   # Accept the license for this version of Xcode if it's newer than the
   # currently accepted version.
@@ -177,9 +183,6 @@ def InstallXcodeBinaries(version):
 
 
 def main():
-  if sys.platform != 'darwin':
-    return 0
-
   if not _UseHermeticToolchain():
     print('Skipping Mac toolchain installation for mac')
     return 0

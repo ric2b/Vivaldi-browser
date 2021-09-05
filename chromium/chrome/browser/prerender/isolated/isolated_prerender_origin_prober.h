@@ -6,6 +6,9 @@
 #define CHROME_BROWSER_PRERENDER_ISOLATED_ISOLATED_PRERENDER_ORIGIN_PROBER_H_
 
 #include "base/callback.h"
+#include "base/memory/weak_ptr.h"
+#include "base/optional.h"
+#include "net/base/address_list.h"
 #include "url/gurl.h"
 
 class AvailabilityProber;
@@ -33,9 +36,14 @@ class IsolatedPrerenderOriginProber {
   void SetProbeURLOverrideDelegateOverrideForTesting(
       ProbeURLOverrideDelegate* delegate);
 
-  // Tells whether a canary check has completed, either in success or failure.
+  // Tells whether a TLS canary check has completed, either in success or
+  // failure. Used for testing.
+  bool IsTLSCanaryCheckCompleteForTesting() const;
+
+  // Tells whether a DNS canary check has completed, either in success or
+  // failure.
   // Used for testing.
-  bool IsCanaryCheckCompleteForTesting() const;
+  bool IsDNSCanaryCheckCompleteForTesting() const;
 
   // Starts a probe to |url| and calls |callback| with a bool to indicate
   // success (when true) or failure (when false).
@@ -43,8 +51,34 @@ class IsolatedPrerenderOriginProber {
   void Probe(const GURL& url, OnProbeResultCallback callback);
 
  private:
+  void OnTLSCanaryCheckComplete(bool success);
+
   void DNSProbe(const GURL& url, OnProbeResultCallback callback);
   void HTTPProbe(const GURL& url, OnProbeResultCallback callback);
+  void TLSProbe(const GURL& url, OnProbeResultCallback callback);
+
+  // Does a DNS resolution for a DNS or TLS probe, passing all the arguments to
+  // |OnDNSResolved|.
+  void StartDNSResolution(const GURL& url,
+                          OnProbeResultCallback callback,
+                          bool also_do_tls_connect);
+
+  // Both DNS and TLS probes need to resolve DNS. This starts the TLS probe with
+  // the |addresses| from the DNS resolution.
+  void DoTLSProbeAfterDNSResolution(const GURL& url,
+                                    OnProbeResultCallback callback,
+                                    const net::AddressList& addresses);
+
+  // If the DNS resolution was successful, this will either run |callback| for a
+  // DNS probe, or start the TLS socket for a TLS probe. This is determined by
+  // |also_do_tls_connect|. If the DNS resolution failed, |callback| is run with
+  // failure.
+  void OnDNSResolved(
+      const GURL& url,
+      OnProbeResultCallback callback,
+      bool also_do_tls_connect,
+      int net_error,
+      const base::Optional<net::AddressList>& resolved_addresses);
 
   // The current profile, not owned.
   Profile* profile_;
@@ -52,8 +86,13 @@ class IsolatedPrerenderOriginProber {
   // Used for testing to change the url passed to |Probe|. Must outlive |this|.
   ProbeURLOverrideDelegate* override_delegate_ = nullptr;
 
-  // The canary url checker.
-  std::unique_ptr<AvailabilityProber> canary_check_;
+  // The TLS canary url checker.
+  std::unique_ptr<AvailabilityProber> tls_canary_check_;
+
+  // The DNS canary url checker.
+  std::unique_ptr<AvailabilityProber> dns_canary_check_;
+
+  base::WeakPtrFactory<IsolatedPrerenderOriginProber> weak_factory_{this};
 };
 
 #endif  // CHROME_BROWSER_PRERENDER_ISOLATED_ISOLATED_PRERENDER_ORIGIN_PROBER_H_

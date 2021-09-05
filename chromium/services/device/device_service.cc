@@ -43,7 +43,7 @@
 #include "services/device/vibration/vibration_manager_impl.h"
 #endif
 
-#if defined(OS_LINUX) && defined(USE_UDEV)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(USE_UDEV)
 #include "services/device/hid/input_service_linux.h"
 #endif
 
@@ -125,11 +125,11 @@ DeviceService::DeviceService(
       geolocation_api_key_(geolocation_api_key),
       wake_lock_provider_(file_task_runner_, wake_lock_context_callback_) {
   receivers_.Add(this, std::move(receiver));
-#if (defined(OS_LINUX) && defined(USE_UDEV)) || defined(OS_WIN) || \
-    defined(OS_MACOSX)
+#if ((defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(USE_UDEV)) || \
+    defined(OS_WIN) || defined(OS_MAC)
   serial_port_manager_ = std::make_unique<SerialPortManagerImpl>(
       io_task_runner_, base::ThreadTaskRunnerHandle::Get());
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // On macOS the SerialDeviceEnumerator needs to run on the UI thread so that
   // it has access to a CFRunLoop where it can register a notification source.
   serial_port_manager_task_runner_ = base::ThreadTaskRunnerHandle::Get();
@@ -155,8 +155,8 @@ DeviceService::~DeviceService() {
   // it's not really important that this runs anyway.
   device::BatteryStatusService::GetInstance()->Shutdown();
 #endif
-#if (defined(OS_LINUX) && defined(USE_UDEV)) || defined(OS_WIN) || \
-    defined(OS_MACOSX)
+#if ((defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(USE_UDEV)) || \
+    defined(OS_WIN) || defined(OS_MAC)
   serial_port_manager_task_runner_->DeleteSoon(FROM_HERE,
                                                std::move(serial_port_manager_));
 #endif
@@ -230,7 +230,7 @@ void DeviceService::BindMtpManager(
 }
 #endif
 
-#if defined(OS_LINUX) && defined(USE_UDEV)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(USE_UDEV)
 void DeviceService::BindInputDeviceManager(
     mojo::PendingReceiver<mojom::InputDeviceManager> receiver) {
   file_task_runner_->PostTask(
@@ -311,8 +311,8 @@ void DeviceService::BindSensorProvider(
 
 void DeviceService::BindSerialPortManager(
     mojo::PendingReceiver<mojom::SerialPortManager> receiver) {
-#if (defined(OS_LINUX) && defined(USE_UDEV)) || defined(OS_WIN) || \
-    defined(OS_MACOSX)
+#if ((defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(USE_UDEV)) || \
+    defined(OS_WIN) || defined(OS_MAC)
   DCHECK(serial_port_manager_task_runner_);
   serial_port_manager_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&SerialPortManagerImpl::Bind,

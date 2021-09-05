@@ -47,6 +47,7 @@
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/redirect_info.h"
+#include "net/url_request/url_request.h"
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader_stream_consumer.h"
@@ -375,7 +376,7 @@ class SimpleLoaderTestHelper : public SimpleURLLoaderStreamConsumer {
     // Clean up file, so tests don't leave around files in the temp directory.
     // Only matters in the TO_TEMP_FILE case.
     if (!file_path.empty())
-      base::DeleteFile(file_path, false);
+      base::DeleteFile(file_path);
 
     done_ = true;
     run_loop_.Quit();

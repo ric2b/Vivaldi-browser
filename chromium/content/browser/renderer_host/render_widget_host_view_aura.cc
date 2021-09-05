@@ -14,6 +14,7 @@
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -87,6 +88,7 @@
 #include "ui/events/gestures/gesture_recognizer.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -327,11 +329,11 @@ RenderWidgetHostViewAura::RenderWidgetHostViewAura(
 
   RenderWidgetHostOwnerDelegate* owner_delegate = host()->owner_delegate();
   if (owner_delegate) {
-    // TODO(mostynb): actually use prefs.  Landing this as a separate CL
-    // first to rebaseline some unreliable web tests.
     // NOTE: This will not be run for child frame widgets, which do not have
     // an owner delegate and won't get a RenderViewHost here.
-    ignore_result(owner_delegate->GetWebkitPreferencesForWidget());
+    double_tap_to_zoom_enabled_ =
+        owner_delegate->GetWebkitPreferencesForWidget()
+            .double_tap_to_zoom_enabled;
   }
 }
 
@@ -512,11 +514,8 @@ ui::TextInputClient* RenderWidgetHostViewAura::GetTextInputClient() {
 }
 
 RenderFrameHostImpl* RenderWidgetHostViewAura::GetFocusedFrame() const {
-  RenderWidgetHostOwnerDelegate* owner_delegate = host()->owner_delegate();
-  // TODO(crbug.com/689777): Child local roots do not work here?
-  if (!owner_delegate)
-    return nullptr;
-  FrameTreeNode* focused_frame = owner_delegate->GetFocusedFrame();
+  FrameTreeNode* focused_frame =
+      host()->delegate()->GetFrameTree()->GetFocusedFrame();
   if (!focused_frame)
     return nullptr;
   return focused_frame->current_frame_host();
@@ -1167,13 +1166,16 @@ void RenderWidgetHostViewAura::SetCompositionText(
   has_composition_text_ = !composition.text.empty();
 }
 
-void RenderWidgetHostViewAura::ConfirmCompositionText(bool keep_selection) {
+uint32_t RenderWidgetHostViewAura::ConfirmCompositionText(bool keep_selection) {
   if (text_input_manager_ && text_input_manager_->GetActiveWidget() &&
       has_composition_text_) {
     text_input_manager_->GetActiveWidget()->ImeFinishComposingText(
         keep_selection);
   }
   has_composition_text_ = false;
+  // TODO(crbug/1109604): Return the number of characters committed by this
+  // function.
+  return UINT32_MAX;
 }
 
 void RenderWidgetHostViewAura::ClearCompositionText() {
@@ -1487,11 +1489,82 @@ bool RenderWidgetHostViewAura::SetCompositionFromExistingText(
 #endif
 
 #if defined(OS_CHROMEOS)
-// TODO(crbug.com/1091088) Implement setAutocorrectRange
+gfx::Range RenderWidgetHostViewAura::GetAutocorrectRange() const {
+  if (!text_input_manager_ || !text_input_manager_->GetActiveWidget())
+    return gfx::Range();
+
+  const std::vector<ui::mojom::ImeTextSpanInfoPtr>& ime_text_spans_info =
+      text_input_manager_->GetTextInputState()->ime_text_spans_info;
+
+  unsigned autocorrect_span_found = 0;
+  gfx::Range range;
+  for (const auto& ime_text_span_info : ime_text_spans_info) {
+    if (ime_text_span_info->span.type == ui::ImeTextSpan::Type::kAutocorrect) {
+      range = gfx::Range(ime_text_span_info->span.start_offset,
+                         ime_text_span_info->span.end_offset);
+      autocorrect_span_found++;
+    }
+  }
+  // Assuming there is only one autocorrect span at any point in time.
+  DCHECK_LE(autocorrect_span_found, 1u);
+  return range;
+}
+
+gfx::Rect RenderWidgetHostViewAura::GetAutocorrectCharacterBounds() const {
+  if (!text_input_manager_ || !text_input_manager_->GetActiveWidget())
+    return gfx::Rect();
+
+  const std::vector<ui::mojom::ImeTextSpanInfoPtr>& ime_text_spans_info =
+      text_input_manager_->GetTextInputState()->ime_text_spans_info;
+
+  unsigned autocorrect_span_found = 0;
+  gfx::Rect bounds;
+  for (const auto& ime_text_span_info : ime_text_spans_info) {
+    if (ime_text_span_info->span.type == ui::ImeTextSpan::Type::kAutocorrect) {
+      bounds = ConvertRectToScreen(ime_text_span_info->bounds);
+      autocorrect_span_found++;
+    }
+  }
+  // Assuming there is only one autocorrect span at any point in time.
+  DCHECK_LE(autocorrect_span_found, 1u);
+  return bounds;
+}
+
 bool RenderWidgetHostViewAura::SetAutocorrectRange(
     const base::string16& autocorrect_text,
     const gfx::Range& range) {
-  return false;
+  base::UmaHistogramEnumeration(
+      "InputMethod.Assistive.Autocorrect.Count",
+      TextInputClient::SubClass::kRenderWidgetHostViewAura);
+
+  auto* input_handler = GetFrameWidgetInputHandlerForFocusedWidget();
+  if (!input_handler)
+    return false;
+  if (autocorrect_text.empty()) {
+    input_handler->ClearImeTextSpansByType(range.start(), range.end(),
+                                           ui::ImeTextSpan::Type::kAutocorrect);
+    return true;
+  }
+  ui::ImeTextSpan ui_ime_text_span;
+  ui_ime_text_span.type = ui::ImeTextSpan::Type::kAutocorrect;
+  ui_ime_text_span.start_offset = 0;
+  ui_ime_text_span.end_offset = autocorrect_text.length();
+  ui_ime_text_span.underline_style = ui::ImeTextSpan::UnderlineStyle::kDot;
+  ui_ime_text_span.underline_color = gfx::kGoogleGrey700;
+
+  input_handler->AddImeTextSpansToExistingText(range.start(), range.end(),
+                                               {ui_ime_text_span});
+  return true;
+}
+
+void RenderWidgetHostViewAura::ClearAutocorrectRange() {
+  // TODO(crbug/1108170): Once we have a FrameWidgetInputHandlerMock, add a test
+  // to verify that the ClearImeTextSpansByType function has been called.
+  auto* input_handler = GetFrameWidgetInputHandlerForFocusedWidget();
+  if (!input_handler)
+    return;
+  input_handler->ClearImeTextSpansByType(0, UINT32_MAX,
+                                         ui::ImeTextSpan::Type::kAutocorrect);
 }
 #endif
 
@@ -1676,8 +1749,7 @@ bool RenderWidgetHostViewAura::RequiresDoubleTapGestureEvents() const {
   // TODO(crbug.com/916715): Child local roots do not work here?
   if (!owner_delegate)
     return false;
-  return owner_delegate->GetWebkitPreferencesForWidget()
-      .double_tap_to_zoom_enabled;
+  return double_tap_to_zoom_enabled_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1802,13 +1874,13 @@ void RenderWidgetHostViewAura::OnCursorVisibilityChanged(bool is_visible) {
 
 void RenderWidgetHostViewAura::OnWindowFocused(aura::Window* gained_focus,
                                                aura::Window* lost_focus) {
-  if (window_ == gained_focus) {
-    // We need to honor input bypass if the associated tab is does not want
-    // input. This gives the current focused window a chance to be the text
-    // input client and handle events.
-    if (host()->IsIgnoringInputEvents())
-      return;
+  // We need to honor input bypass if the associated tab is does not want
+  // input. This gives the current focused window a chance to be the text
+  // input client and handle events.
+  if (host()->IsIgnoringInputEvents())
+    return;
 
+  if (window_ == gained_focus) {
     host()->GotFocus();
     host()->SetActive(true);
 

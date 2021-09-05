@@ -19,6 +19,7 @@ class WebContents;
 
 namespace web_app {
 
+class AppRegistryController;
 // WebAppUiManagerImpl can be used only in UI code.
 class WebAppUiManagerImpl;
 
@@ -32,6 +33,8 @@ class WebAppUiManager {
 
   virtual ~WebAppUiManager() = default;
 
+  virtual void SetSubsystems(
+      AppRegistryController* app_registry_controller) = 0;
   virtual void Start() = 0;
   virtual void Shutdown() = 0;
 
@@ -52,7 +55,10 @@ class WebAppUiManager {
   virtual bool CanAddAppToQuickLaunchBar() const = 0;
   virtual void AddAppToQuickLaunchBar(const AppId& app_id) = 0;
 
-  virtual bool IsInAppWindow(content::WebContents* web_contents) const = 0;
+  // Returns whether |web_contents| is in a web app window belonging to
+  // |app_id|, or any web app window if |app_id| is nullptr.
+  virtual bool IsInAppWindow(content::WebContents* web_contents,
+                             const AppId* app_id = nullptr) const = 0;
   virtual void NotifyOnAssociatedAppChanged(content::WebContents* web_contents,
                                             const AppId& previous_app_id,
                                             const AppId& new_app_id) const = 0;

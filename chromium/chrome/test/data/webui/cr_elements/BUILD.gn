@@ -33,6 +33,7 @@ js_modulizer("modulize") {
     "cr_search_field_tests.js",
     "cr_slider_test.js",
     "cr_toolbar_search_field_tests.js",
+    "cr_toolbar_tests.js",
     "cr_tabs_test.js",
     "cr_toast_test.js",
     "cr_toast_manager_test.js",
@@ -50,7 +51,6 @@ js_modulizer("modulize") {
 js_type_check("closure_compile") {
   is_polymer3 = true
 
-  # TODO(crbug.com/1000989): Add JS type checking for all commented out targets.
   deps = [
     ":cr_action_menu_test.m",
     ":cr_button_tests.m",
@@ -61,14 +61,13 @@ js_type_check("closure_compile") {
     ":cr_expand_button_focus_tests.m",
     ":cr_expand_button_tests.m",
     ":cr_fingerprint_progress_arc_tests.m",
+    ":cr_grid_focus_test",
     ":cr_icon_button_focus_tests.m",
     ":cr_icon_button_tests.m",
     ":cr_input_test.m",
     ":cr_lazy_render_tests.m",
     ":cr_link_row_tests.m",
-
-    #":cr_lottie_tests",
-
+    ":cr_lottie_tests.m",
     ":cr_policy_indicator_behavior_tests.m",
     ":cr_policy_indicator_tests.m",
     ":cr_policy_pref_indicator_tests.m",
@@ -84,20 +83,14 @@ js_type_check("closure_compile") {
     ":cr_toast_manager_test.m",
     ":cr_toast_test.m",
     ":cr_toggle_test.m",
-
-    #":cr_toolbar_search_field_tests",
-    #":cr_view_manager_test",
-    #":iron_list_focus_test",
-    #":settings_private_test_constants",
+    ":cr_toolbar_search_field_tests.m",
+    ":cr_toolbar_tests.m",
+    ":cr_view_manager_test.m",
+    ":iron_list_focus_test.m",
   ]
 
   if (is_chromeos) {
-    deps += [
-      #":cr_policy_network_behavior_mojo_tests",
-      #":cr_policy_network_indicator_mojo_tests",
-      #":cr_policy_network_indicator_tests",
-      #":cr_searchable_drop_down_tests",
-    ]
+    deps += [ ":cr_searchable_drop_down_tests.m" ]
   }
 }
 
@@ -214,8 +207,10 @@ js_library("cr_fingerprint_progress_arc_tests.m") {
   sources = [ "$root_gen_dir/chrome/test/data/webui/cr_elements/cr_fingerprint_progress_arc_tests.m.js" ]
   deps = [
     "..:chai_assert",
+    "..:mock_controller.m",
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
     "//ui/webui/resources/cr_elements/cr_fingerprint:cr_fingerprint_progress_arc.m",
+    "//ui/webui/resources/cr_elements/cr_lottie:cr_lottie.m",
   ]
   externs_list = [ "$externs_path/mocha-2.5.js" ]
   extra_deps = [ ":modulize" ]
@@ -257,6 +252,17 @@ js_library("cr_input_test.m") {
   extra_deps = [ ":modulize" ]
 }
 
+js_library("cr_grid_focus_test") {
+  deps = [
+    "..:chai_assert",
+    "..:test_util.m",
+    "//third_party/polymer/v3_0/components-chromium/iron-test-helpers:mock-interactions",
+    "//ui/webui/resources/cr_elements/cr_grid",
+    "//ui/webui/resources/js:util.m",
+  ]
+  externs_list = [ "$externs_path/mocha-2.5.js" ]
+}
+
 js_library("cr_lazy_render_tests.m") {
   sources = [ "$root_gen_dir/chrome/test/data/webui/cr_elements/cr_lazy_render_tests.m.js" ]
   deps = [
@@ -277,6 +283,19 @@ js_library("cr_link_row_tests.m") {
     "..:chai_assert",
     "//ui/webui/resources/cr_elements/cr_icon_button:cr_icon_button.m",
     "//ui/webui/resources/cr_elements/cr_link_row:cr_link_row.m",
+  ]
+  externs_list = [ "$externs_path/mocha-2.5.js" ]
+  extra_deps = [ ":modulize" ]
+}
+
+js_library("cr_lottie_tests.m") {
+  sources = [
+    "$root_gen_dir/chrome/test/data/webui/cr_elements/cr_lottie_tests.m.js",
+  ]
+  deps = [
+    "..:chai_assert",
+    "..:mock_controller.m",
+    "//ui/webui/resources/cr_elements/cr_lottie:cr_lottie.m",
   ]
   externs_list = [ "$externs_path/mocha-2.5.js" ]
   extra_deps = [ ":modulize" ]
@@ -458,4 +477,66 @@ js_library("cr_toggle_test.m") {
   ]
   externs_list = [ "$externs_path/mocha-2.5.js" ]
   extra_deps = [ ":modulize" ]
+}
+
+js_library("cr_toolbar_search_field_tests.m") {
+  sources = [ "$root_gen_dir/chrome/test/data/webui/cr_elements/cr_toolbar_search_field_tests.m.js" ]
+  deps = [
+    "..:chai_assert",
+    "//third_party/polymer/v3_0/components-chromium/iron-test-helpers:mock-interactions",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/cr_elements/cr_toolbar:cr_toolbar_search_field.m",
+  ]
+  externs_list = [ "$externs_path/mocha-2.5.js" ]
+  extra_deps = [ ":modulize" ]
+}
+
+js_library("cr_toolbar_tests.m") {
+  sources = [
+    "$root_gen_dir/chrome/test/data/webui/cr_elements/cr_toolbar_tests.m.js",
+  ]
+  deps = [
+    "..:chai_assert",
+    "..:test_util.m",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/cr_elements/cr_toolbar:cr_toolbar.m",
+  ]
+  externs_list = [ "$externs_path/mocha-2.5.js" ]
+  extra_deps = [ ":modulize" ]
+}
+
+js_library("cr_view_manager_test.m") {
+  sources = [ "$root_gen_dir/chrome/test/data/webui/cr_elements/cr_view_manager_test.m.js" ]
+  deps = [
+    "..:chai_assert",
+    "..:test_util.m",
+    "//ui/webui/resources/cr_elements/cr_view_manager:cr_view_manager.m",
+  ]
+  externs_list = [ "$externs_path/mocha-2.5.js" ]
+  extra_deps = [ ":modulize" ]
+}
+
+js_library("iron_list_focus_test.m") {
+  sources = [ "$root_gen_dir/chrome/test/data/webui/cr_elements/iron_list_focus_test.m.js" ]
+  deps = [
+    "..:chai_assert",
+    "//third_party/polymer/v3_0/components-chromium/iron-list:iron-list",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+  ]
+  externs_list = [ "$externs_path/mocha-2.5.js" ]
+  extra_deps = [ ":modulize" ]
+}
+
+if (is_chromeos) {
+  js_library("cr_searchable_drop_down_tests.m") {
+    sources = [ "$root_gen_dir/chrome/test/data/webui/cr_elements/cr_searchable_drop_down_tests.m.js" ]
+    deps = [
+      "..:chai_assert",
+      "//third_party/polymer/v3_0/components-chromium/iron-test-helpers:mock-interactions",
+      "//ui/webui/resources/cr_elements/cr_input:cr_input.m",
+      "//ui/webui/resources/cr_elements/cr_searchable_drop_down:cr_searchable_drop_down.m",
+    ]
+    externs_list = [ "$externs_path/mocha-2.5.js" ]
+    extra_deps = [ ":modulize" ]
+  }
 }

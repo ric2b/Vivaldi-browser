@@ -48,6 +48,7 @@
     "chrome://theme/",
     "chrome://vivaldi-data/",
     "chrome://vivaldi-webui/",
+    "chrome://game/",
     "clipboardRead",
     "commandLinePrivate",
     "contentSettings",
@@ -109,6 +110,7 @@
         "accessible_resources": [
           "browser.html",
           "components/thumbnail/capture.html",
+          "components/chat/chat.html",
           "components/settings/settings.html",
           "components/mail/mail.html",
           "components/welcome/welcome.html",

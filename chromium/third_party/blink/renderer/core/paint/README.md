@@ -114,9 +114,10 @@ are treated in different ways during painting:
     concept.
 
 *   Visual rect: the bounding box of all pixels that will be painted by a
-    [display item client](../../platform/graphics/paint/README.md#display-items).
+    for a [display item](../../platform/graphics/paint/README.md#display-items)
     It's in the space of the containing transform property node (see [Building
-    paint property trees](#building-paint-property-trees)).
+    paint property trees](#building-paint-property-trees)). It's calculated
+    during paint for each display item.
 
 *   Isolation nodes/boundary: In certain situations, it is possible to put in
     place a barrier that isolates a subtree from being affected by its
@@ -124,6 +125,12 @@ are treated in different ways during painting:
     in the property trees as isolation nodes that serve as roots for any
     descendant property nodes. Currently, the `contain: paint` css property
     establishes an isolation boundary.
+
+*   Local property tree state: the `PropertyTreeState` associated with each
+    fragment. All fragments have a well-defined local property tree state.
+    This is often cached in the `LocalBorderBoxProperties`
+    struct that belongs to `FragmentData`. Some `FragmentData` objects don't
+    have a `LocalBorderBoxProperties`, but that is merely a memory optimization.
 
 ## Overview
 
@@ -590,7 +597,7 @@ point to the ith parent's transform.
 
 Each `FragmentData` receives its own `ClipPaintPropertyNode`. They
 also store a unique `PaintOffset, `PaginationOffset and
-`LocalBordreBoxProperties` object.
+`LocalBorderBoxProperties` object.
 
 See
 [`LayoutMultiColumnFlowThread.h`](../layout/layout_multi_column_flow_thread.h)

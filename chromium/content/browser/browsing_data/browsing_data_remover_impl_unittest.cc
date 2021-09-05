@@ -51,8 +51,6 @@
 #include "net/http/http_network_session.h"
 #include "net/http/http_transaction_factory.h"
 #include "net/ssl/ssl_client_cert_type.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/network/cookie_manager.h"
 #include "services/network/public/cpp/features.h"
@@ -224,8 +222,9 @@ class StoragePartitionRemovalTestStoragePartition
 // Custom matcher to test the equivalence of two URL filters. Since those are
 // blackbox predicates, we can only approximate the equivalence by testing
 // whether the filter give the same answer for several URLs. This is currently
-// good enough for our testing purposes, to distinguish whitelists
-// and blacklists, empty and non-empty filters and such.
+// good enough for our testing purposes, to distinguish deletelists and
+// preservelists, empty and non-empty filters and such.
+//
 // TODO(msramek): BrowsingDataRemover and some of its backends support URL
 // filters, but its constructor currently only takes a single URL and constructs
 // its own url filter. If an url filter was directly passed to
@@ -298,21 +297,27 @@ class TestBrowsingDataRemoverDelegate
     return base::NullCallback();
   }
   bool MayRemoveDownloadHistory() override { return false; }
-  void RemoveEmbedderData(const base::Time& delete_begin,
-                          const base::Time& delete_end,
-                          uint64_t remove_mask,
-                          BrowsingDataFilterBuilder* filter_builder,
-                          uint64_t origin_type_mask,
-                          base::OnceClosure callback) override {
-    std::move(callback).Run();
+  void RemoveEmbedderData(
+      const base::Time& delete_begin,
+      const base::Time& delete_end,
+      uint64_t remove_mask,
+      BrowsingDataFilterBuilder* filter_builder,
+      uint64_t origin_type_mask,
+      base::OnceCallback<void(uint64_t)> callback) override {
+    std::move(callback).Run(failed_data_types_);
   }
 
   void set_deferred_domains(std::vector<std::string> deferred_domains) {
     deferred_domains_ = deferred_domains;
   }
 
+  void set_failed_data_types(uint64_t failed_data_types) {
+    failed_data_types_ = failed_data_types;
+  }
+
  private:
   std::vector<std::string> deferred_domains_;
+  uint64_t failed_data_types_ = 0;
 };
 
 }  // namespace
@@ -518,9 +523,10 @@ TEST_F(BrowsingDataRemoverImplTest, RemoveCookieLastHour) {
   EXPECT_EQ(removal_data.remove_begin, GetBeginTime());
 }
 
-TEST_F(BrowsingDataRemoverImplTest, RemoveCookiesDomainBlacklist) {
+TEST_F(BrowsingDataRemoverImplTest, RemoveCookiesDomainPreserveList) {
   std::unique_ptr<BrowsingDataFilterBuilder> filter(
-      BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::BLACKLIST));
+      BrowsingDataFilterBuilder::Create(
+          BrowsingDataFilterBuilder::Mode::kPreserve));
   const GURL kTestUrl1("http://host1.com");
   const GURL kTestUrl3("http://host3.com");
   filter->AddRegisterableDomain(kTestUrl1.host());
@@ -873,7 +879,8 @@ TEST_F(BrowsingDataRemoverImplTest, RemoveQuotaManagedDataForeverNeither) {
 TEST_F(BrowsingDataRemoverImplTest,
        RemoveQuotaManagedDataForeverSpecificOrigin) {
   std::unique_ptr<BrowsingDataFilterBuilder> builder(
-      BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::WHITELIST));
+      BrowsingDataFilterBuilder::Create(
+          BrowsingDataFilterBuilder::Mode::kDelete));
   const GURL kTestUrl("http://host1.com");
   builder->AddRegisterableDomain(kTestUrl.host());
   // Remove the test origin.
@@ -1055,7 +1062,8 @@ TEST_F(BrowsingDataRemoverImplTest, RemoveQuotaManagedProtectedSpecificOrigin) {
   policy->AddProtected(kTestUrl);
 
   std::unique_ptr<BrowsingDataFilterBuilder> builder(
-      BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::WHITELIST));
+      BrowsingDataFilterBuilder::Create(
+          BrowsingDataFilterBuilder::Mode::kDelete));
   builder->AddRegisterableDomain(kTestUrl.host());
 
   // Try to remove the test origin. Expect failure.
@@ -1211,8 +1219,9 @@ class InspectableCompletionObserver
   bool called() { return called_; }
 
  protected:
-  void OnBrowsingDataRemoverDone() override {
-    BrowsingDataRemoverCompletionObserver::OnBrowsingDataRemoverDone();
+  void OnBrowsingDataRemoverDone(uint64_t failed_data_types) override {
+    BrowsingDataRemoverCompletionObserver::OnBrowsingDataRemoverDone(
+        failed_data_types);
     called_ = true;
   }
 
@@ -1295,7 +1304,8 @@ TEST_F(BrowsingDataRemoverImplTest, RemoveDownloadsByTimeOnly) {
 TEST_F(BrowsingDataRemoverImplTest, RemoveDownloadsByOrigin) {
   RemoveDownloadsTester tester(GetBrowserContext());
   std::unique_ptr<BrowsingDataFilterBuilder> builder(
-      BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::WHITELIST));
+      BrowsingDataFilterBuilder::Create(
+          BrowsingDataFilterBuilder::Mode::kDelete));
   builder->AddRegisterableDomain("host1.com");
   base::RepeatingCallback<bool(const GURL&)> filter = builder->BuildUrlFilter();
 
@@ -1348,7 +1358,7 @@ class MultipleTasksObserver {
     }
     ~Target() override = default;
 
-    void OnBrowsingDataRemoverDone() override {
+    void OnBrowsingDataRemoverDone(uint64_t failed_data_types) override {
       parent_->last_called_targets_.push_back(this);
     }
 
@@ -1383,9 +1393,11 @@ TEST_F(BrowsingDataRemoverImplTest, MultipleTasks) {
   EXPECT_FALSE(remover->IsRemovingForTesting());
 
   std::unique_ptr<BrowsingDataFilterBuilder> filter_builder_1(
-      BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::WHITELIST));
+      BrowsingDataFilterBuilder::Create(
+          BrowsingDataFilterBuilder::Mode::kDelete));
   std::unique_ptr<BrowsingDataFilterBuilder> filter_builder_2(
-      BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::BLACKLIST));
+      BrowsingDataFilterBuilder::Create(
+          BrowsingDataFilterBuilder::Mode::kPreserve));
   filter_builder_2->AddRegisterableDomain("example.com");
 
   MultipleTasksObserver observer(remover);
@@ -1394,23 +1406,25 @@ TEST_F(BrowsingDataRemoverImplTest, MultipleTasks) {
   // Test several tasks with various configuration of masks, filters, and target
   // observers.
   std::list<BrowsingDataRemoverImpl::RemovalTask> tasks;
-  tasks.emplace_back(
-      base::Time(), base::Time::Max(), BrowsingDataRemover::DATA_TYPE_DOWNLOADS,
-      BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
-      BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::BLACKLIST),
-      observer.target_a());
-  tasks.emplace_back(
-      base::Time(), base::Time::Max(), BrowsingDataRemover::DATA_TYPE_COOKIES,
-      BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB,
-      BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::BLACKLIST),
-      nullptr);
-  tasks.emplace_back(
-      base::Time::Now(), base::Time::Max(),
-      BrowsingDataRemover::DATA_TYPE_DOWNLOADS,
-      BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
-          BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB,
-      BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::BLACKLIST),
-      observer.target_b());
+  tasks.emplace_back(base::Time(), base::Time::Max(),
+                     BrowsingDataRemover::DATA_TYPE_DOWNLOADS,
+                     BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
+                     BrowsingDataFilterBuilder::Create(
+                         BrowsingDataFilterBuilder::Mode::kPreserve),
+                     observer.target_a());
+  tasks.emplace_back(base::Time(), base::Time::Max(),
+                     BrowsingDataRemover::DATA_TYPE_COOKIES,
+                     BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB,
+                     BrowsingDataFilterBuilder::Create(
+                         BrowsingDataFilterBuilder::Mode::kPreserve),
+                     nullptr);
+  tasks.emplace_back(base::Time::Now(), base::Time::Max(),
+                     BrowsingDataRemover::DATA_TYPE_DOWNLOADS,
+                     BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
+                         BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB,
+                     BrowsingDataFilterBuilder::Create(
+                         BrowsingDataFilterBuilder::Mode::kPreserve),
+                     observer.target_b());
   tasks.emplace_back(base::Time(), base::Time::UnixEpoch(),
                      BrowsingDataRemover::DATA_TYPE_WEB_SQL,
                      BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
@@ -1421,10 +1435,11 @@ TEST_F(BrowsingDataRemoverImplTest, MultipleTasks) {
     // that is a private method, we must call the four public versions of
     // Remove.* instead. This also serves as a test that those methods are all
     // correctly reduced to RemoveInternal().
-    if (task.observers.empty() && task.filter_builder->IsEmptyBlacklist()) {
+    if (task.observers.empty() &&
+        task.filter_builder->MatchesAllOriginsAndDomains()) {
       remover->Remove(task.delete_begin, task.delete_end, task.remove_mask,
                       task.origin_type_mask);
-    } else if (task.filter_builder->IsEmptyBlacklist()) {
+    } else if (task.filter_builder->MatchesAllOriginsAndDomains()) {
       remover->RemoveAndReply(task.delete_begin, task.delete_end,
                               task.remove_mask, task.origin_type_mask,
                               task.observers[0]);
@@ -1470,7 +1485,8 @@ TEST_F(BrowsingDataRemoverImplTest, MultipleIdenticalTasks) {
   EXPECT_FALSE(remover->IsRemovingForTesting());
 
   std::unique_ptr<BrowsingDataFilterBuilder> filter_builder(
-      BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::WHITELIST));
+      BrowsingDataFilterBuilder::Create(
+          BrowsingDataFilterBuilder::Mode::kDelete));
   filter_builder->AddRegisterableDomain("example.com");
 
   MultipleTasksObserver observer(remover);
@@ -1481,7 +1497,8 @@ TEST_F(BrowsingDataRemoverImplTest, MultipleIdenticalTasks) {
     remover->RemoveWithFilterAndReply(
         base::Time(), base::Time::Max(), BrowsingDataRemover::DATA_TYPE_COOKIES,
         BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB,
-        BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::BLACKLIST),
+        BrowsingDataFilterBuilder::Create(
+            BrowsingDataFilterBuilder::Mode::kPreserve),
         observer.target_a());
   }
 
@@ -1607,7 +1624,8 @@ TEST_F(BrowsingDataRemoverImplTest, ClearsTrustTokensForSite) {
       .WillOnce(RunOnceClosure<1>());
 
   std::unique_ptr<BrowsingDataFilterBuilder> builder(
-      BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::WHITELIST));
+      BrowsingDataFilterBuilder::Create(
+          BrowsingDataFilterBuilder::Mode::kDelete));
   builder->AddRegisterableDomain("host1.com");
 
   BlockUntilOriginDataRemoved(base::Time(), base::Time::Max(),
@@ -1632,7 +1650,8 @@ TEST_F(BrowsingDataRemoverImplTest, ClearsTrustTokensForSiteDespiteTimeRange) {
       .WillOnce(RunOnceClosure<1>());
 
   std::unique_ptr<BrowsingDataFilterBuilder> builder(
-      BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::WHITELIST));
+      BrowsingDataFilterBuilder::Create(
+          BrowsingDataFilterBuilder::Mode::kDelete));
   builder->AddRegisterableDomain("host1.com");
 
   // Since Trust Tokens data is not associated with particular timestamps, we
@@ -1695,6 +1714,48 @@ TEST_F(BrowsingDataRemoverImplTest, DeferCookieDeletion) {
   // Reset delegate.
   BrowserContext::GetBrowsingDataRemover(GetBrowserContext())
       ->SetEmbedderDelegate(nullptr);
+}
+
+// Tests that the failed_data_types mask is correctly plumbed from the embedder
+// delegate to the observer's OnBrowsingDataRemoverDone() method.
+TEST_F(BrowsingDataRemoverImplTest, FailedDataTypes) {
+  const uint64_t kSomeEmbedderType = BrowsingDataRemover::DATA_TYPE_CONTENT_END
+                                     << 1;
+
+  BrowsingDataRemover* remover =
+      BrowserContext::GetBrowsingDataRemover(GetBrowserContext());
+
+  TestBrowsingDataRemoverDelegate delegate;
+  remover->SetEmbedderDelegate(&delegate);
+
+  {
+    delegate.set_failed_data_types(kSomeEmbedderType);
+
+    BrowsingDataRemoverCompletionObserver completion_observer(remover);
+    remover->RemoveAndReply(
+        base::Time(), base::Time::Max(),
+        BrowsingDataRemover::DATA_TYPE_COOKIES | kSomeEmbedderType,
+        BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB, &completion_observer);
+    completion_observer.BlockUntilCompletion();
+
+    EXPECT_EQ(completion_observer.failed_data_types(), kSomeEmbedderType);
+  }
+
+  {
+    delegate.set_failed_data_types(0);
+
+    BrowsingDataRemoverCompletionObserver completion_observer(remover);
+    remover->RemoveAndReply(
+        base::Time(), base::Time::Max(),
+        BrowsingDataRemover::DATA_TYPE_COOKIES | kSomeEmbedderType,
+        BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB, &completion_observer);
+    completion_observer.BlockUntilCompletion();
+
+    EXPECT_EQ(completion_observer.failed_data_types(), 0u);
+  }
+
+  // Reset delegate.
+  remover->SetEmbedderDelegate(nullptr);
 }
 
 }  // namespace content

@@ -14,6 +14,7 @@
 #include "services/network/public/mojom/ip_address_space.mojom-shared.h"
 #include "services/network/public/mojom/referrer_policy.mojom-shared.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-shared.h"
+#include "services/network/public/mojom/web_client_hints_types.mojom-shared.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
 #include "third_party/blink/public/common/navigation/triggering_event_info.h"
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-shared.h"
@@ -330,13 +331,16 @@ struct BLINK_EXPORT WebNavigationParams {
   bool had_transient_activation = false;
   // Whether this navigation has a sticky user activation flag.
   bool is_user_activated = false;
+  // Whether the navigation should be allowed to invoke a text fragment anchor.
+  // This is based on a user activation but is different from the above bit as
+  // it can be propagated across redirects and is consumed on use.
+  bool has_text_fragment_token = false;
   // Whether this navigation was browser initiated.
   bool is_browser_initiated = false;
   // Whether the document should be able to access local file:// resources.
   bool grant_load_local_resources = false;
   // The previews state which should be used for this navigation.
-  WebURLRequest::PreviewsState previews_state =
-      WebURLRequest::kPreviewsUnspecified;
+  PreviewsState previews_state = PreviewsTypes::kPreviewsUnspecified;
   // The service worker network provider to be used in the new
   // document.
   std::unique_ptr<blink::WebServiceWorkerNetworkProvider>
@@ -391,8 +395,19 @@ struct BLINK_EXPORT WebNavigationParams {
   // A list of origin trial names to enable for the document being loaded.
   WebVector<WebString> force_enabled_origin_trials;
 
-  // Whether origin isolation is restricting certain cross-origin web APIs.
-  bool origin_isolation_restricted = false;
+  // Whether the page is origin isolated.
+  // https://github.com/WICG/origin-isolation
+  bool origin_isolated = false;
+
+  // List of client hints enabled for top-level frame. These still need to be
+  // checked against feature policy before use.
+  WebVector<network::mojom::WebClientHintsType> enabled_client_hints;
+
+  // Whether the navigation is cross browsing context group (browsing instance).
+  bool is_cross_browsing_context_group_navigation = false;
+
+  // A list of additional content security policies to be enforced by blink.
+  WebVector<WebString> forced_content_security_policies;
 };
 
 }  // namespace blink

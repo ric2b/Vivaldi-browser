@@ -173,7 +173,7 @@ base::span<const PermissionsUIInfo> GetContentSettingsUIInfo() {
     {ContentSettingsType::SERIAL_GUARD, IDS_PAGE_INFO_TYPE_SERIAL},
 #endif
     {ContentSettingsType::BLUETOOTH_GUARD, IDS_PAGE_INFO_TYPE_BLUETOOTH},
-    {ContentSettingsType::NATIVE_FILE_SYSTEM_WRITE_GUARD,
+    {ContentSettingsType::FILE_SYSTEM_WRITE_GUARD,
      IDS_PAGE_INFO_TYPE_NATIVE_FILE_SYSTEM_WRITE},
     {ContentSettingsType::BLUETOOTH_SCANNING,
      IDS_PAGE_INFO_TYPE_BLUETOOTH_SCANNING},
@@ -184,6 +184,7 @@ base::span<const PermissionsUIInfo> GetContentSettingsUIInfo() {
      IDS_PAGE_INFO_TYPE_CAMERA_PAN_TILT_ZOOM},
     {ContentSettingsType::WINDOW_PLACEMENT,
      IDS_PAGE_INFO_TYPE_WINDOW_PLACEMENT},
+    {ContentSettingsType::FONT_ACCESS, IDS_PAGE_INFO_TYPE_FONT_ACCESS},
 #if !defined(OS_ANDROID)
     {ContentSettingsType::HID_GUARD, IDS_PAGE_INFO_TYPE_HID},
 #endif
@@ -216,8 +217,8 @@ CreateSecurityDescriptionForLookalikeSafetyTip(const GURL& safe_url) {
           safe_url);
   security_description->summary = l10n_util::GetStringFUTF16(
       IDS_PAGE_INFO_SAFETY_TIP_LOOKALIKE_TITLE, safe_host);
-  security_description->details = l10n_util::GetStringFUTF16(
-      IDS_PAGE_INFO_SAFETY_TIP_LOOKALIKE_DESCRIPTION, safe_host);
+  security_description->details =
+      l10n_util::GetStringUTF16(IDS_PAGE_INFO_SAFETY_TIP_LOOKALIKE_DESCRIPTION);
   security_description->type = PageInfoUI::SecurityDescriptionType::SAFETY_TIP;
   return security_description;
 }
@@ -622,7 +623,7 @@ const gfx::ImageSkia PageInfoUI::GetPermissionIcon(const PermissionInfo& info,
     case ContentSettingsType::BLUETOOTH_SCANNING:
       icon = &vector_icons::kBluetoothScanningIcon;
       break;
-    case ContentSettingsType::NATIVE_FILE_SYSTEM_WRITE_GUARD:
+    case ContentSettingsType::FILE_SYSTEM_WRITE_GUARD:
       icon = &vector_icons::kSaveOriginalFileIcon;
       break;
     case ContentSettingsType::VR:
@@ -631,6 +632,9 @@ const gfx::ImageSkia PageInfoUI::GetPermissionIcon(const PermissionInfo& info,
       break;
     case ContentSettingsType::WINDOW_PLACEMENT:
       icon = &vector_icons::kWindowPlacementIcon;
+      break;
+    case ContentSettingsType::FONT_ACCESS:
+      icon = &vector_icons::kFontDownloadIcon;
       break;
     case ContentSettingsType::HID_GUARD:
       icon = &vector_icons::kVideogameAssetIcon;

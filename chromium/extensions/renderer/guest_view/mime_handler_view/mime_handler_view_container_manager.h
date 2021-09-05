@@ -97,7 +97,7 @@ class MimeHandlerViewContainerManager
   void ReadyToCommitNavigation(
       blink::WebDocumentLoader* document_loader) override;
   void OnDestruct() override;
-  void FrameDetached() override;
+  void WillDetach() override;
 
   // mojom::MimeHandlerViewContainerManager overrides.
   void SetInternalId(const std::string& token_id) override;

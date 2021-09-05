@@ -115,10 +115,10 @@ TEST_F(ExtensionInstallStatusTest, ExtensionTerminated) {
             GetWebstoreExtensionInstallStatus(kExtensionId, profile()));
 }
 
-TEST_F(ExtensionInstallStatusTest, ExtensionBlacklisted) {
-  ExtensionRegistry::Get(profile())->AddBlacklisted(
+TEST_F(ExtensionInstallStatusTest, ExtensionBlocklisted) {
+  ExtensionRegistry::Get(profile())->AddBlocklisted(
       CreateExtension(kExtensionId));
-  EXPECT_EQ(ExtensionInstallStatus::kBlacklisted,
+  EXPECT_EQ(ExtensionInstallStatus::kBlocklisted,
             GetWebstoreExtensionInstallStatus(kExtensionId, profile()));
 }
 
@@ -323,6 +323,27 @@ TEST_F(ExtensionInstallStatusTest, ExtensionBlockedByManifestType) {
             GetWebstoreExtensionInstallStatus(kExtensionId, profile(),
                                               Manifest::Type::TYPE_HOSTED_APP,
                                               PermissionSet()));
+}
+
+TEST_F(ExtensionInstallStatusTest, ExtensionWithoutPermissionInfo) {
+  SetExtensionSettings(R"({
+    "*": {
+      "blocked_permissions": ["storage"]
+    }
+  })");
+
+  EXPECT_EQ(ExtensionInstallStatus::kInstallable,
+            GetWebstoreExtensionInstallStatus(kExtensionId, profile()));
+}
+
+TEST_F(ExtensionInstallStatusTest, ExtensionWithoutManifestInfo) {
+  SetExtensionSettings(R"({
+    "*": {
+      "allowed_types": ["theme"]
+    }
+  })");
+  EXPECT_EQ(ExtensionInstallStatus::kInstallable,
+            GetWebstoreExtensionInstallStatus(kExtensionId, profile()));
 }
 
 TEST_F(ExtensionInstallStatusTest, ExtensionBlockedByPermissions) {

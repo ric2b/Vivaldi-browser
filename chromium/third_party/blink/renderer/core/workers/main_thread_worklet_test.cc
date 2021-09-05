@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/core/workers/global_scope_creation_params.h"
 #include "third_party/blink/renderer/core/workers/main_thread_worklet_reporting_proxy.h"
 #include "third_party/blink/renderer/core/workers/worklet_global_scope.h"
+#include "third_party/blink/renderer/core/workers/worklet_global_scope_test_helper.h"
 #include "third_party/blink/renderer/core/workers/worklet_module_responses_map.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
@@ -31,13 +32,6 @@ class MainThreadWorkletReportingProxyForTest final
     EXPECT_FALSE(reported_features_[static_cast<size_t>(feature)]);
     reported_features_.set(static_cast<size_t>(feature));
     MainThreadWorkletReportingProxy::CountFeature(feature);
-  }
-
-  void CountDeprecation(WebFeature feature) override {
-    // Any feature should be reported only one time.
-    EXPECT_FALSE(reported_features_[static_cast<size_t>(feature)]);
-    reported_features_.set(static_cast<size_t>(feature));
-    MainThreadWorkletReportingProxy::CountDeprecation(feature);
   }
 
  private:
@@ -61,7 +55,7 @@ class MainThreadWorkletTest : public PageTestBase {
     csp->DidReceiveHeader(csp_header,
                           network::mojom::ContentSecurityPolicyType::kEnforce,
                           network::mojom::ContentSecurityPolicySource::kHTTP);
-    window->document()->InitContentSecurityPolicy(csp);
+    window->GetSecurityContext().SetContentSecurityPolicy(csp);
 
     reporting_proxy_ =
         std::make_unique<MainThreadWorkletReportingProxyForTest>(window);
@@ -73,15 +67,14 @@ class MainThreadWorkletTest : public PageTestBase {
         window->GetReferrerPolicy(), window->GetSecurityOrigin(),
         window->IsSecureContext(), window->GetHttpsState(),
         nullptr /* worker_clients */, nullptr /* content_settings_client */,
-        window->GetSecurityContext().AddressSpace(),
-        OriginTrialContext::GetTokens(window).get(),
+        window->AddressSpace(), OriginTrialContext::GetTokens(window).get(),
         base::UnguessableToken::Create(), nullptr /* worker_settings */,
         kV8CacheOptionsDefault,
         MakeGarbageCollected<WorkletModuleResponsesMap>(),
         mojo::NullRemote() /* browser_interface_broker */,
         BeginFrameProviderParams(), nullptr /* parent_feature_policy */,
-        window->GetAgentClusterID());
-    global_scope_ = MakeGarbageCollected<WorkletGlobalScope>(
+        window->GetAgentClusterID(), window->GetExecutionContextToken());
+    global_scope_ = MakeGarbageCollected<FakeWorkletGlobalScope>(
         std::move(creation_params), *reporting_proxy_, &GetFrame(),
         false /* create_microtask_queue */);
     EXPECT_TRUE(global_scope_->IsMainThreadWorkletGlobalScope());

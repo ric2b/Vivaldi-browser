@@ -11,63 +11,51 @@
 namespace {
 
 base::ThreadSafePartitionRoot& Allocator() {
-  static base::NoDestructor<base::ThreadSafePartitionRoot> allocator;
-  allocator->Init();
+  static base::NoDestructor<base::ThreadSafePartitionRoot> allocator{
+      false /* enforce_alignment */};
   return *allocator;
 }
 
 using base::allocator::AllocatorDispatch;
 
 void* PartitionMalloc(const AllocatorDispatch*, size_t size, void* context) {
-  return Allocator().Alloc(size, "");
+  return Allocator().AllocFlagsNoHooks(0, size);
 }
 
 void* PartitionCalloc(const AllocatorDispatch*,
                       size_t n,
                       size_t size,
                       void* context) {
-  return Allocator().AllocFlags(base::PartitionAllocZeroFill, n * size, "");
+  return Allocator().AllocFlagsNoHooks(base::PartitionAllocZeroFill, n * size);
 }
 
 void* PartitionMemalign(const AllocatorDispatch*,
                         size_t alignment,
                         size_t size,
                         void* context) {
-  // This is mandated by |posix_memalign()|, so should never fire.
-  //
-  // Note: CHECK() is fine here since we are not called from malloc(), but from
-  // posix_memalign(), so there is no recursion. It is also fine to make aligned
-  // allocations slower, as they are rare.
-  CHECK(base::bits::IsPowerOfTwo(alignment));
-
-  // PartitionAlloc only guarantees alignment for power-of-two sized
-  // allocations. To make sure this applies here, round up the allocation size.
-  size_t size_rounded_up =
-      static_cast<size_t>(1)
-      << (sizeof(size_t) * 8 - base::bits::CountLeadingZeroBits(size - 1));
-
-  void* ptr = Allocator().Alloc(size_rounded_up, "");
-  CHECK_EQ(reinterpret_cast<uintptr_t>(ptr) % alignment, 0ull);
-
-  return ptr;
+  static base::NoDestructor<base::ThreadSafePartitionRoot> aligned_allocator{
+      true /* enforce_alignment */};
+  return aligned_allocator->AlignedAllocFlags(base::PartitionAllocNoHooks,
+                                              alignment, size);
 }
 
 void* PartitionRealloc(const AllocatorDispatch*,
                        void* address,
                        size_t size,
                        void* context) {
-  return Allocator().Realloc(address, size, "");
+  return Allocator().ReallocFlags(base::PartitionAllocNoHooks, address, size,
+                                  "");
 }
 
 void PartitionFree(const AllocatorDispatch*, void* address, void* context) {
-  Allocator().Free(address);
+  base::ThreadSafePartitionRoot::FreeNoHooks(address);
 }
 
 size_t PartitionGetSizeEstimate(const AllocatorDispatch*,
                                 void* address,
                                 void* context) {
   // TODO(lizeb): Returns incorrect values for aligned allocations.
-  return base::PartitionAllocGetSize<base::internal::ThreadSafe>(address);
+  return base::ThreadSafePartitionRoot::GetSizeFromPointer(address);
 }
 
 }  // namespace

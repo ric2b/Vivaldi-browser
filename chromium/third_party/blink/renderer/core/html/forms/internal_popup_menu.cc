@@ -54,8 +54,6 @@ const char* TextTransformToString(ETextTransform transform) {
 
 class PopupMenuCSSFontSelector : public CSSFontSelector,
                                  private FontSelectorClient {
-  USING_GARBAGE_COLLECTED_MIXIN(PopupMenuCSSFontSelector);
-
  public:
   PopupMenuCSSFontSelector(Document*, CSSFontSelector*);
   ~PopupMenuCSSFontSelector() override;
@@ -113,7 +111,7 @@ class InternalPopupMenu::ItemIterationContext {
         is_in_group_(false),
         buffer_(buffer) {
     DCHECK(buffer_);
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
     // On other platforms, the <option> background color is the same as the
     // <select> background color. On Linux, that makes the <option>
     // background color very dark, so by default, try to use a lighter
@@ -500,6 +498,10 @@ void InternalPopupMenu::Hide() {
 
 void InternalPopupMenu::UpdateFromElement(UpdateReason) {
   needs_update_ = true;
+}
+
+AXObject* InternalPopupMenu::PopupRootAXObject() const {
+  return popup_ ? popup_->RootAXObject() : nullptr;
 }
 
 void InternalPopupMenu::Update(bool force_update) {

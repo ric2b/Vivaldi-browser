@@ -146,7 +146,7 @@ WebApplicationInfo CreateWebAppInfo(const char* title,
   web_app_info.description = base::UTF8ToUTF16(description);
   web_app_info.app_url = GURL(app_url);
   web_app_info.scope = GURL(app_url);
-  web_app_info.icon_bitmaps[size] = CreateSquareBitmap(size);
+  web_app_info.icon_bitmaps_any[size] = CreateSquareBitmap(size);
   if (create_with_shortcuts) {
     WebApplicationShortcutsMenuItemInfo shortcut_item;
     WebApplicationShortcutsMenuItemInfo::Icon icon;
@@ -156,7 +156,8 @@ WebApplicationInfo CreateWebAppInfo(const char* title,
     icon.url = GURL(kShortcutIconUrl);
     icon.square_size_px = size;
     shortcut_item.shortcut_icon_infos.push_back(std::move(icon));
-    web_app_info.shortcut_infos.emplace_back(std::move(shortcut_item));
+    web_app_info.shortcuts_menu_item_infos.emplace_back(
+        std::move(shortcut_item));
     shortcut_icon_bitmaps[size] = CreateSquareBitmap(size);
     web_app_info.shortcuts_menu_icons_bitmaps.emplace_back(
         std::move(shortcut_icon_bitmaps));
@@ -704,13 +705,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest,
 }
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
-IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, Blacklist) {
-  scoped_refptr<FakeSafeBrowsingDatabaseManager> blacklist_db(
+IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, Blocklist) {
+  scoped_refptr<FakeSafeBrowsingDatabaseManager> blocklist_db(
       new FakeSafeBrowsingDatabaseManager(true));
-  Blacklist::ScopedDatabaseManagerForTest scoped_blacklist_db(blacklist_db);
+  Blocklist::ScopedDatabaseManagerForTest scoped_blocklist_db(blocklist_db);
 
   const std::string extension_id = "gllekhaobjnhgeagipipnkpmmmpchacm";
-  blacklist_db->SetUnsafe(extension_id);
+  blocklist_db->SetUnsafe(extension_id);
 
   base::FilePath crx_path = test_data_dir_.AppendASCII("theme_hidpi_crx")
                                           .AppendASCII("theme_hidpi.crx");

@@ -57,13 +57,9 @@ TEST(NinjaTargetCommandUtil, DefineWriter) {
 #endif
              {"FOO", "BAR=1", "BAZ=\"Baz\""});
 
-  TestWriter(DefineWriter(ESCAPE_NINJA_COMMAND, true),
-// Escaping is different between Windows and Posix.
-#if defined(OS_WIN)
-             " -DFOO -DBAR=1 \"-DBAZ=\\\\\\\"Baz\\\\\\\"\"",
-#else
-             " -DFOO -DBAR=1 -DBAZ=\\\\\\\"Baz\\\\\\\"",
-#endif
+  TestWriter(DefineWriter(ESCAPE_COMPILATION_DATABASE),
+             // Escaping is different between Windows and Posix.
+             " -DFOO -DBAR=1 \"-DBAZ=\\\"Baz\\\"\"",
              {"FOO", "BAR=1", "BAZ=\"Baz\""});
 }
 
@@ -94,7 +90,7 @@ TEST(NinjaTargetCommandUtil, FrameworksWriter) {
 #endif
              {"Foundation.framework", "Name With Spaces.framework"});
 
-  TestWriter(FrameworksWriter(ESCAPE_SPACE, true, "-framework "),
+  TestWriter(FrameworksWriter(ESCAPE_SPACE, "-framework "),
              " -framework Foundation -framework Name\\ With\\ Spaces",
              {"Foundation.framework", "Name With Spaces.framework"});
 }

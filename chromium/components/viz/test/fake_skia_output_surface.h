@@ -43,7 +43,6 @@ class FakeSkiaOutputSurface : public SkiaOutputSurface {
   void EnsureBackbuffer() override;
   void DiscardBackbuffer() override;
   void BindFramebuffer() override;
-  void SetDrawRectangle(const gfx::Rect& draw_rectangle) override;
   void Reshape(const gfx::Size& size,
                float device_scale_factor,
                const gfx::ColorSpace& color_space,
@@ -126,7 +125,7 @@ class FakeSkiaOutputSurface : public SkiaOutputSurface {
       scoped_refptr<ContextProvider> context_provider);
 
   ContextProvider* context_provider() { return context_provider_.get(); }
-  GrContext* gr_context() { return context_provider()->GrContext(); }
+  GrDirectContext* gr_context() { return context_provider()->GrContext(); }
 
   bool GetGrBackendTexture(const ImageContext& image_context,
                            GrBackendTexture* backend_texture);
@@ -138,7 +137,7 @@ class FakeSkiaOutputSurface : public SkiaOutputSurface {
   std::unique_ptr<TextureDeleter> texture_deleter_;
 
   // The current render pass id set by BeginPaintRenderPass.
-  RenderPassId current_render_pass_id_ = 0;
+  RenderPassId current_render_pass_id_;
 
   // SkSurfaces for render passes, sk_surfaces_[0] is the root surface.
   base::flat_map<RenderPassId, sk_sp<SkSurface>> sk_surfaces_;

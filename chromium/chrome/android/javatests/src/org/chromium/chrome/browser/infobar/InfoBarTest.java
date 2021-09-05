@@ -9,6 +9,7 @@ import android.support.test.InstrumentationRegistry;
 
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -25,21 +26,21 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.WebContentsFactory;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.datareduction.DataReductionPromoUtils;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.TabTestUtils;
 import org.chromium.chrome.browser.tab.TabWebContentsDelegateAndroid;
-import org.chromium.chrome.browser.ui.messages.infobar.InfoBar;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.InfoBarTestAnimationListener;
 import org.chromium.chrome.test.util.InfoBarUtil;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.LocationSettingsTestUtil;
+import org.chromium.components.infobars.InfoBar;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.Criteria;
@@ -109,12 +110,11 @@ public class InfoBarTest {
     }
 
     private void waitUntilDataReductionPromoInfoBarAppears() {
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                List<InfoBar> infobars = mActivityTestRule.getInfoBars();
-                return infobars.size() == 1 && infobars.get(0) instanceof DataReductionPromoInfoBar;
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            List<InfoBar> infobars = mActivityTestRule.getInfoBars();
+            Criteria.checkThat(infobars.size(), Matchers.is(1));
+            Criteria.checkThat(
+                    infobars.get(0), Matchers.instanceOf(DataReductionPromoInfoBar.class));
         });
     }
 
@@ -511,11 +511,8 @@ public class InfoBarTest {
         // The renderer should have been killed and the InfoBar removed.
         mListener.removeInfoBarAnimationFinished("InfoBar not removed.");
         Assert.assertTrue("Wrong infobar count", mActivityTestRule.getInfoBars().isEmpty());
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return SadTab.isShowing(mActivityTestRule.getActivity().getActivityTab());
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            return SadTab.isShowing(mActivityTestRule.getActivity().getActivityTab());
         }, MAX_TIMEOUT, CHECK_INTERVAL);
     }
 

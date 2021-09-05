@@ -26,8 +26,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_DOM_ELEMENT_H_
 
 #include "third_party/blink/public/common/input/pointer_id.h"
-#include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_focus_options.h"
+#include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/renderer/core/animation/animatable.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
@@ -43,6 +42,7 @@
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
+#include "third_party/blink/renderer/platform/wtf/text/atomic_string_table.h"
 
 namespace blink {
 
@@ -65,6 +65,7 @@ class ElementRareData;
 class ExceptionState;
 class FloatQuad;
 class FloatSize;
+class FocusOptions;
 class GetInnerHTMLOptions;
 class HTMLTemplateElement;
 class Image;
@@ -93,6 +94,9 @@ enum class CSSPropertyID;
 enum class CSSValueID;
 enum class DisplayLockActivationReason;
 enum class DisplayLockLifecycleTarget;
+enum class DocumentUpdateReason;
+
+struct FocusParams;
 
 using ScrollOffset = FloatSize;
 
@@ -130,27 +134,6 @@ enum class NamedItemType {
   kName,
   kNameOrId,
   kNameOrIdWithName,
-};
-
-struct FocusParams {
-  STACK_ALLOCATED();
-
- public:
-  FocusParams() : options(FocusOptions::Create()) {}
-  FocusParams(SelectionBehaviorOnFocus selection,
-              mojom::blink::FocusType focus_type,
-              InputDeviceCapabilities* capabilities,
-              const FocusOptions* focus_options = FocusOptions::Create())
-      : selection_behavior(selection),
-        type(focus_type),
-        source_capabilities(capabilities),
-        options(focus_options) {}
-
-  SelectionBehaviorOnFocus selection_behavior =
-      SelectionBehaviorOnFocus::kRestore;
-  mojom::blink::FocusType type = mojom::blink::FocusType::kNone;
-  InputDeviceCapabilities* source_capabilities = nullptr;
-  const FocusOptions* options = nullptr;
 };
 
 typedef HeapVector<Member<Attr>> AttrNodeList;
@@ -240,18 +223,28 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // Ignores namespace.
   bool HasAttributeIgnoringNamespace(const AtomicString& local_name) const;
 
-  const AtomicString& getAttribute(const AtomicString& name) const;
+  const AtomicString& getAttribute(const AtomicString& local_name) const {
+    return GetAttributeHinted(local_name, WeakLowercaseIfNecessary(local_name));
+  }
+
   const AtomicString& getAttributeNS(const AtomicString& namespace_uri,
                                      const AtomicString& local_name) const;
 
   void setAttribute(const AtomicString& name,
-                    const AtomicString& value,
-                    ExceptionState& = ASSERT_NO_EXCEPTION);
+                    AtomicString value,
+                    ExceptionState& exception_state = ASSERT_NO_EXCEPTION) {
+    SetAttributeHinted(name, WeakLowercaseIfNecessary(name), value,
+                       exception_state);
+  }
 
   // Trusted Types variant for explicit setAttribute() use.
-  void setAttribute(const AtomicString&,
-                    const StringOrTrustedHTMLOrTrustedScriptOrTrustedScriptURL&,
-                    ExceptionState&);
+  void setAttribute(const AtomicString& name,
+                    const StringOrTrustedHTMLOrTrustedScriptOrTrustedScriptURL&
+                        string_or_trusted,
+                    ExceptionState& exception_state) {
+    SetAttributeHinted(name, WeakLowercaseIfNecessary(name), string_or_trusted,
+                       exception_state);
+  }
 
   // Returns attributes that should be checked against Trusted Types
   virtual const AttrNameToTrustedType& GetCheckedAttributeTypes() const;
@@ -282,6 +275,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   //   document, then set qualifiedName to qualifiedName in ASCII lowercase.
   //   https://dom.spec.whatwg.org/#concept-element-attributes-get-by-name
   AtomicString LowercaseIfNecessary(const AtomicString&) const;
+  WTF::AtomicStringTable::WeakResult WeakLowercaseIfNecessary(
+      const StringView&) const;
 
   // NoncedElement implementation: this is only used by HTMLElement and
   // SVGElement, but putting the implementation here allows us to use
@@ -340,6 +335,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // Applies ancestors' frames' clipping, but does not (yet) apply (overflow)
   // element clipping (crbug.com/889840).
   IntRect VisibleBoundsInVisualViewport() const;
+  Vector<IntRect> OutlineRectsInVisualViewport(
+      DocumentUpdateReason reason = DocumentUpdateReason::kUnknown) const;
 
   DOMRectList* getClientRects();
   DOMRect* getBoundingClientRect();
@@ -352,7 +349,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   void DidMoveToNewDocument(Document&) override;
 
-  void removeAttribute(const AtomicString& name);
+  void removeAttribute(const AtomicString& name) {
+    RemoveAttributeHinted(name, WeakLowercaseIfNecessary(name));
+  }
   void removeAttributeNS(const AtomicString& namespace_uri,
                          const AtomicString& local_name);
 
@@ -642,7 +641,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // delegatesFocus flag.
   bool DelegatesFocus() const;
   Element* GetFocusableArea() const;
-  virtual void focus(const FocusParams& = FocusParams());
+  virtual void focus(const FocusParams&);
+  void focus();
   void focus(const FocusOptions*);
 
   void UpdateFocusAppearance(SelectionBehaviorOnFocus);
@@ -873,7 +873,10 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   ElementAnimations& EnsureElementAnimations();
   bool HasAnimations() const;
 
-  void SynchronizeAttribute(const AtomicString& local_name) const;
+  void SynchronizeAttribute(const AtomicString& local_name) const {
+    SynchronizeAttributeHinted(local_name,
+                               WeakLowercaseIfNecessary(local_name));
+  }
 
   MutableCSSPropertyValueSet& EnsureMutableInlineStyle();
   void ClearMutableInlineStyleIfEmpty();
@@ -1106,16 +1109,42 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
                                SynchronizationOfLazyAttribute);
   void RemoveAttributeInternal(wtf_size_t index,
                                SynchronizationOfLazyAttribute);
-  std::pair<wtf_size_t, const QualifiedName> LookupAttributeQNameInternal(
-      const AtomicString& local_name) const;
   SpecificTrustedType ExpectedTrustedTypeForAttribute(
       const QualifiedName&) const;
+
+  // These Hinted versions of the functions are subtle hot path
+  // optimizations designed to reduce the number of unnecessary AtomicString
+  // creations, AtomicStringTable lookups, and LowerCaseIfNecessary calls.
+  //
+  // The `hint` is the result of a WeakLowercaseIfNecessary() call unless it is
+  // known that the the incoming string already has the right case. Then
+  // the `hint` can be constructed from calling AtomicString::Impl().
+  const AtomicString& GetAttributeHinted(
+      const AtomicString& name,
+      WTF::AtomicStringTable::WeakResult hint) const;
+  void RemoveAttributeHinted(const AtomicString& name,
+                             WTF::AtomicStringTable::WeakResult hint);
+  void SynchronizeAttributeHinted(
+      const AtomicString& name,
+      WTF::AtomicStringTable::WeakResult hint) const;
+  void SetAttributeHinted(const AtomicString& name,
+                          WTF::AtomicStringTable::WeakResult hint,
+                          const AtomicString& value,
+                          ExceptionState& = ASSERT_NO_EXCEPTION);
+  void SetAttributeHinted(
+      const AtomicString& name,
+      WTF::AtomicStringTable::WeakResult hint,
+      const StringOrTrustedHTMLOrTrustedScriptOrTrustedScriptURL&,
+      ExceptionState&);
+  std::pair<wtf_size_t, const QualifiedName> LookupAttributeQNameHinted(
+      const AtomicString& name,
+      WTF::AtomicStringTable::WeakResult hint) const;
 
   void CancelFocusAppearanceUpdate();
   virtual int DefaultTabIndex() const;
 
   const ComputedStyle* VirtualEnsureComputedStyle(
-      PseudoId pseudo_element_specifier = kPseudoIdNone) override {
+      PseudoId pseudo_element_specifier = kPseudoIdNone) final {
     return EnsureComputedStyle(pseudo_element_specifier);
   }
 

@@ -227,7 +227,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   auto* overlay_window = window_controller()->GetWindowForTesting();
   gfx::NativeWindow native_window =
       static_cast<OverlayWindowViews*>(overlay_window)->GetNativeWindow();
-#if defined(OS_CHROMEOS) || defined(OS_MACOSX)
+#if defined(OS_CHROMEOS) || defined(OS_MAC)
   EXPECT_FALSE(platform_util::IsWindowActive(native_window));
 #else
   EXPECT_TRUE(platform_util::IsWindowActive(native_window));
@@ -1267,7 +1267,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
 
-  EXPECT_TRUE(active_web_contents->IsFullscreenForCurrentTab());
+  EXPECT_TRUE(active_web_contents->IsFullscreen());
   EXPECT_FALSE(window_controller()->GetWindowForTesting()->IsVisible());
 }
 
@@ -1296,7 +1296,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
       active_web_contents, "enterPictureInPicture();", &result));
   EXPECT_TRUE(result);
 
-  EXPECT_FALSE(active_web_contents->IsFullscreenForCurrentTab());
+  EXPECT_FALSE(active_web_contents->IsFullscreen());
   EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
 }
 
@@ -1623,8 +1623,9 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 // Tests that video in Picture-in-Picture is paused when user presses
 // VKEY_MEDIA_PLAY_PAUSE key even if there's another media playing in a
 // foreground tab.
+// TODO(https://crbug.com/1070810) flaky test
 IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
-                       HandleMediaKeyPlayPause) {
+                       DISABLED_HandleMediaKeyPlayPause) {
   GURL test_page_url = ui_test_utils::GetTestUrl(
       base::FilePath(base::FilePath::kCurrentDirectory),
       base::FilePath(kPictureInPictureWindowSizePage));
@@ -2428,7 +2429,7 @@ IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWindowControllerBrowserTest,
 // triggered.
 
 // Crashes on Mac only.  http://crbug.com/1058087
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_AutoPictureInPictureTriggeredWhenFullscreen \
   DISABLED_AutoPictureInPictureTriggeredWhenFullscreen
 #else
@@ -2951,7 +2952,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 }
 
 // TODO(crbug.com/1002489): Test is flaky on Linux.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_UpdateMaxSize DISABLED_UpdateMaxSize
 #else
 #define MAYBE_UpdateMaxSize UpdateMaxSize

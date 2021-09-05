@@ -10,6 +10,7 @@
 #include "base/base_paths.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/json/json_reader.h"
 #include "base/run_loop.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_path_override.h"
@@ -19,6 +20,8 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/pref_names.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_renderer_host.h"
@@ -27,6 +30,7 @@
 #include "url/origin.h"
 
 using content::BrowserContext;
+using HandleType = ChromeNativeFileSystemPermissionContext::HandleType;
 using UserAction = ChromeNativeFileSystemPermissionContext::UserAction;
 using PermissionStatus =
     content::NativeFileSystemPermissionGrant::PermissionStatus;
@@ -47,7 +51,7 @@ class TestNativeFileSystemPermissionContext
   scoped_refptr<content::NativeFileSystemPermissionGrant>
   GetReadPermissionGrant(const url::Origin& origin,
                          const base::FilePath& path,
-                         bool is_directory,
+                         HandleType handle_type,
                          UserAction user_action) override {
     NOTREACHED();
     return nullptr;
@@ -55,17 +59,10 @@ class TestNativeFileSystemPermissionContext
   scoped_refptr<content::NativeFileSystemPermissionGrant>
   GetWritePermissionGrant(const url::Origin& origin,
                           const base::FilePath& path,
-                          bool is_directory,
+                          HandleType handle_type,
                           UserAction user_action) override {
     NOTREACHED();
     return nullptr;
-  }
-  void ConfirmDirectoryReadAccess(
-      const url::Origin& origin,
-      const base::FilePath& path,
-      content::GlobalFrameRoutingId frame_id,
-      base::OnceCallback<void(PermissionStatus)> callback) override {
-    NOTREACHED();
   }
 
   // ChromeNativeFileSystemPermissionContext:
@@ -99,12 +96,12 @@ class ChromeNativeFileSystemPermissionContextTest : public testing::Test {
 
   SensitiveDirectoryResult ConfirmSensitiveDirectoryAccessSync(
       ChromeNativeFileSystemPermissionContext* context,
-      const std::vector<base::FilePath>& paths) {
+      const std::vector<base::FilePath>& paths,
+      HandleType handle_type) {
     base::RunLoop loop;
     SensitiveDirectoryResult out_result;
     permission_context_->ConfirmSensitiveDirectoryAccess(
-        kTestOrigin, paths, /*is_directory=*/false,
-        content::GlobalFrameRoutingId(),
+        kTestOrigin, paths, handle_type, content::GlobalFrameRoutingId(),
         base::BindLambdaForTesting([&](SensitiveDirectoryResult result) {
           out_result = result;
           loop.Quit();
@@ -134,6 +131,7 @@ class ChromeNativeFileSystemPermissionContextTest : public testing::Test {
     return permission_context_.get();
   }
   BrowserContext* browser_context() { return &profile_; }
+  TestingProfile* profile() { return &profile_; }
 
  protected:
   const url::Origin kTestOrigin =
@@ -162,13 +160,17 @@ TEST_F(ChromeNativeFileSystemPermissionContextTest,
 #endif
 
   // Path outside any special directories should be allowed.
-  EXPECT_EQ(
-      SensitiveDirectoryResult::kAllowed,
-      ConfirmSensitiveDirectoryAccessSync(permission_context(), {kTestPath}));
+  EXPECT_EQ(SensitiveDirectoryResult::kAllowed,
+            ConfirmSensitiveDirectoryAccessSync(
+                permission_context(), {kTestPath}, HandleType::kFile));
+  EXPECT_EQ(SensitiveDirectoryResult::kAllowed,
+            ConfirmSensitiveDirectoryAccessSync(
+                permission_context(), {kTestPath}, HandleType::kDirectory));
 
   // Empty set of paths should also be allowed.
   EXPECT_EQ(SensitiveDirectoryResult::kAllowed,
-            ConfirmSensitiveDirectoryAccessSync(permission_context(), {}));
+            ConfirmSensitiveDirectoryAccessSync(permission_context(), {},
+                                                HandleType::kFile));
 }
 
 TEST_F(ChromeNativeFileSystemPermissionContextTest,
@@ -177,17 +179,23 @@ TEST_F(ChromeNativeFileSystemPermissionContextTest,
   base::ScopedPathOverride home_override(base::DIR_HOME, home_dir, true, true);
 
   // Home directory itself should not be allowed.
+  EXPECT_EQ(SensitiveDirectoryResult::kAbort,
+            ConfirmSensitiveDirectoryAccessSync(
+                permission_context(), {home_dir}, HandleType::kDirectory));
+  // Parent of home directory should also not be allowed.
   EXPECT_EQ(
       SensitiveDirectoryResult::kAbort,
-      ConfirmSensitiveDirectoryAccessSync(permission_context(), {home_dir}));
-  // Parent of home directory should also not be allowed.
-  EXPECT_EQ(SensitiveDirectoryResult::kAbort,
-            ConfirmSensitiveDirectoryAccessSync(permission_context(),
-                                                {temp_dir_.GetPath()}));
+      ConfirmSensitiveDirectoryAccessSync(
+          permission_context(), {temp_dir_.GetPath()}, HandleType::kDirectory));
   // Paths inside home directory should be allowed.
   EXPECT_EQ(SensitiveDirectoryResult::kAllowed,
             ConfirmSensitiveDirectoryAccessSync(permission_context(),
-                                                {home_dir.AppendASCII("foo")}));
+                                                {home_dir.AppendASCII("foo")},
+                                                HandleType::kFile));
+  EXPECT_EQ(SensitiveDirectoryResult::kAllowed,
+            ConfirmSensitiveDirectoryAccessSync(permission_context(),
+                                                {home_dir.AppendASCII("foo")},
+                                                HandleType::kDirectory));
 }
 
 TEST_F(ChromeNativeFileSystemPermissionContextTest,
@@ -196,17 +204,23 @@ TEST_F(ChromeNativeFileSystemPermissionContextTest,
   base::ScopedPathOverride app_override(chrome::DIR_APP, app_dir, true, true);
 
   // App directory itself should not be allowed.
+  EXPECT_EQ(SensitiveDirectoryResult::kAbort,
+            ConfirmSensitiveDirectoryAccessSync(permission_context(), {app_dir},
+                                                HandleType::kDirectory));
+  // Parent of App directory should also not be allowed.
   EXPECT_EQ(
       SensitiveDirectoryResult::kAbort,
-      ConfirmSensitiveDirectoryAccessSync(permission_context(), {app_dir}));
-  // Parent of App directory should also not be allowed.
-  EXPECT_EQ(SensitiveDirectoryResult::kAbort,
-            ConfirmSensitiveDirectoryAccessSync(permission_context(),
-                                                {temp_dir_.GetPath()}));
+      ConfirmSensitiveDirectoryAccessSync(
+          permission_context(), {temp_dir_.GetPath()}, HandleType::kDirectory));
   // Paths inside App directory should also not be allowed.
   EXPECT_EQ(SensitiveDirectoryResult::kAbort,
             ConfirmSensitiveDirectoryAccessSync(permission_context(),
-                                                {app_dir.AppendASCII("foo")}));
+                                                {app_dir.AppendASCII("foo")},
+                                                HandleType::kFile));
+  EXPECT_EQ(SensitiveDirectoryResult::kAbort,
+            ConfirmSensitiveDirectoryAccessSync(permission_context(),
+                                                {app_dir.AppendASCII("foo")},
+                                                HandleType::kDirectory));
 }
 
 TEST_F(ChromeNativeFileSystemPermissionContextTest,
@@ -220,20 +234,50 @@ TEST_F(ChromeNativeFileSystemPermissionContextTest,
 
   // User Data directory itself should not be allowed.
   EXPECT_EQ(SensitiveDirectoryResult::kAbort,
-            ConfirmSensitiveDirectoryAccessSync(permission_context(),
-                                                {user_data_dir}));
+            ConfirmSensitiveDirectoryAccessSync(
+                permission_context(), {user_data_dir}, HandleType::kDirectory));
   // Parent of User Data directory should also not be allowed.
-  EXPECT_EQ(SensitiveDirectoryResult::kAbort,
-            ConfirmSensitiveDirectoryAccessSync(permission_context(),
-                                                {temp_dir_.GetPath()}));
+  EXPECT_EQ(
+      SensitiveDirectoryResult::kAbort,
+      ConfirmSensitiveDirectoryAccessSync(
+          permission_context(), {temp_dir_.GetPath()}, HandleType::kDirectory));
   // The nested Download directory itself should not be allowed.
   EXPECT_EQ(SensitiveDirectoryResult::kAbort,
-            ConfirmSensitiveDirectoryAccessSync(permission_context(),
-                                                {download_dir}));
+            ConfirmSensitiveDirectoryAccessSync(
+                permission_context(), {download_dir}, HandleType::kDirectory));
   // Paths inside the nested Download directory should be allowed.
   EXPECT_EQ(SensitiveDirectoryResult::kAllowed,
             ConfirmSensitiveDirectoryAccessSync(
-                permission_context(), {download_dir.AppendASCII("foo")}));
+                permission_context(), {download_dir.AppendASCII("foo")},
+                HandleType::kFile));
+  EXPECT_EQ(SensitiveDirectoryResult::kAllowed,
+            ConfirmSensitiveDirectoryAccessSync(
+                permission_context(), {download_dir.AppendASCII("foo")},
+                HandleType::kDirectory));
+
+#if defined(OS_WIN)
+  // DIR_IE_INTERNET_CACHE is an example of a directory where nested directories
+  // are blocked, but nested files should be allowed.
+  base::FilePath internet_cache = user_data_dir.AppendASCII("INetCache");
+  base::ScopedPathOverride internet_cache_override(base::DIR_IE_INTERNET_CACHE,
+                                                   internet_cache, true, true);
+
+  // The nested INetCache directory itself should not be allowed.
+  EXPECT_EQ(
+      SensitiveDirectoryResult::kAbort,
+      ConfirmSensitiveDirectoryAccessSync(
+          permission_context(), {internet_cache}, HandleType::kDirectory));
+  // Files inside the nested INetCache directory should be allowed.
+  EXPECT_EQ(SensitiveDirectoryResult::kAllowed,
+            ConfirmSensitiveDirectoryAccessSync(
+                permission_context(), {internet_cache.AppendASCII("foo")},
+                HandleType::kFile));
+  // But directories should be blocked.
+  EXPECT_EQ(SensitiveDirectoryResult::kAbort,
+            ConfirmSensitiveDirectoryAccessSync(
+                permission_context(), {internet_cache.AppendASCII("foo")},
+                HandleType::kDirectory));
+#endif
 }
 
 TEST_F(ChromeNativeFileSystemPermissionContextTest,
@@ -243,44 +287,52 @@ TEST_F(ChromeNativeFileSystemPermissionContextTest,
 
   // ~/.ssh should be blocked
   EXPECT_EQ(SensitiveDirectoryResult::kAbort,
-            ConfirmSensitiveDirectoryAccessSync(
-                permission_context(), {home_dir.AppendASCII(".ssh")}));
+            ConfirmSensitiveDirectoryAccessSync(permission_context(),
+                                                {home_dir.AppendASCII(".ssh")},
+                                                HandleType::kDirectory));
   // And anything inside ~/.ssh should also be blocked
   EXPECT_EQ(SensitiveDirectoryResult::kAbort,
             ConfirmSensitiveDirectoryAccessSync(
-                permission_context(), {home_dir.AppendASCII(".ssh/id_rsa")}));
+                permission_context(), {home_dir.AppendASCII(".ssh/id_rsa")},
+                HandleType::kFile));
 }
 
 TEST_F(ChromeNativeFileSystemPermissionContextTest,
        ConfirmSensitiveDirectoryAccess_ExplicitPathBlock) {
 // Linux is the only OS where we have some blocked directories with explicit
 // paths (as opposed to PathService provided paths).
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // /dev should be blocked.
   EXPECT_EQ(
       SensitiveDirectoryResult::kAbort,
       ConfirmSensitiveDirectoryAccessSync(
-          permission_context(), {base::FilePath(FILE_PATH_LITERAL("/dev"))}));
+          permission_context(), {base::FilePath(FILE_PATH_LITERAL("/dev"))},
+          HandleType::kDirectory));
   // As well as children of /dev.
-  EXPECT_EQ(SensitiveDirectoryResult::kAbort,
-            ConfirmSensitiveDirectoryAccessSync(
-                permission_context(),
-                {base::FilePath(FILE_PATH_LITERAL("/dev/foo"))}));
+  EXPECT_EQ(
+      SensitiveDirectoryResult::kAbort,
+      ConfirmSensitiveDirectoryAccessSync(
+          permission_context(), {base::FilePath(FILE_PATH_LITERAL("/dev/foo"))},
+          HandleType::kDirectory));
+  EXPECT_EQ(
+      SensitiveDirectoryResult::kAbort,
+      ConfirmSensitiveDirectoryAccessSync(
+          permission_context(), {base::FilePath(FILE_PATH_LITERAL("/dev/foo"))},
+          HandleType::kFile));
 #endif
 }
 
 TEST_F(ChromeNativeFileSystemPermissionContextTest,
        CanObtainWritePermission_ContentSettingAsk) {
-  SetDefaultContentSettingValue(
-      ContentSettingsType::NATIVE_FILE_SYSTEM_WRITE_GUARD, CONTENT_SETTING_ASK);
+  SetDefaultContentSettingValue(ContentSettingsType::FILE_SYSTEM_WRITE_GUARD,
+                                CONTENT_SETTING_ASK);
   EXPECT_TRUE(permission_context()->CanObtainWritePermission(kTestOrigin));
 }
 
 TEST_F(ChromeNativeFileSystemPermissionContextTest,
        CanObtainWritePermission_ContentSettingsBlock) {
-  SetDefaultContentSettingValue(
-      ContentSettingsType::NATIVE_FILE_SYSTEM_WRITE_GUARD,
-      CONTENT_SETTING_BLOCK);
+  SetDefaultContentSettingValue(ContentSettingsType::FILE_SYSTEM_WRITE_GUARD,
+                                CONTENT_SETTING_BLOCK);
   EXPECT_FALSE(permission_context()->CanObtainWritePermission(kTestOrigin));
 }
 
@@ -289,6 +341,69 @@ TEST_F(ChromeNativeFileSystemPermissionContextTest,
   // Note, chrome:// scheme is whitelisted. But we can't set default content
   // setting here because ALLOW is not an acceptable option.
   EXPECT_TRUE(permission_context()->CanObtainWritePermission(kChromeOrigin));
+}
+
+TEST_F(ChromeNativeFileSystemPermissionContextTest, PolicyReadGuardPermission) {
+  auto* prefs = profile()->GetTestingPrefService();
+  prefs->SetManagedPref(prefs::kManagedDefaultFileSystemReadGuardSetting,
+                        std::make_unique<base::Value>(CONTENT_SETTING_BLOCK));
+
+  EXPECT_FALSE(permission_context()->CanObtainReadPermission(kTestOrigin));
+}
+
+TEST_F(ChromeNativeFileSystemPermissionContextTest,
+       PolicyWriteGuardPermission) {
+  auto* prefs = profile()->GetTestingPrefService();
+  prefs->SetManagedPref(prefs::kManagedDefaultFileSystemWriteGuardSetting,
+                        std::make_unique<base::Value>(CONTENT_SETTING_BLOCK));
+
+  EXPECT_FALSE(permission_context()->CanObtainWritePermission(kTestOrigin));
+}
+
+TEST_F(ChromeNativeFileSystemPermissionContextTest, PolicyReadAskForUrls) {
+  // Set the default to "block" so that the policy being tested overrides it.
+  auto* prefs = profile()->GetTestingPrefService();
+  prefs->SetManagedPref(prefs::kManagedDefaultFileSystemReadGuardSetting,
+                        std::make_unique<base::Value>(CONTENT_SETTING_BLOCK));
+  prefs->SetManagedPref(prefs::kManagedFileSystemReadAskForUrls,
+                        base::JSONReader::ReadDeprecated(
+                            "[\"" + kTestOrigin.Serialize() + "\"]"));
+
+  EXPECT_TRUE(permission_context()->CanObtainReadPermission(kTestOrigin));
+  EXPECT_FALSE(permission_context()->CanObtainReadPermission(kTestOrigin2));
+}
+
+TEST_F(ChromeNativeFileSystemPermissionContextTest, PolicyReadBlockedForUrls) {
+  auto* prefs = profile()->GetTestingPrefService();
+  prefs->SetManagedPref(prefs::kManagedFileSystemReadBlockedForUrls,
+                        base::JSONReader::ReadDeprecated(
+                            "[\"" + kTestOrigin.Serialize() + "\"]"));
+
+  EXPECT_FALSE(permission_context()->CanObtainReadPermission(kTestOrigin));
+  EXPECT_TRUE(permission_context()->CanObtainReadPermission(kTestOrigin2));
+}
+
+TEST_F(ChromeNativeFileSystemPermissionContextTest, PolicyWriteAskForUrls) {
+  // Set the default to "block" so that the policy being tested overrides it.
+  auto* prefs = profile()->GetTestingPrefService();
+  prefs->SetManagedPref(prefs::kManagedDefaultFileSystemWriteGuardSetting,
+                        std::make_unique<base::Value>(CONTENT_SETTING_BLOCK));
+  prefs->SetManagedPref(prefs::kManagedFileSystemWriteAskForUrls,
+                        base::JSONReader::ReadDeprecated(
+                            "[\"" + kTestOrigin.Serialize() + "\"]"));
+
+  EXPECT_TRUE(permission_context()->CanObtainWritePermission(kTestOrigin));
+  EXPECT_FALSE(permission_context()->CanObtainWritePermission(kTestOrigin2));
+}
+
+TEST_F(ChromeNativeFileSystemPermissionContextTest, PolicyWriteBlockedForUrls) {
+  auto* prefs = profile()->GetTestingPrefService();
+  prefs->SetManagedPref(prefs::kManagedFileSystemWriteBlockedForUrls,
+                        base::JSONReader::ReadDeprecated(
+                            "[\"" + kTestOrigin.Serialize() + "\"]"));
+
+  EXPECT_FALSE(permission_context()->CanObtainWritePermission(kTestOrigin));
+  EXPECT_TRUE(permission_context()->CanObtainWritePermission(kTestOrigin2));
 }
 
 #endif  // !defined(OS_ANDROID)

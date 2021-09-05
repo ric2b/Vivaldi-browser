@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">ਚੁਣੋ</translation>
 <translation id="1859234291848436338">ਦਿਸ਼ਾ ਲਿਖ ਰਿਹਾ ਹੈ</translation>
 <translation id="1860796786778352021">ਸੂਚਨਾ ਬੰਦ</translation>
+<translation id="186476001994626254">ਵੈੱਬ ਸਮਾਰਟ ਪੇਸਟ ਸਮੱਗਰੀ</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" /> %</translation>
 <translation id="1901303067676059328">&amp;ਸਾਰੇ ਚੁਣੋ</translation>
+<translation id="19085484004813472">ਇਹ ਇੱਕ ਨਵੀਂ ਵਿਸ਼ੇਸ਼ਤਾ ਹੈ</translation>
 <translation id="2006524834898217237">ਪੱਕਾ ਕਰੋ ਕਿ ਇਹ ਡੀਵਾਈਸ ਇੰਟਰਨੈੱਟ ਨਾਲ ਕਨੈਕਟ ਹੋਵੇ।</translation>
 <translation id="208586643495776849">ਕਿਰਪਾ ਕਰਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ</translation>
 <translation id="2090963878406559571"><ph name="ORIGIN" /> ਤੋਂ ਨੰਬਰ ਆਪਣੇ Android ਫ਼ੋਨ ਵਿੱਚ ਭੇਜਣ ਲਈ, ਸੈਟਿੰਗਾਂ ਵਿੱਚ ਦੋਵੇਂ ਡੀਵਾਈਸਾਂ ਲਈ <ph name="TROUBLESHOOT_LINK" />।</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">ਸੈਟਿੰਗਾਂ ਦਾ ਪ੍ਰਬੰਧਨ ਕਰੋ</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{1 ਘੰ. ਵਿੱਚ}one{# ਘੰ. ਵਿੱਚ}other{# ਘੰ. ਵਿੱਚ}}</translation>
 <translation id="2583543531130364912">ਆਪਣੀ ਟੱਚਸਕ੍ਰੀਨ ਨੂੰ ਕੈਲੀਬਰੇਟ ਕਰੋ</translation>
+<translation id="2586657967955657006">ਕਲਿੱਪਬੋਰਡ</translation>
 <translation id="2666092431469916601">ਟੌਪ</translation>
 <translation id="2701330563083355633"><ph name="DEVICE_NAME" /> ਤੋਂ ਸਾਂਝਾ ਕੀਤਾ ਗਿਆ</translation>
 <translation id="271033894570825754">ਨਵਾਂ</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">ਫੋਲਡਰ ਖੋਲ੍ਹੋ</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{1 ਸਾਲ ਪਹਿਲਾਂ}one{# ਸਾਲ ਪਹਿਲਾਂ}other{# ਸਾਲ ਪਹਿਲਾਂ}}</translation>
+<translation id="2878511608894704031">ਸਭ ਮਿਟਾਓ</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{1 ਦਿਨ ਵਿੱਚ}one{# ਦਿਨ ਵਿੱਚ}other{# ਦਿਨ ਵਿੱਚ}}</translation>
 <translation id="2931838996092594335">ਕਲਿੱਕ ਕਰੋ</translation>
 <translation id="2981684127883932071">ਸੁਝਾਵਾਂ ਨੂੰ ਦਿਖਾਇਆ ਜਾ ਰਿਹਾ ਹੈ</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">ਬੋਲਣਾ ਸ਼ੁਰੂ ਕਰੋ</translation>
 <translation id="430191667033048642"><ph name="MOVED_APP_NAME" /> ਨੂੰ <ph name="FOLDER_NAME" /> ਫੋਲਡਰ ਵਿੱਚ ਲਿਜਾਇਆ ਗਿਆ।</translation>
 <translation id="4316910396681052118">ਸਭ ਐਪਾਂ</translation>
+<translation id="4491109536499578614">ਚਿੱਤਰ</translation>
 <translation id="4588090240171750605">ਸੱਜੇ ਪਾਸੇ ਸਕ੍ਰੌਲ ਕਰੋ</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />, ਤਾਰਾ ਰੇਟਿੰਗ <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />, ਐਪ ਸਿਫ਼ਾਰਸ਼</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{1 ਦਿਨ ਅਤੇ }one{# ਦਿਨ ਅਤੇ }other{# ਦਿਨ ਅਤੇ }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{1 ਸਾਲ ਵਿੱਚ}one{# ਸਾਲ ਵਿੱਚ}other{# ਸਾਲ ਵਿੱਚ}}</translation>
+<translation id="588258955323874662">ਫੁਲਸਕ੍ਰੀਨ</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 ਸਕਿੰਟ ਬਾਕੀ}one{# ਸਕਿੰਟ ਬਾਕੀ}other{# ਸਕਿੰਟ ਬਾਕੀ}}</translation>
 <translation id="5941711191222866238">ਨਿਊਨਤਮ</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 ਘੰਟਾ}one{# ਘੰਟੇ}other{# ਘੰਟੇ}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">Google Assistant</translation>
 <translation id="6430678249303439055">ਇਸ ਐਪ ਦੀਆਂ ਸਾਰੀਆਂ ਸੂਚਨਾਵਾਂ ਬਲਾਕ ਕਰੋ</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{1 ਸਕਿੰਟ ਪਹਿਲਾਂ}one{# ਸਕਿੰਟ ਪਹਿਲਾਂ}other{# ਸਕਿੰਟ ਪਹਿਲਾਂ}}</translation>
+<translation id="6503257047630241175">RTF ਸਮੱਗਰੀ</translation>
 <translation id="6539092367496845964">ਕੋਈ ਗੜਬੜ ਹੋਈ। ਬਾਅਦ ਵਿੱਚ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।</translation>
 <translation id="654149438358937226">ਸਾਰੀਆਂ ਸੂਚਨਾਵਾਂ ਨੂੰ ਬਲਾਕ ਕਰੋ</translation>
 <translation id="6567071839949112727">ਇਸ ਨਾਲ ਸੰਬੰਧਿਤ ਕਿਸੇ ਪੁਰਾਣੀ ਵਸਤੂ 'ਤੇ ਕਲਿੱਕ ਕਰੋ</translation>

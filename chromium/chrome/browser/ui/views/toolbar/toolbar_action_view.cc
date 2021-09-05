@@ -57,9 +57,7 @@ const char ToolbarActionView::kClassName[] = "ToolbarActionView";
 ToolbarActionView::ToolbarActionView(
     ToolbarActionViewController* view_controller,
     ToolbarActionView::Delegate* delegate)
-    : MenuButton(base::string16(), this),
-      view_controller_(view_controller),
-      delegate_(delegate) {
+    : MenuButton(this), view_controller_(view_controller), delegate_(delegate) {
   SetInkDropMode(InkDropMode::ON);
   set_has_ink_drop_action_on_click(true);
   set_hide_ink_drop_when_showing_context_menu(false);
@@ -162,7 +160,7 @@ void ToolbarActionView::UpdateState() {
   if (!view_controller_->IsEnabled(web_contents) &&
       !view_controller_->DisabledClickOpensMenu()) {
     SetState(views::Button::STATE_DISABLED);
-  } else if (state() == views::Button::STATE_DISABLED) {
+  } else if (GetState() == views::Button::STATE_DISABLED) {
     SetState(views::Button::STATE_NORMAL);
   }
 
@@ -171,7 +169,8 @@ void ToolbarActionView::UpdateState() {
           .AsImageSkia());
 
   if (!icon.isNull())
-    SetImage(views::Button::STATE_NORMAL, icon);
+    SetImageModel(views::Button::STATE_NORMAL,
+                  ui::ImageModel::FromImageSkia(icon));
 
   SetTooltipText(view_controller_->GetTooltip(web_contents));
 

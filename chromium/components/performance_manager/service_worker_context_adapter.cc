@@ -122,12 +122,9 @@ bool ServiceWorkerContextAdapter::MaybeHasRegistrationForOrigin(
   return false;
 }
 
-void ServiceWorkerContextAdapter::WaitForRegistrationsInitializedForTest() {
-  NOTIMPLEMENTED();
-}
-
-void ServiceWorkerContextAdapter::AddRegistrationToRegisteredOriginsForTest(
-    const url::Origin& origin) {
+void ServiceWorkerContextAdapter::GetInstalledRegistrationOrigins(
+    base::Optional<std::string> host_filter,
+    GetInstalledRegistrationOriginsCallback callback) {
   NOTIMPLEMENTED();
 }
 
@@ -136,7 +133,7 @@ void ServiceWorkerContextAdapter::GetAllOriginsInfo(
   NOTIMPLEMENTED();
 }
 
-void ServiceWorkerContextAdapter::DeleteForOrigin(const GURL& origin_url,
+void ServiceWorkerContextAdapter::DeleteForOrigin(const url::Origin& origin_url,
                                                   ResultCallback callback) {
   NOTIMPLEMENTED();
 }
@@ -270,6 +267,43 @@ void ServiceWorkerContextAdapter::OnVersionStoppedRunning(int64_t version_id) {
     observer.OnVersionStoppedRunning(version_id);
 }
 
+void ServiceWorkerContextAdapter::OnControlleeAdded(
+    int64_t version_id,
+    const std::string& client_uuid,
+    const content::ServiceWorkerClientInfo& client_info) {
+  // If |client_uuid| is already marked as a client of |version_id|, the
+  // notification is dropped.
+  bool inserted =
+      service_worker_clients_[version_id].insert(client_uuid).second;
+  if (!inserted)
+    return;
+
+  for (auto& observer : observer_list_)
+    observer.OnControlleeAdded(version_id, client_uuid, client_info);
+}
+
+void ServiceWorkerContextAdapter::OnControlleeRemoved(
+    int64_t version_id,
+    const std::string& client_uuid) {
+  // If |client_uuid| is not already marked as a client of |version_id|, the
+  // notification is dropped.
+  auto it = service_worker_clients_.find(version_id);
+  if (it == service_worker_clients_.end())
+    return;
+
+  size_t removed = it->second.erase(client_uuid);
+  if (!removed)
+    return;
+
+  // If a service worker no longer has any clients, it is removed entirely from
+  // |service_worker_clients_|.
+  if (it->second.empty())
+    service_worker_clients_.erase(it);
+
+  for (auto& observer : observer_list_)
+    observer.OnControlleeRemoved(version_id, client_uuid);
+}
+
 void ServiceWorkerContextAdapter::OnNoControllees(int64_t version_id,
                                                   const GURL& scope) {
   for (auto& observer : observer_list_)
@@ -278,9 +312,10 @@ void ServiceWorkerContextAdapter::OnNoControllees(int64_t version_id,
 
 void ServiceWorkerContextAdapter::OnReportConsoleMessage(
     int64_t version_id,
+    const GURL& scope,
     const content::ConsoleMessage& message) {
   for (auto& observer : observer_list_)
-    observer.OnReportConsoleMessage(version_id, message);
+    observer.OnReportConsoleMessage(version_id, scope, message);
 }
 
 void ServiceWorkerContextAdapter::OnDestruct(ServiceWorkerContext* context) {

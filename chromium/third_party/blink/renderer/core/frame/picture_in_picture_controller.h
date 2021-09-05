@@ -6,11 +6,12 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_PICTURE_IN_PICTURE_CONTROLLER_H_
 
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 
 namespace blink {
 
+class Document;
+class Element;
 class HTMLElement;
 class HTMLVideoElement;
 class PictureInPictureOptions;
@@ -22,8 +23,6 @@ class ScriptPromiseResolver;
 class CORE_EXPORT PictureInPictureController
     : public GarbageCollected<PictureInPictureController>,
       public Supplement<Document> {
-  USING_GARBAGE_COLLECTED_MIXIN(PictureInPictureController);
-
  public:
   static const char kSupplementName[];
 

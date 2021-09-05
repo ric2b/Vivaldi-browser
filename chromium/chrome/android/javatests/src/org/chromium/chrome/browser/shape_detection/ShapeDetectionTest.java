@@ -19,12 +19,13 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ChromeRestriction;
+import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.browser.TabTitleObserver;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -92,8 +93,8 @@ public class ShapeDetectionTest {
             mActivityTestRule.loadUrl(
                     testServer.getURL("/chrome/test/data/android/text_detection.html"));
             titleObserver.waitForTitleUpdate(10);
-
-            Assert.assertEquals(TEXT_TEST_EXPECTED_TAB_TITLE, tab.getTitle());
+            Assert.assertEquals(
+                    TEXT_TEST_EXPECTED_TAB_TITLE, ChromeTabUtils.getTitleOnUiThread(tab));
         } finally {
             testServer.stopAndDestroyServer();
         }

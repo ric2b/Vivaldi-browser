@@ -6,20 +6,27 @@
 #define CONTENT_PUBLIC_BROWSER_SERVICE_WORKER_CLIENT_INFO_H_
 
 #include "content/common/content_export.h"
-#include "content/public/browser/dedicated_worker_id.h"
 #include "content/public/browser/render_frame_host.h"
-#include "content/public/browser/shared_worker_id.h"
+#include "third_party/blink/public/common/tokens/multi_token.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_client.mojom.h"
 
 namespace content {
+
+using DedicatedOrSharedWorkerToken =
+    blink::MultiToken<blink::DedicatedWorkerToken, blink::SharedWorkerToken>;
 
 // Holds information about a single service worker client:
 // https://w3c.github.io/ServiceWorker/#client
 class CONTENT_EXPORT ServiceWorkerClientInfo {
  public:
   explicit ServiceWorkerClientInfo(int frame_tree_node_id);
-  explicit ServiceWorkerClientInfo(DedicatedWorkerId dedicated_worker_id);
-  explicit ServiceWorkerClientInfo(SharedWorkerId shared_worker_id);
+  explicit ServiceWorkerClientInfo(
+      const blink::DedicatedWorkerToken& dedicated_worker_token);
+  explicit ServiceWorkerClientInfo(
+      const blink::SharedWorkerToken& shared_worker_token);
+  explicit ServiceWorkerClientInfo(
+      const DedicatedOrSharedWorkerToken& worker_token);
 
   ServiceWorkerClientInfo(const ServiceWorkerClientInfo& other);
   ServiceWorkerClientInfo& operator=(const ServiceWorkerClientInfo& other);
@@ -30,21 +37,24 @@ class CONTENT_EXPORT ServiceWorkerClientInfo {
   blink::mojom::ServiceWorkerClientType type() const { return type_; }
 
   int GetFrameTreeNodeId() const;
-  DedicatedWorkerId GetDedicatedWorkerId() const;
-  SharedWorkerId GetSharedWorkerId() const;
+
+  // Returns the corresponding DedicatedWorkerToken. This should only be called
+  // if "type() == blink::mojom::ServiceWorkerClientType::kDedicatedWorker".
+  blink::DedicatedWorkerToken GetDedicatedWorkerToken() const;
+
+  // Returns the corresponding SharedWorkerToken. This should only be called
+  // if "type() == blink::mojom::ServiceWorkerClientType::kSharedWorker".
+  blink::SharedWorkerToken GetSharedWorkerToken() const;
 
  private:
   // The client type.
   blink::mojom::ServiceWorkerClientType type_;
 
-  // The frame tree node ID, if this is a window client.
+  // The frame tree node ID, if it is a window client.
   int frame_tree_node_id_ = content::RenderFrameHost::kNoFrameTreeNodeId;
 
-  // The ID of the client, if this is a dedicated worker client.
-  DedicatedWorkerId dedicated_worker_id_;
-
-  // The ID of the client, if this is a shared worker client.
-  SharedWorkerId shared_worker_id_;
+  // The ID of the client, if it is a worker.
+  base::Optional<DedicatedOrSharedWorkerToken> worker_token_;
 };
 
 }  // namespace content

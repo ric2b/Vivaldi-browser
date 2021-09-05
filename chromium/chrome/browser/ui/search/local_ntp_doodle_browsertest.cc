@@ -53,7 +53,7 @@ const char kFreshB64[] = "abc";                        // b64decode("YWJj")
 const int kSearchboxTopPx =
     56 + 200 + 38;  // top margin + height + bottom margin
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_MAC)
 const char kFreshDarkB64[] = "xyz";  // b64decode("eHl6");
 #endif
 
@@ -323,12 +323,11 @@ class LocalNTPDoodleTest : public InProcessBrowserTest {
   }
 
   void SetUpInProcessBrowserTestFixture() override {
-    will_create_browser_context_services_subscription_ =
+    create_services_subscription_ =
         BrowserContextDependencyManager::GetInstance()
-            ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
-                base::Bind(
-                    &LocalNTPDoodleTest::OnWillCreateBrowserContextServices,
-                    base::Unretained(this)));
+            ->RegisterCreateServicesCallbackForTesting(base::BindRepeating(
+                &LocalNTPDoodleTest::OnWillCreateBrowserContextServices,
+                base::Unretained(this)));
   }
 
   static std::unique_ptr<KeyedService> CreateLogoService(
@@ -342,8 +341,8 @@ class LocalNTPDoodleTest : public InProcessBrowserTest {
   }
 
   std::unique_ptr<
-      base::CallbackList<void(content::BrowserContext*)>::Subscription>
-      will_create_browser_context_services_subscription_;
+      BrowserContextDependencyManager::CreateServicesCallbackList::Subscription>
+      create_services_subscription_;
 };
 
 IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest,
@@ -1418,10 +1417,7 @@ IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest, ShouldNotMoveFakeboxForIframeSizes) {
   }
 }
 
-// Fails on gLinux with legacy flexbox. Fails locally and on bots with FlexNG.
-// https://crbug.com/1062484
-IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest,
-                       DISABLED_ShouldMoveFakeboxWhenIframeResized) {
+IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest, ShouldMoveFakeboxWhenIframeResized) {
   EncodedLogo cached_logo;
   cached_logo.encoded_image = MakeRefPtr(std::string());
   cached_logo.metadata.mime_type = "image/png";
@@ -1495,7 +1491,7 @@ IN_PROC_BROWSER_TEST_F(LocalNTPDoodleTest,
 
 // TODO(crbug/980638): Update/Remove when Linux and/or ChromeOS support dark
 // mode.
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_MAC)
 
 // Tests that dark mode styling is properly applied to the local NTP Doodle.
 class LocalNTPDarkModeDoodleTest : public LocalNTPDoodleTest,

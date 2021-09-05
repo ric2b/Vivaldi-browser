@@ -14,18 +14,6 @@
 
 namespace cc {
 
-TEST(FrameSequenceMetricsTest, AggregatedThroughput) {
-  FrameSequenceMetrics first(FrameSequenceTrackerType::kTouchScroll, nullptr);
-  first.impl_throughput().frames_expected = 200u;
-  first.impl_throughput().frames_produced = 190u;
-  first.main_throughput().frames_expected = 100u;
-  first.main_throughput().frames_produced = 50u;
-
-  // The aggregated throughput is computed at ReportMetrics().
-  first.ComputeAggregatedThroughputForTesting();
-  EXPECT_EQ(first.aggregated_throughput().frames_expected, 200u);
-}
-
 TEST(FrameSequenceMetricsTest, AggregatedThroughputClearedAfterReport) {
   FrameSequenceMetrics first(FrameSequenceTrackerType::kCompositorAnimation,
                              nullptr);
@@ -98,6 +86,19 @@ TEST(FrameSequenceMetricsTest, ScrollingThreadMergeMetrics) {
   ASSERT_DEATH(first.Merge(std::move(second)), "");
 }
 #endif  // DCHECK_IS_ON()
+
+TEST(FrameSequenceMetricsTest, VideoReportsOnImplOnly) {
+  base::HistogramTester histograms;
+
+  FrameSequenceMetrics first(FrameSequenceTrackerType::kVideo, nullptr);
+  first.impl_throughput().frames_expected = 120;
+  first.impl_throughput().frames_produced = 80;
+  first.main_throughput().frames_expected = 0;
+  first.main_throughput().frames_produced = 0;
+  first.ReportMetrics();
+  histograms.ExpectTotalCount("Graphics.Smoothness.FrameSequenceLength.Video",
+                              1u);
+}
 
 TEST(FrameSequenceMetricsTest, AllMetricsReported) {
   base::HistogramTester histograms;

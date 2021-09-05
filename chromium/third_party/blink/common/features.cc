@@ -54,10 +54,8 @@ const base::Feature kFreezePurgeMemoryAllPagesFrozen{
 const base::Feature kFreezeUserAgent{"FreezeUserAgent",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
-// When enabled, use the maximum possible bounds in compositing overlap testing
-// for fixed position elements.
-const base::Feature kMaxOverlapBoundsForFixed{"MaxOverlapBoundsForFixed",
-                                              base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kMeasureMemoryExperiment{"MeasureMemoryExperiment",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enable Display Locking JavaScript APIs.
 const base::Feature kDisplayLocking{"DisplayLocking",
@@ -75,6 +73,10 @@ const base::Feature kTopLevelAwait{"TopLevelAwait",
 
 // Enable LayoutNG.
 const base::Feature kLayoutNG{"LayoutNG", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enable LayoutNGFieldset by default. This feature is for a kill switch.
+const base::Feature kLayoutNGFieldset{"LayoutNGFieldset",
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enable LayoutNGRuby by default. This feature is for a kill switch.
 const base::Feature kLayoutNGRuby{"LayoutNGRuby",
@@ -100,6 +102,9 @@ const base::Feature kNavigationPredictor {
       base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 };
+
+const base::Feature kParentNodeReplaceChildren{
+    "ParentNodeReplaceChildren", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enable browser-initiated dedicated worker script loading
 // (PlzDedicatedWorker). https://crbug.com/906991
@@ -138,7 +143,7 @@ const base::Feature kPreviewsResourceLoadingHintsSpecificResourceTypes{
 // https://crbug.com/926186
 const base::Feature kPurgeRendererMemoryWhenBackgrounded {
   "PurgeRendererMemoryWhenBackgrounded",
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(OS_MAC) || defined(OS_ANDROID)
       base::FEATURE_DISABLED_BY_DEFAULT
 #else
       base::FEATURE_ENABLED_BY_DEFAULT
@@ -215,6 +220,10 @@ const base::Feature kWebRtcHideLocalIpsWithMdns{
 const base::Feature kIntensiveWakeUpThrottling{
     "IntensiveWakeUpThrottling", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// When enabled, timers with timeout=0 are not throttled.
+const base::Feature kOptOutZeroTimeoutTimersFromThrottling{
+    "OptOutZeroTimeoutTimersFromThrottling", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // When enabled, no throttling is applied to a page when it uses WebRTC.
 //
 // This allows a page to use a timer to do video processing on frames. An
@@ -222,6 +231,13 @@ const base::Feature kIntensiveWakeUpThrottling{
 // available, this feature should be removed. https://crbug.com/1101806
 const base::Feature kOptOutWebRTCFromAllThrottling{
     "OptOutWebRTCFromAllThrottling", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Name of the parameter that controls the grace period during which there is no
+// intensive wake up throttling after a page is hidden. Defined here to allow
+// access from about_flags.cc. The FeatureParam is defined in
+// third_party/blink/renderer/platform/scheduler/common/features.cc.
+const char kIntensiveWakeUpThrottling_GracePeriodSeconds_Name[] =
+    "grace_period_seconds";
 
 #if BUILDFLAG(RTC_USE_H264) && BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
 // Run-time feature for the |rtc_use_h264| encoder/decoder.
@@ -279,6 +295,10 @@ const base::Feature kAllowSyncXHRInPageDismissal{
 // https://crbug.com/982054.
 const base::Feature kFontAccess{"FontAccess",
                                 base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Allows Web Components v0 to be re-enabled.
+const base::Feature kWebComponentsV0{"WebComponentsV0",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Prefetch request properties are updated to be privacy-preserving. See
 // crbug.com/988956.
@@ -534,15 +554,11 @@ const base::Feature kLinkDisabledNewSpecBehavior{
 // they don't miss the first paint if they can be loaded fast enough (e.g.,
 // from the disk cache)
 const base::Feature kFontPreloadingDelaysRendering{
-    "FontPreloadingDelaysRendering", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Set to be over 90th-percentile of HttpCache.AccessToDone.Used on all
-// platforms, and also to allow some time for IPC and scheduling.
-// TODO(xiaochengh): Tune it for the best performance.
+    "FontPreloadingDelaysRendering", base::FEATURE_ENABLED_BY_DEFAULT};
+// 50ms is the overall best performing value in our experiments.
 const base::FeatureParam<int> kFontPreloadingDelaysRenderingParam{
-    &kFontPreloadingDelaysRendering, "delay-in-ms", 100};
+    &kFontPreloadingDelaysRendering, "delay-in-ms", 50};
 
-const base::Feature kFlexGaps{"FlexGaps", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kFlexNG{"FlexNG", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kKeepScriptResourceAlive{"KeepScriptResourceAlive",
@@ -553,7 +569,9 @@ const base::FeatureParam<DelayAsyncScriptDelayType>::Option
     delay_async_script_execution_delay_types[] = {
         {DelayAsyncScriptDelayType::kFinishedParsing, "finished_parsing"},
         {DelayAsyncScriptDelayType::kFirstPaintOrFinishedParsing,
-         "first_paint_or_finished_parsing"}};
+         "first_paint_or_finished_parsing"},
+        {DelayAsyncScriptDelayType::kUseOptimizationGuide,
+         "use_optimization_guide"}};
 const base::FeatureParam<DelayAsyncScriptDelayType>
     kDelayAsyncScriptExecutionDelayParam{
         &kDelayAsyncScriptExecution, "delay_type",
@@ -562,7 +580,8 @@ const base::FeatureParam<DelayAsyncScriptDelayType>
 
 // The AppCache feature is a kill-switch for the entire AppCache feature,
 // both backend and API.  If disabled, then it will turn off the backend and
-// api, regardless of the presence of valid origin trial tokens.
+// api, regardless of the presence of valid origin trial tokens.  Disabling
+// AppCache will also delete any AppCache data from the profile directory.
 const base::Feature kAppCache{"AppCache", base::FEATURE_ENABLED_BY_DEFAULT};
 // If AppCacheRequireOriginTrial is enabled, then the AppCache backend in the
 // browser will require origin trial tokens in order to load or store manifests
@@ -624,18 +643,8 @@ const base::Feature kAllowClientHintsToThirdParty{
     "AllowClientHintsToThirdParty", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
-const char kScrollPredictorNameLsq[] = "lsq";
-const char kScrollPredictorNameKalman[] = "kalman";
-const char kScrollPredictorNameLinearFirst[] = "linear_first";
-const char kScrollPredictorNameLinearSecond[] = "linear_second";
-const char kScrollPredictorNameLinearResampling[] = "linear_resampling";
-const char kScrollPredictorNameEmpty[] = "empty";
-
 const base::Feature kFilteringScrollPrediction{
     "FilteringScrollPrediction", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const char kFilterNameEmpty[] = "empty_filter";
-const char kFilterNameOneEuro[] = "one_euro_filter";
 
 const base::Feature kKalmanHeuristics{"KalmanHeuristics",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
@@ -663,9 +672,52 @@ const base::Feature kWebXrMultiGpu{"WebXRMultiGpu",
 const base::Feature kCSSMatchedPropertiesCacheDependencies{
     "CSSMatchedPropertiesCacheDependencies", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Disabling this will cause parkable strings to never be compressed.
+// This is useful for headless mode + virtual time. Since virtual time advances
+// quickly, strings may be parked too eagerly in that mode.
+const base::Feature kCompressParkableStrings{"CompressParkableStrings",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Whether ParkableStrings can be written out to disk.
+// Depends on compression above.
 const base::Feature kParkableStringsToDisk{"ParkableStringsToDisk",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsParkableStringsToDiskEnabled() {
+  return base::FeatureList::IsEnabled(kParkableStringsToDisk) &&
+         base::FeatureList::IsEnabled(kCompressParkableStrings);
+}
+
+// Controls whether to auto select on contextual menu click in Chrome OS.
+const base::Feature kCrOSAutoSelect{"CrOSAutoSelect",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kCompositingOptimizations{
+    "CompositingOptimizations", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Reduce the amount of information in the default 'referer' header for
+// cross-origin requests.
+const base::Feature kReducedReferrerGranularity{
+    "ReducedReferrerGranularity", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables the user activated exponential delay in the ContentCapture task.
+const base::Feature kContentCaptureUserActivatedDelay = {
+    "ContentCaptureUserActivatedDelay", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable ReadableStream, WritableStream and TransformStream objects to be
+// transferred with postMessage().
+const base::Feature kTransferableStreams{"TransferableStreams",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
+// The "BackForwardCacheABExperimentControl" feature indicates the state of the
+// same-site BackForwardCache experiment. This information is used when sending
+// the "Sec-bfcache-experiment" HTTP Header on resource requests. The header
+// value is determined by the value of the "experiment_group_for_http_header"
+// feature parameter.
+const base::Feature kBackForwardCacheABExperimentControl{
+    "BackForwardCacheABExperimentControl", base::FEATURE_DISABLED_BY_DEFAULT};
+const char kBackForwardCacheABExperimentGroup[] =
+    "experiment_group_for_http_header";
 
 }  // namespace features
 }  // namespace blink

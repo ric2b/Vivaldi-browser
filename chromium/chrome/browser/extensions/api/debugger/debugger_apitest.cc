@@ -374,10 +374,30 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessDebuggerExtensionApiTest, Debugger) {
                                ui::PAGE_TRANSITION_LINK, std::string());
   navigation_manager.WaitForNavigationFinished();
   navigation_manager_iframe.WaitForNavigationFinished();
-  content::WaitForLoadStop(tab);
+  EXPECT_TRUE(content::WaitForLoadStop(tab));
 
   ASSERT_TRUE(
       RunExtensionTestWithArg("debugger", "oopif.html;oopif_frame.html"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(SitePerProcessDebuggerExtensionApiTest,
+                       NavigateSubframe) {
+  GURL url(embedded_test_server()->GetURL(
+      "a.com",
+      "/extensions/api_test/debugger_navigate_subframe/inspected_page.html"));
+  ASSERT_TRUE(
+      RunExtensionTestWithArg("debugger_navigate_subframe", url.spec().c_str()))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(SitePerProcessDebuggerExtensionApiTest,
+                       AutoAttachPermissions) {
+  GURL url(embedded_test_server()->GetURL(
+      "a.com",
+      "/extensions/api_test/debugger_auto_attach_permissions/page.html"));
+  ASSERT_TRUE(RunExtensionTestWithArg("debugger_auto_attach_permissions",
+                                      url.spec().c_str()))
       << message_;
 }
 

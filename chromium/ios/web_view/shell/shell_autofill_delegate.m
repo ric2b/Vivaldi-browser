@@ -277,21 +277,38 @@
                  completion:nil];
 }
 
+- (void)autofillController:(CWVAutofillController*)autofillController
+    notifyUserOfPasswordLeakOnURL:(NSURL*)URL
+                         leakType:(CWVPasswordLeakType)leakType {
+  NSLog(@"Password on %@ is leaked!", URL);
+}
+
+- (void)autofillController:(CWVAutofillController*)autofillController
+    suggestGeneratedPassword:(NSString*)generatedPassword
+             decisionHandler:(void (^)(BOOL accept))decisionHandler {
+  NSLog(@"Accepting suggested password: %@", generatedPassword);
+  decisionHandler(YES);
+}
+
 #pragma mark - Private Methods
 
 - (UIAlertAction*)actionForSuggestion:(CWVAutofillSuggestion*)suggestion {
   NSString* title =
       [NSString stringWithFormat:@"%@ %@", suggestion.value,
                                  suggestion.displayDescription ?: @""];
-  return [UIAlertAction actionWithTitle:title
-                                  style:UIAlertActionStyleDefault
-                                handler:^(UIAlertAction* _Nonnull action) {
-                                  [_autofillController
-                                       acceptSuggestion:suggestion
-                                      completionHandler:nil];
-                                  [UIApplication.sharedApplication.keyWindow
-                                      endEditing:YES];
-                                }];
+  __weak ShellAutofillDelegate* weakSelf = self;
+  return [UIAlertAction
+      actionWithTitle:title
+                style:UIAlertActionStyleDefault
+              handler:^(UIAlertAction* action) {
+                ShellAutofillDelegate* strongSelf = weakSelf;
+                if (!strongSelf) {
+                  return;
+                }
+                [strongSelf.autofillController acceptSuggestion:suggestion
+                                              completionHandler:nil];
+                [UIApplication.sharedApplication.keyWindow endEditing:YES];
+              }];
 }
 
 @end

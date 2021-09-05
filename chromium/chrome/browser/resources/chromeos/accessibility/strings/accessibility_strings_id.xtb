@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Item daftar</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Geser dua jari ke kanan</translation>
+<translation id="1016393160682012902">Tekan tombol qwerty, tombol braille yang dapat diperbarui, atau gestur sentuh untuk mempelajari fungsinya. Tekan control dengan w atau escape untuk keluar.</translation>
 <translation id="1022586497894531524">Baru pertama kali menggunakan masukan lisan ChromeVox? Tutorial singkat ini akan menjelaskan dasar-dasar memulai ChromeVox.</translation>
 <translation id="1025074108959230262">Mode lekat dinonaktifkan</translation>
 <translation id="1031961866430398710">kemudian</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Tautan internal</translation>
 <translation id="4909019435900810068">Mundur satu kata</translation>
 <translation id="4911349081560453449">Tidak ada kotak centang sebelumnya</translation>
-<translation id="4915087353619183190">Memulai Mode Belajar. Tekan tombol qwerty, tombol braille yang dapat dimuat ulang, atau sentuh gestur untuk mempelajari fungsinya. Tekan tombol Ctrl plus tombol W atau escape untuk keluar.</translation>
 <translation id="492295894462528572">Kata pengantar</translation>
 <translation id="495046168593986294">Scroll ke atas</translation>
 <translation id="495170559598752135">Tindakan</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Hijau</translation>
 <translation id="602001110135236999">Scroll ke kiri</translation>
 <translation id="6034000775414344507">Abu-abu Muda</translation>
+<translation id="6036135911048686884">Sentuh jelajahi</translation>
 <translation id="6037602951055904232">Geser ke depan</translation>
 <translation id="6044160928851315051">Gelapkan layar</translation>
 <translation id="6082768461603900813">Navigasi Dasar</translation>
@@ -922,6 +923,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{tanda pagar}other{# tanda pagar}}</translation>
 <translation id="8378855320830505539">Kawasan</translation>
 <translation id="8382679411218029383">Pelengkapan otomatis sebaris dan daftar</translation>
+<translation id="8394908167088220973">Putar/Jeda Media</translation>
 <translation id="8428213095426709021">Setelan</translation>
 <translation id="8428603554127842284">tingkat <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -966,6 +968,7 @@
 <translation id="8770473310765924354">keluar dari konten terstruktur, misalnya tabel</translation>
 <translation id="8779057862865475116">Tidak ada link sebelumnya</translation>
 <translation id="8796411681063377102">Judul tingkat 3 berikutnya</translation>
+<translation id="8823311177246872527">Halaman <ph name="CURRENTPAGE" /> dari <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8882002077197914455">Judul baris</translation>

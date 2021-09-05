@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/serialization/v8_script_value_deserializer.h"
 
+#include <limits>
+
 #include "base/numerics/checked_math.h"
 #include "base/optional.h"
 #include "base/time/time.h"
@@ -574,21 +576,34 @@ ScriptWrappable* V8ScriptValueDeserializer::ReadDOMObject(
         return nullptr;
       uint32_t index = 0;
       if (!ReadUint32(&index) || !transferred_stream_ports_ ||
+          index == std::numeric_limits<decltype(index)>::max() ||
           index + 1 >= transferred_stream_ports_->size()) {
         return nullptr;
       }
+
+      // https://streams.spec.whatwg.org/#ts-transfer
+      // 1. Let readableRecord be !
+      //    StructuredDeserializeWithTransfer(dataHolder.[[readable]], the
+      //    current Realm).
       ReadableStream* readable = ReadableStream::Deserialize(
           script_state_, (*transferred_stream_ports_)[index].Get(),
           exception_state);
       if (!readable)
         return nullptr;
 
+      // 2. Let writableRecord be !
+      //    StructuredDeserializeWithTransfer(dataHolder.[[writable]], the
+      //    current Realm).
       WritableStream* writable = WritableStream::Deserialize(
           script_state_, (*transferred_stream_ports_)[index + 1].Get(),
           exception_state);
       if (!writable)
         return nullptr;
 
+      // 3. Set value.[[readable]] to readableRecord.[[Deserialized]].
+      // 4. Set value.[[writable]] to writableRecord.[[Deserialized]].
+      // 5. Set value.[[backpressure]], value.[[backpressureChangePromise]], and
+      //    value.[[controller]] to undefined.
       return MakeGarbageCollected<TransformStream>(readable, writable);
     }
     case kDOMExceptionTag: {

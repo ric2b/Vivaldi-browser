@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Пункт списку</translation>
 <translation id="1013742170491673792">пошук</translation>
 <translation id="1014370462248694370">Проведіть двома пальцями праворуч</translation>
+<translation id="1016393160682012902">Натисніть клавішу на фізичній клавіатурі, клавішу на оновлюваному брайлівському дисплеї або виконайте жест достиком, щоб дізнатися про функції кожного елемента. Щоб вийти з цього режиму, натисніть клавіші Ctrl + w або Esc.</translation>
 <translation id="1022586497894531524">Уперше користуєтеся голосовими підказками ChromeVox? З цього посібника ви швидко дізнаєтеся про основні функції програми.</translation>
 <translation id="1025074108959230262">Залипання клавіш вимкнено</translation>
 <translation id="1031961866430398710">тоді</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Внутрішнє посилання</translation>
 <translation id="4909019435900810068">Перемістити назад на слово</translation>
 <translation id="4911349081560453449">Немає попереднього прапорця</translation>
-<translation id="4915087353619183190">Увімкнення режиму довідки. Натисніть клавішу на клавіатурі QWERTY, клавішу оновлення на брайлівській клавіатурі або торкніться жесту, щоб дізнатися про функції. Щоб вийти з цього режиму, натисніть клавіші Ctrl + w або Esc.</translation>
 <translation id="492295894462528572">Передмова</translation>
 <translation id="495046168593986294">Прокрутити вгору</translation>
 <translation id="495170559598752135">Дії</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Зелений</translation>
 <translation id="602001110135236999">Прокрутити ліворуч</translation>
 <translation id="6034000775414344507">Світло-сірий</translation>
+<translation id="6036135911048686884">Торкніться опції Огляд</translation>
 <translation id="6037602951055904232">На задній план</translation>
 <translation id="6044160928851315051">Дезактивувати екран</translation>
 <translation id="6082768461603900813">Основна навігація</translation>
@@ -716,7 +717,7 @@
 <translation id="6696967141280706829">Передмова</translation>
 <translation id="6697092096875747123">Попереднє комбіноване вікно</translation>
 <translation id="6702609185760332517">{COUNT,plural, =1{знак оклику}one{# знак оклику}few{# знаки оклику}many{# знаків оклику}other{# знаку оклику}}</translation>
-<translation id="6710213216561001401">Попереднє</translation>
+<translation id="6710213216561001401">Назад</translation>
 <translation id="6714813999819678458">Попередній заголовок рівня 2</translation>
 <translation id="6730312624811567147">Використовуйте комбінацію клавіші пошуку зі стрілкою праворуч або ліворуч як клавішу Home або End, комбінацію клавіш пошуку та Control зі стрілкою праворуч чи ліворуч як клавіші Control Home або End, а клавішу пошуку зі стрілкою вгору чи вниз – як клавіші Page Up або Page Down</translation>
 <translation id="6736510033526053669">вкладку створено</translation>
@@ -922,6 +923,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{фунт}one{# символ фунта}few{# символи фунта}many{# символів фунта}other{# pound signs}}</translation>
 <translation id="8378855320830505539">Регіон</translation>
 <translation id="8382679411218029383">Вбудоване автозавершення та список</translation>
+<translation id="8394908167088220973">Відтворити чи призупинити</translation>
 <translation id="8428213095426709021">Налаштування</translation>
 <translation id="8428603554127842284">рівень <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">панель меню</translation>
@@ -966,6 +968,7 @@
 <translation id="8770473310765924354">закрити структурований вміст, як-от таблиці</translation>
 <translation id="8779057862865475116">Немає попереднього посилання</translation>
 <translation id="8796411681063377102">Наступний заголовок рівня 3</translation>
+<translation id="8823311177246872527">Сторінка <ph name="CURRENTPAGE" /> з <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">банер</translation>
 <translation id="8851136666856101339">головний</translation>
 <translation id="8882002077197914455">Заголовок рядка</translation>

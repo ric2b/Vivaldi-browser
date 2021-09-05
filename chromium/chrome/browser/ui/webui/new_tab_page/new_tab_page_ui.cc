@@ -7,6 +7,10 @@
 #include <memory>
 #include <utility>
 
+#include "chrome/browser/buildflags.h"
+#include "chrome/browser/media/kaleidoscope/constants.h"
+#include "chrome/browser/media/kaleidoscope/kaleidoscope_data_provider_impl.h"
+#include "chrome/browser/media/kaleidoscope/kaleidoscope_ui.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
@@ -16,6 +20,7 @@
 #include "chrome/browser/ui/search/omnibox_mojo_utils.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h"
+#include "chrome/browser/ui/webui/new_tab_page/promo_browser_command/promo_browser_command_handler.h"
 #include "chrome/browser/ui/webui/new_tab_page/untrusted_source.h"
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/browser/ui/webui/webui_util.h"
@@ -30,6 +35,7 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "media/base/media_switches.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -83,6 +89,8 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
   source->AddBoolean(
       "themeModeDoodlesEnabled",
       base::FeatureList::IsEnabled(ntp_features::kWebUIThemeModeDoodles));
+  source->AddBoolean("modulesEnabled",
+                     base::FeatureList::IsEnabled(ntp_features::kModules));
 
   static constexpr webui::LocalizedString kStrings[] = {
       {"doneButton", IDS_DONE},
@@ -168,6 +176,14 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
 
       // Theme.
       {"themeCreatedBy", IDS_NEW_TAB_ATTRIBUTION_INTRO},
+
+      // Modules.
+      {"modulesDummyName", IDS_NTP_MODULES_DUMMY_NAME},
+      {"modulesDummyTitle", IDS_NTP_MODULES_DUMMY_TITLE},
+      {"modulesDummy2Name", IDS_NTP_MODULES_DUMMY2_NAME},
+      {"modulesDummy2Title", IDS_NTP_MODULES_DUMMY2_TITLE},
+      {"modulesKaleidoscopeName", IDS_NTP_MODULES_KALEIDOSCOPE_NAME},
+      {"modulesKaleidoscopeTitle", IDS_NTP_MODULES_KALEIDOSCOPE_TITLE},
   };
   AddLocalizedStringsBulk(source, kStrings);
 
@@ -193,10 +209,19 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {omnibox::kSearchIconResourceName, IDR_WEBUI_IMAGES_ICON_SEARCH}};
   webui::AddResourcePathsBulk(source, kImages);
 
+#if BUILDFLAG(ENABLE_KALEIDOSCOPE)
+  source->AddBoolean("kaleidoscopeModuleEnabled",
+                     base::FeatureList::IsEnabled(media::kKaleidoscopeModule));
+#else
+  source->AddBoolean("kaleidoscopeModuleEnabled", false);
+#endif  // BUILDFLAG(ENABLE_KALEIDOSCOPE)
+
   source->AddResourcePath("new_tab_page.mojom-lite.js",
                           IDR_NEW_TAB_PAGE_MOJO_LITE_JS);
   source->AddResourcePath("omnibox.mojom-lite.js",
                           IDR_NEW_TAB_PAGE_OMNIBOX_MOJO_LITE_JS);
+  source->AddResourcePath("promo_browser_command.mojom-lite.js",
+                          IDR_NEW_TAB_PAGE_PROMO_BROWSER_COMMAND_MOJO_LITE_JS);
 #if BUILDFLAG(OPTIMIZE_WEBUI)
   source->AddResourcePath("new_tab_page.js", IDR_NEW_TAB_PAGE_NEW_TAB_PAGE_JS);
 #endif  // BUILDFLAG(OPTIMIZE_WEBUI)
@@ -211,15 +236,17 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
   // script-src.
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
-      "script-src chrome://resources chrome://test 'self' 'unsafe-inline' "
-      "https:;");
+      "script-src chrome://resources chrome://test chrome://kaleidoscope "
+      "'self' 'unsafe-inline' https:;");
   // Allow embedding of iframes from the One Google Bar and
-  // chrome-untrusted://new-tab-page for other external content and resources.
+  // chrome-untrusted://new-tab-page for other external content and resources
+  // and chrome-untrusted://kaleidoscope for Kaleidoscope.
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ChildSrc,
-      base::StringPrintf("child-src https: %s %s;",
+      base::StringPrintf("child-src https: %s %s %s;",
                          google_util::CommandLineGoogleBaseURL().spec().c_str(),
-                         chrome::kChromeUIUntrustedNewTabPageUrl));
+                         chrome::kChromeUIUntrustedNewTabPageUrl,
+                         kKaleidoscopeUntrustedContentUIURL));
 
   return source;
 }
@@ -227,7 +254,7 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
 }  // namespace
 
 NewTabPageUI::NewTabPageUI(content::WebUI* web_ui)
-    : ui::MojoWebUIController(web_ui, true),
+    : ui::MojoWebUIController(web_ui, /*enable_chrome_send=*/false),
       content::WebContentsObserver(web_ui->GetWebContents()),
       page_factory_receiver_(this),
       profile_(Profile::FromWebUI(web_ui)),
@@ -250,6 +277,12 @@ NewTabPageUI::NewTabPageUI(content::WebUI* web_ui)
   content::URLDataSource::Add(
       profile_,
       std::make_unique<ThemeSource>(profile_, /*serve_untrusted=*/true));
+
+  content::WebUIDataSource::Add(profile_,
+                                KaleidoscopeUI::CreateWebUIDataSource());
+
+  content::WebUIDataSource::Add(
+      profile_, KaleidoscopeUI::CreateUntrustedWebUIDataSource());
 
   web_ui->AddRequestableScheme(content::kChromeUIUntrustedScheme);
 
@@ -276,6 +309,20 @@ void NewTabPageUI::BindInterface(
   }
 
   page_factory_receiver_.Bind(std::move(pending_receiver));
+}
+
+void NewTabPageUI::BindInterface(
+    mojo::PendingReceiver<promo_browser_command::mojom::CommandHandler>
+        pending_page_handler) {
+  promo_browser_command_handler_ = std::make_unique<PromoBrowserCommandHandler>(
+      std::move(pending_page_handler), profile_);
+}
+
+void NewTabPageUI::BindInterface(
+    mojo::PendingReceiver<media::mojom::KaleidoscopeDataProvider>
+        pending_page_handler) {
+  kaleidoscope_data_provider_ = std::make_unique<KaleidoscopeDataProviderImpl>(
+      std::move(pending_page_handler), profile_);
 }
 
 void NewTabPageUI::CreatePageHandler(

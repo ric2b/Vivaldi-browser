@@ -68,8 +68,8 @@ fuchsia::netstack::NetInterface DefaultNetInterface() {
   // is sufficient.
   fuchsia::netstack::NetInterface interface;
   interface.id = kDefaultInterfaceId;
-  interface.flags = fuchsia::netstack::NetInterfaceFlagUp;
-  interface.features = 0;
+  interface.flags = fuchsia::netstack::Flags::UP;
+  interface.features = {};
   interface.addr = IpAddressFrom(kDefaultIPv4Address);
   interface.netmask = IpAddressFrom(kDefaultIPv4Netmask);
   interface.broadaddr = IpAddressFrom(kDefaultIPv4Address);
@@ -81,8 +81,8 @@ fuchsia::netstack::NetInterface SecondaryNetInterface() {
   // is sufficient.
   fuchsia::netstack::NetInterface interface;
   interface.id = kSecondaryInterfaceId;
-  interface.flags = fuchsia::netstack::NetInterfaceFlagUp;
-  interface.features = 0;
+  interface.flags = fuchsia::netstack::Flags::UP;
+  interface.features = {};
   interface.addr = IpAddressFrom(kSecondaryIPv4Address);
   interface.netmask = IpAddressFrom(kSecondaryIPv4Netmask);
   interface.broadaddr = IpAddressFrom(kSecondaryIPv4Address);
@@ -102,26 +102,27 @@ std::vector<fuchsia::netstack::NetInterface> CloneNetInterfaces(
 // Partial fake implementation of a Netstack.
 class FakeNetstack : public fuchsia::netstack::testing::Netstack_TestBase {
  public:
-  explicit FakeNetstack(
-      fidl::InterfaceRequest<fuchsia::netstack::Netstack> netstack_request)
-      : binding_(this) {
-    CHECK_EQ(ZX_OK, binding_.Bind(std::move(netstack_request)));
-  }
+  explicit FakeNetstack() : binding_(this) {}
   ~FakeNetstack() override = default;
+
+  void Bind(
+      fidl::InterfaceRequest<fuchsia::netstack::Netstack> netstack_request) {
+    CHECK_EQ(ZX_OK, binding_.Bind(std::move(netstack_request)));
+    binding_.events().OnInterfacesChanged(CloneNetInterfaces(interfaces_));
+  }
 
   // Sets the interfaces reported by the fake Netstack and sends an
   // OnInterfacesChanged() event to the client.
   void SetInterfaces(std::vector<fuchsia::netstack::NetInterface> interfaces) {
     interfaces_ = std::move(interfaces);
-    binding_.events().OnInterfacesChanged(CloneNetInterfaces(interfaces_));
+    if (binding_.is_bound()) {
+      binding_.events().OnInterfacesChanged(CloneNetInterfaces(interfaces_));
+    }
   }
 
  private:
-  void GetInterfaces(GetInterfacesCallback callback) override {
-    callback(CloneNetInterfaces(interfaces_));
-  }
-
   void GetRouteTable(GetRouteTableCallback callback) override {
+    CHECK(binding_.is_bound());
     std::vector<fuchsia::netstack::RouteTableEntry> table(2);
 
     table[0].nicid = kDefaultInterfaceId;
@@ -149,15 +150,17 @@ class FakeNetstack : public fuchsia::netstack::testing::Netstack_TestBase {
 
 class FakeNetstackAsync {
  public:
-  explicit FakeNetstackAsync(
-      fidl::InterfaceRequest<fuchsia::netstack::Netstack> netstack_request)
-      : thread_("Netstack Thread") {
+  explicit FakeNetstackAsync() : thread_("Netstack Thread") {
     base::Thread::Options options(base::MessagePumpType::IO, 0);
     CHECK(thread_.StartWithOptions(options));
-    netstack_ = base::SequenceBound<FakeNetstack>(thread_.task_runner(),
-                                                  std::move(netstack_request));
+    netstack_ = base::SequenceBound<FakeNetstack>(thread_.task_runner());
   }
   ~FakeNetstackAsync() = default;
+
+  void Bind(
+      fidl::InterfaceRequest<fuchsia::netstack::Netstack> netstack_request) {
+    netstack_.Post(FROM_HERE, &FakeNetstack::Bind, std::move(netstack_request));
+  }
 
   // Asynchronously update the state of the netstack.
   void SetInterfaces(
@@ -291,23 +294,27 @@ class FakeIPAddressObserver : public NetworkChangeNotifier::IPAddressObserver {
 
 class NetworkChangeNotifierFuchsiaTest : public testing::Test {
  public:
-  NetworkChangeNotifierFuchsiaTest() : netstack_(netstack_ptr_.NewRequest()) {}
+  NetworkChangeNotifierFuchsiaTest() {}
   ~NetworkChangeNotifierFuchsiaTest() override = default;
 
   // Creates a NetworkChangeNotifier and spins the MessageLoop to allow it to
   // populate from the list of interfaces which have already been added to
   // |netstack_|. |observer_| is registered last, so that tests need only
   // express expectations on changes they make themselves.
-  void CreateNotifier(uint32_t required_features = 0) {
+  void CreateNotifier(
+      fuchsia::hardware::ethernet::Features required_features = {}) {
     // Ensure that the Netstack internal state is up-to-date before the
     // notifier queries it.
     netstack_.FlushNetstackThread();
+
+    CHECK(!netstack_handle_);
+    netstack_.Bind(netstack_handle_.NewRequest());
 
     // Use a noop DNS notifier.
     dns_config_notifier_ = std::make_unique<SystemDnsConfigChangeNotifier>(
         nullptr /* task_runner */, nullptr /* dns_config_service */);
     notifier_.reset(new NetworkChangeNotifierFuchsia(
-        std::move(netstack_ptr_), required_features,
+        std::move(netstack_handle_), required_features,
         dns_config_notifier_.get()));
 
     type_observer_ = std::make_unique<FakeConnectionTypeObserver>();
@@ -324,7 +331,7 @@ class NetworkChangeNotifierFuchsiaTest : public testing::Test {
   base::test::SingleThreadTaskEnvironment task_environment_{
       base::test::SingleThreadTaskEnvironment::MainThreadType::IO};
 
-  fuchsia::netstack::NetstackPtr netstack_ptr_;
+  fidl::InterfaceHandle<fuchsia::netstack::Netstack> netstack_handle_;
   FakeNetstackAsync netstack_;
 
   // Allows us to allocate our own NetworkChangeNotifier for unit testing.
@@ -349,7 +356,7 @@ TEST_F(NetworkChangeNotifierFuchsiaTest, NotifyNetworkChangeOnInitialIPChange) {
   // Set a live interface with an IP address and create the notifier.
   std::vector<fuchsia::netstack::NetInterface> interfaces(1);
   interfaces[0] = DefaultNetInterface();
-  interfaces[0].features = fuchsia::hardware::ethernet::INFO_FEATURE_WLAN;
+  interfaces[0].features = fuchsia::hardware::ethernet::Features::WLAN;
 
   netstack_.SetInterfaces(interfaces);
   CreateNotifier();
@@ -500,7 +507,7 @@ TEST_F(NetworkChangeNotifierFuchsiaTest, InterfaceDown) {
   EXPECT_EQ(NetworkChangeNotifier::ConnectionType::CONNECTION_UNKNOWN,
             notifier_->GetCurrentConnectionType());
 
-  interfaces[0].flags = 0;
+  interfaces[0].flags = {};
   netstack_.SetInterfaces(interfaces);
 
   EXPECT_TRUE(type_observer_->RunAndExpectConnectionTypes(
@@ -511,14 +518,14 @@ TEST_F(NetworkChangeNotifierFuchsiaTest, InterfaceDown) {
 TEST_F(NetworkChangeNotifierFuchsiaTest, InterfaceUp) {
   std::vector<fuchsia::netstack::NetInterface> interfaces(1);
   interfaces[0] = DefaultNetInterface();
-  interfaces[0].flags = 0;
+  interfaces[0].flags = {};
 
   netstack_.SetInterfaces(interfaces);
   CreateNotifier();
   EXPECT_EQ(NetworkChangeNotifier::ConnectionType::CONNECTION_NONE,
             notifier_->GetCurrentConnectionType());
 
-  interfaces[0].flags = fuchsia::netstack::NetInterfaceFlagUp;
+  interfaces[0].flags = fuchsia::netstack::Flags::UP;
   netstack_.SetInterfaces(interfaces);
 
   EXPECT_TRUE(type_observer_->RunAndExpectConnectionTypes(
@@ -550,7 +557,7 @@ TEST_F(NetworkChangeNotifierFuchsiaTest, InterfaceAdded) {
 
   std::vector<fuchsia::netstack::NetInterface> interfaces(1);
   interfaces[0] = DefaultNetInterface();
-  interfaces[0].features = fuchsia::hardware::ethernet::INFO_FEATURE_WLAN;
+  interfaces[0].features = fuchsia::hardware::ethernet::Features::WLAN;
 
   netstack_.SetInterfaces(interfaces);
 
@@ -585,7 +592,7 @@ TEST_F(NetworkChangeNotifierFuchsiaTest, SecondaryInterfaceDeletedNoop) {
 TEST_F(NetworkChangeNotifierFuchsiaTest, FoundWiFi) {
   std::vector<fuchsia::netstack::NetInterface> interfaces(1);
   interfaces[0] = DefaultNetInterface();
-  interfaces[0].features = fuchsia::hardware::ethernet::INFO_FEATURE_WLAN;
+  interfaces[0].features = fuchsia::hardware::ethernet::Features::WLAN;
 
   netstack_.SetInterfaces(interfaces);
   CreateNotifier();
@@ -596,10 +603,10 @@ TEST_F(NetworkChangeNotifierFuchsiaTest, FoundWiFi) {
 TEST_F(NetworkChangeNotifierFuchsiaTest, FindsInterfaceWithRequiredFeature) {
   std::vector<fuchsia::netstack::NetInterface> interfaces(1);
   interfaces[0] = DefaultNetInterface();
-  interfaces[0].features = fuchsia::hardware::ethernet::INFO_FEATURE_WLAN;
+  interfaces[0].features = fuchsia::hardware::ethernet::Features::WLAN;
 
   netstack_.SetInterfaces(interfaces);
-  CreateNotifier(fuchsia::hardware::ethernet::INFO_FEATURE_WLAN);
+  CreateNotifier(fuchsia::hardware::ethernet::Features::WLAN);
   EXPECT_EQ(NetworkChangeNotifier::ConnectionType::CONNECTION_WIFI,
             notifier_->GetCurrentConnectionType());
 }
@@ -609,7 +616,7 @@ TEST_F(NetworkChangeNotifierFuchsiaTest, IgnoresInterfaceWithMissingFeature) {
   interfaces[0] = DefaultNetInterface();
 
   netstack_.SetInterfaces(interfaces);
-  CreateNotifier(fuchsia::hardware::ethernet::INFO_FEATURE_WLAN);
+  CreateNotifier(fuchsia::hardware::ethernet::Features::WLAN);
   EXPECT_EQ(NetworkChangeNotifier::ConnectionType::CONNECTION_NONE,
             notifier_->GetCurrentConnectionType());
 }

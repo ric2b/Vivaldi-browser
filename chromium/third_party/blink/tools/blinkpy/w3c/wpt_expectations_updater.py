@@ -44,14 +44,18 @@ class WPTExpectationsUpdater(object):
         self.git_cl = GitCL(host)
         self.git = self.host.git(self.finder.chromium_base())
         self.configs_with_no_results = []
-        self.configs_with_all_pass = []
         self.patchset = None
 
         # Get options from command line arguments.
         parser = argparse.ArgumentParser(description=__doc__)
         self.add_arguments(parser)
         self.options = parser.parse_args(args or [])
-
+        if not (self.options.clean_up_test_expectations or
+                self.options.clean_up_test_expectations_only):
+            assert not self.options.clean_up_affected_tests_only, (
+                'Cannot use --clean-up-affected-tests-only without using '
+                '--clean-up-test-expectations or '
+                '--clean-up-test-expectations-only')
         # Set up TestExpectations instance which contains all
         # expectations files associated with the platform.
         expectations_dict = {p: self.host.filesystem.read_text_file(p)
@@ -78,13 +82,20 @@ class WPTExpectationsUpdater(object):
         log_level = logging.DEBUG if self.options.verbose else logging.INFO
         configure_logging(logging_level=log_level, include_time=True)
 
+        if not(self.options.android_product or
+                self.options.update_android_expectations_only):
+            assert not self.options.include_unexpected_pass, (
+                'Command line argument --include-unexpected-pass is not '
+                'supported in desktop mode.')
         self.patchset = self.options.patchset
 
-        # Remove expectations for deleted tests and rename tests in expectations
-        # for renamed tests.
-        self.cleanup_test_expectations_files()
+        if (self.options.clean_up_test_expectations or
+                self.options.clean_up_test_expectations_only):
+            # Remove expectations for deleted tests and rename tests in
+            # expectations for renamed tests.
+            self.cleanup_test_expectations_files()
 
-        if not self.options.cleanup_test_expectations_only:
+        if not self.options.clean_up_test_expectations_only:
             # Use try job results to update expectations and baselines
             self.update_expectations()
 
@@ -101,23 +112,36 @@ class WPTExpectationsUpdater(object):
             action='store_true',
             help='More verbose logging.')
         parser.add_argument(
+            '--clean-up-test-expectations',
+            action='store_true',
+            help='Cleanup test expectations files.')
+        parser.add_argument(
+            '--clean-up-test-expectations-only',
+            action='store_true',
+            help='Clean up expectations and then exit script.')
+        parser.add_argument(
             '--clean-up-affected-tests-only',
             action='store_true',
             help='Only cleanup expectations deleted or renamed in current CL. '
                  'If flag is not used then a full cleanup of deleted or '
                  'renamed tests will be done in expectations.')
-        parser.add_argument(
-            '--cleanup-test-expectations-only',
-            action='store_true',
-            help='Cleanup test expectations files and then exit script.')
-        # TODO(rmhasan): Move this argument to the
+        # TODO(rmhasan): Move below arguments to the
         # AndroidWPTExpectationsUpdater add_arguments implementation.
         # Also look into using sub parsers to separate android and
         # desktop specific arguments.
         parser.add_argument(
+            '--update-android-expectations-only', action='store_true',
+            help='Update and clean up only Android test expectations.')
+        parser.add_argument(
             '--android-product', action='append', default=[],
             help='Android products whose baselines will be updated.',
             choices=PRODUCTS)
+        parser.add_argument(
+            '--include-unexpected-pass',
+            action='store_true',
+            help='Adds Pass to tests with failure expectations. '
+                 'This command line argument can be used to mark tests '
+                 'as flaky.')
 
     def update_expectations(self):
         """Downloads text new baselines and adds test expectations lines.
@@ -139,9 +163,8 @@ class WPTExpectationsUpdater(object):
         # Here we build up a dict of failing test results for all platforms.
         test_expectations = {}
         for build, job_status in build_to_status.iteritems():
-            if job_status.result == 'SUCCESS':
-                self.configs_with_all_pass.extend(
-                    self.get_builder_configs(build))
+            if (job_status.result == 'SUCCESS' and
+                    not self.options.include_unexpected_pass):
                 continue
             result_dicts = self.get_failing_results_dicts(build)
             for result_dict in result_dicts:
@@ -222,13 +245,13 @@ class WPTExpectationsUpdater(object):
             self.configs_with_no_results.extend(self.get_builder_configs(build))
             return []
 
-        failing_test_results = []
+        unexpected_test_results = []
         for results_set in test_results_list:
             results_dict = self.generate_failing_results_dict(
                 build, results_set)
             if results_dict:
-                failing_test_results.append(results_dict)
-        return failing_test_results
+                unexpected_test_results.append(results_dict)
+        return unexpected_test_results
 
     def _get_web_test_results(self, build):
         """Gets web tests results for a builder.
@@ -277,9 +300,6 @@ class WPTExpectationsUpdater(object):
             raise ScriptError('No configuration was found for builder and web test'
                               ' step combination ')
         config = configs[0]
-        if config in self.configs_with_all_pass:
-            return {}
-
         for result in web_test_results.didnt_run_as_expected_results():
             # TODO(rmhasan) If a test fails unexpectedly then it runs multiple
             # times until, it passes or a retry limit is reached. Even though
@@ -287,7 +307,11 @@ class WPTExpectationsUpdater(object):
             # creating test expectations for. Maybe we should add a mode
             # which creates expectations for tests that are flaky but still
             # pass in a web test step.
-            if result.did_pass():
+
+            # Create flaky expectations for flaky tests on Android. In order to
+            # do this we should add 'Pass' to all tests with failing
+            # expectations that pass in the patchset's try job.
+            if result.did_pass() and not self.options.include_unexpected_pass:
                 continue
 
             test_name = result.test_name()

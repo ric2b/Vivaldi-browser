@@ -16,8 +16,9 @@ import org.chromium.chrome.browser.flags.StringCachedFieldTrialParameter;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.components.user_prefs.UserPrefs;
 
 import org.chromium.chrome.browser.ChromeApplication;
 
@@ -88,12 +89,7 @@ public class StartSurfaceConfiguration {
      * @return Whether the Start Surface SinglePane is enabled.
      */
     public static boolean isStartSurfaceSinglePaneEnabled() {
-        // TODO(crbug.com/1062013): The values cached to START_SURFACE_SINGLE_PANE_ENABLED_KEY
-        // should be honored for some time. Remove only after M85 to be safe.
-        return isStartSurfaceEnabled()
-                && (START_SURFACE_VARIATION.getValue().equals("single")
-                        || SharedPreferencesManager.getInstance().readBoolean(
-                                ChromePreferenceKeys.START_SURFACE_SINGLE_PANE_ENABLED_KEY, false));
+        return isStartSurfaceEnabled() && START_SURFACE_VARIATION.getValue().equals("single");
     }
 
     /**
@@ -118,7 +114,8 @@ public class StartSurfaceConfiguration {
     private static void updateFeedVisibility() {
         SharedPreferencesManager.getInstance().writeBoolean(
                 ChromePreferenceKeys.FEED_ARTICLES_LIST_VISIBLE,
-                PrefServiceBridge.getInstance().getBoolean(Pref.ARTICLES_LIST_VISIBLE));
+                UserPrefs.get(Profile.getLastUsedRegularProfile())
+                        .getBoolean(Pref.ARTICLES_LIST_VISIBLE));
     }
 
     /**
@@ -150,5 +147,21 @@ public class StartSurfaceConfiguration {
     public static String getHistogramName(String name, boolean isInstantStart) {
         return STARTUP_UMA_PREFIX + name
                 + (isInstantStart ? INSTANT_START_SUBFIX : REGULAR_START_SUBFIX);
+    }
+    /**
+     * @param isDense Whether the placeholder of Feed is dense. This depends on whether the first
+     *         article card of Feed is dense.
+     */
+    public static void setFeedPlaceholderDense(boolean isDense) {
+        SharedPreferencesManager.getInstance().writeBoolean(
+                ChromePreferenceKeys.FEED_PLACEHOLDER_DENSE, isDense);
+    }
+
+    /**
+     * @return Whether the placeholder of Feed is dense.
+     */
+    public static boolean isFeedPlaceholderDense() {
+        return SharedPreferencesManager.getInstance().readBoolean(
+                ChromePreferenceKeys.FEED_PLACEHOLDER_DENSE, false);
     }
 }

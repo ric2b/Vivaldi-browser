@@ -3,7 +3,7 @@
 #include "ui/views/vivaldi_context_menu_views.h"
 
 #include "base/command_line.h"
-#include "base/message_loop/message_loop_current.h"
+#include "base/task/current_thread.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/renderer_context_menu/views/toolkit_delegate_views.h"
 #include "content/public/browser/web_contents.h"
@@ -15,7 +15,7 @@ namespace vivaldi {
 
 // Mac uses both a native version and the views version depening menu location
 // A separate CreateVivaldiContextMenu exists on the mac implementation.
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 
 VivaldiContextMenu* CreateVivaldiContextMenu(
     content::WebContents* web_contents,
@@ -72,7 +72,7 @@ void VivaldiContextMenuViews::Show() {
 
   // Enable recursive tasks on the message loop so we can get updates while
   // the context menu is being displayed.
-  base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
+  base::CurrentThread::ScopedNestableTaskAllower allow;
   RunMenuAt(widget, rect, ui::MENU_SOURCE_NONE);
 }
 

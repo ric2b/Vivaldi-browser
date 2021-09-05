@@ -109,6 +109,8 @@ def GetANGLERenderer(gpu_info):
         retval = 'opengles'
       elif 'OpenGL' in gl_renderer:
         retval = 'opengl'
+      elif 'Metal' in gl_renderer:
+        retval = 'metal'
       # SwiftShader first because it also contains Vulkan
       elif 'SwiftShader' in gl_renderer:
         retval = 'swiftshader'
@@ -202,8 +204,9 @@ def MatchDriverTag(tag):
 
 
 # No good way to reduce the number of local variables, particularly since each
-# argument is also considered a local.
-# pylint: disable=too-many-locals
+# argument is also considered a local. Also no good way to reduce the number of
+# branches without harming readability.
+# pylint: disable=too-many-locals,too-many-branches
 def EvaluateVersionComparison(version,
                               operation,
                               ref_version,
@@ -273,7 +276,7 @@ def EvaluateVersionComparison(version,
     raise Exception('Invalid operation: ' + operation)
 
   return operation == 'eq' or operation == 'ge' or operation == 'le'
-# pylint: enable=too-many-locals
+# pylint: enable=too-many-locals,too-many-branches
 
 
 def ExpectationsDriverTags():

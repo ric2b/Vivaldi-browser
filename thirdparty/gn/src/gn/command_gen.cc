@@ -244,7 +244,6 @@ bool RunIdeWriter(const std::string& ide,
         command_line->GetSwitchValueASCII(kSwitchXcodeProject),
         command_line->GetSwitchValueASCII(kSwitchRootTarget),
         command_line->GetSwitchValueASCII(kSwitchNinjaExecutable),
-        command_line->GetSwitchValueASCII(kSwitchNinjaExtraArgs),
         command_line->GetSwitchValueASCII(kSwitchFilters),
         XcodeBuildSystem::kLegacy,
     };

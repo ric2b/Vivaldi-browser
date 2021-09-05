@@ -12,9 +12,9 @@
 #include "base/callback.h"
 #include "base/check.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/notreached.h"
 #include "base/run_loop.h"
+#include "base/task/current_thread.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
@@ -64,18 +64,47 @@ WaylandWindowDragController::WaylandWindowDragController(
 
 WaylandWindowDragController::~WaylandWindowDragController() = default;
 
+bool WaylandWindowDragController::StartDragSession() {
+  if (state_ != State::kIdle)
+    return true;
+
+  origin_window_ = window_manager_->GetCurrentFocusedWindow();
+  if (!origin_window_) {
+    LOG(ERROR) << "Failed to get origin window.";
+    return false;
+  }
+
+  VLOG(1) << "Starting DND session.";
+  state_ = State::kAttached;
+
+  DCHECK(!data_source_);
+  data_source_ = data_device_manager_->CreateSource(this);
+  data_source_->Offer({kMimeTypeChromiumWindow});
+  data_source_->SetAction(DragDropTypes::DRAG_MOVE);
+
+  // TODO(crbug.com/1099418): Use dragged window's surface as icon surface
+  // once "immediate drag" protocol extensions are available.
+  data_device_->StartDrag(*data_source_, *origin_window_,
+                          /*icon_surface=*/nullptr, this);
+
+  pointer_grab_owner_ = origin_window_;
+
+  // Observe window so we can take ownership of the origin surface in case it
+  // is destroyed during the DND session.
+  window_manager_->AddObserver(this);
+  return true;
+}
+
 bool WaylandWindowDragController::Drag(WaylandToplevelWindow* window,
                                        const gfx::Vector2d& offset) {
-  DCHECK_LE(state_, State::kAttached);
-  DCHECK(window);
-
-  if (!OfferWindow())
-    return false;
-
   DCHECK_EQ(state_, State::kAttached);
+  DCHECK(window);
   dragged_window_ = window;
   drag_offset_ = offset;
+
   RunLoop();
+
+  dragged_window_ = nullptr;
 
   DCHECK(state_ == State::kAttached || state_ == State::kDropped);
   bool dropped = state_ == State::kDropped;
@@ -91,9 +120,11 @@ void WaylandWindowDragController::StopDragging() {
   VLOG(1) << "End drag loop requested. state=" << state_;
 
   // This function is supposed to be called to indicate that the window was just
-  // snapped into a tab strip. So switch to |kAttached| state and ask to quit
-  // the nested loop.
+  // snapped into a tab strip. So switch to |kAttached| state, store the focused
+  // window as the pointer grabber and ask to quit the nested loop.
   state_ = State::kAttached;
+  pointer_grab_owner_ = window_manager_->GetCurrentFocusedWindow();
+  DCHECK(pointer_grab_owner_);
   QuitLoop();
 }
 
@@ -118,6 +149,8 @@ void WaylandWindowDragController::OnDragEnter(WaylandWindow* window,
                                               uint32_t serial) {
   DCHECK_GE(state_, State::kAttached);
   DCHECK(window);
+  DCHECK(data_source_);
+  DCHECK(data_offer_);
 
   // Forward focus change event to the input delegate, so other components, such
   // as WaylandScreen, are able to properly retrieve focus related info during
@@ -126,8 +159,13 @@ void WaylandWindowDragController::OnDragEnter(WaylandWindow* window,
 
   VLOG(1) << "OnEnter. widget=" << window->GetWidget();
 
+  // TODO(crbug.com/1102946): Exo does not support custom mime types. In this
+  // case, |data_offer_| will hold an empty mime_types list and, at this point,
+  // it's safe just to skip the offer checks and requests here.
+  if (data_offer_->mime_types().empty())
+    return;
+
   // Ensure this is a valid "window drag" offer.
-  DCHECK(data_offer_);
   DCHECK_EQ(data_offer_->mime_types().size(), 1u);
   DCHECK_EQ(data_offer_->mime_types().front(), kMimeTypeChromiumWindow);
 
@@ -161,16 +199,39 @@ void WaylandWindowDragController::OnDragLeave() {
   // which would require hacky workarounds in HandleDropAndResetState function
   // to properly detect and handle such cases.
 
-  VLOG(1) << "OnLeave";
+  if (!data_offer_)
+    return;
 
+  VLOG(1) << "OnLeave";
   data_offer_.reset();
+
+  // As Wayland clients are only aware of surface-local coordinates and there is
+  // no implicit grab during DND sessions, a fake motion event with negative
+  // coordinates must be used here to make it possible for higher level UI
+  // components to detect when a window should be detached. E.g: On Chrome,
+  // dragging a tab all the way up to the top edge of the window won't work
+  // without this fake motion event upon wl_data_device::leave events.
+  if (state_ == State::kAttached)
+    pointer_delegate_->OnPointerMotionEvent({-1, -1});
 }
 
 void WaylandWindowDragController::OnDragDrop() {
-  // Not used for window dragging sessions. Handling of drop events is fully
-  // done at OnDataSourceFinish function, i.e: wl_data_source::{cancel,finish}.
+  DCHECK_GE(state_, State::kAttached);
+  VLOG(1) << "Dropped. state=" << state_;
+
+  // Some compositors, e.g: Exo, may delay the wl_data_source::cancelled event
+  // delivery for some seconds, when the drop happens within a toplevel surface.
+  // Such event is handled by OnDataSourceFinish() function below, which is the
+  // single entry point for the drop event in window drag controller. In order
+  // to prevent such delay, the current data offer must be destroyed here.
+  DCHECK(data_offer_);
+  data_offer_.reset();
 }
 
+// This function is called when either 'cancelled' or 'finished' data source
+// events is received during a window dragging session. It is used to detect
+// when drop happens, since it is the only event sent by the server regardless
+// where it happens, inside or outside toplevel surfaces.
 void WaylandWindowDragController::OnDataSourceFinish(bool completed) {
   DCHECK_GE(state_, State::kAttached);
   DCHECK(data_source_);
@@ -180,7 +241,8 @@ void WaylandWindowDragController::OnDataSourceFinish(bool completed) {
   // Release DND objects.
   data_offer_.reset();
   data_source_.reset();
-  icon_surface_.reset();
+  origin_surface_.reset();
+  origin_window_ = nullptr;
   dragged_window_ = nullptr;
 
   // Transition to |kDropped| state and determine the next action to take. If
@@ -193,6 +255,7 @@ void WaylandWindowDragController::OnDataSourceFinish(bool completed) {
     HandleDropAndResetState();
 
   data_device_->ResetDragDelegate();
+  window_manager_->RemoveObserver(this);
 }
 
 void WaylandWindowDragController::OnDataSourceSend(const std::string& mime_type,
@@ -208,7 +271,7 @@ bool WaylandWindowDragController::CanDispatchEvent(const PlatformEvent& event) {
 uint32_t WaylandWindowDragController::DispatchEvent(
     const PlatformEvent& event) {
   DCHECK_EQ(state_, State::kDetached);
-  DCHECK(base::MessageLoopCurrentForUI::IsSet());
+  DCHECK(base::CurrentUIThread::IsSet());
 
   VLOG(2) << "Dispatch. event=" << event->GetName();
 
@@ -219,30 +282,10 @@ uint32_t WaylandWindowDragController::DispatchEvent(
   return POST_DISPATCH_PERFORM_DEFAULT;
 }
 
-bool WaylandWindowDragController::OfferWindow() {
-  DCHECK_LE(state_, State::kAttached);
-
-  auto* window = window_manager_->GetCurrentFocusedWindow();
-  if (!window) {
-    LOG(ERROR) << "Failed to get focused window.";
-    return false;
-  }
-
-  if (!data_source_)
-    data_source_ = data_device_manager_->CreateSource(this);
-
-  if (state_ == State::kIdle) {
-    DCHECK(!icon_surface_);
-    icon_surface_.reset(
-        wl_compositor_create_surface(connection_->compositor()));
-
-    VLOG(1) << "Starting DND session.";
-    state_ = State::kAttached;
-    data_source_->Offer({kMimeTypeChromiumWindow});
-    data_source_->SetAction(DragDropTypes::DRAG_MOVE);
-    data_device_->StartDrag(*data_source_, *window, icon_surface_.get(), this);
-  }
-  return true;
+void WaylandWindowDragController::OnWindowRemoved(WaylandWindow* window) {
+  DCHECK_NE(state_, State::kIdle);
+  if (window == origin_window_)
+    origin_surface_ = origin_window_->TakeWaylandSurface();
 }
 
 void WaylandWindowDragController::HandleMotionEvent(MouseEvent* event) {
@@ -273,14 +316,15 @@ void WaylandWindowDragController::HandleMotionEvent(MouseEvent* event) {
 // about to finish.
 void WaylandWindowDragController::HandleDropAndResetState() {
   DCHECK_EQ(state_, State::kDropped);
-  DCHECK(window_manager_->GetCurrentFocusedWindow());
-  VLOG(1) << "Notifying drop. window="
-          << window_manager_->GetCurrentFocusedWindow();
+  DCHECK(pointer_grab_owner_);
+  VLOG(1) << "Notifying drop. window=" << pointer_grab_owner_;
 
   EventFlags pointer_button = EF_LEFT_MOUSE_BUTTON;
   DCHECK(connection_->event_source()->IsPointerButtonPressed(pointer_button));
-  pointer_delegate_->OnPointerButtonEvent(ET_MOUSE_RELEASED, pointer_button);
+  pointer_delegate_->OnPointerButtonEvent(ET_MOUSE_RELEASED, pointer_button,
+                                          pointer_grab_owner_);
 
+  pointer_grab_owner_ = nullptr;
   state_ = State::kIdle;
 }
 
@@ -288,7 +332,8 @@ void WaylandWindowDragController::RunLoop() {
   DCHECK_EQ(state_, State::kAttached);
   DCHECK(dragged_window_);
 
-  VLOG(1) << "Starting drag loop. widget=" << dragged_window_->GetWidget();
+  VLOG(1) << "Starting drag loop. widget=" << dragged_window_->GetWidget()
+          << " offset=" << drag_offset_.ToString();
 
   // TODO(crbug.com/896640): Handle cursor
   auto old_dispatcher = std::move(nested_dispatcher_);

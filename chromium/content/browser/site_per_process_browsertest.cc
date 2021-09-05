@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <cmath>
 #include <list>
 #include <map>
 #include <memory>
@@ -91,10 +92,12 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_widget_host_observer.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
+#include "content/public/test/back_forward_cache_util.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -110,6 +113,7 @@
 #include "content/test/content_browser_test_utils_internal.h"
 #include "content/test/did_commit_navigation_interceptor.h"
 #include "content/test/render_document_feature.h"
+#include "content/test/test_content_browser_client.h"
 #include "ipc/constants.mojom.h"
 #include "ipc/ipc_security_test_util.h"
 #include "media/base/media_switches.h"
@@ -124,11 +128,13 @@
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/feature_policy/policy_value.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-test-utils.h"
+#include "third_party/blink/public/mojom/frame/frame.mojom.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom.h"
 #include "ui/display/display_switches.h"
 #include "ui/display/screen.h"
@@ -143,6 +149,7 @@
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/transform.h"
 #include "ui/latency/latency_info.h"
 #include "ui/native_theme/native_theme_features.h"
 
@@ -152,7 +159,7 @@
 #include "ui/aura/window_tree_host.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "content/browser/renderer_host/input/synthetic_touchpad_pinch_gesture.h"
 #include "ui/base/test/scoped_preferred_scroller_style_mac.h"
 #endif
@@ -391,13 +398,56 @@ class UserInteractionObserver : public WebContentsObserver {
 
  private:
   // WebContentsObserver
-  void DidGetUserInteraction(const blink::WebInputEvent::Type type) override {
+  void DidGetUserInteraction(const blink::WebInputEvent& event) override {
     user_interaction_received_ = true;
   }
 
   bool user_interaction_received_;
 
   DISALLOW_COPY_AND_ASSIGN(UserInteractionObserver);
+};
+
+// Supports waiting until a WebContents notifies its observers that the visible
+// security state changed, and a test-specific condition is true at that time.
+class VisibleSecurityStateObserver : public WebContentsObserver {
+ public:
+  // Invoked at Wait() start and when the visible security state changes.
+  // If the callback returns true, stops waiting.
+  using ConditionCallback = base::RepeatingCallback<bool(WebContents*)>;
+
+  // Creates a VisibleSecurityStateObserver which will wait until
+  // a visible security state change is announced by |web_contents| and
+  // |condition_callback| returns true (unless |condition_callback| returns true
+  // in Wait() already, when it will not wait at all).
+  VisibleSecurityStateObserver(WebContents* web_contents,
+                               ConditionCallback condition_callback)
+      : WebContentsObserver(web_contents),
+        condition_callback_(condition_callback) {}
+  ~VisibleSecurityStateObserver() override = default;
+
+  VisibleSecurityStateObserver(const VisibleSecurityStateObserver& other) =
+      delete;
+  VisibleSecurityStateObserver& operator=(
+      const VisibleSecurityStateObserver& other) = delete;
+
+  // If the |condition_callback| passed to the constructor returns true, this
+  // returns immediately. Otherwise, blocks until the |web_contents| passed to
+  // the constructor notifies about a visible security state change and the
+  // |condition_callback| evaluates to true.
+  void Wait() {
+    if (condition_callback_.Run(web_contents()))
+      return;
+    run_loop_.Run();
+  }
+
+  void DidChangeVisibleSecurityState() override {
+    if (condition_callback_.Run(web_contents()))
+      run_loop_.Quit();
+  }
+
+ private:
+  ConditionCallback condition_callback_;
+  base::RunLoop run_loop_;
 };
 
 // Helper function to focus a frame by sending it a mouse click and then
@@ -470,7 +520,7 @@ bool ConvertJSONToPoint(const std::string& str, gfx::PointF* point) {
 }
 
 void OpenURLBlockUntilNavigationComplete(Shell* shell, const GURL& url) {
-  WaitForLoadStop(shell->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(shell->web_contents()));
   TestNavigationObserver same_tab_observer(shell->web_contents(), 1);
 
   OpenURLParams params(
@@ -496,8 +546,8 @@ blink::ParsedFeaturePolicyDeclaration CreateParsedFeaturePolicyDeclaration(
   blink::ParsedFeaturePolicyDeclaration declaration;
 
   declaration.feature = feature;
-  declaration.fallback_value = origins.empty();
-  declaration.opaque_value = declaration.fallback_value;
+  declaration.matches_all_origins = origins.empty();
+  declaration.matches_opaque_src = declaration.matches_all_origins;
 
   for (const auto& origin : origins)
     declaration.allowed_origins.push_back(url::Origin::Create(origin));
@@ -1030,99 +1080,109 @@ class TextAutosizerPageInfoInterceptor
   base::Optional<float> target_device_scale_adjustment_;
 };
 
-class OutgoingTextAutosizerPageInfoIPCWatcher {
+// TODO(tonikitoo): Move to fake_remote_frame.h|cc in case it is useful
+// for other tests.
+class FakeRemoteMainFrame : public blink::mojom::RemoteMainFrame {
  public:
-  OutgoingTextAutosizerPageInfoIPCWatcher(
-      RenderProcessHostImpl* rph,
-      base::Optional<int> target_width,
-      base::Optional<float> target_device_scale_adjustment)
-      : rph_(rph),
-        outgoing_message_seen_(false),
-        target_width_(target_width),
-        target_device_scale_adjustment_(target_device_scale_adjustment) {
-    rph_->SetIpcSendWatcherForTesting(
-        base::BindRepeating(&OutgoingTextAutosizerPageInfoIPCWatcher::OnMessage,
+  FakeRemoteMainFrame() = default;
+  ~FakeRemoteMainFrame() override = default;
+
+  void Init(blink::AssociatedInterfaceProvider* provider) {
+    provider->OverrideBinderForTesting(
+        blink::mojom::RemoteMainFrame::Name_,
+        base::BindRepeating(&FakeRemoteMainFrame::BindFrameHostReceiver,
                             base::Unretained(this)));
   }
-  ~OutgoingTextAutosizerPageInfoIPCWatcher() {
-    rph_->SetIpcSendWatcherForTesting(
-        base::RepeatingCallback<void(const IPC::Message& msg)>());
+
+  // blink::mojom::RemoteMainFrame overrides:
+  void UpdateTextAutosizerPageInfo(
+      blink::mojom::TextAutosizerPageInfoPtr page_info) override {}
+
+ private:
+  void BindFrameHostReceiver(mojo::ScopedInterfaceEndpointHandle handle) {
+    receiver_.Bind(
+        mojo::PendingAssociatedReceiver<blink::mojom::RemoteMainFrame>(
+            std::move(handle)));
   }
 
-  void WaitForIPC() {
-    if (outgoing_message_seen_)
-      return;
-    run_loop_ = std::make_unique<base::RunLoop>();
-    run_loop_->Run();
-    run_loop_.reset();
+  mojo::AssociatedReceiver<blink::mojom::RemoteMainFrame> receiver_{this};
+};
+
+// This class intercepts RenderFrameProxyHost creations, and overrides their
+// respective blink::mojom::RemoteMainFrame instances, so that it can watch for
+// text autosizer page info updates.
+class UpdateTextAutosizerInfoProxyObserver {
+ public:
+  UpdateTextAutosizerInfoProxyObserver() {
+    RenderFrameProxyHost::SetCreatedCallbackForTesting(
+        base::BindRepeating(&UpdateTextAutosizerInfoProxyObserver::
+                                RenderFrameProxyHostCreatedCallback,
+                            base::Unretained(this)));
+  }
+  ~UpdateTextAutosizerInfoProxyObserver() {
+    RenderFrameProxyHost::SetCreatedCallbackForTesting(
+        RenderFrameProxyHost::CreatedCallback());
   }
 
-  const blink::WebTextAutosizerPageInfo& GetTextAutosizerPageInfo() {
-    return remote_page_info_;
+  const blink::mojom::TextAutosizerPageInfo& TextAutosizerPageInfo(
+      RenderFrameProxyHost* proxy) {
+    return remote_frames_[proxy]->page_info();
   }
 
  private:
-  void OnMessage(const IPC::Message& message) {
-    IPC_BEGIN_MESSAGE_MAP(OutgoingTextAutosizerPageInfoIPCWatcher, message)
-      IPC_MESSAGE_HANDLER(
-          PageMsg_UpdateTextAutosizerPageInfoForRemoteMainFrames,
-          ProcessMessage)
-    IPC_END_MESSAGE_MAP()
-  }
-
-  void ProcessMessage(const blink::WebTextAutosizerPageInfo& remote_page_info) {
-    if ((target_width_ && remote_page_info.main_frame_width != target_width_) ||
-        (target_device_scale_adjustment_ &&
-         remote_page_info.device_scale_adjustment !=
-             target_device_scale_adjustment_)) {
-      return;
+  class Remote : public FakeRemoteMainFrame {
+   public:
+    explicit Remote(RenderFrameProxyHost* proxy) {
+      Init(proxy->GetRemoteAssociatedInterfacesTesting());
     }
-    outgoing_message_seen_ = true;
-    remote_page_info_ = remote_page_info;
-    if (run_loop_)
-      run_loop_->Quit();
+    void UpdateTextAutosizerPageInfo(
+        blink::mojom::TextAutosizerPageInfoPtr page_info) override {
+      page_info_ = *page_info;
+    }
+    const blink::mojom::TextAutosizerPageInfo& page_info() {
+      return page_info_;
+    }
+
+   private:
+    blink::mojom::TextAutosizerPageInfo page_info_;
+  };
+
+  void RenderFrameProxyHostCreatedCallback(RenderFrameProxyHost* proxy_host) {
+    remote_frames_[proxy_host] = std::make_unique<Remote>(proxy_host);
   }
 
-  RenderProcessHostImpl* rph_;
-  bool outgoing_message_seen_;
-  base::Optional<int> target_width_;
-  base::Optional<float> target_device_scale_adjustment_;
-  std::unique_ptr<base::RunLoop> run_loop_;
-  blink::WebTextAutosizerPageInfo remote_page_info_;
+  std::map<RenderFrameProxyHost*, std::unique_ptr<Remote>> remote_frames_;
 };
 
 // Make sure that when a relevant feature of the main frame changes, e.g. the
 // frame width, that the browser is notified.
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, TextAutosizerPageInfo) {
-  WebPreferences prefs =
-      web_contents()->GetRenderViewHost()->GetWebkitPreferences();
+  UpdateTextAutosizerInfoProxyObserver update_text_autosizer_info_observer;
+
+  WebPreferences prefs = web_contents()->GetOrCreateWebPreferences();
   prefs.text_autosizing_enabled = true;
 
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b)"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
-  web_contents()->GetRenderViewHost()->UpdateWebkitPreferences(prefs);
+  web_contents()->SetWebPreferences(prefs);
 
   FrameTreeNode* root = web_contents()->GetFrameTree()->root();
   ASSERT_EQ(1U, root->child_count());
   FrameTreeNode* b_child = root->child_at(0);
-  auto* child_rph = static_cast<RenderProcessHostImpl*>(
-      b_child->current_frame_host()->GetProcess());
 
   blink::mojom::TextAutosizerPageInfo received_page_info;
   auto interceptor = std::make_unique<TextAutosizerPageInfoInterceptor>(
       web_contents()->GetMainFrame());
 #if defined(OS_ANDROID)
   prefs.device_scale_adjustment += 0.05f;
-  OutgoingTextAutosizerPageInfoIPCWatcher ipc_watcher(
-      child_rph, base::Optional<int>(), prefs.device_scale_adjustment);
   // Change the device scale adjustment to trigger a RemotePageInfo update.
-  web_contents()->GetRenderViewHost()->UpdateWebkitPreferences(prefs);
+  web_contents()->SetWebPreferences(prefs);
   // Make sure we receive a ViewHostMsg from the main frame's renderer.
   interceptor->WaitForPageInfo(base::Optional<int>(),
                                prefs.device_scale_adjustment);
   // Make sure the correct page message is sent to the child.
-  ipc_watcher.WaitForIPC();
+  base::RunLoop().RunUntilIdle();
   received_page_info = interceptor->GetTextAutosizerPageInfo();
   EXPECT_EQ(prefs.device_scale_adjustment,
             received_page_info.device_scale_adjustment);
@@ -1134,13 +1194,12 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, TextAutosizerPageInfo) {
   gfx::Rect new_bounds(
       old_bounds.origin(),
       gfx::Size(old_bounds.width() - 20, old_bounds.height() - 20));
-  OutgoingTextAutosizerPageInfoIPCWatcher ipc_watcher(
-      child_rph, new_bounds.width(), base::Optional<float>());
+
   view->SetBounds(new_bounds);
   // Make sure we receive a ViewHostMsg from the main frame's renderer.
   interceptor->WaitForPageInfo(new_bounds.width(), base::Optional<float>());
   // Make sure the correct page message is sent to the child.
-  ipc_watcher.WaitForIPC();
+  base::RunLoop().RunUntilIdle();
   received_page_info = interceptor->GetTextAutosizerPageInfo();
   EXPECT_EQ(new_bounds.width(), received_page_info.main_frame_width);
 #endif  // defined(OS_ANDROID)
@@ -1160,8 +1219,6 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, TextAutosizerPageInfo) {
   ASSERT_TRUE(c_rph);
   ASSERT_NE(c_rph, root->current_frame_host()->GetProcess());
   ASSERT_NE(c_rph, b_child->current_frame_host()->GetProcess());
-  OutgoingTextAutosizerPageInfoIPCWatcher c_ipc_watcher(
-      c_rph, base::Optional<int>(), base::Optional<float>());
 
   // Create the subframe now.
   std::string create_frame_script = base::StringPrintf(
@@ -1173,16 +1230,21 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, TextAutosizerPageInfo) {
   ASSERT_EQ(2U, root->child_count());
 
   // Ensure IPC is sent.
-  c_ipc_watcher.WaitForIPC();
-  // TODO(hferreiro): use the comparison operator when
-  // PageMsg_UpdateTextAutosizerPageInfoForRemoteMainFrames is migrated to
-  // Mojo.
+  base::RunLoop().RunUntilIdle();
+  blink::mojom::TextAutosizerPageInfo page_info_sent_to_remote_main_frames =
+      update_text_autosizer_info_observer.TextAutosizerPageInfo(
+          web_contents()
+              ->GetRenderManager()
+              ->GetAllProxyHostsForTesting()
+              .begin()
+              ->second.get());
+
   EXPECT_EQ(received_page_info.main_frame_width,
-            c_ipc_watcher.GetTextAutosizerPageInfo().main_frame_width);
+            page_info_sent_to_remote_main_frames.main_frame_width);
   EXPECT_EQ(received_page_info.main_frame_layout_width,
-            c_ipc_watcher.GetTextAutosizerPageInfo().main_frame_layout_width);
+            page_info_sent_to_remote_main_frames.main_frame_layout_width);
   EXPECT_EQ(received_page_info.device_scale_adjustment,
-            c_ipc_watcher.GetTextAutosizerPageInfo().device_scale_adjustment);
+            page_info_sent_to_remote_main_frames.device_scale_adjustment);
 }
 
 // Ensure that navigating subframes in --site-per-process mode works and the
@@ -1488,10 +1550,10 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, ViewBoundsInNestedFrameTest) {
       blink::WebInputEvent::GetStaticTimeStampForTests());
 
   scroll_event.SetPositionInWidget(
-      gfx::ToFlooredInt((bounds.x() - rwhv_root->GetViewBounds().x() - 5) *
-                        scale_factor),
-      gfx::ToFlooredInt((bounds.y() - rwhv_root->GetViewBounds().y() - 5) *
-                        scale_factor));
+      std::floor((bounds.x() - rwhv_root->GetViewBounds().x() - 5) *
+                 scale_factor),
+      std::floor((bounds.y() - rwhv_root->GetViewBounds().y() - 5) *
+                 scale_factor));
   scroll_event.delta_x = 0.0f;
   scroll_event.delta_y = -30.0f;
   scroll_event.phase = blink::WebMouseWheelEvent::kPhaseBegan;
@@ -2079,10 +2141,10 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   float scale_factor =
       frame_observer.LastRenderFrameMetadata().page_scale_factor;
   scroll_event.SetPositionInWidget(
-      gfx::ToCeiledInt((bounds.x() - root_view->GetViewBounds().x() + 10) *
-                       scale_factor),
-      gfx::ToCeiledInt((bounds.y() - root_view->GetViewBounds().y() + 10) *
-                       scale_factor));
+      std::ceil((bounds.x() - root_view->GetViewBounds().x() + 10) *
+                scale_factor),
+      std::ceil((bounds.y() - root_view->GetViewBounds().y() + 10) *
+                scale_factor));
   scroll_event.delta_units = ui::ScrollGranularity::kScrollByPrecisePixel;
   scroll_event.delta_x = 0.0f;
   scroll_event.delta_y = 5.0f;
@@ -2139,10 +2201,10 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   float scale_factor =
       frame_observer.LastRenderFrameMetadata().page_scale_factor;
   scroll_event.SetPositionInWidget(
-      gfx::ToCeiledInt((bounds.x() - root_view->GetViewBounds().x() + 10) *
-                       scale_factor),
-      gfx::ToCeiledInt((bounds.y() - root_view->GetViewBounds().y() + 10) *
-                       scale_factor));
+      std::ceil((bounds.x() - root_view->GetViewBounds().x() + 10) *
+                scale_factor),
+      std::ceil((bounds.y() - root_view->GetViewBounds().y() + 10) *
+                scale_factor));
   scroll_event.delta_units = ui::ScrollGranularity::kScrollByPrecisePixel;
   scroll_event.delta_x = 0.0f;
   scroll_event.delta_y = -5.0f;
@@ -3103,6 +3165,14 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, NavigateRemoteAfterError) {
 // TODO(creis): Make the net error page show in the correct process as well,
 // per https://crbug.com/588314.
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, ProcessTransferAfterError) {
+  // This test doesn't yet work properly with RenderDocument for subframes,
+  // because it does not correctly identify the repeated navigation to the same
+  // URL as same-page, and fails to reuse the same NavigationEntry in this
+  // case. See https://crbug.com/1068965.
+  // TODO(fergal,alexmos): Re-enable once this is fixed.
+  if (ShouldCreateNewHostForSameSiteSubframe())
+    return;
+
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(a)"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -3928,7 +3998,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, ProxyCreationSkipsSubtree) {
 #endif
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
                        MAYBE_FrameOwnerPropertiesPropagationScrolling) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   ui::test::ScopedPreferredScrollerStyle scroller_style_override(false);
 #endif
   GURL main_url(embedded_test_server()->GetURL(
@@ -5571,7 +5641,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 // the second B2 -> A3 navigation is initiated before the first page receives
 // the FrameHostMsg_Unload_ACK. Ensure that this doesn't crash and that the
 // RVH(A1) is not reused in that case.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_RenderViewHostIsNotReusedAfterDelayedUnloadACK \
   DISABLED_RenderViewHostIsNotReusedAfterDelayedUnloadACK
 #else
@@ -5607,9 +5677,17 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   commit_observer.WaitForCommit();
   EXPECT_FALSE(deleted_observer.deleted());
 
-  // Since the FrameHostMsg_Unload_ACK for A->B is dropped, the first page's
-  // RenderFrameHost should be pending deletion after the last navigation.
-  EXPECT_TRUE(rfh->IsPendingDeletion());
+  // The previous RFH should be either:
+  // 1) In the BackForwardCache, if back-forward cache is enabled.
+  // 2) Pending deletion otherwise, since the FrameHostMsg_Unload_ACK for A->B
+  // is dropped.
+  EXPECT_THAT(
+      rfh->lifecycle_state(),
+      testing::AnyOf(
+          testing::Eq(
+              RenderFrameHostImpl::LifecycleState::kRunningUnloadHandlers),
+          testing::Eq(
+              RenderFrameHostImpl::LifecycleState::kInBackForwardCache)));
 
   // Without the FrameHostMsg_Unload_ACK and timer, the process A will never
   // shutdown. Simulate the process being killed now.
@@ -5633,7 +5711,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
   // When ProactivelySwapBrowsingInstance A1 and A3 aren't using the same
   // BrowsingInstance.
-  if (IsProactivelySwapBrowsingInstanceEnabled())
+  if (CanCrossSiteNavigationsProactivelySwapBrowsingInstances())
     EXPECT_NE(site_instance, pending_rvh->GetSiteInstance());
   else
     EXPECT_EQ(site_instance, pending_rvh->GetSiteInstance());
@@ -6193,6 +6271,11 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
     params->devtools_frame_token = base::UnguessableToken::Create();
     process->GetRendererInterface()->CreateFrame(std::move(params));
   }
+
+  // Disable the BackForwardCache to ensure the old process is going to be
+  // released.
+  DisableBackForwardCacheForTesting(web_contents(),
+                                    BackForwardCache::TEST_ASSUMES_NO_CACHING);
 
   // The test must wait for the process to exit, but if there is no leak, the
   // RenderFrame will be properly created and there will be no crash.
@@ -7041,8 +7124,9 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessIgnoreCertErrorsBrowserTest,
 // loads an image with certificate errors, the browser should be
 // notified about the subresource with certificate errors and downgrade
 // the UI appropriately.
+// TODO(crbug.com/1105145): Flaky.
 IN_PROC_BROWSER_TEST_P(SitePerProcessIgnoreCertErrorsBrowserTest,
-                       SubresourceWithCertificateErrors) {
+                       DISABLED_SubresourceWithCertificateErrors) {
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_server.ServeFilesFromSourceDirectory(GetTestDataFilePath());
   SetupCrossSiteRedirector(&https_server);
@@ -7051,7 +7135,22 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessIgnoreCertErrorsBrowserTest,
   GURL url(https_server.GetURL(
       "example.test",
       "/mixed-content/non-redundant-cert-error-in-iframe.html"));
+
+  // The update of the security state can happen asynchronously after the
+  // navigation finished, see https://crbug.com/1105145.
+  VisibleSecurityStateObserver displayed_content_with_cert_errors_observer(
+      shell()->web_contents(),
+      base::BindRepeating([](WebContents* web_contents) {
+        NavigationEntry* entry =
+            web_contents->GetController().GetLastCommittedEntry();
+        // The image that the iframe loaded had certificate errors also, so
+        // the page should be marked as having displayed subresources with
+        // cert errors.
+        return entry && (entry->GetSSL().content_status &
+                         SSLStatus::DISPLAYED_CONTENT_WITH_CERT_ERRORS) != 0;
+      }));
   EXPECT_TRUE(NavigateToURL(shell(), url));
+  displayed_content_with_cert_errors_observer.Wait();
 
   NavigationEntry* entry =
       shell()->web_contents()->GetController().GetLastCommittedEntry();
@@ -7059,12 +7158,6 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessIgnoreCertErrorsBrowserTest,
 
   // The main page was loaded with certificate errors.
   EXPECT_TRUE(net::IsCertStatusError(entry->GetSSL().cert_status));
-
-  // The image that the iframe loaded had certificate errors also, so
-  // the page should be marked as having displayed subresources with
-  // cert errors.
-  EXPECT_TRUE(!!(entry->GetSSL().content_status &
-                 SSLStatus::DISPLAYED_CONTENT_WITH_CERT_ERRORS));
 }
 
 // Test setting a cross-origin iframe to display: none.
@@ -7408,7 +7501,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // The test expect the BrowsingInstance to be kept across cross-site main
   // frame navigations. ProactivelySwapBrowsingInstance will provide a new one.
   // To prevent this, a popup is opened.
-  if (IsProactivelySwapBrowsingInstanceEnabled()) {
+  if (CanCrossSiteNavigationsProactivelySwapBrowsingInstances()) {
     GURL popup_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
     EXPECT_TRUE(OpenPopup(root, popup_url, "foo"));
   }
@@ -8076,10 +8169,10 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
   // Now, simulate that both FrameHostMsg_ShowCreatedWindow messages arrive by
   // showing both of the pending WebContents.
-  web_contents()->ShowCreatedWindow(process1->GetID(), routing_id1,
+  web_contents()->ShowCreatedWindow(frame1, routing_id1,
                                     WindowOpenDisposition::NEW_FOREGROUND_TAB,
                                     gfx::Rect(), true);
-  web_contents()->ShowCreatedWindow(process2->GetID(), routing_id2,
+  web_contents()->ShowCreatedWindow(frame2, routing_id2,
                                     WindowOpenDisposition::NEW_FOREGROUND_TAB,
                                     gfx::Rect(), true);
 
@@ -8095,7 +8188,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 // where popup menus don't create a popup RenderWidget, but rather they trigger
 // a FrameHostMsg_ShowPopup to ask the browser to build and display the actual
 // popup using native controls.
-#if !defined(OS_MACOSX) && !defined(OS_ANDROID)
+#if !defined(OS_MAC) && !defined(OS_ANDROID)
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
                        TwoSubframesCreatePopupMenuWidgetsSimultaneously) {
   GURL main_url(embedded_test_server()->GetURL(
@@ -8344,9 +8437,6 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 // was on before crashing.  See https://crbug.com/634368.
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
                        NavigateCrashedSubframeToSameSite) {
-  // TODO(https://crbug.com/1064944): Enable this when the fix is submitted.
-  if (CreateNewHostForSameSiteSubframe())
-    return;
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b)"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -8662,8 +8752,9 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 // same site as the canceled RFH doesn't lead to a renderer crash.  The steps
 // here are similar to ReuseNonLiveRenderViewHostAfterCancelPending, but don't
 // involve crashing the renderer. See https://crbug.com/651980.
+// Flaky on all platforms, see https://crbug.com/1104826.
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
-                       RecreateMainFrameAfterCancelPending) {
+                       DISABLED_RecreateMainFrameAfterCancelPending) {
   GURL a_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
   GURL b_url(embedded_test_server()->GetURL("b.com", "/title2.html"));
   GURL c_url(embedded_test_server()->GetURL("c.com", "/title3.html"));
@@ -9271,14 +9362,14 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
       root->child_at(2)->pending_frame_policy().container_policy;
   EXPECT_EQ(1UL, updated_effective_policy[0].allowed_origins.size());
   EXPECT_FALSE(updated_effective_policy[0].allowed_origins.begin()->opaque());
-  EXPECT_TRUE(updated_pending_policy[0].opaque_value);
+  EXPECT_TRUE(updated_pending_policy[0].matches_opaque_src);
   EXPECT_EQ(0UL, updated_pending_policy[0].allowed_origins.size());
 
   // Navigate the frame; pending policy should now be committed.
   NavigateFrameToURL(root->child_at(2), nav_url);
   const blink::ParsedFeaturePolicy final_effective_policy =
       root->child_at(2)->effective_frame_policy().container_policy;
-  EXPECT_TRUE(final_effective_policy[0].opaque_value);
+  EXPECT_TRUE(final_effective_policy[0].matches_opaque_src);
   EXPECT_EQ(0UL, final_effective_policy[0].allowed_origins.size());
 }
 
@@ -10185,7 +10276,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // Check that all frames have proxies for b.com at this point. The proxy for
   // |child2| is important to create since |child| has to use it to communicate
   // with |child2| if |child| commits first.
-  if (IsProactivelySwapBrowsingInstanceEnabled()) {
+  if (CanCrossSiteNavigationsProactivelySwapBrowsingInstances()) {
     // With ProactivelySwapBrowsingInstance, the new main document and the new
     // iframe don't have the same SiteInstance, because they belong to two
     // unrelated pages. The two page use different BrowsingInstances.
@@ -10218,7 +10309,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   EXPECT_EQ(new_url_2, child->current_frame_host()->GetLastCommittedURL());
 
   // Recheck the proxies.  Main frame should still be pending.
-  if (IsProactivelySwapBrowsingInstanceEnabled()) {
+  if (CanCrossSiteNavigationsProactivelySwapBrowsingInstances()) {
     EXPECT_EQ(
         " Site A (B speculative) -- proxies for B C\n"
         "   |--Site C ------- proxies for A\n"
@@ -11142,7 +11233,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   params.anchor = gfx::PointF(bounds.CenterPoint());
   // In SyntheticPinchGestureParams, |scale_factor| is really a delta.
   params.scale_factor = kPageScaleDelta;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   auto synthetic_pinch_gesture =
       std::make_unique<SyntheticTouchpadPinchGesture>(params);
 #else
@@ -11303,10 +11394,19 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
       GURL(embedded_test_server()->GetURL("b.com", "/title1.html")));
   commit_observer.WaitForCommit();
 
-  // The previous RFH should still be pending deletion, as we wait for either
-  // the FrameHostMsg_Unload_ACK or a timeout.
+  // The previous RFH should be either:
+  // 1) In the BackForwardCache, or
+  // 2) Pending deletion, waiting for the FrameHostMsg_Unload_ACK.
+  // As a result, it must still be alive.
   ASSERT_TRUE(rfh->IsRenderFrameLive());
-  ASSERT_TRUE(rfh->IsPendingDeletion());
+  EXPECT_THAT(
+      rfh->lifecycle_state(),
+      testing::AnyOf(
+          testing::Eq(
+              RenderFrameHostImpl::LifecycleState::kRunningUnloadHandlers),
+          testing::Eq(
+              RenderFrameHostImpl::LifecycleState::kInBackForwardCache)));
+
   ASSERT_FALSE(rfh_observer.deleted());
 
   // Check sandbox flags on old RFH -- they should be unchanged.
@@ -11806,7 +11906,7 @@ class CommitMessageOrderReverser : public DidCommitNavigationInterceptor {
 // its layout/animate phase. See https://crbug.com/802932.
 //
 // TODO(809580): Disabled on Android, Mac, and ChromeOS due to flakiness.
-#if defined(OS_ANDROID) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#if defined(OS_ANDROID) || defined(OS_MAC) || defined(OS_CHROMEOS)
 #define MAYBE_OOPIFDetachDuringAnimation DISABLED_OOPIFDetachDuringAnimation
 #else
 #define MAYBE_OOPIFDetachDuringAnimation OOPIFDetachDuringAnimation
@@ -12209,14 +12309,18 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // +4 for a 2px border on each iframe.
   gfx::PointF expected(iframe_b_offset_left + iframe_c_offset_left + 4,
                        iframe_b_offset_top + iframe_c_offset_top + 4);
-  ScreenInfo screen_info;
+  blink::ScreenInfo screen_info;
   root->render_manager()->GetRenderWidgetHostView()->GetScreenInfo(
       &screen_info);
   // Convert from CSS to physical pixels
   expected.Scale(screen_info.device_scale_factor);
-  gfx::Point actual = filter->GetIntersectionState().viewport_offset;
-  EXPECT_NEAR(expected.x(), actual.x(), 2.0);
-  EXPECT_NEAR(expected.y(), actual.y(), 2.0);
+  gfx::Transform actual = filter->GetIntersectionState().main_frame_transform;
+  gfx::Point viewport_offset;
+  EXPECT_TRUE(actual.TransformPointReverse(&viewport_offset));
+  viewport_offset = gfx::Point(-viewport_offset.x(), -viewport_offset.y());
+  float tolerance = ceilf(screen_info.device_scale_factor);
+  EXPECT_NEAR(expected.x(), viewport_offset.x(), tolerance);
+  EXPECT_NEAR(expected.y(), viewport_offset.y(), tolerance);
 }
 
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
@@ -12343,7 +12447,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
 // Tests that when a large OOPIF has been scaled, the compositor raster area
 // sent from the embedder is correct.
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MAC)
 // Temporarily disabled on Android because this doesn't account for browser
 // control height or page scale factor.
 // Flaky on Mac. https://crbug.com/840314
@@ -12377,9 +12481,9 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   gfx::Rect compositing_rect =
       filter->GetIntersectionState().compositor_visible_rect;
 
-  float scale_factor = 1.0f;
+  float device_scale_factor = 1.0f;
   if (IsUseZoomForDSFEnabled())
-    scale_factor = GetFrameDeviceScaleFactor(shell()->web_contents());
+    device_scale_factor = GetFrameDeviceScaleFactor(shell()->web_contents());
 
   // The math below replicates the calculations in
   // RemoteFrameView::GetCompositingRect(). That could be subject to tweaking,
@@ -12393,28 +12497,32 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
                         ->GetView()
                         ->GetViewBounds()
                         .height() *
-                    5 * scale_factor;
+                    5 * device_scale_factor;
 
   // The raster size is expanded by a factor of 1.3 to allow for some scrolling
   // without requiring re-raster. The expanded area to be rasterized should be
   // centered around the iframe's visible area within the parent document, hence
-  // the "(expected_height - view_height) / 2" term below.
-  int expected_height = view_height * 13 / 10;
+  // the expansion in each direction (top, bottom, left, right) is
+  // (0.15 * viewport dimension).
+  int expansion = ceilf(view_height * 0.15f);
+  int expected_height = view_height + expansion * 2;
 
-  int expected_offset = ((5000 - div_offset_top * 5) * scale_factor) -
-                        (expected_height - view_height) / 2;
+  // 5000 = div scroll offset in scaled pixels
+  // 5 = scale factor from top-level document to iframe contents
+  // 2 = iframe border in scaled pixels
+  int expected_offset =
+      ((5000 - (div_offset_top * 5) - 2) * device_scale_factor) - expansion;
 
   // Allow a small amount for rounding differences from applying page and
   // device scale factors at different times.
-  EXPECT_GE(compositing_rect.height(), expected_height - 2);
-  EXPECT_LE(compositing_rect.height(), expected_height + 2);
-  EXPECT_GE(compositing_rect.y(), expected_offset - 2);
-  EXPECT_LE(compositing_rect.y(), expected_offset + 2);
+  float tolerance = ceilf(device_scale_factor);
+  EXPECT_NEAR(compositing_rect.height(), expected_height, tolerance);
+  EXPECT_NEAR(compositing_rect.y(), expected_offset, tolerance);
 }
 
 // Similar to ScaledIFrameRasterSize but with nested OOPIFs to ensure
 // propagation works correctly.
-#if defined(OS_ANDROID) || defined(OS_LINUX)
+#if defined(OS_ANDROID)
 // Temporarily disabled on Android because this doesn't account for browser
 // control height or page scale factor.
 #define MAYBE_ScaledNestedIframeRasterSize DISABLED_ScaledNestedIframeRasterSize
@@ -12494,7 +12602,10 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
                      50) *
                     scale_factor;
   // 30% padding is added to the view_height to prevent frequent re-rasters.
-  int expected_height = view_height * 13 / 10;
+  // The extra padding is centered around the view height, hence expansion by
+  // 0.15 in each direction.
+  int expansion = ceilf(view_height * 0.15f);
+  int expected_height = view_height + expansion * 2;
 
   // Explanation of terms:
   //   5000 = offset from top of nested iframe to top of containing div, due to
@@ -12504,15 +12615,57 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   //       from the top of the child frame (i.e, clipped amount at top of child)
   //   view_height * 0.15 = padding added to the top of the compositing rect
   //                        (half the the 30% total padding)
-  int expected_offset = 5000 - ((child_div_offset_top - 50) * scale_factor) -
-                        roundf(view_height * 0.15);
+  int expected_offset =
+      5000 - ((child_div_offset_top - 50) * scale_factor) - expansion;
 
   // Allow a small amount for rounding differences from applying page and
   // device scale factors at different times.
-  EXPECT_GE(compositing_rect.height(), expected_height - 1);
-  EXPECT_LE(compositing_rect.height(), expected_height + 1);
-  EXPECT_GE(compositing_rect.y(), expected_offset - 1);
-  EXPECT_LE(compositing_rect.y(), expected_offset + 1);
+  EXPECT_NEAR(compositing_rect.height(), expected_height, ceilf(scale_factor));
+  EXPECT_NEAR(compositing_rect.y(), expected_offset, ceilf(scale_factor));
+}
+
+// Tests that when an OOPIF is inside a multicolumn container, its compositing
+// rect is set correctly.
+IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
+                       IframeInMulticolCompositingRect) {
+  GURL http_url(embedded_test_server()->GetURL(
+      "a.com", "/frame_tree/page_with_iframe_in_multicol.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), http_url));
+
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+
+  scoped_refptr<UpdateViewportIntersectionMessageFilter> filter =
+      new UpdateViewportIntersectionMessageFilter();
+  root->current_frame_host()->GetProcess()->AddFilter(filter.get());
+
+  // Force a lifecycle update and wait for it to finish. Changing the width of
+  // the iframe should cause the parent renderer to propagate a new
+  // ViewportIntersectionState while running the rendering pipeline. By the time
+  // this call returns, the viewport intersection IPC should already have been
+  // received by the browser process and handled by the filter.
+  EvalJsResult eval_result = EvalJsAfterLifecycleUpdate(
+      root->current_frame_host(),
+      "document.querySelector('iframe').style.width = '250px'", "");
+  ASSERT_TRUE(filter->MessageReceived());
+  gfx::Rect compositing_rect =
+      filter->GetIntersectionState().compositor_visible_rect;
+
+  float scale_factor = 1.0f;
+  if (IsUseZoomForDSFEnabled())
+    scale_factor = GetFrameDeviceScaleFactor(shell()->web_contents());
+
+  gfx::Point visible_offset(0, 0);
+  gfx::Size visible_size =
+      gfx::ScaleToFlooredSize(gfx::Size(250, 150), scale_factor, scale_factor);
+  gfx::Rect visible_rect(visible_offset, visible_size);
+  float tolerance = ceilf(scale_factor);
+  EXPECT_NEAR(compositing_rect.x(), visible_rect.x(), tolerance);
+  EXPECT_NEAR(compositing_rect.y(), visible_rect.y(), tolerance);
+  EXPECT_NEAR(compositing_rect.width(), visible_rect.width(), tolerance);
+  EXPECT_NEAR(compositing_rect.height(), visible_rect.height(), tolerance);
+  EXPECT_TRUE(compositing_rect.Contains(visible_rect));
 }
 
 // Verify that OOPIF select element popup menu coordinates account for scroll
@@ -12765,15 +12918,14 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   ASSERT_TRUE(
       ExecJs(child_node->current_frame_host(), "window.scrollTo(0, 5000)"));
   filter->Wait();
-  EXPECT_TRUE(filter->GetIntersectionState()
-                  .main_frame_document_intersection.IsEmpty());
+  EXPECT_TRUE(filter->GetIntersectionState().main_frame_intersection.IsEmpty());
 
   // Scroll the frame back into view.
   ASSERT_TRUE(
       ExecJs(child_node->current_frame_host(), "window.scrollTo(0, 0)"));
   filter->Wait();
-  EXPECT_FALSE(filter->GetIntersectionState()
-                   .main_frame_document_intersection.IsEmpty());
+  EXPECT_FALSE(
+      filter->GetIntersectionState().main_frame_intersection.IsEmpty());
 }
 
 namespace {
@@ -12997,7 +13149,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTouchActionTest,
   ContentBrowserClient* old_client = SetBrowserClientForTesting(&new_client);
   new_client.set_old_client(old_client);
 
-  web_contents()->GetRenderViewHost()->OnWebkitPreferencesChanged();
+  web_contents()->OnWebPreferencesChanged();
 
   EXPECT_TRUE(GetTouchActionForceEnableZoom(child_rwh));
 
@@ -13266,8 +13418,16 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTouchActionTest,
     EXPECT_EQ(expected_touch_action, allowed_touch_action.value());
 }
 
+// Failes on Win.  https://crbug.com/1097060
+#if defined(OS_WIN)
+#define MAYBE_ChildFrameCrashMetrics_KilledWhileVisible \
+  DISABLED_ChildFrameCrashMetrics_KilledWhileVisible
+#else
+#define MAYBE_ChildFrameCrashMetrics_KilledWhileVisible \
+  ChildFrameCrashMetrics_KilledWhileVisible
+#endif
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
-                       ChildFrameCrashMetrics_KilledWhileVisible) {
+                       MAYBE_ChildFrameCrashMetrics_KilledWhileVisible) {
   // Set-up a frame tree that helps verify what the metrics tracks:
   // 1) frames (12 frames are affected if B process gets killed) or
   // 2) crashes (simply 1 crash if B process gets killed)?
@@ -13478,8 +13638,10 @@ class SitePerProcessBrowserTestWithoutSadFrameTabReload
   base::test::ScopedFeatureList feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTestWithoutSadFrameTabReload,
-                       ChildFrameCrashMetrics_ScrolledIntoViewAfterTabIsShown) {
+// Flaky everywhere: https://crbug.com/1115096
+IN_PROC_BROWSER_TEST_P(
+    SitePerProcessBrowserTestWithoutSadFrameTabReload,
+    DISABLED_ChildFrameCrashMetrics_ScrolledIntoViewAfterTabIsShown) {
   // Start on a page that has a single iframe, which is positioned out of
   // view, and navigate that iframe cross-site.
   GURL main_url(
@@ -13565,10 +13727,11 @@ class SitePerProcessBrowserTestWithSadFrameTabReload
 };
 
 // Verify the feature where hidden tabs with crashed subframes are marked for
-// reload.  This avoids showing crashed subframes if a hidden tab is eventually
-// shown.  See https://crbug.com/841572.
-// crbug.com/1010119, fails on win. crbug.com/1015971, fails on Linux.
-#if defined(OS_WIN) || defined(OS_LINUX)
+// reload. This avoids showing crashed subframes if a hidden tab is eventually
+// shown. See https://crbug.com/841572.
+// crbug.com/1010119, fails on Win. crbug.com/1015971, fails on Linux.
+// crbug.com/1049885, fails on Android.
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_ANDROID)
 #define MAYBE_ReloadHiddenTabWithCrashedSubframe \
   DISABLED_ReloadHiddenTabWithCrashedSubframe
 #else
@@ -14256,22 +14419,29 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
 // Touchscreen DoubleTapZoom is only supported on Android & ChromeOS at present.
 #if defined(OS_CHROMEOS) || defined(OS_ANDROID)
-namespace {
+// A test ContentBrowserClient implementation which enforces
+// WebPreferences' |double_tap_to_zoom_enabled| to be true.
+class DoubleTapZoomContentBrowserClient : public TestContentBrowserClient {
+ public:
+  DoubleTapZoomContentBrowserClient() = default;
 
-void EnableDoubleTapZoomInRenderView(FrameTreeNode* node) {
-  content::RenderViewHost* rvh =
-      node->current_frame_host()->GetRenderViewHost();
-  content::WebPreferences web_prefs = rvh->GetWebkitPreferences();
-  if (web_prefs.double_tap_to_zoom_enabled)
-    return;
-  web_prefs.double_tap_to_zoom_enabled = true;
-  rvh->UpdateWebkitPreferences(web_prefs);
-}
+  void OverrideWebkitPrefs(content::RenderViewHost* rvh,
+                           content::WebPreferences* web_prefs) override {
+    web_prefs->double_tap_to_zoom_enabled = true;
+  }
 
-}  // namespace
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DoubleTapZoomContentBrowserClient);
+};
 
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
                        TouchscreenAnimateDoubleTapZoomInOOPIF) {
+  // Install a client forcing double-tap zoom to be enabled.
+  DoubleTapZoomContentBrowserClient content_browser_client;
+  ContentBrowserClient* old_client =
+      SetBrowserClientForTesting(&content_browser_client);
+  web_contents()->OnWebPreferencesChanged();
+
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b)"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -14280,12 +14450,6 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   ASSERT_EQ(1u, root->child_count());
   FrameTreeNode* child_b = root->child_at(0);
   ASSERT_TRUE(child_b);
-
-  // Enable double-tap zoom. This must be done separately for the main frame and
-  // for the oopif frame since RenderViewHost::UpdateWebkitPreferences() only
-  // sends the IPC to its own RenderView.
-  EnableDoubleTapZoomInRenderView(root);
-  EnableDoubleTapZoomInRenderView(child_b);
 
   RenderFrameSubmissionObserver observer_a(root);
   // We need to observe a root frame submission to pick up the initial page
@@ -14352,6 +14516,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
     observer_a.WaitForAnyFrameSubmission();
     new_page_scale = observer_a.LastRenderFrameMetadata().page_scale_factor;
   } while (new_page_scale < target_scale);
+
+  SetBrowserClientForTesting(old_client);
 }
 #endif  // defined(OS_CHROMEOS) || defined(OS_ANDROID)
 
@@ -14530,17 +14696,18 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   NavigateFrameToURL(subframe, page_with_raf_counter);
 
   // Initially page is visible - wait some time and then ensure a good number of
-  // rafs have been generated.
-  auto wait_for_half_a_second = []() {
+  // rafs have been generated. On Mac the number of RAFs that occur in 500ms is
+  // quite low, see https://crbug.com/1098715.
+  auto allow_time_for_rafs = []() {
     base::RunLoop run_loop;
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, run_loop.QuitClosure(),
-        base::TimeDelta::FromMilliseconds(500));
+        base::TimeDelta::FromMilliseconds(1000));
     run_loop.Run();
   };
 
   ASSERT_TRUE(ExecuteScript(subframe, "reset_count();"));
-  wait_for_half_a_second();
+  allow_time_for_rafs();
   int32_t default_raf_count = EvalJs(subframe, "raf_count").ExtractInt();
   // On a 60 fps we should expect more than 30 counts - however purely for
   // sanity checking and avoiding unnecessary flakes adding a comparison for a
@@ -14548,14 +14715,14 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   EXPECT_GT(default_raf_count, 5);
   web_contents()->WasOccluded();
   ASSERT_TRUE(ExecuteScript(subframe, "reset_count();"));
-  wait_for_half_a_second();
+  allow_time_for_rafs();
   int32_t raf_count = EvalJs(subframe, "raf_count").ExtractInt();
   // If the frame is throttled, we should expect 0 rAFs.
   EXPECT_EQ(raf_count, 0);
   // Sanity-check: unoccluding will reverse the effect.
   web_contents()->WasShown();
   ASSERT_TRUE(ExecuteScript(subframe, "reset_count();"));
-  wait_for_half_a_second();
+  allow_time_for_rafs();
   ASSERT_TRUE(ExecuteScriptAndExtractInt(
       subframe, "window.domAutomationController.send(raf_count)", &raf_count));
   EXPECT_GT(raf_count, 5);
@@ -14609,11 +14776,11 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   int process_id = root->current_frame_host()->GetProcess()->GetID();
   IsolationContext isolation_context(controller.GetBrowserContext());
   auto start_url_lock =
-      SiteInstanceImpl::DetermineProcessLockURL(isolation_context, start_url);
+      SiteInstanceImpl::DetermineProcessLock(isolation_context, start_url);
   auto another_url_lock =
-      SiteInstanceImpl::DetermineProcessLockURL(isolation_context, another_url);
-  EXPECT_EQ(start_url_lock, policy->GetOriginLock(process_id));
-  EXPECT_NE(another_url_lock, policy->GetOriginLock(process_id));
+      SiteInstanceImpl::DetermineProcessLock(isolation_context, another_url);
+  EXPECT_EQ(start_url_lock, policy->GetProcessLock(process_id));
+  EXPECT_NE(another_url_lock, policy->GetProcessLock(process_id));
 
   // Transfer the NavigationRequest ownership to the RenderFrameHost. The test
   // for NavigationRequest match happens before the check of origin lock and
@@ -14711,9 +14878,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   RenderFrameHostImpl* rfh_b = rfh_a->child_at(0)->current_frame_host();
 
   // RFH B has an unload handler.
-  auto detach_filter_b = base::MakeRefCounted<DropMessageFilter>(
-      FrameMsgStart, FrameHostMsg_Detach::ID);
-  rfh_b->GetProcess()->AddFilter(detach_filter_b.get());
+  rfh_b->DoNotDeleteForTesting();
   EXPECT_TRUE(ExecJs(rfh_b, "onunload=function(){}"));
 
   // 2) Navigation from B to C. The server is slow to respond.
@@ -14747,7 +14912,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
   // |rfh_b| will complete its deletion at some point:
   EXPECT_FALSE(delete_b.deleted());
-  rfh_b->OnDetach();
+  rfh_b->DetachForTesting();
   EXPECT_TRUE(delete_b.deleted());
 }
 
@@ -14808,8 +14973,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // |rfh_b| and |rfh_c| will complete their deletion at some point:
   EXPECT_FALSE(delete_b.deleted());
   EXPECT_FALSE(delete_c.deleted());
-  rfh_c->ResumeDeletionForTesting();
-  rfh_c->OnDetach();
+  rfh_c->DetachForTesting();
   EXPECT_TRUE(delete_b.deleted());
   EXPECT_TRUE(delete_c.deleted());
 }
@@ -14978,7 +15142,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   params.anchor = gfx::PointF(bounds.CenterPoint().x(), 70.f);
   // In SyntheticPinchGestureParams, |scale_factor| is really a delta.
   params.scale_factor = kPageScaleDelta;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   auto synthetic_pinch_gesture =
       std::make_unique<SyntheticTouchpadPinchGesture>(params);
 #else
@@ -15586,7 +15750,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, MainFrameScrollOffset) {
   ASSERT_TRUE(b2_to_c2_message_filter->MessageReceived());
 
   // Window scroll offset will be scaled by device scale factor
-  ScreenInfo screen_info;
+  blink::ScreenInfo screen_info;
   a_node->render_manager()->GetRenderWidgetHostView()->GetScreenInfo(
       &screen_info);
   int expected_y = roundf(screen_info.device_scale_factor * 5.0);

@@ -101,7 +101,7 @@ MATCHER_P2(IsAdvertisementContent,
            expected_client_eid,
            expected_uuid_formatted_client_eid,
            "") {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   const auto uuid_list = arg->service_uuids();
   return std::any_of(uuid_list->begin(), uuid_list->end(),
                      [this](const auto& uuid) {
@@ -148,14 +148,15 @@ MATCHER_P2(IsAdvertisementContent,
 class CableMockBluetoothAdvertisement : public BluetoothAdvertisement {
  public:
   MOCK_METHOD2(Unregister,
-               void(const SuccessCallback& success_callback,
-                    const ErrorCallback& error_callback));
+               void(SuccessCallback success_callback,
+                    ErrorCallback error_callback));
 
   void ExpectUnregisterAndSucceed() {
     EXPECT_CALL(*this, Unregister(_, _))
-        .WillOnce(::testing::WithArg<0>([](const auto& success_cb) {
-          base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, success_cb);
-        }));
+        .WillOnce(::testing::WithArg<0>(::testing::Invoke([](auto success_cb) {
+          base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                        std::move(success_cb));
+        })));
   }
 
  private:
@@ -199,8 +200,8 @@ class CableMockAdapter : public MockBluetoothAdapter {
 
   MOCK_METHOD3(RegisterAdvertisement,
                void(std::unique_ptr<BluetoothAdvertisement::Data>,
-                    const CreateAdvertisementCallback&,
-                    const AdvertisementErrorCallback&));
+                    CreateAdvertisementCallback,
+                    AdvertisementErrorCallback));
 
   void AddNewTestBluetoothDevice(
       base::span<const uint8_t, kCableEphemeralIdSize> authenticator_eid) {
@@ -262,12 +263,12 @@ class CableMockAdapter : public MockBluetoothAdapter {
                     _, _))
         .InSequence(sequence)
         .WillOnce(::testing::WithArgs<1, 2>(
-            [simulate_success, advertisement](const auto& success_callback,
-                                              const auto& failure_callback) {
-              simulate_success
-                  ? success_callback.Run(advertisement)
-                  : failure_callback.Run(BluetoothAdvertisement::ErrorCode::
-                                             INVALID_ADVERTISEMENT_ERROR_CODE);
+            [simulate_success, advertisement](auto success_callback,
+                                              auto failure_callback) {
+              simulate_success ? std::move(success_callback).Run(advertisement)
+                               : std::move(failure_callback)
+                                     .Run(BluetoothAdvertisement::ErrorCode::
+                                              INVALID_ADVERTISEMENT_ERROR_CODE);
             }));
   }
 
@@ -326,15 +327,18 @@ class FakeFidoCableDiscovery : public FidoCableDiscovery {
       std::vector<CableDiscoveryData> discovery_data)
       : FidoCableDiscovery(std::move(discovery_data),
                            BogusQRGeneratorKey(),
-                           /*pairing_callback=*/base::nullopt) {}
+                           /*pairing_callback=*/base::nullopt,
+                           /*network_context=*/nullptr) {}
   ~FakeFidoCableDiscovery() override = default;
 
  private:
-  base::Optional<std::unique_ptr<FidoCableHandshakeHandler>>
-  CreateHandshakeHandler(FidoCableDevice* device,
-                         const CableDiscoveryData& discovery_data,
-                         const CableNonce& nonce,
-                         const CableEidArray& eid) override {
+  std::unique_ptr<FidoCableHandshakeHandler> CreateV1HandshakeHandler(
+      FidoCableDevice* device,
+      const CableDiscoveryData& discovery_data,
+      const CableEidArray& eid) override {
+    // Nonce is embedded as first 8 bytes of client EID.
+    std::array<uint8_t, 8> nonce;
+    CHECK(fido_parsing_utils::ExtractArray(eid, 0, &nonce));
     return std::make_unique<FakeHandshakeHandler>(
         device, nonce, discovery_data.v1->session_pre_key);
   }

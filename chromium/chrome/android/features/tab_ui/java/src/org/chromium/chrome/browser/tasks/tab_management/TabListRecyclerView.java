@@ -197,7 +197,7 @@ class TabListRecyclerView
                         .getToolbarManager()
                         .getToolbar()
                         .getHeight();
-                VivaldiUtils.updateTopMarginForTabsOnPhoneUI(this, toolbarHeight);
+                VivaldiUtils.updateViewsTopMargin(this, toolbarHeight);
             }
 
             mListener.startedShowing(animate);

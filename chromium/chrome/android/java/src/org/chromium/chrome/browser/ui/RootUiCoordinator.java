@@ -10,6 +10,7 @@ import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
@@ -24,8 +25,8 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ChromeActionModeHandler;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.TabThemeColorProvider;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
@@ -33,11 +34,14 @@ import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
+import org.chromium.chrome.browser.crash.PureJavaExceptionReporter;
 import org.chromium.chrome.browser.directactions.DirectActionInitializer;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.findinpage.FindToolbar;
 import org.chromium.chrome.browser.findinpage.FindToolbarManager;
 import org.chromium.chrome.browser.findinpage.FindToolbarObserver;
 import org.chromium.chrome.browser.flags.ActivityType;
+import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.identity_disc.IdentityDiscController;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
 import org.chromium.chrome.browser.lifecycle.InflationObserver;
@@ -61,9 +65,7 @@ import org.chromium.chrome.browser.ui.appmenu.AppMenuBlocker;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuCoordinator;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuCoordinatorFactory;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
-import org.chromium.chrome.browser.ui.system.StatusBarColorController;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
-import org.chromium.chrome.browser.widget.ScrimView;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerFactory;
@@ -75,6 +77,7 @@ import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.content_public.browser.ActionModeCallbackHelper;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.ui.DeferredViewStubInflationProvider;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogManagerObserver;
@@ -130,7 +133,6 @@ public class RootUiCoordinator
     private ManagedBottomSheetController mBottomSheetController;
     private SnackbarManager mBottomSheetSnackbarManager;
 
-    private ScrimView mScrimView;
     private ScrimCoordinator mScrimCoordinator;
     private DirectActionInitializer mDirectActionInitializer;
     private List<ButtonDataProvider> mButtonDataProviders;
@@ -145,6 +147,8 @@ public class RootUiCoordinator
     private BottomSheetObserver mContextualSearchSuppressor;
     private final Supplier<ContextualSearchManager> mContextualSearchManagerSupplier;
     protected final CallbackController mCallbackController;
+    @Nullable
+    private BrowserControlsManager mBrowserControlsManager;
 
     /**
      * Create a new {@link RootUiCoordinator} for the given activity.
@@ -251,7 +255,13 @@ public class RootUiCoordinator
             if (mContextualSearchSuppressor != null) {
                 mBottomSheetController.removeObserver(mContextualSearchSuppressor);
             }
+            BottomSheetControllerFactory.detach(mBottomSheetController);
             mBottomSheetController.destroy();
+        }
+
+        if (mBrowserControlsManager != null) {
+            mBrowserControlsManager.destroy();
+            mBrowserControlsManager = null;
         }
 
         if (mButtonDataProviders != null) {
@@ -275,17 +285,7 @@ public class RootUiCoordinator
 
     @Override
     public void onInflationComplete() {
-        ViewGroup coordinator = mActivity.findViewById(R.id.coordinator);
-        StatusBarColorController statusBarColorController = mActivity.getStatusBarColorController();
-        mScrimView = new ScrimView(mActivity,
-                statusBarColorController.getStatusBarScrimDelegate(), coordinator);
-        mScrimCoordinator = new ScrimCoordinator(mActivity,
-                (fraction) -> statusBarColorController
-                        .getStatusBarScrimDelegate()
-                        .setStatusBarScrimFraction(fraction),
-                coordinator,
-                ApiCompatibilityUtils.getColor(coordinator.getResources(),
-                        R.color.omnibox_focused_fading_background_color));
+        mScrimCoordinator = buildScrimWidget();
 
         mTabThemeColorProvider = new TabThemeColorProvider(mActivity);
         mTabThemeColorProvider.setActivityTabProvider(mActivity.getActivityTabProvider());
@@ -388,7 +388,8 @@ public class RootUiCoordinator
                 RecordUserAction.record("MobileShortcutFindInPage");
             }
             return true;
-        } else if (id == R.id.share_menu_id || id == R.id.direct_share_menu_id) {
+        } else if (id == R.id.share_menu_button_id || id == R.id.share_menu_id
+                || id == R.id.direct_share_menu_id) {
             onShareMenuItemSelected(id == R.id.direct_share_menu_id,
                     mActivity.getTabModelSelector().isIncognitoSelected());
         } else if (id == R.id.paint_preview_show_id) {
@@ -503,7 +504,7 @@ public class RootUiCoordinator
                     bottomToolbarVisibilitySupplier, mActivity.getLifecycleDispatcher(),
                     mActivity.getModalDialogManager());
             mButtonDataProviders = Arrays.asList(mIdentityDiscController, shareButtonController);
-            mToolbarManager = new ToolbarManager(mActivity, mActivity.getFullscreenManager(),
+            mToolbarManager = new ToolbarManager(mActivity, mActivity.getBrowserControlsManager(),
                     mActivity.getFullscreenManager(), toolbarContainer,
                     mActivity.getCompositorViewHolder().getInvalidator(), urlFocusChangedCallback,
                     mTabThemeColorProvider, mTabObscuringHandler, mShareDelegateSupplier,
@@ -516,6 +517,28 @@ public class RootUiCoordinator
                 mToolbarManager.getToolbar().disableMenuButton();
             }
         }
+    }
+
+    /**
+     * Gives concrete implementation of {@link ScrimCoordinator.SystemUiScrimDelegate} and
+     * constructs {@link ScrimCoordinator}.
+     */
+    protected ScrimCoordinator buildScrimWidget() {
+        ViewGroup coordinator = mActivity.findViewById(R.id.coordinator);
+        ScrimCoordinator.SystemUiScrimDelegate delegate =
+                new ScrimCoordinator.SystemUiScrimDelegate() {
+                    @Override
+                    public void setStatusBarScrimFraction(float scrimFraction) {
+                        mActivity.getStatusBarColorController().setStatusBarScrimFraction(
+                                scrimFraction);
+                    }
+
+                    @Override
+                    public void setNavigationBarScrimFraction(float scrimFraction) {}
+                };
+        return new ScrimCoordinator(mActivity, delegate, coordinator,
+                ApiCompatibilityUtils.getColor(coordinator.getResources(),
+                        R.color.omnibox_focused_fading_background_color));
     }
 
     private void setOverviewModeBehavior(OverviewModeBehavior overviewModeBehavior) {
@@ -584,7 +607,8 @@ public class RootUiCoordinator
         if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity)) {
             stubId = R.id.find_toolbar_tablet_stub;
         }
-        mFindToolbarManager = new FindToolbarManager(mActivity.findViewById(stubId),
+        mFindToolbarManager = new FindToolbarManager(
+                new DeferredViewStubInflationProvider<FindToolbar>(mActivity.findViewById(stubId)),
                 mActivity.getTabModelSelector(), mActivity.getWindowAndroid(),
                 mActionModeControllerCallback);
 
@@ -641,9 +665,13 @@ public class RootUiCoordinator
                 () -> mScrimCoordinator, sheetInitializedCallback, mActivity.getWindow(),
                 mActivity.getWindowAndroid().getKeyboardDelegate(),
                 () -> mActivity.findViewById(R.id.coordinator));
+        BottomSheetControllerFactory.setExceptionReporter(
+                (throwable)
+                        -> PureJavaExceptionReporter.reportJavaException((Throwable) throwable));
+        BottomSheetControllerFactory.attach(mActivity.getWindowAndroid(), mBottomSheetController);
 
         mBottomSheetManager = new BottomSheetManager(mBottomSheetController, mActivityTabProvider,
-                mActivity.getFullscreenManager(), mActivity.getFullscreenManager(),
+                mActivity.getBrowserControlsManager(), mActivity.getFullscreenManager(),
                 mActivity::getModalDialogManager, this::getBottomSheetSnackbarManager,
                 mTabObscuringHandler, mOmniboxFocusStateSupplier, panelManagerSupplier);
     }
@@ -661,9 +689,31 @@ public class RootUiCoordinator
         return mBottomSheetController;
     }
 
-    /** @return The root coordinator / activity's primary scrim. */
-    public ScrimView getScrim() {
-        return mScrimView;
+    /**
+     * Gets the browser controls manager, creates it unless already created.
+     */
+    @NonNull
+    public BrowserControlsManager getBrowserControlsManager() {
+        if (mBrowserControlsManager == null) {
+            // When finish()ing, getBrowserControlsManager() is required to perform cleanup logic.
+            // It should never be called when it results in creating a new manager though.
+            if (mActivity.isActivityFinishingOrDestroyed()) {
+                throw new IllegalStateException();
+            }
+            mBrowserControlsManager = createBrowserControlsManager();
+            assert mBrowserControlsManager != null;
+        }
+        return mBrowserControlsManager;
+    }
+
+    /**
+     * Create a browser controls manager to be used by ChromeActivity.
+     * Note: This may be called before native code is initialized.
+     * @return A {@link BrowserControlsManager} instance that's been created.
+     */
+    @NonNull
+    protected BrowserControlsManager createBrowserControlsManager() {
+        return new BrowserControlsManager(mActivity, BrowserControlsManager.ControlsPosition.TOP);
     }
 
     /** @return The {@link ScrimCoordinator} to control activity's primary scrim. */
@@ -685,9 +735,8 @@ public class RootUiCoordinator
         TabModelSelector tabModelSelector = mActivity.getTabModelSelector();
         mDirectActionInitializer = new DirectActionInitializer(mActivity, activityType, mActivity,
                 mActivity::onBackPressed, tabModelSelector, mFindToolbarManager,
-                mActivity.getBottomSheetController(), mActivity.getFullscreenManager(),
-                mActivity.getCompositorViewHolder(), mActivity.getActivityTabProvider(),
-                mScrimView);
+                getBottomSheetController(), mActivity.getBrowserControlsManager(),
+                mActivity.getCompositorViewHolder(), mActivity.getActivityTabProvider());
         mActivity.getLifecycleDispatcher().register(mDirectActionInitializer);
     }
 

@@ -7,6 +7,7 @@ import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//chrome/process_version_rc_template.gni")
 import("//components/nacl/features.gni")
+import("//third_party/ffmpeg/ffmpeg_options.gni")
 import("//third_party/icu/config.gni")
 import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
 import("//ui/base/ui_features.gni")
@@ -33,6 +34,8 @@ source_set("lib") {
     "configuration.h",
     "decompress.cc",
     "decompress.h",
+    "mini_file.cc",
+    "mini_file.h",
     "mini_installer.cc",
     "mini_installer.h",
     "mini_installer.rc",
@@ -41,6 +44,7 @@ source_set("lib") {
     "mini_installer_resource.h",
     "mini_string.cc",
     "mini_string.h",
+    "path_string.h",
     "pe_resource.cc",
     "pe_resource.h",
     "regkey.cc",
@@ -69,6 +73,7 @@ source_set("unit_tests") {
   sources = [
     "configuration_test.cc",
     "decompress_test.cc",
+    "mini_file_test.cc",
     "mini_installer_unittest.cc",
     "mini_string_test.cc",
   ]
@@ -190,6 +195,10 @@ template("generate_mini_installer") {
     }
     if (is_component_build) {
       args += [ "--component_build=1" ]
+    }
+
+    if (is_component_ffmpeg) {
+      args += [ "--component_ffmpeg_build=1" ]
     }
 
     if (skip_archive_compression) {

@@ -18,7 +18,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings_delegate.h"
+#include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/ui/blocked_content/tab_under_navigation_throttle.h"
 #include "chrome/common/pref_names.h"
@@ -27,7 +27,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/blocked_content/list_item_position.h"
 #include "components/blocked_content/popup_tracker.h"
-#include "components/content_settings/browser/tab_specific_content_settings.h"
+#include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/web_contents.h"
@@ -36,17 +36,20 @@
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_source.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/scoped_java_ref.h"
-#include "chrome/browser/ui/android/infobars/infobar_android.h"
+#include "components/infobars/android/infobar_android.h"
 #else
 #include "chrome/browser/ui/blocked_content/framebust_block_tab_helper.h"
 #endif
 
+namespace infobars {
 class InfoBarAndroid;
+}
 
 constexpr char kTabUnderVisibleTime[] = "Tab.TabUnder.VisibleTime";
 constexpr char kTabUnderVisibleTimeBefore[] = "Tab.TabUnder.VisibleTimeBefore";
@@ -64,9 +67,9 @@ class PopupOpenerTabHelperTest : public ChromeRenderViewHostTestHarness {
         web_contents(), &raw_clock_,
         HostContentSettingsMapFactory::GetForProfile(profile()));
     InfoBarService::CreateForWebContents(web_contents());
-    content_settings::TabSpecificContentSettings::CreateForWebContents(
+    content_settings::PageSpecificContentSettings::CreateForWebContents(
         web_contents(),
-        std::make_unique<chrome::TabSpecificContentSettingsDelegate>(
+        std::make_unique<chrome::PageSpecificContentSettingsDelegate>(
             web_contents()));
 #if !defined(OS_ANDROID)
     FramebustBlockTabHelper::CreateForWebContents(web_contents());
@@ -409,14 +412,14 @@ class BlockTabUnderTest : public PopupOpenerTabHelperTest {
         TabUnderNavigationThrottle::kBlockTabUnders);
   }
 
-  InfoBarAndroid* GetInfoBar() {
+  infobars::InfoBarAndroid* GetInfoBar() {
 #if defined(OS_ANDROID)
     auto* service = InfoBarService::FromWebContents(web_contents());
     if (!service->infobar_count())
       return nullptr;
     EXPECT_EQ(1u, service->infobar_count());
-    InfoBarAndroid* infobar =
-        static_cast<InfoBarAndroid*>(service->infobar_at(0));
+    infobars::InfoBarAndroid* infobar =
+        static_cast<infobars::InfoBarAndroid*>(service->infobar_at(0));
     EXPECT_TRUE(infobar);
     return infobar;
 #endif  // defined(OS_ANDROID)
@@ -549,7 +552,7 @@ TEST_F(BlockTabUnderTest, TabUnderWithSubsequentGesture_IsNotBlocked) {
   // members.
   static_cast<content::WebContentsObserver*>(
       blocked_content::PopupOpenerTabHelper::FromWebContents(web_contents()))
-      ->DidGetUserInteraction(blink::WebInputEvent::Type::kMouseDown);
+      ->DidGetUserInteraction(blink::WebMouseEvent());
 
   // A subsequent navigation should be allowed, even if it is classified as a
   // suspicious redirect.
@@ -607,7 +610,7 @@ TEST_F(BlockTabUnderTest, ClickThroughAction) {
   EXPECT_FALSE(NavigateAndCommitWithoutGesture(blocked_url));
   EXPECT_FALSE(NavigateAndCommitWithoutGesture(blocked_url));
 #if defined(OS_ANDROID)
-  InfoBarAndroid* infobar = GetInfoBar();
+  infobars::InfoBarAndroid* infobar = GetInfoBar();
   base::android::JavaParamRef<jobject> jobj(nullptr);
   infobar->OnLinkClicked(nullptr /* env */, jobj);
 #else

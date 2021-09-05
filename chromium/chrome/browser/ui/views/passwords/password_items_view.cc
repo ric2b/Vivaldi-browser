@@ -30,6 +30,7 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/range/range.h"
+#include "ui/gfx/vector_icon_types.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/image_button.h"
@@ -38,6 +39,7 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link.h"
+#include "ui/views/controls/separator.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/style/typography.h"
@@ -52,10 +54,28 @@ constexpr int kUndoButtonTag = 2;
 enum PasswordItemsViewColumnSetType {
   // Contains three columns for credential pair and a delete button.
   PASSWORD_COLUMN_SET,
-  // Like PASSWORD_COLUMN_SET plus a column for an icon indicating the store.
+  // Like PASSWORD_COLUMN_SET plus a column for an icon indicating the store,
+  // and a vertical bar before the delete button.
   MULTI_STORE_PASSWORD_COLUMN_SET,
   // Contains two columns for text and an undo button.
   UNDO_COLUMN_SET
+};
+
+// And ImageView that holds a kGlobeIcon of gfx::kFaviconSize and adapts to
+// changes in theme color. Used as a fallback option when the page has no
+// favicon.
+class GlobeIconImageView : public views::ImageView {
+ public:
+  GlobeIconImageView() = default;
+  ~GlobeIconImageView() override = default;
+
+  // views::View:
+  void OnThemeChanged() override {
+    views::ImageView::OnThemeChanged();
+    const SkColor icon_color = GetNativeTheme()->GetSystemColor(
+        ui::NativeTheme::kColorId_DefaultIconColor);
+    SetImage(gfx::CreateVectorIcon(kGlobeIcon, gfx::kFaviconSize, icon_color));
+  }
 };
 
 PasswordItemsViewColumnSetType InferColumnSetTypeFromCredentials(
@@ -81,6 +101,16 @@ void BuildColumnSet(views::GridLayout* layout,
   const int between_column_padding =
       ChromeLayoutProvider::Get()->GetDistanceMetric(
           views::DISTANCE_RELATED_CONTROL_HORIZONTAL);
+  // Add favicon column
+  if (type_id == PASSWORD_COLUMN_SET ||
+      type_id == MULTI_STORE_PASSWORD_COLUMN_SET) {
+    column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL,
+                          views::GridLayout::kFixedSize,
+                          views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
+    column_set->AddPaddingColumn(views::GridLayout::kFixedSize,
+                                 between_column_padding);
+  }
+
   column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL,
                         kFirstColumnWeight,
                         views::GridLayout::ColumnSize::kFixed, 0, 0);
@@ -98,6 +128,12 @@ void BuildColumnSet(views::GridLayout* layout,
     column_set->AddPaddingColumn(views::GridLayout::kFixedSize,
                                  between_column_padding);
     column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL,
+                          views::GridLayout::kFixedSize,
+                          views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
+    // Add a column for the vertical bar.
+    column_set->AddPaddingColumn(views::GridLayout::kFixedSize,
+                                 between_column_padding);
+    column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::CENTER,
                           views::GridLayout::kFixedSize,
                           views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
   }
@@ -131,7 +167,7 @@ std::unique_ptr<views::ImageButton> CreateDeleteButton(
 std::unique_ptr<views::LabelButton> CreateUndoButton(
     views::ButtonListener* listener,
     const base::string16& username) {
-  auto undo_button = views::MdTextButton::Create(
+  auto undo_button = std::make_unique<views::MdTextButton>(
       listener, l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_UNDO));
   undo_button->set_tag(kUndoButtonTag);
   undo_button->SetFocusForPlatform();
@@ -142,7 +178,7 @@ std::unique_ptr<views::LabelButton> CreateUndoButton(
 
 std::unique_ptr<views::View> CreateManageButton(
     views::ButtonListener* listener) {
-  return views::MdTextButton::Create(
+  return std::make_unique<views::MdTextButton>(
       listener,
       l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_MANAGE_PASSWORDS_BUTTON));
 }
@@ -173,6 +209,16 @@ std::unique_ptr<views::ImageView> CreateStoreIndicator(
   image_view->SetAccessibleName(l10n_util::GetStringUTF16(
       IDS_MANAGE_PASSWORDS_ACCOUNT_STORE_ICON_DESCRIPTION));
   return image_view;
+}
+
+std::unique_ptr<views::Separator> CreateSeparator() {
+  auto separator = std::make_unique<views::Separator>();
+  separator->SetFocusBehavior(
+      LocationBarBubbleDelegateView::FocusBehavior::NEVER);
+  separator->SetPreferredHeight(views::style::GetLineHeight(
+      views::style::CONTEXT_MENU, views::style::STYLE_SECONDARY));
+  separator->set_can_process_events_within_subtree(false);
+  return separator;
 }
 
 std::unique_ptr<views::Label> CreatePasswordLabel(
@@ -261,6 +307,16 @@ void PasswordItemsView::PasswordRow::AddPasswordRow(
   std::unique_ptr<views::ImageButton> delete_button =
       CreateDeleteButton(this, GetDisplayUsername(*password_form_));
   StartRow(layout, type_id);
+
+  // Use a globe fallback until the actual favicon is loaded.
+  if (parent_->favicon_.IsEmpty()) {
+    layout->AddView(std::make_unique<GlobeIconImageView>());
+  } else {
+    auto favicon_view = std::make_unique<views::ImageView>();
+    favicon_view->SetImage(parent_->favicon_.AsImageSkia());
+    layout->AddView(std::move(favicon_view));
+  }
+
   layout->AddView(std::move(username_label));
   layout->AddView(std::move(password_label));
   if (type_id == MULTI_STORE_PASSWORD_COLUMN_SET) {
@@ -270,6 +326,7 @@ void PasswordItemsView::PasswordRow::AddPasswordRow(
     } else {
       layout->SkipColumns(1);
     }
+    layout->AddView(CreateSeparator());
   }
   layout->AddView(std::move(delete_button));
 }
@@ -298,6 +355,11 @@ PasswordItemsView::PasswordItemsView(content::WebContents* web_contents,
     // content.
     SetLayoutManager(std::make_unique<views::FillLayout>());
   } else {
+    // The request is cancelled when the |controller_| is destructed.
+    // |controller_| has the same life time as |this| and hence it's safe to use
+    // base::Unretained(this).
+    controller_.RequestFavicon(base::BindOnce(
+        &PasswordItemsView::OnFaviconReady, base::Unretained(this)));
     for (auto& password_form : controller_.local_credentials()) {
       password_rows_.push_back(
           std::make_unique<PasswordRow>(this, &password_form));
@@ -372,4 +434,11 @@ void PasswordItemsView::ButtonPressed(views::Button* sender,
   controller_.OnManageClicked(
       password_manager::ManagePasswordsReferrer::kManagePasswordsBubble);
   CloseBubble();
+}
+
+void PasswordItemsView::OnFaviconReady(const gfx::Image& favicon) {
+  if (!favicon.IsEmpty()) {
+    favicon_ = favicon;
+    RecreateLayout();
+  }
 }

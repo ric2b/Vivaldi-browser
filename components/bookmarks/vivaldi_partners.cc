@@ -23,7 +23,7 @@ namespace {
 #if defined(OS_ANDROID)
 const char kAssetsDir[] = "assets/default-bookmarks/";
 #else
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 const base::FilePath::CharType kResources[] = FILE_PATH_LITERAL("resources");
 #endif
 const base::FilePath::CharType kVivaldi[] = FILE_PATH_LITERAL("vivaldi");
@@ -168,7 +168,7 @@ bool ParsePartnerDatabaseDetailsList(
 }  // namespace
 
 bool HasPartnerThumbnailPrefix(base::StringPiece url) {
-  return url.starts_with(kPartnerThumbnailUrlPrefix);
+  return base::StartsWith(url, kPartnerThumbnailUrlPrefix);
 }
 
 AssetReader::AssetReader() = default;
@@ -205,9 +205,9 @@ base::Optional<base::Value> AssetReader::ReadJson(base::StringPiece name) {
 #else
   if (asset_dir_.empty()) {
     base::PathService::Get(base::DIR_ASSETS, &asset_dir_);
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
     asset_dir_ = asset_dir_.Append(kResources);
-#endif  // if !defined(OS_MACOSX)
+#endif  // if !defined(OS_MAC)
     asset_dir_ = asset_dir_.Append(kVivaldi).Append(kDefBookmarks);
   }
   path_ = asset_dir_.AppendASCII(name);

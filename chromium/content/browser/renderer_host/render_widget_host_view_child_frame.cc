@@ -45,25 +45,29 @@
 
 #include "app/vivaldi_apptools.h"
 #include "browser/vivaldi_clipboard_utils.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 
 namespace content {
 
 // static
 RenderWidgetHostViewChildFrame* RenderWidgetHostViewChildFrame::Create(
-    RenderWidgetHost* widget) {
+    RenderWidgetHost* widget,
+    const blink::ScreenInfo& screen_info) {
   RenderWidgetHostViewChildFrame* view =
-      new RenderWidgetHostViewChildFrame(widget);
+      new RenderWidgetHostViewChildFrame(widget, screen_info);
   view->Init();
   return view;
 }
 
 RenderWidgetHostViewChildFrame::RenderWidgetHostViewChildFrame(
-    RenderWidgetHost* widget_host)
+    RenderWidgetHost* widget_host,
+    const blink::ScreenInfo& screen_info)
     : RenderWidgetHostViewBase(widget_host),
       frame_sink_id_(
           base::checked_cast<uint32_t>(widget_host->GetProcess()->GetID()),
           base::checked_cast<uint32_t>(widget_host->GetRoutingID())),
-      frame_connector_(nullptr) {
+      frame_connector_(nullptr),
+      screen_info_(screen_info) {
   GetHostFrameSinkManager()->RegisterFrameSinkId(
       frame_sink_id_, this, viz::ReportFirstSurfaceActivation::kNo);
   GetHostFrameSinkManager()->SetFrameSinkDebugLabel(
@@ -499,7 +503,7 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
   if (event.IsTouchpadZoomEvent())
     ProcessTouchpadZoomEventAckInRoot(event, ack_result);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // NOTE(espen@vivladi.com): We must forward the ack to the root view right
   // away in order to properly activate mac history navigation. Normally
   // we bubble the event and deal with the ack after the next roundtrip to
@@ -532,7 +536,10 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
     if (vivaldi::IsVivaldiRunning() &&
         ack_result ==
             blink::mojom::InputEventResultState::kConsumedShouldBubble &&
-        BrowserPluginGuest::IsGuest(RenderViewHostImpl::From(host()))) {
+        RenderViewHostImpl::From(host()) &&
+        BrowserPluginGuest::IsGuest(
+            static_cast<WebContentsImpl*>(WebContents::FromRenderViewHost(
+                RenderViewHostImpl::From(host()))))) {
       // NOTE(espen@vivaldi.com): A begin must never start bubbling events
       // to the root view. It will break elastic scrolling in guestviews.
       // To get here the begin event is sent to the view and dealt with in
@@ -799,7 +806,7 @@ void RenderWidgetHostViewChildFrame::WillSendScreenRects() {
   }
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 void RenderWidgetHostViewChildFrame::SetActive(bool active) {}
 
 void RenderWidgetHostViewChildFrame::ShowDefinitionForSelection() {
@@ -810,7 +817,10 @@ void RenderWidgetHostViewChildFrame::ShowDefinitionForSelection() {
 }
 
 void RenderWidgetHostViewChildFrame::SpeakSelection() {}
-#endif  // defined(OS_MACOSX)
+
+void RenderWidgetHostViewChildFrame::SetWindowFrameInScreen(
+    const gfx::Rect& rect) {}
+#endif  // defined(OS_MAC)
 
 void RenderWidgetHostViewChildFrame::CopyFromSurface(
     const gfx::Rect& src_subrect,
@@ -834,7 +844,7 @@ void RenderWidgetHostViewChildFrame::CopyFromSurface(
   if (src_subrect.IsEmpty()) {
     request->set_area(gfx::Rect(GetCompositorViewportPixelSize()));
   } else {
-    ScreenInfo screen_info;
+    blink::ScreenInfo screen_info;
     GetScreenInfo(&screen_info);
     // |src_subrect| is in DIP coordinates; convert to Surface coordinates.
     request->set_area(
@@ -921,8 +931,10 @@ RenderWidgetHostViewChildFrame::FilterInputEvent(
       // NOTE(espen@vivaldi.com): In Vivaldi we must receive pinch events in
       // child renderers since that is what we have in guest view layout.
       // Both tests were added with ch68.
-      if (vivaldi::IsVivaldiRunning() &&
-          BrowserPluginGuest::IsGuest(RenderViewHostImpl::From(host())))
+      if (vivaldi::IsVivaldiRunning() && RenderViewHostImpl::From(host()) &&
+          BrowserPluginGuest::IsGuest(
+              static_cast<WebContentsImpl*>(WebContents::FromRenderViewHost(
+                  RenderViewHostImpl::From(host())))))
         return blink::mojom::InputEventResultState::kNotConsumed;
       return blink::mojom::InputEventResultState::kConsumed;
     }
@@ -975,11 +987,11 @@ RenderWidgetHostViewChildFrame::CreateBrowserAccessibilityManager(
       BrowserAccessibilityManager::GetEmptyDocument(), delegate);
 }
 
-void RenderWidgetHostViewChildFrame::GetScreenInfo(ScreenInfo* screen_info) {
+void RenderWidgetHostViewChildFrame::GetScreenInfo(
+    blink::ScreenInfo* screen_info) {
   if (frame_connector_)
-    *screen_info = frame_connector_->screen_info();
-  else
-    DisplayUtil::GetDefaultScreenInfo(screen_info);
+    screen_info_ = frame_connector_->screen_info();
+  *screen_info = screen_info_;
 }
 
 void RenderWidgetHostViewChildFrame::EnableAutoResize(

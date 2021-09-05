@@ -9,7 +9,6 @@
 #include "ash/assistant/model/assistant_ui_model.h"
 #include "base/strings/string_util.h"
 #include "chromeos/constants/devicetype.h"
-#include "chromeos/services/assistant/public/cpp/features.h"
 
 namespace {
 
@@ -68,10 +67,6 @@ bool ShouldAttemptWarmerWelcome(AssistantEntryPoint entry_point) {
     case AssistantEntryPoint::kSetup:
       return true;
   }
-}
-
-bool ShouldShowOnboarding() {
-  return chromeos::assistant::features::IsBetterOnboardingEnabled();
 }
 
 bool IsGoogleDevice() {

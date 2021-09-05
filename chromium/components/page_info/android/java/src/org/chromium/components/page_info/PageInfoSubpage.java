@@ -8,8 +8,9 @@ import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 import android.widget.TextView;
+
+import org.chromium.ui.widget.ChromeImageButton;
 
 /**
  * Represents a particular page info subpage.
@@ -26,23 +27,22 @@ public class PageInfoSubpage extends FrameLayout {
     }
 
     private PageInfoView.ElidedUrlTextView mUrlTitle;
-    private ImageView mBackButton;
     private TextView mSubpageTitle;
 
-    public PageInfoSubpage(Context context, Params params) {
+    public PageInfoSubpage(Context context) {
         super(context);
         LayoutInflater.from(context).inflate(R.layout.page_info_subpage, this, true);
-        // Set the url title.
         mUrlTitle = findViewById(R.id.subpage_url);
-        mUrlTitle.setUrl(params.url, params.urlOriginLength);
-        // Set the back button.
-        mBackButton = findViewById(R.id.subpage_back_button);
-        // Set the page title.
         mSubpageTitle = findViewById(R.id.subpage_title);
+    }
+
+    public void updateSubpage(Params params) {
+        mUrlTitle.setUrl(params.url, params.urlOriginLength);
         mSubpageTitle.setText(params.subpageTitle);
     }
 
     public void setBackButtonOnClickListener(View.OnClickListener listener) {
-        mBackButton.setOnClickListener(listener);
+        ChromeImageButton backButton = findViewById(R.id.subpage_back_button);
+        backButton.setOnClickListener(listener);
     }
 }

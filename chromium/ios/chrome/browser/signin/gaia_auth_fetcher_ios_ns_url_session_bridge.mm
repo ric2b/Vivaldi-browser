@@ -10,6 +10,7 @@
 #include "base/bind_helpers.h"
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
+#include "components/signin/ios/browser/account_consistency_service.h"
 #include "ios/chrome/browser/signin/feature_flags.h"
 #include "ios/net/cookies/system_cookie_util.h"
 #include "ios/web/common/features.h"
@@ -149,6 +150,13 @@ void GaiaAuthFetcherIOSNSURLSessionBridge::FetchPendingRequestWithCookies(
   NSMutableArray* http_cookies = [[NSMutableArray alloc]
       initWithCapacity:cookies_with_access_results.size()];
   for (const auto& cookie_with_access_result : cookies_with_access_results) {
+    // |CHROME_CONNECTED| cookie is attached to all web requests to Google web
+    // properties. Requests initiated from the browser services (e.g.
+    // GaiaCookieManagerService) must not include this cookie.
+    if (cookie_with_access_result.cookie.Name() ==
+        AccountConsistencyService::kChromeConnectedCookieName) {
+      continue;
+    }
     [http_cookies addObject:net::SystemCookieFromCanonicalCookie(
                                 cookie_with_access_result.cookie)];
   }

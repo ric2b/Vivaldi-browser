@@ -9,9 +9,18 @@
 
 #include "content/public/browser/navigation_throttle.h"
 
+#include "components/password_manager/core/browser/well_known_change_password_state.h"
+#include "components/password_manager/core/browser/well_known_change_password_util.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
+
+class GURL;
 namespace content {
 class NavigationHandle;
 }  // namespace content
+
+namespace password_manager {
+class ChangePasswordUrlService;
+}  // namespace password_manager
 
 // This NavigationThrottle checks whether a site supports the
 // .well-known/change-password url. To check whether a site supports the
@@ -21,7 +30,8 @@ class NavigationHandle;
 // support the change password url, the user gets redirected to the base path
 // '/'.
 class WellKnownChangePasswordNavigationThrottle
-    : public content::NavigationThrottle {
+    : public content::NavigationThrottle,
+      public password_manager::WellKnownChangePasswordStateDelegate {
  public:
   ~WellKnownChangePasswordNavigationThrottle() override;
 
@@ -39,6 +49,21 @@ class WellKnownChangePasswordNavigationThrottle
  private:
   explicit WellKnownChangePasswordNavigationThrottle(
       content::NavigationHandle* handle);
+  // password_manager::WellKnownChangePasswordStateDelegate:
+  void OnProcessingFinished(bool is_supported) override;
+  // Redirects to a given URL in the same tab.
+  void Redirect(const GURL& url);
+  // Records the given UKM metric.
+  void RecordMetric(password_manager::WellKnownChangePasswordResult result);
+
+  // Stores `navigation_handle()->GetURL()` if the first navigation was to
+  // .well-known/change-password. It is later used to derive the URL for the
+  // non-existing resource, and to provide fallback logic.
+  const GURL request_url_;
+  password_manager::WellKnownChangePasswordState
+      well_known_change_password_state_{this};
+  password_manager::ChangePasswordUrlService* change_password_url_service_;
+  ukm::SourceId source_id_ = ukm::kInvalidSourceId;
 };
 
 #endif  // CHROME_BROWSER_UI_PASSWORDS_WELL_KNOWN_CHANGE_PASSWORD_NAVIGATION_THROTTLE_H_

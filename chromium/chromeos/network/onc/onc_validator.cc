@@ -269,10 +269,10 @@ bool Validator::ValidateRecommendedField(
     base::DictionaryValue* result) {
   CHECK(result);
 
-  std::unique_ptr<base::Value> recommended_value;
+  base::Optional<base::Value> recommended_value =
+      result->ExtractKey(::onc::kRecommended);
   // This remove passes ownership to |recommended_value|.
-  if (!result->RemoveWithoutPathExpansion(::onc::kRecommended,
-                                          &recommended_value)) {
+  if (!recommended_value) {
     return true;
   }
 
@@ -567,7 +567,7 @@ bool Validator::ValidateSSIDAndHexSSID(base::DictionaryValue* object) {
             << ::onc::wifi::kHexSSID << "' contain inconsistent values.";
         AddValidationIssue(false /* is_error */, msg.str());
         path_.pop_back();
-        object->RemoveWithoutPathExpansion(::onc::wifi::kSSID, nullptr);
+        object->RemoveKey(::onc::wifi::kSSID);
       }
     }
   }
@@ -730,8 +730,8 @@ bool Validator::ValidateIPConfig(base::DictionaryValue* result,
                                  bool require_fields) {
   const std::vector<const char*> valid_types = {::onc::ipconfig::kIPv4,
                                                 ::onc::ipconfig::kIPv6};
-  if (FieldExistsAndHasNoValidValue(
-          *result, ::onc::ipconfig::kType, valid_types))
+  if (FieldExistsAndHasNoValidValue(*result, ::onc::ipconfig::kType,
+                                    valid_types))
     return false;
 
   std::string type = GetStringFromDict(*result, ::onc::ipconfig::kType);
@@ -1010,8 +1010,18 @@ bool Validator::ValidateCertificatePattern(base::DictionaryValue* result) {
 
 bool Validator::ValidateGlobalNetworkConfiguration(
     base::DictionaryValue* result) {
+  // Replace the deprecated kBlacklistedHexSSIDs with kBlockedHexSSIDs.
+  if (!result->HasKey(::onc::global_network_config::kBlockedHexSSIDs)) {
+    base::Optional<base::Value> blocked =
+        result->ExtractKey(::onc::global_network_config::kBlacklistedHexSSIDs);
+    if (blocked) {
+      result->SetKey(::onc::global_network_config::kBlockedHexSSIDs,
+                     std::move(*blocked));
+    }
+  }
+
   // Validate that kDisableNetworkTypes, kAllowOnlyPolicyNetworksToConnect and
-  // kBlacklistedHexSSIDs are only allowed in device policy.
+  // kBlockedHexSSIDs are only allowed in device policy.
   if (!IsInDevicePolicy(result,
                         ::onc::global_network_config::kDisableNetworkTypes) ||
       !IsInDevicePolicy(
@@ -1021,7 +1031,7 @@ bool Validator::ValidateGlobalNetworkConfiguration(
                         ::onc::global_network_config::
                             kAllowOnlyPolicyNetworksToConnectIfAvailable) ||
       !IsInDevicePolicy(result,
-                        ::onc::global_network_config::kBlacklistedHexSSIDs)) {
+                        ::onc::global_network_config::kBlockedHexSSIDs)) {
     return false;
   }
 

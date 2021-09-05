@@ -229,8 +229,7 @@ TEST(PreflightControllerOptionsTest, CheckOptions) {
   base::test::TaskEnvironment task_environment_(
       base::test::TaskEnvironment::MainThreadType::IO);
   TestURLLoaderFactory url_loader_factory;
-  PreflightController preflight_controller(
-      {} /* extra_safelisted_header_names */, nullptr /* network_service */);
+  PreflightController preflight_controller(nullptr /* network_service */);
 
   network::ResourceRequest request;
   request.url = GURL("https://example.com/");
@@ -300,7 +299,7 @@ class MockNetworkServiceClient : public TestNetworkServiceClient {
       int32_t process_id,
       int32_t routing_id,
       const std::string& devtools_request_id,
-      const net::CookieAndLineStatusList& cookies_with_status,
+      const net::CookieAndLineAccessResultList& cookies_with_access_result,
       std::vector<network::mojom::HttpRawHeaderPairPtr> headers,
       const base::Optional<std::string>& raw_response_headers) override {
     on_raw_response_called_ = true;
@@ -364,6 +363,10 @@ class PreflightControllerTest : public testing::Test {
     network::mojom::URLLoaderFactoryParamsPtr params =
         network::mojom::URLLoaderFactoryParams::New();
     params->process_id = mojom::kBrowserProcessId;
+    // We use network::CorsURLLoaderFactory for "internal" URLLoaderFactory
+    // used by the PreflightController. Hence here we disable CORS as otherwise
+    // the URLLoader would create a CORS-preflight for the preflight request.
+    params->disable_web_security = true;
     params->is_corb_enabled = false;
     network_context_remote_->CreateURLLoaderFactory(
         url_loader_factory_remote_.BindNewPipeAndPassReceiver(),
@@ -418,8 +421,8 @@ class PreflightControllerTest : public testing::Test {
   void SetUp() override {
     SetAccessControlAllowOrigin(test_initiator_origin_);
 
-    preflight_controller_ = std::make_unique<PreflightController>(
-        std::vector<std::string>(), network_service_.get());
+    preflight_controller_ =
+        std::make_unique<PreflightController>(network_service_.get());
 
     test_server_.RegisterRequestHandler(base::BindRepeating(
         &PreflightControllerTest::ServePreflight, base::Unretained(this)));

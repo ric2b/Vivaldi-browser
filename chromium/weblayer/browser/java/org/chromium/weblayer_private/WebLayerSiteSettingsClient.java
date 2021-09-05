@@ -11,12 +11,13 @@ import androidx.annotation.Nullable;
 import androidx.preference.Preference;
 
 import org.chromium.base.Callback;
+import org.chromium.base.ContextUtils;
 import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsCategory.Type;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsClient;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsHelpClient;
-import org.chromium.components.browser_ui.site_settings.SiteSettingsPrefClient;
 import org.chromium.components.browser_ui.site_settings.WebappSettingsClient;
+import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.embedder_support.browser_context.BrowserContextHandle;
 import org.chromium.components.embedder_support.util.Origin;
 
@@ -26,9 +27,8 @@ import java.util.Set;
 /**
  * A SiteSettingsClient instance that contains WebLayer-specific Site Settings logic.
  */
-public class WebLayerSiteSettingsClient
-        implements SiteSettingsClient, ManagedPreferenceDelegate, SiteSettingsHelpClient,
-                   SiteSettingsPrefClient, WebappSettingsClient {
+public class WebLayerSiteSettingsClient implements SiteSettingsClient, ManagedPreferenceDelegate,
+                                                   SiteSettingsHelpClient, WebappSettingsClient {
     private final BrowserContextHandle mBrowserContextHandle;
 
     public WebLayerSiteSettingsClient(BrowserContextHandle browserContextHandle) {
@@ -49,11 +49,6 @@ public class WebLayerSiteSettingsClient
 
     @Override
     public SiteSettingsHelpClient getSiteSettingsHelpClient() {
-        return this;
-    }
-
-    @Override
-    public SiteSettingsPrefClient getSiteSettingsPrefClient() {
         return this;
     }
 
@@ -83,6 +78,33 @@ public class WebLayerSiteSettingsClient
 
     @Override
     public String getChannelIdForOrigin(String origin) {
+        return null;
+    }
+
+    @Override
+    public String getAppName() {
+        return WebLayerImpl.getClientApplicationName();
+    }
+
+    @Override
+    @Nullable
+    public String getDelegateAppNameForOrigin(Origin origin, @ContentSettingsType int type) {
+        if (WebLayerImpl.isLocationPermissionManaged(origin)
+                && type == ContentSettingsType.GEOLOCATION) {
+            return WebLayerImpl.getClientApplicationName();
+        }
+
+        return null;
+    }
+
+    @Override
+    @Nullable
+    public String getDelegatePackageNameForOrigin(Origin origin, @ContentSettingsType int type) {
+        if (WebLayerImpl.isLocationPermissionManaged(origin)
+                && type == ContentSettingsType.GEOLOCATION) {
+            return ContextUtils.getApplicationContext().getPackageName();
+        }
+
         return null;
     }
 
@@ -118,22 +140,6 @@ public class WebLayerSiteSettingsClient
     @Override
     public void launchProtectedContentHelpAndFeedbackActivity(Activity currentActivity) {}
 
-    // SiteSettingsPrefClient implementation:
-
-    // The quiet notification UI is a Chrome-specific feature for now.
-    @Override
-    public boolean getEnableQuietNotificationPermissionUi() {
-        return false;
-    }
-    @Override
-    public void setEnableQuietNotificationPermissionUi(boolean newValue) {}
-    @Override
-    public void clearEnableNotificationPermissionUi() {}
-
-    // WebLayer doesn't support notifications yet.
-    @Override
-    public void setNotificationsVibrateEnabled(boolean newValue) {}
-
     // WebappSettingsClient implementation:
     // A no-op since WebLayer doesn't support webapps.
 
@@ -145,17 +151,5 @@ public class WebLayerSiteSettingsClient
     @Override
     public Set<String> getAllDelegatedNotificationOrigins() {
         return Collections.EMPTY_SET;
-    }
-
-    @Override
-    @Nullable
-    public String getNotificationDelegateAppNameForOrigin(Origin origin) {
-        return null;
-    }
-
-    @Override
-    @Nullable
-    public String getNotificationDelegatePackageNameForOrigin(Origin origin) {
-        return null;
     }
 }

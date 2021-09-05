@@ -12,6 +12,7 @@
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/numerics/safe_math.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string16.h"
@@ -22,9 +23,12 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/win/windows_version.h"
 #include "chrome/updater/win/net/net_util.h"
 #include "chrome/updater/win/net/network.h"
+#include "chrome/updater/win/net/proxy_info.h"
 #include "chrome/updater/win/net/scoped_hinternet.h"
+#include "chrome/updater/win/net/scoped_winttp_proxy_info.h"
 #include "chrome/updater/win/util.h"
 #include "url/url_constants.h"
 
@@ -53,9 +57,12 @@ void CrackUrl(const GURL& url,
 
 }  // namespace
 
-NetworkFetcherWinHTTP::NetworkFetcherWinHTTP(const HINTERNET& session_handle)
+NetworkFetcherWinHTTP::NetworkFetcherWinHTTP(
+    const HINTERNET& session_handle,
+    scoped_refptr<ProxyConfiguration> proxy_configuration)
     : main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      session_handle_(session_handle) {}
+      session_handle_(session_handle),
+      proxy_configuration_(proxy_configuration) {}
 
 NetworkFetcherWinHTTP::~NetworkFetcherWinHTTP() {
   DVLOG(3) << "~NetworkFetcherWinHTTP";
@@ -92,12 +99,17 @@ HRESULT NetworkFetcherWinHTTP::GetNetError() const {
 
 std::string NetworkFetcherWinHTTP::GetHeaderETag() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return etag_;
+  return header_etag_;
 }
 
-int64_t NetworkFetcherWinHTTP::GetXHeaderRetryAfterSec() const {
+std::string NetworkFetcherWinHTTP::GetHeaderXCupServerProof() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return xheader_retry_after_sec_;
+  return header_x_cup_server_proof_;
+}
+
+int64_t NetworkFetcherWinHTTP::GetHeaderXRetryAfterSec() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return header_x_retry_after_sec_;
 }
 
 base::FilePath NetworkFetcherWinHTTP::GetFilePath() const {
@@ -125,15 +137,16 @@ void NetworkFetcherWinHTTP::PostRequest(
   fetch_progress_callback_ = std::move(fetch_progress_callback);
   fetch_complete_callback_ = std::move(fetch_complete_callback);
 
-  DCHECK(url.SchemeIsHTTPOrHTTPS());
-  CrackUrl(url, &is_https_, &host_, &port_, &path_for_request_);
+  DCHECK(url_.SchemeIsHTTPOrHTTPS());
+  CrackUrl(url_, &is_https_, &host_, &port_, &path_for_request_);
 
   verb_ = L"POST";
-  content_type_ = base::SysUTF8ToWide(content_type);
+  content_type_ = content_type;
   write_data_callback_ =
       base::BindRepeating(&NetworkFetcherWinHTTP::WriteDataToMemory, this);
 
   net_error_ = BeginFetch(post_data, post_additional_headers);
+
   if (FAILED(net_error_))
     CompleteFetch();
 }
@@ -160,21 +173,28 @@ void NetworkFetcherWinHTTP::DownloadToFile(
       base::BindRepeating(&NetworkFetcherWinHTTP::WriteDataToFile, this);
 
   net_error_ = BeginFetch({}, {});
+
   if (FAILED(net_error_))
     CompleteFetch();
 }
 
 HRESULT NetworkFetcherWinHTTP::BeginFetch(
     const std::string& data,
-    const base::flat_map<std::string, std::string>& additional_headers) {
+    base::flat_map<std::string, std::string> additional_headers) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   connect_handle_ = Connect();
   if (!connect_handle_.get())
     return HRESULTFromLastError();
 
+  base::Optional<ScopedWinHttpProxyInfo> winhttp_proxy_info =
+      proxy_configuration_->GetProxyForUrl(session_handle_, url_);
+
   request_handle_ = OpenRequest();
   if (!request_handle_.get())
     return HRESULTFromLastError();
+
+  SetProxyForRequest(request_handle_.get(), winhttp_proxy_info);
 
   const auto winhttp_callback = ::WinHttpSetStatusCallback(
       request_handle_.get(), &NetworkFetcherWinHTTP::WinHttpStatusCallback,
@@ -195,17 +215,17 @@ HRESULT NetworkFetcherWinHTTP::BeginFetch(
   if (FAILED(hr))
     return hr;
 
-  if (!content_type_.empty()) {
-    ::WinHttpAddRequestHeaders(
-        request_handle_.get(), content_type_.data(), content_type_.size(),
-        WINHTTP_ADDREQ_FLAG_ADD | WINHTTP_ADDREQ_FLAG_REPLACE);
-  }
+  if (!content_type_.empty())
+    additional_headers.insert({"Content-Type", content_type_});
+
   for (const auto& header : additional_headers) {
     const auto raw_header = base::SysUTF8ToWide(
         base::StrCat({header.first, ": ", header.second, "\r\n"}));
-    ::WinHttpAddRequestHeaders(
-        request_handle_.get(), raw_header.c_str(), raw_header.size(),
-        WINHTTP_ADDREQ_FLAG_ADD | WINHTTP_ADDREQ_FLAG_REPLACE);
+    if (!::WinHttpAddRequestHeaders(
+            request_handle_.get(), raw_header.c_str(), raw_header.size(),
+            WINHTTP_ADDREQ_FLAG_ADD | WINHTTP_ADDREQ_FLAG_REPLACE)) {
+      PLOG(ERROR) << "Failed to set the request header: " << raw_header;
+    }
   }
 
   hr = SendRequest(data);
@@ -299,7 +319,16 @@ void NetworkFetcherWinHTTP::HeadersAvailable() {
   base::string16 etag;
   if (SUCCEEDED(QueryHeadersString(request_handle_.get(), WINHTTP_QUERY_ETAG,
                                    WINHTTP_HEADER_NAME_BY_INDEX, &etag))) {
-    etag_ = base::SysWideToUTF8(etag);
+    header_etag_ = base::SysWideToUTF8(etag);
+  }
+
+  base::string16 xheader_cup_server_proof;
+  if (SUCCEEDED(QueryHeadersString(
+          request_handle_.get(), WINHTTP_QUERY_CUSTOM,
+          base::SysUTF8ToWide(
+              update_client::NetworkFetcher::kHeaderXCupServerProof),
+          &xheader_cup_server_proof))) {
+    header_x_cup_server_proof_ = base::SysWideToUTF8(xheader_cup_server_proof);
   }
 
   int xheader_retry_after_sec = 0;
@@ -308,7 +337,7 @@ void NetworkFetcherWinHTTP::HeadersAvailable() {
           base::SysUTF8ToWide(
               update_client::NetworkFetcher::kHeaderXRetryAfter),
           &xheader_retry_after_sec))) {
-    xheader_retry_after_sec_ = xheader_retry_after_sec;
+    header_x_retry_after_sec_ = xheader_retry_after_sec;
   }
 
   std::move(fetch_started_callback_).Run(response_code, content_length);
@@ -379,7 +408,7 @@ bool NetworkFetcherWinHTTP::WriteDataToFileBlocking() {
       -1) {
     net_error_ = HRESULTFromUpdaterError(base::File::GetLastFileError());
     file_.Close();
-    base::DeleteFile(file_path_, false);
+    base::DeleteFile(file_path_);
     return false;
   }
 

@@ -134,21 +134,35 @@ void AAudioOutputStream::Start(AudioSourceCallback* callback) {
 void AAudioOutputStream::Stop() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  base::AutoLock al(lock_);
-  if (!callback_ || !aaudio_stream_)
-    return;
-
-  // Note: This call is asynchronous, so we must clear |callback_| under lock
-  // below to ensure no further calls occur after Stop().
-  auto result = AAudioStream_requestStop(aaudio_stream_);
-
-  if (result != AAUDIO_OK) {
-    DLOG(ERROR) << "Failed to stop audio stream, result: "
-                << AAudio_convertResultToText(result);
-    callback_->OnError(AudioSourceCallback::ErrorType::kUnknown);
+  {
+    base::AutoLock al(lock_);
+    if (!callback_ || !aaudio_stream_)
+      return;
   }
 
-  callback_ = nullptr;
+  // Note: This call may be asynchronous, so we must clear |callback_| under
+  // lock below to ensure no further calls occur after Stop(). Since it may
+  // not always be asynchronous, we don't hold |lock_| while we call stop.
+  auto result = AAudioStream_requestStop(aaudio_stream_);
+
+  {
+    base::AutoLock al(lock_);
+    if (result != AAUDIO_OK) {
+      DLOG(ERROR) << "Failed to stop audio stream, result: "
+                  << AAudio_convertResultToText(result);
+      callback_->OnError(AudioSourceCallback::ErrorType::kUnknown);
+    }
+
+    callback_ = nullptr;
+  }
+
+  // Wait for AAUDIO_STREAM_STATE_STOPPED, but do not explicitly check for the
+  // success of this wait.
+  aaudio_stream_state_t current_state = AAUDIO_STREAM_STATE_STOPPING;
+  aaudio_stream_state_t next_state = AAUDIO_STREAM_STATE_UNINITIALIZED;
+  static const int64_t kTimeoutNanoseconds = 1e8;
+  result = AAudioStream_waitForStateChange(aaudio_stream_, current_state,
+                                           &next_state, kTimeoutNanoseconds);
 }
 
 base::TimeDelta AAudioOutputStream::GetDelay(base::TimeTicks delay_timestamp) {
@@ -173,8 +187,10 @@ base::TimeDelta AAudioOutputStream::GetDelay(base::TimeTicks delay_timestamp) {
   const base::TimeDelta next_frame_pts = base::TimeDelta::FromNanosecondsD(
       existing_frame_pts + frame_index_delta * ns_per_frame_);
 
-  // Calculate the latency between write time and presentation time.
-  return next_frame_pts - (delay_timestamp - base::TimeTicks());
+  // Calculate the latency between write time and presentation time. At startup
+  // we may end up with negative values here.
+  return std::max(base::TimeDelta(),
+                  next_frame_pts - (delay_timestamp - base::TimeTicks()));
 }
 
 aaudio_data_callback_result_t AAudioOutputStream::OnAudioDataRequested(
@@ -232,4 +248,5 @@ void AAudioOutputStream::SetMute(bool muted) {
   base::AutoLock al(lock_);
   muted_ = muted;
 }
+
 }  // namespace media

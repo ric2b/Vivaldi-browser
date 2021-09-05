@@ -56,6 +56,7 @@ const char kFlashVersion[] = "flash_version";
 const char kJSEngine[] = "js_engine";
 const char kJSVersion[] = "js_version";
 #endif
+const char kLogoAltText[] = "logo_alt_text";
 const char kOfficial[] = "official";
 #if !defined(OS_CHROMEOS)
 const char kOSName[] = "os_name";
@@ -81,7 +82,7 @@ const char kUserAgentName[] = "user_agent_name";
 const char kVariationsCmdName[] = "variations_cmd_name";
 const char kVariationsName[] = "variations_name";
 const char kVersion[] = "version";
-const char kVersionBitSize[] = "version_bitsize";
 const char kVersionModifier[] = "version_modifier";
+const char kVersionProcessorVariation[] = "version_processor_variation";
 
 }  // namespace version_ui

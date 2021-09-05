@@ -10,7 +10,8 @@ import android.content.Context;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.download.DownloadLaterMetrics.DownloadLaterUiEvent;
-import org.chromium.chrome.browser.download.dialogs.DownloadDateTimePickerDialogCoordinator;
+import org.chromium.chrome.browser.download.dialogs.DownloadDateTimePickerDialog;
+import org.chromium.chrome.browser.download.dialogs.DownloadDateTimePickerDialogImpl;
 import org.chromium.chrome.browser.download.dialogs.DownloadLaterDialogChoice;
 import org.chromium.chrome.browser.download.dialogs.DownloadLaterDialogController;
 import org.chromium.chrome.browser.download.dialogs.DownloadLaterDialogCoordinator;
@@ -72,8 +73,7 @@ public class DownloadDialogBridge
     @CalledByNative
     private static DownloadDialogBridge create(long nativeDownloadDialogBridge) {
         DownloadLocationDialogCoordinator locationDialog = new DownloadLocationDialogCoordinator();
-        DownloadDateTimePickerDialogCoordinator dateTimePickerDialog =
-                new DownloadDateTimePickerDialogCoordinator();
+        DownloadDateTimePickerDialog dateTimePickerDialog = new DownloadDateTimePickerDialogImpl();
         DownloadLaterDialogCoordinator downloadLaterDialog =
                 new DownloadLaterDialogCoordinator(dateTimePickerDialog);
         dateTimePickerDialog.initialize(downloadLaterDialog);
@@ -201,8 +201,7 @@ public class DownloadDialogBridge
         PropertyModel.Builder builder =
                 new PropertyModel.Builder(DownloadLaterDialogProperties.ALL_KEYS)
                         .with(DownloadLaterDialogProperties.CONTROLLER, mDownloadLaterDialog)
-                        .with(DownloadLaterDialogProperties.DOWNLOAD_TIME_INITIAL_SELECTION,
-                                mDownloadLaterChoice)
+                        .with(DownloadLaterDialogProperties.INITIAL_CHOICE, mDownloadLaterChoice)
                         .with(DownloadLaterDialogProperties.DONT_SHOW_AGAIN_SELECTION,
                                 promptStatus);
         if (mShowEditLocation) {

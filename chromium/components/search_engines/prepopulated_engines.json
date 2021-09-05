@@ -29,7 +29,7 @@
     // Increment this if you change the data in ways that mean users with
     // existing data should get a new version. Otherwise, existing data may
     // continue to be used and updates made here will not always appear.
-    "kCurrentDataVersion": 123
+    "kCurrentDataVersion": 125
   },
 
   // The following engines are included in country lists and are added to the
@@ -955,9 +955,9 @@
     "privacywall": {
       "name": "PrivacyWall",
       "keyword": "privacywall.org",
-      "favicon_url": "https://www.privacywall.org/images/favicon32.ico",
+      "favicon_url": "https://www.privacywall.org/images/favicon_32x32.ico",
       "search_url": "https://www.privacywall.org/search/secure/?q={searchTerms}",
-      "suggest_url": "https://www.privacywall.org/search/suggest.php?q={searchTerms}",
+      "suggest_url": "https://search.privacywall.org/suggest.php?q={searchTerms}",
       "type": "SEARCH_ENGINE_PRIVACYWALL",
       "id": 100
     },
@@ -1171,7 +1171,7 @@
       "name": "DuckDuckGo",
       "keyword": "duckduckgo.com",
       "favicon_url": "https://duckduckgo.com/favicon.ico",
-      "search_url": "https://duckduckgo.com/?q={searchTerms}&t=vivaldi",
+      "search_url": "https://duckduckgo.com/?q={searchTerms}&t=vivaldim",
       "suggest_url": "https://duckduckgo.com/ac/?q={searchTerms}&type=list",
       "type": "SEARCH_ENGINE_DUCKDUCKGO_VIV",
       "id": 1000098
@@ -1226,6 +1226,18 @@
       "image_url_post_params": "upfile={google:imageThumbnail},original_width={google:imageOriginalWidth},original_height={google:imageOriginalHeight},prg=1",
       "type": "SEARCH_ENGINE_YANDEX_VIV",
       "id": 10000103
+    },
+
+    "yandex_tr_viv": {
+      "name": "Yandex",
+      "keyword": "yandex.com.tr",
+      "favicon_url": "https://yastatic.net/lego/_/rBTjd6UOPk5913OSn5ZQVYMTQWQ.ico",
+      "search_url": "https://yandex.com.tr/search/?text={searchTerms}",
+      "suggest_url": "https://suggest.yandex.com.tr/suggest-ya.cgi?part={searchTerms}",
+      "image_url": "https://yandex.com.tr/gorsel/search?rpt=imageview",
+      "image_url_post_params": "upfile={google:imageThumbnail},original_width={google:imageOriginalWidth},original_height={google:imageOriginalHeight},prg=1",
+      "type": "SEARCH_ENGINE_YANDEX_TR_VIV",
+      "id": 10000104
     }
   },
 

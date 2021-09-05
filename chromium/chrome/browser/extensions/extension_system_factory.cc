@@ -4,7 +4,7 @@
 
 #include "chrome/browser/extensions/extension_system_factory.h"
 
-#include "chrome/browser/extensions/blacklist_factory.h"
+#include "chrome/browser/extensions/blocklist_factory.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/forced_extensions/install_stage_tracker_factory.h"
 #include "chrome/browser/extensions/install_verifier_factory.h"
@@ -50,7 +50,7 @@ ExtensionSystemSharedFactory::ExtensionSystemSharedFactory()
   DependsOn(InstallVerifierFactory::GetInstance());
   DependsOn(ProcessManagerFactory::GetInstance());
   DependsOn(RendererStartupHelperFactory::GetInstance());
-  DependsOn(BlacklistFactory::GetInstance());
+  DependsOn(BlocklistFactory::GetInstance());
   DependsOn(DeclarativeUserScriptManagerFactory::GetInstance());
   DependsOn(EventRouterFactory::GetInstance());
   // This depends on ExtensionDownloader, which depends on

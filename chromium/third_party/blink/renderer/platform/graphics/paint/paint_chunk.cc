@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/platform/graphics/paint/paint_chunk.h"
 
+#include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
@@ -12,28 +13,28 @@ namespace blink {
 struct SameSizeAsPaintChunk {
   wtf_size_t begin_index;
   wtf_size_t end_index;
+  Color background_color;
+  uint64_t background_color_area;
   PaintChunk::Id id;
   PropertyTreeState properties;
   IntRect bounds;
   IntRect drawable_bounds;
-  float outset_for_raster_effects;
-  unsigned bools;  // known_to_be_opaque, is_cacheable, client_is_just_created
-  void* pointers[1];  // hit_test_data
+  void* hit_test_data;
+  bool b[2];
 };
 
-static_assert(sizeof(PaintChunk) == sizeof(SameSizeAsPaintChunk),
-              "PaintChunk should stay small");
+ASSERT_SIZE(PaintChunk, SameSizeAsPaintChunk);
 
 bool PaintChunk::EqualsForUnderInvalidationChecking(
     const PaintChunk& other) const {
   return size() == other.size() && id == other.id &&
          properties == other.properties && bounds == other.bounds &&
          drawable_bounds == other.drawable_bounds &&
-         outset_for_raster_effects == other.outset_for_raster_effects &&
+         raster_effect_outset == other.raster_effect_outset &&
          ((!hit_test_data && !other.hit_test_data) ||
           (hit_test_data && other.hit_test_data &&
            *hit_test_data == *other.hit_test_data));
-  // known_to_be_opaque is not checked because it's updated when we create the
+  // known_to_be_opaque is not checked ]because it's updated when we create the
   // next chunk or release chunks. We ensure its correctness with unit tests and
   // under-invalidation checking of display items.
 }

@@ -4,6 +4,7 @@
 
 #include "chrome/renderer/safe_browsing/phishing_classifier.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -11,9 +12,12 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/paint/skia_paint_canvas.h"
 #include "chrome/common/url_constants.h"
@@ -25,6 +29,7 @@
 #include "components/paint_preview/common/paint_preview_tracker.h"
 #include "components/safe_browsing/core/proto/csd.pb.h"
 #include "content/public/renderer/render_frame.h"
+#include "content/public/renderer/render_thread.h"
 #include "crypto/sha2.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -164,6 +169,9 @@ void PhishingClassifier::TermExtractionFinished(bool success) {
 }
 
 void PhishingClassifier::ExtractVisualFeatures() {
+  DCHECK(content::RenderThread::IsMainThread());
+  base::TimeTicks start_time = base::TimeTicks::Now();
+
   blink::WebLocalFrame* frame = render_frame_->GetWebFrame();
   gfx::SizeF viewport_size = frame->View()->VisualViewportSize();
   gfx::Rect bounds = ToEnclosingRect(gfx::RectF(viewport_size));
@@ -185,9 +193,12 @@ void PhishingClassifier::ExtractVisualFeatures() {
   cc_canvas.SetPaintPreviewTracker(tracker.get());
   VisualExtractionFinished(frame->CapturePaintPreview(
       bounds, &cc_canvas, /*include_linked_destinations=*/false));
+  base::UmaHistogramTimes("SBClientPhishing.VisualFeatureTime",
+                          base::TimeTicks::Now() - start_time);
 }
 
 void PhishingClassifier::VisualExtractionFinished(bool success) {
+  DCHECK(content::RenderThread::IsMainThread());
   if (!success) {
     RunFailureCallback();
     return;
@@ -198,29 +209,43 @@ void PhishingClassifier::VisualExtractionFinished(bool success) {
   // Hash all of the features so that they match the model, then compute
   // the score.
   FeatureMap hashed_features;
-  ClientPhishingRequest verdict;
-  verdict.set_model_version(scorer_->model_version());
-  verdict.set_url(main_frame->GetDocument().Url().GetString().Utf8());
+  std::unique_ptr<ClientPhishingRequest> verdict =
+      std::make_unique<ClientPhishingRequest>();
+  verdict->set_model_version(scorer_->model_version());
+  verdict->set_url(main_frame->GetDocument().Url().GetString().Utf8());
   for (const auto& it : features_->features()) {
     bool result = hashed_features.AddRealFeature(
         crypto::SHA256HashString(it.first), it.second);
     DCHECK(result);
-    ClientPhishingRequest::Feature* feature = verdict.add_feature_map();
+    ClientPhishingRequest::Feature* feature = verdict->add_feature_map();
     feature->set_name(it.first);
     feature->set_value(it.second);
   }
   for (const auto& it : *shingle_hashes_) {
-    verdict.add_shingle_hashes(it);
+    verdict->add_shingle_hashes(it);
   }
   float score = static_cast<float>(scorer_->ComputeScore(hashed_features));
-  verdict.set_client_score(score);
-  verdict.set_is_phishing(score >= scorer_->threshold_probability());
+  verdict->set_client_score(score);
+  verdict->set_is_phishing(score >= scorer_->threshold_probability());
 
-  if (scorer_->GetMatchingVisualTargets(*bitmap_, &verdict)) {
-    verdict.set_is_phishing(true);
+  visual_matching_start_ = base::TimeTicks::Now();
+
+  scorer_->GetMatchingVisualTargets(
+      *bitmap_, std::move(verdict),
+      base::BindOnce(&PhishingClassifier::OnVisualTargetsMatched,
+                     weak_factory_.GetWeakPtr()));
+}
+
+void PhishingClassifier::OnVisualTargetsMatched(
+    std::unique_ptr<ClientPhishingRequest> verdict) {
+  DCHECK(content::RenderThread::IsMainThread());
+  if (!verdict->vision_match().empty()) {
+    verdict->set_is_phishing(true);
   }
+  base::UmaHistogramTimes("SBClientPhishing.VisualComparisonTime",
+                          base::TimeTicks::Now() - visual_matching_start_);
 
-  RunCallback(verdict);
+  RunCallback(*verdict);
 }
 
 void PhishingClassifier::RunCallback(const ClientPhishingRequest& verdict) {

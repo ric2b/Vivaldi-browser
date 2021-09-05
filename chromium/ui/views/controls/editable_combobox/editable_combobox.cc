@@ -5,7 +5,6 @@
 #include "ui/views/controls/editable_combobox/editable_combobox.h"
 
 #include <memory>
-#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -45,7 +44,7 @@
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/button_controller.h"
 #include "ui/views/controls/combobox/combobox_util.h"
-#include "ui/views/controls/editable_combobox/editable_combobox_listener.h"
+#include "ui/views/controls/combobox/empty_combobox_model.h"
 #include "ui/views/controls/menu/menu_config.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/menu/menu_types.h"
@@ -303,6 +302,9 @@ class EditableCombobox::EditableComboboxPreTargetHandler
   DISALLOW_COPY_AND_ASSIGN(EditableComboboxPreTargetHandler);
 };
 
+EditableCombobox::EditableCombobox()
+    : EditableCombobox(std::make_unique<internal::EmptyComboboxModel>()) {}
+
 EditableCombobox::EditableCombobox(
     std::unique_ptr<ui::ComboboxModel> combobox_model,
     const bool filter_on_edit,
@@ -312,16 +314,13 @@ EditableCombobox::EditableCombobox(
     const int text_style,
     const bool display_arrow)
     : textfield_(new Textfield()),
-      combobox_model_(std::move(combobox_model)),
-      menu_model_(
-          std::make_unique<EditableComboboxMenuModel>(this,
-                                                      combobox_model_.get(),
-                                                      filter_on_edit,
-                                                      show_on_empty)),
       text_context_(text_context),
       text_style_(text_style),
       type_(type),
+      filter_on_edit_(filter_on_edit),
+      show_on_empty_(show_on_empty),
       showing_password_text_(type != Type::kPassword) {
+  SetModel(std::move(combobox_model));
   observer_.Add(textfield_);
   textfield_->set_controller(this);
   textfield_->SetFontList(GetFontList());
@@ -341,6 +340,13 @@ EditableCombobox::EditableCombobox(
 EditableCombobox::~EditableCombobox() {
   CloseMenu();
   textfield_->set_controller(nullptr);
+}
+
+void EditableCombobox::SetModel(std::unique_ptr<ui::ComboboxModel> model) {
+  CloseMenu();
+  combobox_model_.swap(model);
+  menu_model_ = std::make_unique<EditableComboboxMenuModel>(
+      this, combobox_model_.get(), filter_on_edit_, show_on_empty_);
 }
 
 const base::string16& EditableCombobox::GetText() const {
@@ -475,15 +481,15 @@ void EditableCombobox::OnItemSelected(int index) {
 
 void EditableCombobox::HandleNewContent(const base::string16& new_content) {
   DCHECK(GetText() == new_content);
-  // We notify |listener_| before updating |menu_model_|'s items shown. This
+  // We notify |callback_| before updating |menu_model_|'s items shown. This
   // gives the user a chance to modify the ComboboxModel beforehand if they wish
   // to do so.
   // We disable UpdateItemsShown while we notify the listener in case it
   // modifies the ComboboxModel, then calls OnComboboxModelChanged and thus
   // UpdateItemsShown. That way UpdateItemsShown doesn't do its work twice.
-  if (listener_) {
+  if (!content_changed_callback_.is_null()) {
     menu_model_->DisableUpdateItemsShown();
-    listener_->OnContentChanged(this);
+    content_changed_callback_.Run();
     menu_model_->EnableUpdateItemsShown();
   }
   menu_model_->UpdateItemsShown();

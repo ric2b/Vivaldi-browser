@@ -181,8 +181,8 @@ void ClientSession::SetCapabilities(
   if (HasCapability(capabilities_, protocol::kFileTransferCapability)) {
     data_channel_manager_.RegisterCreateHandlerCallback(
         kFileTransferDataChannelPrefix,
-        base::Bind(&ClientSession::CreateFileTransferMessageHandler,
-                   base::Unretained(this)));
+        base::BindRepeating(&ClientSession::CreateFileTransferMessageHandler,
+                            base::Unretained(this)));
   }
 
   std::vector<ActionRequest::Action> supported_actions;
@@ -293,14 +293,27 @@ void ClientSession::ControlPeerConnection(
   }
   base::Optional<int> min_bitrate_bps;
   base::Optional<int> max_bitrate_bps;
+  bool set_preferred_bitrates = false;
   if (parameters.has_preferred_min_bitrate_bps()) {
     min_bitrate_bps = parameters.preferred_min_bitrate_bps();
+    set_preferred_bitrates = true;
   }
   if (parameters.has_preferred_max_bitrate_bps()) {
     max_bitrate_bps = parameters.preferred_max_bitrate_bps();
+    set_preferred_bitrates = true;
   }
-  connection_->peer_connection_controls()->SetPreferredBitrates(
-      min_bitrate_bps, max_bitrate_bps);
+  if (set_preferred_bitrates) {
+    connection_->peer_connection_controls()->SetPreferredBitrates(
+        min_bitrate_bps, max_bitrate_bps);
+  }
+
+  if (parameters.request_ice_restart()) {
+    connection_->peer_connection_controls()->RequestIceRestart();
+  }
+
+  if (parameters.request_sdp_restart()) {
+    connection_->peer_connection_controls()->RequestSdpRestart();
+  }
 }
 
 void ClientSession::OnConnectionAuthenticating() {
@@ -600,7 +613,7 @@ void ClientSession::SetMouseClampingFilter(const DisplaySize& size) {
       break;
 
     case protocol::SessionConfig::Protocol::WEBRTC: {
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
       mouse_clamping_filter_.set_input_size(size.WidthAsPixels(),
                                             size.HeightAsPixels());
 #else
@@ -609,7 +622,7 @@ void ClientSession::SetMouseClampingFilter(const DisplaySize& size) {
       // TODO(sergeyu): Fix InputInjector implementations to use DIPs as well.
       mouse_clamping_filter_.set_input_size(size.WidthAsDips(),
                                             size.HeightAsDips());
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_APPLE)
     }
   }
 }
@@ -723,7 +736,7 @@ void ClientSession::OnDesktopDisplayChanged(
   // display configuration supports capturing the entire desktop.
   LOG(INFO) << "    Webrtc desktop size " << default_webrtc_desktop_size_;
   if (show_display_id_ == webrtc::kInvalidScreenId) {
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
     // On MacOS, there are situations where webrtc cannot capture the entire
     // desktop (e.g, when there are displays with different DPIs). We detect
     // this situation by comparing the full desktop size (calculated above
@@ -741,7 +754,7 @@ void ClientSession::OnDesktopDisplayChanged(
 #else
     // Windows/Linux can capture full desktop if multiple displays.
     can_capture_full_desktop_ = true;
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_APPLE)
   }
 
   // Generate and send VideoLayout message.

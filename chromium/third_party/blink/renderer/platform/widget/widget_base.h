@@ -10,9 +10,10 @@
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
+#include "third_party/blink/public/mojom/input/input_handler.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/widget.mojom-blink.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
-#include "third_party/blink/public/web/web_widget.h"
+#include "third_party/blink/public/platform/web_text_input_info.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
@@ -34,11 +35,15 @@ class Cursor;
 }
 
 namespace blink {
+class ImeEventGuard;
 class LayerTreeView;
 class WidgetBaseClient;
+class WidgetInputHandlerManager;
+class WidgetCompositor;
 
 namespace scheduler {
 class WebRenderWidgetSchedulingState;
+class WebThreadScheduler;
 }
 
 // This class is the foundational class for all widgets that blink creates.
@@ -56,15 +61,20 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
       CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase> widget);
   ~WidgetBase() override;
 
-  // Initialize the compositor.
+  // Initialize the compositor. |settings| is typically null. When |settings| is
+  // null the default settings will be used, tests may provide a |settings|
+  // object to override the defaults.
   void InitializeCompositing(
+      bool never_composited,
+      scheduler::WebThreadScheduler* main_thread_scheduler,
       cc::TaskGraphRunner* task_graph_runner,
-      const cc::LayerTreeSettings& settings,
-      std::unique_ptr<cc::UkmRecorderFactory> ukm_recorder_factory);
+      bool for_child_local_root_frame,
+      const ScreenInfo& screen_info,
+      std::unique_ptr<cc::UkmRecorderFactory> ukm_recorder_factory,
+      const cc::LayerTreeSettings* settings);
 
   // Shutdown the compositor.
-  void Shutdown(scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner,
-                base::OnceCallback<void()> cleanup_task);
+  void Shutdown(scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner);
 
   // Set the compositor as visible. If |visible| is true, then the compositor
   // will request a new layer frame sink, begin producing frames from the
@@ -80,6 +90,11 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
   void GetWidgetInputHandler(
       mojo::PendingReceiver<mojom::blink::WidgetInputHandler> request,
       mojo::PendingRemote<mojom::blink::WidgetInputHandlerHost> host) override;
+  void UpdateVisualProperties(
+      const VisualProperties& visual_properties) override;
+  void UpdateScreenRects(const gfx::Rect& widget_screen_rect,
+                         const gfx::Rect& window_screen_rect,
+                         UpdateScreenRectsCallback callback) override;
 
   // LayerTreeDelegate overrides:
   // Applies viewport related properties during a commit from the compositor
@@ -136,11 +151,16 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
   // Dispatch the virtual keyboard and update text input state.
   void ShowVirtualKeyboardOnElementFocus();
 
-  // Process the touch action, return true if the action should be
-  // sent to the browser.
-  bool ProcessTouchAction(cc::TouchAction touch_action);
+  // Process the touch action.
+  void ProcessTouchAction(cc::TouchAction touch_action);
 
   WidgetBaseInputHandler& input_handler() { return input_handler_; }
+
+  WidgetInputHandlerManager* widget_input_handler_manager() {
+    return widget_input_handler_manager_.get();
+  }
+
+  gfx::Rect CompositorViewportRect() const;
 
   WidgetBaseClient* client() { return client_; }
 
@@ -155,18 +175,90 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
   void UpdateCompositionInfo(bool immediate_request);
   void SetFocus(bool enable);
   bool has_focus() const { return has_focus_; }
+  void MouseCaptureLost();
+  void CursorVisibilityChange(bool is_visible);
+  void QueueSyntheticEvent(
+      std::unique_ptr<blink::WebCoalescedInputEvent> event);
+  void SetEditCommandsForNextKeyEvent(
+      Vector<mojom::blink::EditCommandPtr> edit_commands);
+  void SetMouseCapture(bool capture);
+  void ImeSetComposition(const String& text,
+                         const Vector<ui::ImeTextSpan>& ime_text_spans,
+                         const gfx::Range& replacement_range,
+                         int selection_start,
+                         int selection_end);
+  void ImeCommitText(const String& text,
+                     const Vector<ui::ImeTextSpan>& ime_text_spans,
+                     const gfx::Range& replacement_range,
+                     int relative_cursor_pos);
+  void ImeFinishComposingText(bool keep_selection);
+  bool IsForProvisionalFrame();
+  void FlushInputProcessedCallback();
+  void CancelCompositionForPepper();
+
+  void RequestPresentationAfterScrollAnimationEnd(
+      mojom::blink::Widget::ForceRedrawCallback callback);
+
+  void OnImeEventGuardStart(ImeEventGuard* guard);
+  void OnImeEventGuardFinish(ImeEventGuard* guard);
+
+  bool is_hidden() { return false; }
+  void set_is_pasting(bool value) { is_pasting_ = value; }
+  bool is_pasting() const { return is_pasting_; }
+  void set_handling_select_range(bool value) { handling_select_range_ = value; }
+  bool handling_select_range() const { return handling_select_range_; }
+
+  void RequestMouseLock(
+      bool has_transient_user_activation,
+      bool priviledged,
+      bool request_unadjusted_movement,
+      base::OnceCallback<
+          void(blink::mojom::PointerLockResult,
+               CrossVariantMojoRemote<
+                   mojom::blink::PointerLockContextInterfaceBase>)> callback);
+
+  void BindWidgetCompositor(
+      mojo::PendingReceiver<mojom::blink::WidgetCompositor> receiver);
+
+  base::WeakPtr<WidgetBase> GetWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
+
+  void UpdateSurfaceAndScreenInfo(
+      const viz::LocalSurfaceIdAllocation& new_local_surface_id_allocation,
+      const gfx::Rect& compositor_viewport_pixel_rect,
+      const ScreenInfo& new_screen_info);
+  void UpdateScreenInfo(const ScreenInfo& new_screen_info);
+  void UpdateCompositorViewportAndScreenInfo(
+      const gfx::Rect& compositor_viewport_pixel_rect,
+      const ScreenInfo& new_screen_info);
+  void UpdateCompositorViewportRect(
+      const gfx::Rect& compositor_viewport_pixel_rect);
+  const ScreenInfo& GetScreenInfo();
+
+  const viz::LocalSurfaceIdAllocation& local_surface_id_allocation_from_parent()
+      const {
+    return local_surface_id_allocation_from_parent_;
+  }
 
  private:
   bool CanComposeInline();
   void UpdateTextInputStateInternal(bool show_virtual_keyboard,
                                     bool immediate_request);
+  bool ShouldHandleImeEvents();
+  // Returns the range of the text that is being composed or the selection if
+  // the composition does not exist.
   void GetCompositionRange(gfx::Range* range);
   void GetCompositionCharacterBounds(Vector<gfx::Rect>* bounds);
   ui::TextInputType GetTextInputType();
+
+  // Returns true if the composition range or composition character bounds
+  // should be sent to the browser process.
   bool ShouldUpdateCompositionInfo(const gfx::Range& range,
                                    const Vector<gfx::Rect>& bounds);
 
   std::unique_ptr<LayerTreeView> layer_tree_view_;
+  scoped_refptr<WidgetInputHandlerManager> widget_input_handler_manager_;
   WidgetBaseClient* client_;
   mojo::AssociatedRemote<mojom::blink::WidgetHost> widget_host_;
   mojo::AssociatedReceiver<mojom::blink::Widget> receiver_;
@@ -176,6 +268,7 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
   base::TimeTicks was_shown_time_ = base::TimeTicks::Now();
   bool has_focus_ = false;
   WidgetBaseInputHandler input_handler_{this};
+  scoped_refptr<WidgetCompositor> widget_compositor_;
 
   // Stores the current selection bounds.
   gfx::Rect selection_focus_rect_;
@@ -189,6 +282,7 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
 
   // True if the IME requests updated composition info.
   bool monitor_composition_info_ = false;
+
   // Stores information about the current text input.
   blink::WebTextInputInfo text_input_info_;
 
@@ -214,6 +308,25 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
 
   // Stores whether the IME should always be hidden for |webwidget_|.
   bool always_hide_ime_ = false;
+
+  // Used to inform didChangeSelection() when it is called in the context
+  // of handling a FrameInputHandler::SelectRange IPC.
+  bool handling_select_range_ = false;
+
+  // Whether or not this RenderWidget is currently pasting.
+  bool is_pasting_ = false;
+
+  // Properties of the screen hosting the WidgetBase. Rects in this structure
+  // do not include any scaling by device scale factor, so are logical pixels
+  // not physical device pixels.
+  ScreenInfo screen_info_;
+  viz::LocalSurfaceIdAllocation local_surface_id_allocation_from_parent_;
+
+  // It is possible that one ImeEventGuard is nested inside another
+  // ImeEventGuard. We keep track of the outermost one, and update it as needed.
+  ImeEventGuard* ime_event_guard_ = nullptr;
+
+  base::WeakPtrFactory<WidgetBase> weak_ptr_factory_{this};
 };
 
 }  // namespace blink

@@ -15,6 +15,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.TestFileUtil;
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
@@ -26,7 +27,6 @@ import org.chromium.components.offline_items_collection.OfflineContentProvider;
 import org.chromium.components.offline_items_collection.OfflineItem;
 import org.chromium.components.offline_items_collection.OfflineItemState;
 import org.chromium.components.offline_items_collection.UpdateDelta;
-import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServerRule;
@@ -62,12 +62,7 @@ public final class ServicificationDownloadTest {
 
         public void waitForDownloadCompletion() {
             CriteriaHelper.pollUiThread(
-                    new Criteria("Failed waiting for the download to complete.") {
-                        @Override
-                        public boolean isSatisfied() {
-                            return mDownloadCompleted;
-                        }
-                    });
+                    () -> mDownloadCompleted, "Failed waiting for the download to complete.");
         }
     }
 
@@ -87,12 +82,7 @@ public final class ServicificationDownloadTest {
 
         public void waitForDownloadCompletion() {
             CriteriaHelper.pollUiThread(
-                    new Criteria("Failed waiting for the download to complete.") {
-                        @Override
-                        public boolean isSatisfied() {
-                            return mDownloadCompleted;
-                        }
-                    });
+                    () -> mDownloadCompleted, "Failed waiting for the download to complete.");
         }
     }
 
@@ -110,6 +100,7 @@ public final class ServicificationDownloadTest {
 
     @Test
     @LargeTest
+    @DisabledTest(message = "Noop since UseDownloadOfflineContentProvider is enabled in debug.")
     @Feature({"Download"})
     public void testResumeInterruptedDownload() {
         if (useDownloadOfflineContentProvider()) return;

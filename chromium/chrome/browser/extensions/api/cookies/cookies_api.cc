@@ -119,7 +119,7 @@ void CookiesEventRouter::OnCookieChange(bool otr,
                    change.cause != net::CookieChangeCause::INSERTED);
 
   Profile* profile =
-      otr ? profile_->GetOffTheRecordProfile() : profile_->GetOriginalProfile();
+      otr ? profile_->GetPrimaryOTRProfile() : profile_->GetOriginalProfile();
   api::cookies::Cookie cookie = cookies_helpers::CreateCookie(
       change.cookie, cookies_helpers::GetStoreIdFromProfile(profile));
   dict->Set(cookies_api_constants::kCookieKey, cookie.ToValue());
@@ -175,8 +175,8 @@ void CookiesEventRouter::MaybeStartListening() {
   DCHECK(profile_);
 
   Profile* original_profile = profile_->GetOriginalProfile();
-  Profile* otr_profile = original_profile->HasOffTheRecordProfile()
-                             ? original_profile->GetOffTheRecordProfile()
+  Profile* otr_profile = original_profile->HasPrimaryOTRProfile()
+                             ? original_profile->GetPrimaryOTRProfile()
                              : nullptr;
 
   if (!receiver_.is_bound())
@@ -463,11 +463,11 @@ ExtensionFunction::ResponseAction CookiesSetFunction::Run() {
 }
 
 void CookiesSetFunction::SetCanonicalCookieCallback(
-    net::CookieInclusionStatus set_cookie_result) {
+    net::CookieAccessResult set_cookie_result) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK_EQ(NO_RESPONSE, state_);
   state_ = SET_COMPLETED;
-  success_ = set_cookie_result.IsInclude();
+  success_ = set_cookie_result.status.IsInclude();
 }
 
 void CookiesSetFunction::GetCookieListCallback(
@@ -563,8 +563,8 @@ ExtensionFunction::ResponseAction CookiesGetAllCookieStoresFunction::Run() {
   Profile* incognito_profile = NULL;
   std::unique_ptr<base::ListValue> incognito_tab_ids;
   if (include_incognito_information() &&
-      original_profile->HasOffTheRecordProfile()) {
-    incognito_profile = original_profile->GetOffTheRecordProfile();
+      original_profile->HasPrimaryOTRProfile()) {
+    incognito_profile = original_profile->GetPrimaryOTRProfile();
     if (incognito_profile)
       incognito_tab_ids.reset(new base::ListValue());
   }

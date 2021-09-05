@@ -133,8 +133,6 @@ cr.define('cr.login', function() {
     'platformVersion',           // Version of the OS build.
     'releaseChannel',            // Installation channel.
     'endpointGen',               // Current endpoint generation.
-    'menuGuestMode',             // Enables "Guest mode" menu item
-    'menuKeyboardOptions',       // Enables "Keyboard options" menu item
     'menuEnterpriseEnrollment',  // Enables "Enterprise enrollment" menu item.
     'lsbReleaseBoard',           // Chrome OS Release board name
     'isFirstUser',               // True if this is non-enterprise device,
@@ -208,6 +206,9 @@ cr.define('cr.login', function() {
     },
     'backButton'(msg) {
       this.dispatchEvent(new CustomEvent('backButton', {detail: msg.show}));
+    },
+    'getAccounts'(msg) {
+      this.dispatchEvent(new Event('getAccounts'));
     },
     'showView'(msg) {
       this.dispatchEvent(new Event('showView'));
@@ -597,6 +598,14 @@ cr.define('cr.login', function() {
       this.isLoaded_ = true;
     }
 
+    /**
+     * Called in response to 'getAccounts' event.
+     * @param {Array<string>} accounts list of emails
+     */
+    getAccountsResponse(accounts) {
+      this.sendMessageToWebview('accountsListed', accounts);
+    }
+
     constructInitialFrameUrl_(data) {
       if (data.doSamlRedirect) {
         let url = this.idpOrigin_ + SAML_REDIRECTION_PATH;
@@ -639,26 +648,15 @@ cr.define('cr.login', function() {
       if (data.endpointGen) {
         url = appendParam(url, 'endpoint_gen', data.endpointGen);
       }
-      let mi = '';
-      if (data.menuGuestMode) {
-        mi += 'gm,';
-      }
-      if (data.menuKeyboardOptions) {
-        mi += 'ko,';
-      }
       if (data.menuEnterpriseEnrollment) {
-        mi += 'ee,';
-      }
-      if (mi.length) {
-        url = appendParam(url, 'mi', mi);
+        url = appendParam(url, 'mi', 'ee');
       }
 
+      if (data.lsbReleaseBoard) {
+        url = appendParam(url, 'chromeos_board', data.lsbReleaseBoard);
+      }
       if (data.isFirstUser) {
         url = appendParam(url, 'is_first_user', 'true');
-
-        if (data.lsbReleaseBoard) {
-          url = appendParam(url, 'chromeos_board', data.lsbReleaseBoard);
-        }
       }
       if (data.obfuscatedOwnerId) {
         url = appendParam(url, 'obfuscated_owner_id', data.obfuscatedOwnerId);
@@ -873,11 +871,22 @@ cr.define('cr.login', function() {
     }
 
     /**
-     * Invoked to send a HTML5 message to the webview element.
-     * @param {Object} payload Payload of the HTML5 message.
+     * Invoked to send a HTML5 message with attached data to the webview
+     * element.
+     * @param {string} messageType Type of the HTML5 message.
+     * @param {Object=} messageData Data to be attached to the message.
      */
-    sendMessageToWebview(payload) {
+    sendMessageToWebview(messageType, messageData = null) {
       const currentUrl = this.webview_.src;
+      let payload = undefined;
+      if (messageData) {
+        payload = {type: messageType, data: messageData};
+      } else {
+        // TODO(crbug.com/1116343): Use new message format when it will be
+        // available in production.
+        payload = messageType;
+      }
+
       this.webview_.contentWindow.postMessage(payload, currentUrl);
     }
 

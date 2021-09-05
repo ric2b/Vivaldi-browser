@@ -213,7 +213,7 @@ void ViewAXPlatformNodeDelegate::NotifyAccessibilityEvent(
   ax_platform_node_->NotifyAccessibilityEvent(event_type);
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 void ViewAXPlatformNodeDelegate::AnnounceText(const base::string16& text) {
   ax_platform_node_->AnnounceText(text);
 }
@@ -345,6 +345,10 @@ gfx::NativeViewAccessible ViewAXPlatformNodeDelegate::ChildAtIndex(int index) {
   return nullptr;
 }
 
+bool ViewAXPlatformNodeDelegate::HasModalDialog() const {
+  return GetChildWidgets().is_tab_modal_showing;
+}
+
 gfx::NativeViewAccessible ViewAXPlatformNodeDelegate::GetNSWindow() {
   NOTREACHED();
   return nullptr;
@@ -375,6 +379,17 @@ bool ViewAXPlatformNodeDelegate::IsChildOfLeaf() const {
 
 bool ViewAXPlatformNodeDelegate::IsLeaf() const {
   return ViewAccessibility::IsLeaf() || AXPlatformNodeDelegateBase::IsLeaf();
+}
+
+bool ViewAXPlatformNodeDelegate::IsToplevelBrowserWindow() {
+  // Note: only used on Desktop Linux. Other platforms don't have an application
+  // node so this would never return true.
+  ui::AXNodeData data = GetData();
+  if (data.role != ax::mojom::Role::kWindow)
+    return false;
+
+  AXPlatformNodeDelegate* parent = GetParentDelegate();
+  return parent && parent->GetData().role == ax::mojom::Role::kApplication;
 }
 
 gfx::Rect ViewAXPlatformNodeDelegate::GetBoundsRect(
@@ -523,6 +538,46 @@ bool ViewAXPlatformNodeDelegate::IsMinimized() const {
 
 const ui::AXUniqueId& ViewAXPlatformNodeDelegate::GetUniqueId() const {
   return ViewAccessibility::GetUniqueId();
+}
+
+base::Optional<bool>
+ViewAXPlatformNodeDelegate::GetTableHasColumnOrRowHeaderNode() const {
+  if (!GetAncestorTableView())
+    return false;
+  return !GetAncestorTableView()->visible_columns().empty();
+}
+
+std::vector<int32_t> ViewAXPlatformNodeDelegate::GetColHeaderNodeIds() const {
+  std::vector<int32_t> col_header_ids;
+  if (!virtual_children().empty()) {
+    for (const std::unique_ptr<AXVirtualView>& header_cell :
+         virtual_children().front()->children()) {
+      const ui::AXNodeData& header_data = header_cell->GetData();
+      if (header_data.role == ax::mojom::Role::kColumnHeader) {
+        col_header_ids.push_back(header_data.id);
+      }
+    }
+  }
+  return col_header_ids;
+}
+
+std::vector<int32_t> ViewAXPlatformNodeDelegate::GetColHeaderNodeIds(
+    int col_index) const {
+  std::vector<int32_t> columns = GetColHeaderNodeIds();
+  if (columns.size() <= size_t{col_index}) {
+    return {};
+  }
+  return {columns[col_index]};
+}
+
+TableView* ViewAXPlatformNodeDelegate::GetAncestorTableView() const {
+  ui::AXNodeData data;
+  view()->GetViewAccessibility().GetAccessibleNodeData(&data);
+
+  if (!ui::IsTableLike(data.role))
+    return nullptr;
+
+  return static_cast<TableView*>(view());
 }
 
 bool ViewAXPlatformNodeDelegate::IsOrderedSetItem() const {

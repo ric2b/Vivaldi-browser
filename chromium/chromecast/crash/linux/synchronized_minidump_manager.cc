@@ -202,7 +202,7 @@ int SynchronizedMinidumpManager::GetNumDumps(bool delete_all_dumps) {
       if (delete_all_dumps) {
         LOG(INFO) << "Removing " << reader.name()
                   << "which was not in the lockfile";
-        if (!base::DeleteFile(dump_file, false))
+        if (!base::DeleteFile(dump_file))
           PLOG(INFO) << "Removing " << dump_file.value() << " failed";
       }
     }
@@ -435,7 +435,7 @@ bool SynchronizedMinidumpManager::HasDumps() {
   // Check if any files are in minidump directory
   base::DirReaderPosix reader(dump_path_.value().c_str());
   if (!reader.IsValid()) {
-    DLOG(FATAL) << "Could not open minidump dir: " << dump_path_.value();
+    DLOG(ERROR) << "Could not open minidump dir: " << dump_path_.value();
     return false;
   }
 

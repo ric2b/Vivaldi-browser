@@ -16,7 +16,7 @@
 #include "base/callback.h"
 #include "base/component_export.h"
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
 #include "storage/browser/quota/quota_callbacks.h"
 #include "storage/browser/quota/quota_client.h"
@@ -43,7 +43,11 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) UsageTracker
   UsageTracker(
       const base::flat_map<QuotaClient*, QuotaClientType>& client_types,
       blink::mojom::StorageType type,
-      SpecialStoragePolicy* special_storage_policy);
+      scoped_refptr<SpecialStoragePolicy> special_storage_policy);
+
+  UsageTracker(const UsageTracker&) = delete;
+  UsageTracker& operator=(const UsageTracker&) = delete;
+
   ~UsageTracker() override;
 
   blink::mojom::StorageType type() const {
@@ -51,9 +55,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) UsageTracker
     return type_;
   }
 
-  void GetGlobalLimitedUsage(UsageCallback callback);
   void GetGlobalUsage(GlobalUsageCallback callback);
-  void GetHostUsage(const std::string& host, UsageCallback callback);
   void GetHostUsageWithBreakdown(const std::string& host,
                                  UsageWithBreakdownCallback callback);
   void UpdateUsageCache(QuotaClientType client_type,
@@ -76,8 +78,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) UsageTracker
   struct AccumulateInfo;
   friend class ClientUsageTracker;
 
-  void AccumulateClientGlobalLimitedUsage(AccumulateInfo* info,
-                                          int64_t limited_usage);
   void AccumulateClientGlobalUsage(AccumulateInfo* info,
                                    int64_t usage,
                                    int64_t unlimited_usage);
@@ -95,7 +95,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) UsageTracker
       client_tracker_map_;
   size_t client_count_;
 
-  std::vector<UsageCallback> global_limited_usage_callbacks_;
   std::vector<GlobalUsageCallback> global_usage_callbacks_;
   std::map<std::string, std::vector<UsageWithBreakdownCallback>>
       host_usage_callbacks_;
@@ -103,7 +102,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) UsageTracker
   SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<UsageTracker> weak_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(UsageTracker);
 };
 
 }  // namespace storage

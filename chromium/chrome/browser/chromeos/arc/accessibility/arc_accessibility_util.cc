@@ -29,7 +29,7 @@ base::Optional<ax::mojom::Event> FromContentChangeTypesToAXEvent(
   if (node_ptr && node_ptr->range_info) {
     return ax::mojom::Event::kValueChanged;
   } else {
-    return base::nullopt;
+    return ax::mojom::Event::kAriaAttributeChanged;
   }
 }
 

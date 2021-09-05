@@ -19,6 +19,7 @@ import android.util.Base64;
 import androidx.test.filters.LargeTest;
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -29,7 +30,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
@@ -51,7 +52,6 @@ import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.base.PageTransition;
 
-import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -261,35 +261,28 @@ public class UrlOverridingTest {
         // For sub frames, the |loadFailCallback| run through different threads
         // from the ExternalNavigationHandler. As a result, there is no guarantee
         // when url override result would come.
-        CriteriaHelper.pollUiThread(
-                new Criteria() {
-                    @Override
-                    public boolean isSatisfied() {
-                        // Note that we do not distinguish between OVERRIDE_WITH_CLOBBERING_TAB
-                        // and NO_OVERRIDE since tab clobbering will eventually lead to NO_OVERRIDE.
-                        // in the tab. Rather, we check the final URL to distinguish between
-                        // fallback and normal navigation. See crbug.com/487364 for more.
-                        Tab tab = latestTabHolder[0];
-                        InterceptNavigationDelegateImpl delegate = latestDelegateHolder[0];
-                        if (shouldLaunchExternalIntent
-                                != (OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT
-                                        == delegate.getLastOverrideUrlLoadingResultForTests())) {
-                            return false;
-                        }
-                        updateFailureReason(
-                                "Expected: " + expectedFinalUrl + " actual: " + tab.getUrlString());
-                        return expectedFinalUrl == null
-                                || TextUtils.equals(expectedFinalUrl, tab.getUrlString());
-                    }
-                });
+        CriteriaHelper.pollUiThread(() -> {
+            // Note that we do not distinguish between OVERRIDE_WITH_CLOBBERING_TAB
+            // and NO_OVERRIDE since tab clobbering will eventually lead to NO_OVERRIDE.
+            // in the tab. Rather, we check the final URL to distinguish between
+            // fallback and normal navigation. See crbug.com/487364 for more.
+            Tab latestTab = latestTabHolder[0];
+            InterceptNavigationDelegateImpl delegate = latestDelegateHolder[0];
+            if (shouldLaunchExternalIntent) {
+                Criteria.checkThat(delegate.getLastOverrideUrlLoadingResultForTests(),
+                        Matchers.is(OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT));
+            } else {
+                Criteria.checkThat(delegate.getLastOverrideUrlLoadingResultForTests(),
+                        Matchers.not(OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT));
+            }
+            if (expectedFinalUrl == null) return;
+            Criteria.checkThat(latestTab.getUrlString(), Matchers.is(expectedFinalUrl));
+        });
 
-        CriteriaHelper.pollUiThread(
-                Criteria.equals(shouldLaunchExternalIntent ? 1 : 0, new Callable<Integer>() {
-                    @Override
-                    public Integer call() {
-                        return mActivityMonitor.getHits();
-                    }
-                }));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    mActivityMonitor.getHits(), Matchers.is(shouldLaunchExternalIntent ? 1 : 0));
+        });
         Assert.assertEquals(1 + (hasFallbackUrl ? 1 : 0), finishCallback.getCallCount());
 
         Assert.assertEquals(failCallback.getCallCount(), shouldFailNavigation ? 1 : 0);
@@ -442,23 +435,15 @@ public class UrlOverridingTest {
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
 
-        CriteriaHelper.pollUiThread(Criteria.equals(1, new Callable<Integer>() {
-            @Override
-            public Integer call() {
-                return mActivityMonitor.getHits();
-            }
-        }));
+        CriteriaHelper.pollUiThread(
+                () -> Criteria.checkThat(mActivityMonitor.getHits(), Matchers.is(1)));
 
         // Test warm start.
         mActivityTestRule.startMainActivityOnBlankPage();
         targetContext.startActivity(intent);
 
-        CriteriaHelper.pollUiThread(Criteria.equals(2, new Callable<Integer>() {
-            @Override
-            public Integer call() {
-                return mActivityMonitor.getHits();
-            }
-        }));
+        CriteriaHelper.pollUiThread(
+                () -> Criteria.checkThat(mActivityMonitor.getHits(), Matchers.is(2)));
     }
 
     @Test

@@ -79,11 +79,13 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/account_manager/account_manager_util.h"
+#include "chrome/browser/chromeos/drive/drive_integration_service.h"
 #include "chrome/browser/device_identity/device_oauth2_token_service.h"
 #include "chrome/browser/device_identity/device_oauth2_token_service_factory.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/browser/ui/webui/signin/inline_login_dialog_chromeos.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/printing/printer_configuration.h"
 #include "components/signin/public/identity_manager/scope_set.h"
 #endif
@@ -106,6 +108,10 @@ PrinterType GetPrinterTypeForUserAction(UserActionBuckets user_action) {
       return PrinterType::kPrivet;
     case UserActionBuckets::kPrintWithExtension:
       return PrinterType::kExtension;
+    // On Chrome OS, printing to Google Drive needs to open the local file
+    // picker so |kPrintToGoogleDriveCros| action should be handled by the
+    // PDFPrinterHandler.
+    case UserActionBuckets::kPrintToGoogleDriveCros:
     case UserActionBuckets::kPrintToPdf:
       return PrinterType::kPdf;
     case UserActionBuckets::kPrintToPrinter:
@@ -209,10 +215,18 @@ base::Value GetSettingsDictionary(const std::string& json_str) {
 }
 
 UserActionBuckets DetermineUserAction(const base::Value& settings) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (settings.FindKey(kSettingOpenPDFInPreview))
     return UserActionBuckets::kOpenInMacPreview;
 #endif
+
+#if defined(OS_CHROMEOS)
+  if (base::FeatureList::IsEnabled(chromeos::features::kPrintSaveToDrive) &&
+      settings.FindBoolKey(kSettingPrintToGoogleDrive).value_or(false)) {
+    return UserActionBuckets::kPrintToGoogleDriveCros;
+  }
+#endif
+
   // This needs to be checked before checking for a cloud print ID, since a
   // print ticket for printing to Drive will also contain a cloud print ID.
   if (settings.FindBoolKey(kSettingPrintToGoogleDrive).value_or(false))
@@ -442,6 +456,10 @@ void PrintPreviewHandler::RegisterMessages() {
       base::BindRepeating(
           &PrintPreviewHandler::HandleRequestPrinterStatusUpdate,
           base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "isDriveMounted",
+      base::BindRepeating(&PrintPreviewHandler::HandleIsDriveMounted,
+                          base::Unretained(this)));
 #endif
 }
 
@@ -789,10 +807,7 @@ void PrintPreviewHandler::HandlePrinterSetup(const base::ListValue* args) {
                      weak_factory_.GetWeakPtr(), callback_id, printer_name));
 }
 
-void PrintPreviewHandler::HandleSignin(const base::ListValue* args) {
-  bool add_account = false;
-  CHECK(args->GetBoolean(0, &add_account));
-
+void PrintPreviewHandler::HandleSignin(const base::ListValue* /*args*/) {
   Profile* profile = Profile::FromWebUI(web_ui());
   DCHECK(profile);
 
@@ -801,20 +816,15 @@ void PrintPreviewHandler::HandleSignin(const base::ListValue* args) {
     // Chrome OS Account Manager is enabled on this Profile and hence, all
     // account management flows will go through native UIs and not through a
     // tabbed browser window.
-    if (add_account) {
-      chromeos::InlineLoginDialogChromeOS::Show(
-          chromeos::InlineLoginDialogChromeOS::Source::kPrintPreviewDialog);
-    } else {
-      chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
-          profile, chromeos::settings::mojom::kMyAccountsSubpagePath);
-    }
+    chromeos::InlineLoginDialogChromeOS::Show(
+        chromeos::InlineLoginDialogChromeOS::Source::kPrintPreviewDialog);
     return;
   }
 #endif
 
   chrome::ScopedTabbedBrowserDisplayer displayer(profile);
   CreateCloudPrintSigninTab(
-      displayer.browser(), add_account,
+      displayer.browser(),
       base::BindOnce(&PrintPreviewHandler::OnSignInTabClosed,
                      weak_factory_.GetWeakPtr()));
 }
@@ -1399,6 +1409,18 @@ void PrintPreviewHandler::OnPrinterStatusUpdated(
     const std::string& callback_id,
     const base::Value& cups_printer_status) {
   ResolveJavascriptCallback(base::Value(callback_id), cups_printer_status);
+}
+
+void PrintPreviewHandler::HandleIsDriveMounted(const base::ListValue* args) {
+  CHECK_EQ(1U, args->GetSize());
+  const std::string& callback_id = args->GetList()[0].GetString();
+
+  drive::DriveIntegrationService* drive_service =
+      drive::DriveIntegrationServiceFactory::GetForProfile(
+          Profile::FromWebUI(web_ui()));
+  ResolveJavascriptCallback(
+      base::Value(callback_id),
+      base::Value(drive_service && drive_service->IsMounted()));
 }
 #endif
 

@@ -47,6 +47,8 @@ em::Policy_PolicySource GetSource(const base::Value& policy) {
   switch (static_cast<policy::PolicySource>(*policy.FindIntKey("source"))) {
     case policy::POLICY_SOURCE_ENTERPRISE_DEFAULT:
       return em::Policy_PolicySource_SOURCE_ENTERPRISE_DEFAULT;
+    case policy::POLICY_SOURCE_COMMAND_LINE:
+      return em::Policy_PolicySource_SOURCE_COMMAND_LINE;
     case policy::POLICY_SOURCE_CLOUD:
       return em::Policy_PolicySource_SOURCE_CLOUD;
     case policy::POLICY_SOURCE_ACTIVE_DIRECTORY:
@@ -111,6 +113,11 @@ void AppendChromePolicyInfoIntoProfileReport(
 void AppendExtensionPolicyInfoIntoProfileReport(
     const base::Value& policies,
     em::ChromeUserProfileInfo* profile_info) {
+  if (!policies.FindKey("extensionPolicies")) {
+    // Android and iOS don't support extensions and their policies.
+    return;
+  }
+
   for (const auto& extension_iter :
        policies.FindKey("extensionPolicies")->DictItems()) {
     const base::Value& policies = extension_iter.second;

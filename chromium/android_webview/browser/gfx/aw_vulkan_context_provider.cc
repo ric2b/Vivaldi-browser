@@ -12,12 +12,13 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/native_library.h"
+#include "gpu/vulkan/init/gr_vk_memory_allocator_impl.h"
 #include "gpu/vulkan/init/vulkan_factory.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
 #include "gpu/vulkan/vulkan_fence_helper.h"
 #include "gpu/vulkan/vulkan_function_pointers.h"
 #include "gpu/vulkan/vulkan_util.h"
-#include "third_party/skia/include/gpu/GrContext.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/vk/GrVkBackendContext.h"
 #include "third_party/skia/include/gpu/vk/GrVkExtensions.h"
 
@@ -91,6 +92,10 @@ AwVulkanContextProvider::AwVulkanContextProvider() {
 AwVulkanContextProvider::~AwVulkanContextProvider() {
   DCHECK_EQ(g_vulkan_context_provider, this);
   g_vulkan_context_provider = nullptr;
+
+  draw_context_.reset();
+  gr_context_.reset();
+
   device_queue_->Destroy();
   device_queue_ = nullptr;
 }
@@ -103,7 +108,7 @@ gpu::VulkanDeviceQueue* AwVulkanContextProvider::GetDeviceQueue() {
   return device_queue_.get();
 }
 
-GrContext* AwVulkanContextProvider::GetGrContext() {
+GrDirectContext* AwVulkanContextProvider::GetGrContext() {
   return gr_context_.get();
 }
 
@@ -173,11 +178,11 @@ bool AwVulkanContextProvider::Initialize(AwDrawFn_InitVkParams* params) {
       .fVkExtensions = &vk_extensions,
       .fDeviceFeatures = params->device_features,
       .fDeviceFeatures2 = params->device_features_2,
-      .fMemoryAllocator = nullptr,
+      .fMemoryAllocator = gpu::CreateGrVkMemoryAllocator(device_queue_.get()),
       .fGetProc = get_proc,
       .fOwnsInstanceAndDevice = false,
   };
-  gr_context_ = GrContext::MakeVulkan(backend_context);
+  gr_context_ = GrDirectContext::MakeVulkan(backend_context);
   if (!gr_context_) {
     LOG(ERROR) << "Unable to initialize GrContext.";
     return false;

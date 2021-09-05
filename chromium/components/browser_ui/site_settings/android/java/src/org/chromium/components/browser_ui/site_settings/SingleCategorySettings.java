@@ -8,6 +8,8 @@ import static org.chromium.components.browser_ui.settings.SearchUtils.handleSear
 import static org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge.SITE_WILDCARD;
 import static org.chromium.components.content_settings.PrefNames.BLOCK_THIRD_PARTY_COOKIES;
 import static org.chromium.components.content_settings.PrefNames.COOKIE_CONTROLS_MODE;
+import static org.chromium.components.content_settings.PrefNames.ENABLE_QUIET_NOTIFICATION_PERMISSION_UI;
+import static org.chromium.components.content_settings.PrefNames.NOTIFICATIONS_VIBRATE_ENABLED;
 
 import android.content.Context;
 import android.content.DialogInterface;
@@ -50,7 +52,6 @@ import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.site_settings.FourStateCookieSettingsPreference.CookieSettingsState;
 import org.chromium.components.browser_ui.site_settings.Website.StoredDataClearedCallback;
 import org.chromium.components.content_settings.ContentSettingValues;
-import org.chromium.components.content_settings.ContentSettingsFeatureList;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.content_settings.CookieControlsMode;
 import org.chromium.components.embedder_support.browser_context.BrowserContextHandle;
@@ -209,13 +210,11 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
                 getSiteSettingsClient().getBrowserContextHandle();
         for (@SiteSettingsCategory.Type int i = 0; i < SiteSettingsCategory.Type.NUM_ENTRIES; i++) {
             if (!mCategory.showSites(i)) continue;
-            for (@ContentSettingException.Type int j = 0;
-                    j < ContentSettingException.Type.NUM_ENTRIES; j++) {
-                if (ContentSettingException.getContentSettingsType(j)
-                        == SiteSettingsCategory.contentSettingsType(i)) {
-                    return ContentSettingValues.BLOCK
-                            == website.site().getContentSettingPermission(j);
-                }
+            @ContentSettingValues
+            Integer contentSettingPermission = website.site().getContentSettingPermission(
+                    SiteSettingsCategory.contentSettingsType(i));
+            if (contentSettingPermission != null) {
+                return ContentSettingValues.BLOCK == contentSettingPermission;
             }
             for (@PermissionInfo.Type int j = 0; j < PermissionInfo.Type.NUM_ENTRIES; j++) {
                 if (PermissionInfo.getContentSettingsType(j)
@@ -558,14 +557,13 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
         } else if (THIRD_PARTY_COOKIES_TOGGLE_KEY.equals(preference.getKey())) {
             prefService.setBoolean(BLOCK_THIRD_PARTY_COOKIES, (boolean) newValue);
         } else if (NOTIFICATIONS_VIBRATE_TOGGLE_KEY.equals(preference.getKey())) {
-            getPrefs().setNotificationsVibrateEnabled((boolean) newValue);
+            prefService.setBoolean(NOTIFICATIONS_VIBRATE_ENABLED, (boolean) newValue);
         } else if (NOTIFICATIONS_QUIET_UI_TOGGLE_KEY.equals(preference.getKey())) {
-            boolean boolValue = (boolean) newValue;
-            if (boolValue) {
-                getPrefs().setEnableQuietNotificationPermissionUi(true);
+            if ((boolean) newValue) {
+                prefService.setBoolean(ENABLE_QUIET_NOTIFICATION_PERMISSION_UI, true);
             } else {
                 // Clear the pref so if the default changes later the user will get the new default.
-                getPrefs().clearEnableNotificationPermissionUi();
+                prefService.clearPref(ENABLE_QUIET_NOTIFICATION_PERMISSION_UI);
             }
         }
         return true;
@@ -940,6 +938,7 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
         FourStateCookieSettingsPreference fourStateCookieToggle =
                 (FourStateCookieSettingsPreference) screen.findPreference(
                         FOUR_STATE_COOKIE_TOGGLE_KEY);
+        // TODO(crbug.com/1104836): Remove the old third-party cookie blocking UI
         Preference thirdPartyCookies = screen.findPreference(THIRD_PARTY_COOKIES_TOGGLE_KEY);
         Preference notificationsVibrate = screen.findPreference(NOTIFICATIONS_VIBRATE_TOGGLE_KEY);
         Preference notificationsQuietUi = screen.findPreference(NOTIFICATIONS_QUIET_UI_TOGGLE_KEY);
@@ -975,9 +974,7 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
             maybeShowOsWarning(screen);
         }
 
-        if (!(mCategory.showSites(SiteSettingsCategory.Type.COOKIES)
-                    && ContentSettingsFeatureList.isEnabled(
-                            ContentSettingsFeatureList.IMPROVED_COOKIE_CONTROLS))) {
+        if (!mCategory.showSites(SiteSettingsCategory.Type.COOKIES)) {
             screen.removePreference(screen.findPreference(COOKIE_INFO_TEXT_KEY));
         }
 
@@ -1064,8 +1061,8 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
         // Show the link to system settings since permission is disabled.
         ChromeBasePreference osWarning = new ChromeBasePreference(getStyledContext(), null);
         ChromeBasePreference osWarningExtra = new ChromeBasePreference(getStyledContext(), null);
-        mCategory.configurePermissionIsOffPreferences(
-                osWarning, osWarningExtra, getActivity(), true);
+        mCategory.configurePermissionIsOffPreferences(osWarning, osWarningExtra, getActivity(),
+                true, getSiteSettingsClient().getAppName());
         if (osWarning.getTitle() != null) {
             osWarning.setKey(SingleWebsiteSettings.PREF_OS_PERMISSIONS_WARNING);
             screen.addPreference(osWarning);
@@ -1173,7 +1170,9 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
                 quiet_ui_pref = (ChromeBaseCheckBoxPreference) getPreferenceScreen().findPreference(
                         NOTIFICATIONS_QUIET_UI_TOGGLE_KEY);
             }
-            quiet_ui_pref.setChecked(getPrefs().getEnableQuietNotificationPermissionUi());
+            PrefService prefService = UserPrefs.get(browserContextHandle);
+            quiet_ui_pref.setChecked(
+                    prefService.getBoolean(ENABLE_QUIET_NOTIFICATION_PERMISSION_UI));
         } else if (quiet_ui_pref != null) {
             // Save a reference to allow re-adding it to the screen.
             mNotificationsQuietUiPref = quiet_ui_pref;
@@ -1189,9 +1188,5 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
         } else {
             ManagedPreferencesUtils.showManagedByAdministratorToast(getActivity());
         }
-    }
-
-    private SiteSettingsPrefClient getPrefs() {
-        return getSiteSettingsClient().getSiteSettingsPrefClient();
     }
 }

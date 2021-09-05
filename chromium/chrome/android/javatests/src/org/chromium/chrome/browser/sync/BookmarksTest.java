@@ -8,6 +8,7 @@ import android.util.Pair;
 
 import androidx.test.filters.LargeTest;
 
+import org.hamcrest.Matchers;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Assert;
@@ -28,6 +29,7 @@ import org.chromium.components.sync.ModelType;
 import org.chromium.components.sync.protocol.BookmarkSpecifics;
 import org.chromium.components.sync.protocol.SyncEntity;
 import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaNotSatisfiedException;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.ArrayList;
@@ -123,7 +125,7 @@ public class BookmarksTest {
         SyncTestUtil.triggerSync();
         mSyncTestRule.pollInstrumentationThread(() -> {
             Bookmark modifiedBookmark = getClientBookmarks().get(0);
-            Assert.assertEquals(MODIFIED_TITLE, modifiedBookmark.title);
+            Criteria.checkThat(modifiedBookmark.title, Matchers.is(MODIFIED_TITLE));
         });
     }
 
@@ -183,7 +185,7 @@ public class BookmarksTest {
             List<Bookmark> bookmarks = getClientBookmarks();
             Bookmark modifiedBookmark = bookmarks.get(bookmarks.get(0).isFolder() ? 1 : 0);
             // The "s" is prepended because the server adds one to the parentId.
-            Assert.assertEquals("s" + folder.id, modifiedBookmark.parentId);
+            Criteria.checkThat(modifiedBookmark.parentId, Matchers.is("s" + folder.id));
         });
     }
 
@@ -222,8 +224,8 @@ public class BookmarksTest {
 
         mSyncTestRule.pollInstrumentationThread(() -> {
             Bookmark modifiedFolder = getClientBookmarks().get(0);
-            Assert.assertTrue(modifiedFolder.isFolder());
-            Assert.assertEquals(MODIFIED_TITLE, modifiedFolder.title);
+            Criteria.checkThat(modifiedFolder.isFolder(), Matchers.is(true));
+            Criteria.checkThat(modifiedFolder.title, Matchers.is(MODIFIED_TITLE));
         });
     }
 
@@ -315,7 +317,7 @@ public class BookmarksTest {
             List<Bookmark> serverBookmarks = getServerBookmarks();
             Bookmark modifiedBookmark =
                     serverBookmarks.get(serverBookmarks.get(0).isFolder() ? 1 : 0);
-            Assert.assertEquals(folder.id, modifiedBookmark.parentId);
+            Criteria.checkThat(modifiedBookmark.parentId, Matchers.is(folder.id));
         });
     }
 
@@ -492,14 +494,17 @@ public class BookmarksTest {
     }
 
     private void waitForClientBookmarkCount(int n) {
-        mSyncTestRule.pollInstrumentationThread(Criteria.equals(n, new Callable<Integer>() {
-            @Override
-            public Integer call() throws Exception {
-                return SyncTestUtil
-                        .getLocalData(mSyncTestRule.getTargetContext(), BOOKMARKS_TYPE_STRING)
-                        .size();
+        mSyncTestRule.pollInstrumentationThread(() -> {
+            try {
+                Criteria.checkThat(SyncTestUtil
+                                           .getLocalData(mSyncTestRule.getTargetContext(),
+                                                   BOOKMARKS_TYPE_STRING)
+                                           .size(),
+                        Matchers.is(n));
+            } catch (JSONException ex) {
+                throw new CriteriaNotSatisfiedException(ex);
             }
-        }));
+        });
     }
 
     private void waitForServerBookmarkCountWithName(final int count, final String name) {

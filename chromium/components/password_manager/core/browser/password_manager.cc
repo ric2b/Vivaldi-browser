@@ -13,10 +13,10 @@
 
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/platform_thread.h"
-#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_type.h"
@@ -50,6 +50,7 @@
 #endif
 
 using autofill::ACCOUNT_CREATION_PASSWORD;
+using autofill::FieldDataManager;
 using autofill::FieldRendererId;
 using autofill::FormData;
 using autofill::FormRendererId;
@@ -180,12 +181,12 @@ void AddLocallySavedPredictions(FieldInfoManager* field_info_manager,
         field.type = NOT_USERNAME;
     }
     if (logger && local_prediction != UNKNOWN_TYPE) {
-      std::string message =
-          "form signature=" +
-          NumberToString(predictions->form_signature.value()) +
-          " , field signature=" + NumberToString(field.signature.value()) +
-          ", type=" +
-          autofill::AutofillType::ServerFieldTypeToString(local_prediction);
+      std::string message = base::StrCat(
+          {"form signature=",
+           NumberToString(predictions->form_signature.value()),
+           " , field signature=", NumberToString(field.signature.value()),
+           ", type=",
+           autofill::AutofillType::ServerFieldTypeToString(local_prediction)});
       logger->LogString(Logger::STRING_LOCALLY_SAVED_PREDICTION, message);
     }
   }
@@ -234,7 +235,9 @@ void PasswordManager::RegisterProfilePrefs(
   registry->RegisterTimePref(prefs::kAccountStoreDateLastUsedForFilling,
                              base::Time());
 
-#if defined(OS_MACOSX)
+  registry->RegisterIntegerPref(prefs::kSettingsLaunchedPasswordChecks, 0);
+
+#if defined(OS_APPLE)
   registry->RegisterIntegerPref(prefs::kKeychainMigrationStatus,
                                 4 /* MIGRATED_DELETED */);
 #endif
@@ -252,7 +255,7 @@ void PasswordManager::RegisterLocalPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kOsPasswordBlank, false);
 #endif
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
   registry->RegisterTimePref(prefs::kPasswordRecovery, base::Time());
 #endif
 }
@@ -737,24 +740,33 @@ void PasswordManager::OnPasswordNoLongerGenerated(
     manager->PasswordNoLongerGenerated();
 }
 
-void PasswordManager::OnPasswordFormRemoved(PasswordManagerDriver* driver,
-                                            FormRendererId form_id) {
+void PasswordManager::OnPasswordFormRemoved(
+    PasswordManagerDriver* driver,
+    const FieldDataManager* field_data_manager,
+    FormRendererId form_id) {
   for (auto& manager : form_managers_) {
     if (driver && !manager->GetDriver())
       manager->SetDriver(driver->AsWeakPtr());
+    // Find a form with corresponding renderer id.
     if (manager->DoesManageAccordingToRendererId(form_id, driver)) {
-      if (manager->is_submitted())
-        OnLoginSuccessful();
+      DetectPotentialSubmission(manager.get(), field_data_manager, driver);
       return;
     }
   }
 }
 
-void PasswordManager::OnIframeDetach(const std::string& frame_id) {
-  PasswordFormManager* submitted_manager = GetSubmittedManager();
-  if (submitted_manager &&
-      submitted_manager->observed_form().frame_id == frame_id) {
-    OnLoginSuccessful();
+void PasswordManager::OnIframeDetach(
+    const std::string& frame_id,
+    PasswordManagerDriver* driver,
+    const FieldDataManager* field_data_manager) {
+  for (auto& manager : form_managers_) {
+    // Find a form with corresponding frame id. Stop iterating in case the
+    // target form manager was found to avoid crbug.com/1129758 and since only
+    // one password form is being submitted at a time.
+    if (manager->observed_form().frame_id == frame_id &&
+        DetectPotentialSubmission(manager.get(), field_data_manager, driver)) {
+      return;
+    }
   }
 }
 #endif
@@ -885,7 +897,7 @@ void PasswordManager::OnPasswordFormsRendered(
 }
 
 void PasswordManager::OnLoginSuccessful() {
-  if (autofill_assistant_mode_ == AutofillAssistantMode::kRunning) {
+  if (autofill_assistant_mode_ == AutofillAssistantMode::kUIShown) {
     // Suppress prompts while Autofill Assistant is running.
     return;
   }
@@ -921,7 +933,12 @@ void PasswordManager::OnLoginSuccessful() {
 
   // TODO(https://crbug.com/831123): Implement checking whether to save with
   // PasswordFormManager.
-  if (!client_->GetStoreResultFilter()->ShouldSave(
+  // Check whether the filter allows saving this credential. In practice, this
+  // prevents saving the password of the syncing account. However, if the
+  // password is already saved, then *updating* it is still allowed - better
+  // than keeping an outdated password around.
+  if (!submitted_manager->IsPasswordUpdate() &&
+      !client_->GetStoreResultFilter()->ShouldSave(
           *submitted_manager->GetSubmittedForm())) {
     RecordProvisionalSaveFailure(
         PasswordManagerMetricsRecorder::SYNC_CREDENTIAL,
@@ -1214,16 +1231,17 @@ void PasswordManager::ShowManualFallbackForSavingImpl(
 }
 
 void PasswordManager::SetAutofillAssistantMode(AutofillAssistantMode mode) {
+  if (autofill_assistant_mode_ == mode) {
+    return;
+  }
   autofill_assistant_mode_ = mode;
 
-  if (autofill_assistant_mode_ == AutofillAssistantMode::kRunning) {
-    DCHECK(!disable_prompts_timer_.IsRunning())
-        << "Autofill Assistant tried to disable prompts twice in a row.";
-    disable_prompts_timer_.Start(FROM_HERE, GetTimeoutForDisablingPrompts(),
-                                 this,
-                                 &PasswordManager::ResetAutofillAssistantMode);
-  } else {
-    disable_prompts_timer_.Stop();
+  if (autofill_assistant_mode_ == AutofillAssistantMode::kUINotShown) {
+    // Reset pending credentials as Autofill Assistant has handled the pending
+    // submission.
+    for (auto& form_manager : form_managers_)
+      form_manager->ResetState();
+    owned_submitted_form_manager_.reset();
   }
 }
 
@@ -1231,18 +1249,28 @@ AutofillAssistantMode PasswordManager::GetAutofillAssistantMode() const {
   return autofill_assistant_mode_;
 }
 
-void PasswordManager::ResetAutofillAssistantMode() {
-  // The timeout is 0 only in the dedicated test. Otherwise, the call can happen
-  // only due to a bug.
-  DCHECK(disable_prompts_timeout_in_seconds_ == 0)
-      << "Autofill assistant failed to re-enable Password Manager's "
-         "prompts before timing out.";
-
-  autofill_assistant_mode_ = AutofillAssistantMode::kNotRunning;
+#if defined(OS_IOS)
+bool PasswordManager::DetectPotentialSubmission(
+    PasswordFormManager* form_manager,
+    const FieldDataManager* field_data_manager,
+    PasswordManagerDriver* driver) {
+  // If the manager is not submitted, it still can have autofilled data.
+  if (!form_manager->is_submitted()) {
+    form_manager->UpdateObservedFormDataWithFieldDataManagerInfo(
+        field_data_manager);
+    // Provisionally save form and set the manager to be submitted if valid
+    // data was recovered.
+    form_manager->ProvisionallySave(form_manager->observed_form(), driver,
+                                    nullptr);
+  }
+  // If the manager was set to be submitted, either prior to this function call
+  // or on provisional save above, consider submission successful.
+  if (form_manager->is_submitted()) {
+    OnLoginSuccessful();
+    return true;
+  }
+  return false;
 }
-
-base::TimeDelta PasswordManager::GetTimeoutForDisablingPrompts() {
-  return base::TimeDelta::FromSeconds(disable_prompts_timeout_in_seconds_);
-}
+#endif
 
 }  // namespace password_manager

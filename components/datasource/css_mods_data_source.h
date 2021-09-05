@@ -11,18 +11,13 @@
 
 class CSSModsDataClassHandler : public VivaldiDataClassHandler {
  public:
-  CSSModsDataClassHandler(Profile* profile);
-  ~CSSModsDataClassHandler() override;
-
-  void GetData(
-      const std::string& data_id,
-      content::URLDataSource::GotDataCallback callback) override;
+  void GetData(Profile* profile,
+               const std::string& data_id,
+               content::URLDataSource::GotDataCallback callback) override;
 
  private:
   static scoped_refptr<base::RefCountedMemory> GetDataForIdOnBlockingThread(
       base::FilePath dir_path, std::string data_id);
-
-  Profile* const profile_;
 };
 
 #endif  // COMPONENTS_DATASOURCE_CSS_MODS_DATA_SOURCE_H_

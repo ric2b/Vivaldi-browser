@@ -31,6 +31,8 @@
 #include "services/network/public/mojom/fetch_api.mojom-blink-forward.h"
 #include "services/network/public/mojom/ip_address_space.mojom-blink-forward.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/common/loader/worker_main_script_load_parameters.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/script/script_type.mojom-blink-forward.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -67,7 +69,6 @@ class CORE_EXPORT WorkerGlobalScope
       public ActiveScriptWrappable<WorkerGlobalScope>,
       public Supplementable<WorkerGlobalScope> {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(WorkerGlobalScope);
 
  public:
   ~WorkerGlobalScope() override;
@@ -117,6 +118,7 @@ class CORE_EXPORT WorkerGlobalScope
   const UserAgentMetadata& GetUserAgentMetadata() const { return ua_metadata_; }
   HttpsState GetHttpsState() const override { return https_state_; }
   scheduler::WorkerScheduler* GetScheduler() final;
+  ukm::UkmRecorder* UkmRecorder() final;
 
   void AddConsoleMessageImpl(ConsoleMessage*, bool discard_duplicates) final;
   BrowserInterfaceBrokerProxy& GetBrowserInterfaceBroker() final;
@@ -164,6 +166,8 @@ class CORE_EXPORT WorkerGlobalScope
   // Fetches and evaluates the top-level classic script.
   virtual void FetchAndRunClassicScript(
       const KURL& script_url,
+      std::unique_ptr<WorkerMainScriptLoadParameters>
+          worker_main_script_load_params_for_modules,
       const FetchClientSettingsObjectSnapshot& outside_settings_object,
       WorkerResourceTimingNotifier& outside_resource_timing_notifier,
       const v8_inspector::V8StackTraceId& stack_id) = 0;
@@ -171,6 +175,8 @@ class CORE_EXPORT WorkerGlobalScope
   // Fetches and evaluates the top-level module script.
   virtual void FetchAndRunModuleScript(
       const KURL& module_url_record,
+      std::unique_ptr<WorkerMainScriptLoadParameters>
+          worker_main_script_load_params_for_modules,
       const FetchClientSettingsObjectSnapshot& outside_settings_object,
       WorkerResourceTimingNotifier& outside_resource_timing_notifier,
       network::mojom::CredentialsMode,
@@ -200,10 +206,22 @@ class CORE_EXPORT WorkerGlobalScope
   // workers support off-the-main-thread script fetch by default.
   virtual bool IsOffMainThreadScriptFetchDisabled() { return false; }
 
+  // Takes the ownership of the parameters used to load the worker main module
+  // script in renderer process.
+  std::unique_ptr<WorkerMainScriptLoadParameters>
+  TakeWorkerMainScriptLoadingParametersForModules();
+
+  ukm::SourceId UkmSourceID() const override { return ukm_source_id_; }
+
+  // Returns the token uniquely identifying this worker. The token type will
+  // match the actual worker type.
+  virtual WorkerToken GetWorkerToken() const = 0;
+
  protected:
   WorkerGlobalScope(std::unique_ptr<GlobalScopeCreationParams>,
                     WorkerThread*,
-                    base::TimeTicks time_origin);
+                    base::TimeTicks time_origin,
+                    ukm::SourceId);
 
   // ExecutionContext
   void ExceptionThrown(ErrorEvent*) override;
@@ -223,6 +241,12 @@ class CORE_EXPORT WorkerGlobalScope
   void InitializeURL(const KURL& url);
 
   mojom::ScriptType GetScriptType() const { return script_type_; }
+
+  // Sets the parameters for the worker main module script loaded by the browser
+  // process.
+  void SetWorkerMainScriptLoadingParametersForModules(
+      std::unique_ptr<WorkerMainScriptLoadParameters>
+          worker_main_script_load_params_for_modules);
 
  private:
   void SetWorkerSettings(std::unique_ptr<WorkerSettings>);
@@ -277,6 +301,16 @@ class CORE_EXPORT WorkerGlobalScope
   base::Optional<v8_inspector::V8StackTraceId> stack_id_;
 
   HttpsState https_state_;
+
+  std::unique_ptr<ukm::UkmRecorder> ukm_recorder_;
+
+  // |worker_main_script_load_params_for_modules_| is used to load a root module
+  // script for dedicated workers (when PlzDedicatedWorker is enabled) and
+  // shared workers.
+  std::unique_ptr<WorkerMainScriptLoadParameters>
+      worker_main_script_load_params_for_modules_;
+
+  const ukm::SourceId ukm_source_id_;
 };
 
 template <>

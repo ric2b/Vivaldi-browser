@@ -23,6 +23,7 @@
 #include "chrome/browser/native_file_system/native_file_system_permission_request_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
@@ -35,6 +36,7 @@
 #include "components/permissions/permission_util.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_update.h"
+#include "components/services/app_service/public/cpp/intent_util.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_controller_factory.h"
@@ -47,6 +49,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
+#include "ui/display/types/display_constants.h"
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
@@ -65,10 +68,6 @@ namespace web_app {
 SystemWebAppManagerBrowserTestBase::SystemWebAppManagerBrowserTestBase(
     bool install_mock) {
   scoped_feature_list_.InitWithFeatures({features::kSystemWebApps}, {});
-  if (install_mock) {
-    maybe_installation_ =
-        TestSystemWebAppInstallation::SetUpStandaloneSingleWindowApp();
-  }
 }
 
 SystemWebAppManagerBrowserTestBase::~SystemWebAppManagerBrowserTestBase() =
@@ -79,7 +78,7 @@ SystemWebAppManager& SystemWebAppManagerBrowserTestBase::GetManager() {
 }
 
 SystemAppType SystemWebAppManagerBrowserTestBase::GetMockAppType() {
-  DCHECK(maybe_installation_);
+  CHECK(maybe_installation_);
   return maybe_installation_->GetType();
 }
 
@@ -97,60 +96,117 @@ void SystemWebAppManagerBrowserTestBase::WaitForTestSystemAppInstall() {
   proxy->FlushMojoCallsForTesting();
 }
 
-content::WebContents*
-SystemWebAppManagerBrowserTestBase::WaitForSystemAppInstallAndLoad(
-    SystemAppType system_app_type) {
-  WaitForTestSystemAppInstall();
-  apps::AppLaunchParams params = LaunchParamsForApp(system_app_type);
-  content::WebContents* web_contents = LaunchApp(params);
-  EXPECT_TRUE(WaitForLoadStop(web_contents));
-  return web_contents;
-}
-
-Browser* SystemWebAppManagerBrowserTestBase::WaitForSystemAppInstallAndLaunch(
-    SystemAppType system_app_type) {
-  WaitForTestSystemAppInstall();
-  apps::AppLaunchParams params = LaunchParamsForApp(system_app_type);
-  content::WebContents* web_contents = LaunchApp(params);
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
-  EXPECT_EQ(web_app::GetAppIdFromApplicationName(browser->app_name()),
-            params.app_id);
-  return browser;
-}
-
 apps::AppLaunchParams SystemWebAppManagerBrowserTestBase::LaunchParamsForApp(
     SystemAppType system_app_type) {
   base::Optional<AppId> app_id =
       GetManager().GetAppIdForSystemApp(system_app_type);
-  DCHECK(app_id.has_value());
+
+  CHECK(app_id.has_value());
   return apps::AppLaunchParams(
       *app_id, apps::mojom::LaunchContainer::kLaunchContainerWindow,
       WindowOpenDisposition::CURRENT_TAB,
-      apps::mojom::AppLaunchSource::kSourceTest);
+      apps::mojom::AppLaunchSource::kSourceAppLauncher);
 }
 
 content::WebContents* SystemWebAppManagerBrowserTestBase::LaunchApp(
+    const apps::AppLaunchParams& params,
+    bool wait_for_load,
+    Browser** out_browser) {
+  content::TestNavigationObserver navigation_observer(GetLaunchURL(params));
+  navigation_observer.StartWatchingNewWebContents();
+
+  content::WebContents* web_contents =
+      apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
+          ->BrowserAppLauncher()
+          ->LaunchAppWithParams(params);
+
+  if (wait_for_load)
+    navigation_observer.Wait();
+
+  if (out_browser)
+    *out_browser = chrome::FindBrowserWithWebContents(web_contents);
+
+  return web_contents;
+}
+
+content::WebContents* SystemWebAppManagerBrowserTestBase::LaunchApp(
+    const apps::AppLaunchParams& params,
+    Browser** browser) {
+  return LaunchApp(params, /* wait_for_load */ true, browser);
+}
+
+content::WebContents* SystemWebAppManagerBrowserTestBase::LaunchApp(
+    SystemAppType type,
+    Browser** browser) {
+  return LaunchApp(LaunchParamsForApp(type), browser);
+}
+
+content::WebContents*
+SystemWebAppManagerBrowserTestBase::LaunchAppWithoutWaiting(
+    const apps::AppLaunchParams& params,
+    Browser** browser) {
+  return LaunchApp(params, /* wait_for_load */ false, browser);
+}
+
+content::WebContents*
+SystemWebAppManagerBrowserTestBase::LaunchAppWithoutWaiting(
+    web_app::SystemAppType type,
+    Browser** browser) {
+  return LaunchAppWithoutWaiting(LaunchParamsForApp(type), browser);
+}
+
+const GURL& SystemWebAppManagerBrowserTestBase::GetLaunchURL(
     const apps::AppLaunchParams& params) {
-  return apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
-      ->BrowserAppLauncher()
-      .LaunchAppWithParams(params);
+  return params.override_url.is_valid()
+             ? params.override_url
+             : WebAppProvider::Get(browser()->profile())
+                   ->registrar()
+                   .GetAppLaunchURL(params.app_id);
 }
 
 SystemWebAppManagerBrowserTest::SystemWebAppManagerBrowserTest(
     bool install_mock)
     : SystemWebAppManagerBrowserTestBase(install_mock) {
-  if (GetParam() == ProviderType::kWebApps) {
+  if (provider_type() == ProviderType::kWebApps) {
     scoped_feature_list_.InitAndEnableFeature(
         features::kDesktopPWAsWithoutExtensions);
-  } else if (GetParam() == ProviderType::kBookmarkApps) {
+  } else if (provider_type() == ProviderType::kBookmarkApps) {
     scoped_feature_list_.InitAndDisableFeature(
         features::kDesktopPWAsWithoutExtensions);
+  }
+  if (install_mock) {
+    maybe_installation_ =
+        TestSystemWebAppInstallation::SetUpStandaloneSingleWindowApp(
+            install_from_web_app_info());
+  }
+}
+
+SystemWebAppManagerWebAppInfoBrowserTest::
+    SystemWebAppManagerWebAppInfoBrowserTest(bool install_mock)
+    : SystemWebAppManagerBrowserTestBase(install_mock) {
+  if (provider_type() == ProviderType::kWebApps) {
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kDesktopPWAsWithoutExtensions);
+  } else if (provider_type() == ProviderType::kBookmarkApps) {
+    scoped_feature_list_.InitAndDisableFeature(
+        features::kDesktopPWAsWithoutExtensions);
+  }
+
+  if (install_mock) {
+    maybe_installation_ =
+        TestSystemWebAppInstallation::SetUpStandaloneSingleWindowApp(
+            install_from_web_app_info());
   }
 }
 
 // Test that System Apps install correctly with a manifest.
-IN_PROC_BROWSER_TEST_P(SystemWebAppManagerBrowserTest, Install) {
-  Browser* app_browser = WaitForSystemAppInstallAndLaunch(GetMockAppType());
+IN_PROC_BROWSER_TEST_P(SystemWebAppManagerWebAppInfoBrowserTest, Install) {
+  WaitForTestSystemAppInstall();
+
+  // Don't wait for page load because we want to verify AppController identifies
+  // the System Web App before when the app loads.
+  Browser* app_browser;
+  LaunchAppWithoutWaiting(GetMockAppType(), &app_browser);
 
   AppId app_id = app_browser->app_controller()->GetAppId();
   EXPECT_EQ(GetManager().GetAppIdForSystemApp(GetMockAppType()), app_id);
@@ -190,11 +246,38 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerBrowserTest, Install) {
 #endif  // defined(OS_CHROMEOS)
 }
 
+// We test with and without enabling kDesktopPWAsWithoutExtensions.
+std::string ProviderAndInstallationTypeToString(
+    const ::testing::TestParamInfo<ProviderTypeAndInstallationType>&
+        provider_type) {
+  std::string output;
+  switch (std::get<0>(provider_type.param)) {
+    case ProviderType::kBookmarkApps:
+      output.append("BookmarkApps");
+      break;
+    case ProviderType::kWebApps:
+      output.append("WebApps");
+      break;
+  }
+  if (std::get<1>(provider_type.param) ==
+      InstallationType::kWebAppInfoInstall) {
+    output.append("_WebAppInfoInstall");
+  }
+
+  return output;
+}
+
 // Check the toolbar is not shown for system web apps for pages on the chrome://
 // scheme but is shown off the chrome:// scheme.
-IN_PROC_BROWSER_TEST_P(SystemWebAppManagerBrowserTest,
+IN_PROC_BROWSER_TEST_P(SystemWebAppManagerWebAppInfoBrowserTest,
                        ToolbarVisibilityForSystemWebApp) {
-  Browser* app_browser = WaitForSystemAppInstallAndLaunch(GetMockAppType());
+  WaitForTestSystemAppInstall();
+
+  // Don't wait for page load because we want to verify the toolbar is hidden
+  // when the window first opens.
+  Browser* app_browser;
+  LaunchAppWithoutWaiting(GetMockAppType(), &app_browser);
+
   // In scope, the toolbar should not be visible.
   EXPECT_FALSE(app_browser->app_controller()->ShouldShowCustomTabBar());
 
@@ -218,20 +301,92 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerBrowserTest,
   EXPECT_TRUE(app_browser->app_controller()->ShouldShowCustomTabBar());
 }
 
+IN_PROC_BROWSER_TEST_P(SystemWebAppManagerWebAppInfoBrowserTest,
+                       LaunchMetricsWork) {
+  WaitForTestSystemAppInstall();
+
+  base::HistogramTester histograms;
+  apps::AppLaunchParams params = LaunchParamsForApp(GetMockAppType());
+  params.launch_source = apps::mojom::LaunchSource::kFromAppListGrid;
+
+  content::TestNavigationObserver navigation_observer(
+      maybe_installation_->GetAppUrl());
+  navigation_observer.StartWatchingNewWebContents();
+
+  LaunchSystemWebApp(browser()->profile(), GetMockAppType(),
+                     maybe_installation_->GetAppUrl(), params);
+
+  navigation_observer.Wait();
+  histograms.ExpectTotalCount("Apps.DefaultAppLaunch.FromAppListGrid", 1);
+  histograms.ExpectUniqueSample("Apps.DefaultAppLaunch.FromAppListGrid", 39, 1);
+}
+
+IN_PROC_BROWSER_TEST_P(SystemWebAppManagerWebAppInfoBrowserTest,
+                       LaunchMetricsWorkFromAppProxy) {
+  WaitForTestSystemAppInstall();
+
+  base::HistogramTester histograms;
+  content::TestNavigationObserver navigation_observer(
+      maybe_installation_->GetAppUrl());
+  navigation_observer.StartWatchingNewWebContents();
+
+  apps::AppServiceProxy* proxy =
+      apps::AppServiceProxyFactory::GetForProfile(browser()->profile());
+
+  proxy->Launch(GetManager().GetAppIdForSystemApp(GetMockAppType()).value(),
+                ui::EventFlags::EF_NONE,
+                apps::mojom::LaunchSource::kFromAppListGrid,
+                display::kDefaultDisplayId);
+  navigation_observer.Wait();
+
+  histograms.ExpectTotalCount("Apps.DefaultAppLaunch.FromAppListGrid", 1);
+  histograms.ExpectUniqueSample("Apps.DefaultAppLaunch.FromAppListGrid", 39, 1);
+}
+
+IN_PROC_BROWSER_TEST_P(SystemWebAppManagerWebAppInfoBrowserTest,
+                       LaunchMetricsWorkWithIntent) {
+  WaitForTestSystemAppInstall();
+
+  base::HistogramTester histograms;
+  content::TestNavigationObserver navigation_observer(
+      maybe_installation_->GetAppUrl());
+  navigation_observer.StartWatchingNewWebContents();
+
+  apps::AppServiceProxy* proxy =
+      apps::AppServiceProxyFactory::GetForProfile(browser()->profile());
+  auto intent = apps::mojom::Intent::New();
+  intent->action = apps_util::kIntentActionView;
+  intent->mime_type = "text/plain";
+
+  proxy->LaunchAppWithIntent(
+      GetManager().GetAppIdForSystemApp(GetMockAppType()).value(),
+      ui::EventFlags::EF_NONE, std::move(intent),
+      apps::mojom::LaunchSource::kFromAppListGrid, display::kDefaultDisplayId);
+  navigation_observer.Wait();
+
+  histograms.ExpectTotalCount("Apps.DefaultAppLaunch.FromAppListGrid", 1);
+  histograms.ExpectUniqueSample("Apps.DefaultAppLaunch.FromAppListGrid", 39, 1);
+}
+
 class SystemWebAppManagerFileHandlingBrowserTestBase
     : public SystemWebAppManagerBrowserTestBase,
-      public testing::WithParamInterface<bool> {
+      public ::testing::WithParamInterface<ProviderTypeAndInstallationType> {
  public:
   using IncludeLaunchDirectory =
       TestSystemWebAppInstallation::IncludeLaunchDirectory;
+
   explicit SystemWebAppManagerFileHandlingBrowserTestBase(
       IncludeLaunchDirectory include_launch_directory)
       : SystemWebAppManagerBrowserTestBase(/*install_mock=*/false) {
-    bool enable_desktop_pwas_without_extensions = GetParam();
+    web_app::ProviderType provider_type = std::get<0>(GetParam());
+    if (provider_type == ProviderType::kWebApps) {
+      scoped_feature_web_app_provider_type_.InitAndEnableFeature(
+          features::kDesktopPWAsWithoutExtensions);
+    } else if (provider_type == ProviderType::kBookmarkApps) {
+      scoped_feature_web_app_provider_type_.InitAndDisableFeature(
+          features::kDesktopPWAsWithoutExtensions);
+    }
 
-    scoped_feature_web_app_provider_type_.InitWithFeatureState(
-        features::kDesktopPWAsWithoutExtensions,
-        enable_desktop_pwas_without_extensions);
     scoped_feature_blink_api_.InitWithFeatures(
         {blink::features::kNativeFileSystemAPI,
          blink::features::kFileHandlingAPI},
@@ -239,7 +394,68 @@ class SystemWebAppManagerFileHandlingBrowserTestBase
 
     maybe_installation_ =
         TestSystemWebAppInstallation::SetUpAppThatReceivesLaunchFiles(
-            include_launch_directory);
+            include_launch_directory,
+            std::get<1>(GetParam()) == InstallationType::kWebAppInfoInstall);
+  }
+
+  content::WebContents* LaunchApp(
+      const std::vector<base::FilePath> launch_files,
+      bool wait_for_load = true) {
+    apps::AppLaunchParams params = LaunchParamsForApp(GetMockAppType());
+    params.source = apps::mojom::AppLaunchSource::kSourceChromeInternal;
+    params.launch_files = launch_files;
+
+    return SystemWebAppManagerBrowserTestBase::LaunchApp(params);
+  }
+
+  content::WebContents* LaunchAppWithoutWaiting(
+      const std::vector<base::FilePath> launch_files) {
+    apps::AppLaunchParams params = LaunchParamsForApp(GetMockAppType());
+    params.source = apps::mojom::AppLaunchSource::kSourceChromeInternal;
+    params.launch_files = launch_files;
+
+    return SystemWebAppManagerBrowserTestBase::LaunchAppWithoutWaiting(params);
+  }
+
+  // Must be called before WaitAndExposeLaunchParamsToWindow. This sets up the
+  // promise used to wait for launchParam callback.
+  bool PrepareToReceiveLaunchParams(content::WebContents* web_contents) {
+    return content::ExecuteScript(
+        web_contents,
+        "window.launchParamsPromise = new Promise(resolve => {"
+        "  window.resolveLaunchParamsPromise = resolve;"
+        "});"
+        "launchQueue.setConsumer(launchParams => {"
+        "  window.resolveLaunchParamsPromise(launchParams);"
+        "  window.resolveLaunchParamsPromise = null;"
+        "});");
+  }
+
+  // Must be called after PrepareToReceiveLaunchParams. This method waits for
+  // launchParams being received, the stores it to a |js_property_name| on JS
+  // window object.
+  bool WaitAndExposeLaunchParamsToWindow(
+      content::WebContents* web_contents,
+      const std::string js_property_name = "launchParams") {
+    bool launch_params_received;
+    EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
+        web_contents,
+        content::JsReplace("window.launchParamsPromise.then(launchParams => {"
+                           "  window[$1] = launchParams;"
+                           "  domAutomationController.send(true);"
+                           "});",
+                           js_property_name),
+        &launch_params_received));
+    return launch_params_received;
+  }
+
+  std::string GetJsStatementValueAsString(content::WebContents* web_contents,
+                                          std::string js_statement) {
+    std::string str;
+    EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+        web_contents, "domAutomationController.send( " + js_statement + ");",
+        &str));
+    return str;
   }
 
  private:
@@ -261,8 +477,6 @@ class SystemWebAppManagerLaunchFilesBrowserTest
 IN_PROC_BROWSER_TEST_P(SystemWebAppManagerLaunchFilesBrowserTest,
                        LaunchFilesForSystemWebApp) {
   WaitForTestSystemAppInstall();
-  apps::AppLaunchParams params = LaunchParamsForApp(GetMockAppType());
-  params.source = apps::mojom::AppLaunchSource::kSourceChromeInternal;
 
   base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir temp_directory;
@@ -271,70 +485,31 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerLaunchFilesBrowserTest,
   ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_directory.GetPath(),
                                              &temp_file_path));
 
-  const GURL& launch_url = WebAppProvider::Get(browser()->profile())
-                               ->registrar()
-                               .GetAppLaunchURL(params.app_id);
-
   // First launch.
-  params.launch_files = {temp_file_path};
-  content::TestNavigationObserver navigation_observer(launch_url);
-  navigation_observer.StartWatchingNewWebContents();
-  content::WebContents* web_contents =
-      apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
-          ->BrowserAppLauncher()
-          .LaunchAppWithParams(params);
-  navigation_observer.Wait();
+  content::WebContents* web_contents = LaunchApp({temp_file_path});
 
-  // Set up a Promise that resolves to launchParams, when launchQueue's consumer
-  // callback is called.
-  EXPECT_TRUE(content::ExecuteScript(
-      web_contents,
-      "window.launchParamsPromise = new Promise(resolve => {"
-      "  window.resolveLaunchParamsPromise = resolve;"
-      "});"
-      "launchQueue.setConsumer(launchParams => {"
-      "  window.resolveLaunchParamsPromise(launchParams);"
-      "});"));
+  // Check the App is launched with the correct launch file.
+  EXPECT_TRUE(PrepareToReceiveLaunchParams(web_contents));
+  EXPECT_TRUE(WaitAndExposeLaunchParamsToWindow(web_contents, "launchParams1"));
+  EXPECT_EQ(temp_file_path.BaseName().AsUTF8Unsafe(),
+            GetJsStatementValueAsString(web_contents,
+                                        "window.launchParams1.files[0].name"));
 
-  // Check launch files are correct.
-  std::string file_name;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      web_contents,
-      "window.launchParamsPromise.then("
-      "  launchParams => "
-      "    domAutomationController.send(launchParams.files[0].name));",
-      &file_name));
-  EXPECT_EQ(temp_file_path.BaseName().AsUTF8Unsafe(), file_name);
-
-  // Reset the Promise to get second launchParams.
-  EXPECT_TRUE(content::ExecuteScript(
-      web_contents,
-      "window.launchParamsPromise = new Promise(resolve => {"
-      "  window.resolveLaunchParamsPromise = resolve;"
-      "});"));
-
-  // Second Launch.
+  // Second launch.
   base::FilePath temp_file_path2;
   ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_directory.GetPath(),
                                              &temp_file_path2));
-  params.launch_files = {temp_file_path2};
-  content::WebContents* web_contents2 =
-      apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
-          ->BrowserAppLauncher()
-          .LaunchAppWithParams(params);
 
-  // WebContents* should be the same because we are passing launchParams to the
-  // opened application.
-  EXPECT_EQ(web_contents, web_contents2);
+  // The second launch reuses the opened application. It should pass the
+  // launchParams to the opened page, and return the same content::WebContents*.
+  EXPECT_TRUE(PrepareToReceiveLaunchParams(web_contents));
+  EXPECT_EQ(web_contents, LaunchAppWithoutWaiting({temp_file_path2}));
+  EXPECT_TRUE(WaitAndExposeLaunchParamsToWindow(web_contents, "launchParams2"));
 
-  // Second launch_files are passed to the opened application.
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      web_contents,
-      "window.launchParamsPromise.then("
-      "  launchParams => "
-      "    domAutomationController.send(launchParams.files[0].name))",
-      &file_name));
-  EXPECT_EQ(temp_file_path2.BaseName().AsUTF8Unsafe(), file_name);
+  // Second launch_files are correct.
+  EXPECT_EQ(temp_file_path2.BaseName().AsUTF8Unsafe(),
+            GetJsStatementValueAsString(web_contents,
+                                        "window.launchParams2.files[0].name"));
 }
 
 class SystemWebAppManagerLaunchDirectoryBrowserTest
@@ -411,9 +586,6 @@ class SystemWebAppManagerLaunchDirectoryBrowserTest
   // files inside the launch directory; 3) read and write to the launch
   // directory (i.e. list and delete files).
   void TestPermissionsForLaunchDirectory(const base::FilePath& base_dir) {
-    apps::AppLaunchParams params = LaunchParamsForApp(GetMockAppType());
-    params.source = apps::mojom::AppLaunchSource::kSourceChromeInternal;
-
     base::ScopedAllowBlockingForTesting allow_blocking;
 
     // Create the launch file, which stores 4 characters "test".
@@ -422,17 +594,7 @@ class SystemWebAppManagerLaunchDirectoryBrowserTest
     ASSERT_TRUE(base::WriteFile(launch_file_path, "test"));
 
     // Launch the App.
-    const GURL& launch_url = WebAppProvider::Get(browser()->profile())
-                                 ->registrar()
-                                 .GetAppLaunchURL(params.app_id);
-    params.launch_files = {launch_file_path};
-    content::TestNavigationObserver navigation_observer(launch_url);
-    navigation_observer.StartWatchingNewWebContents();
-    content::WebContents* web_contents =
-        apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
-            ->BrowserAppLauncher()
-            .LaunchAppWithParams(params);
-    navigation_observer.Wait();
+    content::WebContents* web_contents = LaunchApp({launch_file_path});
 
     // Launch directories and files passed to system web apps should
     // automatically be granted write permission. Users should not get
@@ -440,23 +602,9 @@ class SystemWebAppManagerLaunchDirectoryBrowserTest
     NativeFileSystemPermissionRequestManager::FromWebContents(web_contents)
         ->set_auto_response_for_test(permissions::PermissionAction::DENIED);
 
-    // Set up a Promise to resolves to launchParams, when launchQueue's consumer
-    // callback is called.
-    EXPECT_TRUE(content::ExecuteScript(
-        web_contents,
-        "window.launchParamsPromise = new Promise(resolve => {"
-        "  window.resolveLaunchParamsPromise = resolve;"
-        "});"
-        "launchQueue.setConsumer(launchParams => {"
-        "  window.resolveLaunchParamsPromise(launchParams);"
-        "});"));
-
-    // Wait for launch. Set window.launchParams for manipulation.
-    EXPECT_TRUE(content::ExecuteScript(
-        web_contents,
-        "window.launchParamsPromise.then(launchParams => {"
-        "  window.launchParams = launchParams;"
-        "});"));
+    // Wait for launchParams.
+    EXPECT_TRUE(PrepareToReceiveLaunchParams(web_contents));
+    EXPECT_TRUE(WaitAndExposeLaunchParamsToWindow(web_contents));
 
     // Check we can read and write to the launch file.
     std::string launch_file_js_handle = "window.launchParams.files[1]";
@@ -468,14 +616,14 @@ class SystemWebAppManagerLaunchDirectoryBrowserTest
 
     // Check we can read and write to a different file inside the directory.
     // Note, this also checks we can read the launch directory, using
-    // directory_handle.getFile().
+    // directory_handle.getFileHandle().
     base::FilePath non_launch_file_path;
     ASSERT_TRUE(
         base::CreateTemporaryFileInDir(base_dir, &non_launch_file_path));
     ASSERT_TRUE(base::WriteFile(non_launch_file_path, "test2"));
 
     std::string non_launch_file_js_handle =
-        content::JsReplace("window.launchParams.files[0].getFile($1)",
+        content::JsReplace("window.launchParams.files[0].getFileHandle($1)",
                            non_launch_file_path.BaseName().AsUTF8Unsafe());
     EXPECT_EQ("test2", ReadContentFromJsFileHandle(web_contents,
                                                    non_launch_file_js_handle));
@@ -498,7 +646,8 @@ class SystemWebAppManagerLaunchDirectoryBrowserTest
 
     // Check a file can be created.
     std::string new_file_js_handle = content::JsReplace(
-        "window.launchParams.files[0].getFile($1, {create:true})", "new_file");
+        "window.launchParams.files[0].getFileHandle($1, {create:true})",
+        "new_file");
     EXPECT_TRUE(WriteContentToJsFileHandle(web_contents, new_file_js_handle,
                                            "js_new_file"));
     EXPECT_EQ("js_new_file", ReadFileContent(base_dir.AppendASCII("new_file")));
@@ -512,8 +661,6 @@ class SystemWebAppManagerLaunchDirectoryBrowserTest
 IN_PROC_BROWSER_TEST_P(SystemWebAppManagerLaunchDirectoryBrowserTest,
                        LaunchDirectoryForSystemWebApp) {
   WaitForTestSystemAppInstall();
-  apps::AppLaunchParams params = LaunchParamsForApp(GetMockAppType());
-  params.source = apps::mojom::AppLaunchSource::kSourceChromeInternal;
 
   base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir temp_directory;
@@ -522,122 +669,49 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerLaunchDirectoryBrowserTest,
   ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_directory.GetPath(),
                                              &temp_file_path));
 
-  const GURL& launch_url = WebAppProvider::Get(browser()->profile())
-                               ->registrar()
-                               .GetAppLaunchURL(params.app_id);
-
   // First launch.
-  params.launch_files = {temp_file_path};
-  content::TestNavigationObserver navigation_observer(launch_url);
-  navigation_observer.StartWatchingNewWebContents();
-  content::WebContents* web_contents =
-      apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
-          ->BrowserAppLauncher()
-          .LaunchAppWithParams(params);
-  navigation_observer.Wait();
+  content::WebContents* web_contents = LaunchApp({temp_file_path});
+  EXPECT_TRUE(PrepareToReceiveLaunchParams(web_contents));
+  EXPECT_TRUE(WaitAndExposeLaunchParamsToWindow(web_contents, "launchParams1"));
 
-  // Set up a Promise that resolves to launchParams, when launchQueue's consumer
-  // callback is called.
-  EXPECT_TRUE(content::ExecuteScript(
-      web_contents,
-      "window.launchParamsPromise = new Promise(resolve => {"
-      "  window.resolveLaunchParamsPromise = resolve;"
-      "});"
-      "launchQueue.setConsumer(launchParams => {"
-      "  window.resolveLaunchParamsPromise(launchParams);"
-      "});"));
+  // Check launch directory and launch files are correct.
+  EXPECT_EQ("directory",
+            GetJsStatementValueAsString(web_contents,
+                                        "window.launchParams1.files[0].kind"));
+  EXPECT_EQ(temp_directory.GetPath().BaseName().AsUTF8Unsafe(),
+            GetJsStatementValueAsString(web_contents,
+                                        "window.launchParams1.files[0].name"));
+  EXPECT_EQ("file", GetJsStatementValueAsString(
+                        web_contents, "window.launchParams1.files[1].kind"));
+  EXPECT_EQ(temp_file_path.BaseName().AsUTF8Unsafe(),
+            GetJsStatementValueAsString(web_contents,
+                                        "window.launchParams1.files[1].name"));
 
-  // Wait for launch. Set window.firstLaunchParams for inspection.
-  EXPECT_TRUE(
-      content::ExecuteScript(web_contents,
-                             "window.launchParamsPromise.then(launchParams => {"
-                             "  window.firstLaunchParams = launchParams;"
-                             "});"));
-
-  // Check launch directory is correct.
-  bool is_directory;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-      web_contents,
-      "domAutomationController.send(window.firstLaunchParams."
-      "files[0].isDirectory)",
-      &is_directory));
-  EXPECT_TRUE(is_directory);
-
-  std::string file_name;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      web_contents,
-      "domAutomationController.send(window.firstLaunchParams.files[0].name)",
-      &file_name));
-  EXPECT_EQ(temp_directory.GetPath().BaseName().AsUTF8Unsafe(), file_name);
-
-  // Check launch files are correct.
-  bool is_file;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-      web_contents,
-      "domAutomationController.send(window.firstLaunchParams.files[1].isFile)",
-      &is_file));
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      web_contents,
-      "domAutomationController.send(window.firstLaunchParams.files[1].name)",
-      &file_name));
-  EXPECT_EQ(temp_file_path.BaseName().AsUTF8Unsafe(), file_name);
-
-  // Reset the Promise to get second launchParams.
-  EXPECT_TRUE(content::ExecuteScript(
-      web_contents,
-      "window.launchParamsPromise = new Promise(resolve => {"
-      "  window.resolveLaunchParamsPromise = resolve;"
-      "});"));
-
-  // Second Launch.
+  // Second launch.
   base::ScopedTempDir temp_directory2;
   ASSERT_TRUE(temp_directory2.CreateUniqueTempDir());
   base::FilePath temp_file_path2;
   ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_directory2.GetPath(),
                                              &temp_file_path2));
-  params.launch_files = {temp_file_path2};
-  content::WebContents* web_contents2 =
-      apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
-          ->BrowserAppLauncher()
-          .LaunchAppWithParams(params);
 
-  // WebContents* should be the same because we are passing launchParams to the
-  // opened application.
-  EXPECT_EQ(web_contents, web_contents2);
+  // The second launch reuses the opened application. It should pass the
+  // launchParams to the opened page, and return the same content::WebContents*.
+  EXPECT_TRUE(PrepareToReceiveLaunchParams(web_contents));
+  EXPECT_EQ(web_contents, LaunchAppWithoutWaiting({temp_file_path2}));
+  EXPECT_TRUE(WaitAndExposeLaunchParamsToWindow(web_contents, "launchParams2"));
 
-  // Wait for launch. Sets window.secondLaunchParams for inspection.
-  EXPECT_TRUE(
-      content::ExecuteScript(web_contents,
-                             "window.launchParamsPromise.then(launchParams => {"
-                             "  window.secondLaunchParams = launchParams;"
-                             "});"));
-
-  // Second launch_dir and launch_files are passed to the opened application.
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-      web_contents,
-      "domAutomationController.send(window.secondLaunchParams.files[0]."
-      "isDirectory)",
-      &is_directory));
-  EXPECT_TRUE(is_directory);
-
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      web_contents,
-      "domAutomationController.send(window.secondLaunchParams.files[0].name)",
-      &file_name));
-  EXPECT_EQ(temp_directory2.GetPath().BaseName().AsUTF8Unsafe(), file_name);
-
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-      web_contents,
-      "domAutomationController.send(window.secondLaunchParams.files[1]."
-      "isFile)",
-      &is_file));
-  EXPECT_TRUE(is_file);
-
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      web_contents,
-      "domAutomationController.send(window.secondLaunchParams.files[1].name)",
-      &file_name));
-  EXPECT_EQ(temp_file_path2.BaseName().AsUTF8Unsafe(), file_name);
+  // Check the second launch directory and launch files are correct.
+  EXPECT_EQ("directory",
+            GetJsStatementValueAsString(web_contents,
+                                        "window.launchParams2.files[0].kind"));
+  EXPECT_EQ(temp_directory2.GetPath().BaseName().AsUTF8Unsafe(),
+            GetJsStatementValueAsString(web_contents,
+                                        "window.launchParams2.files[0].name"));
+  EXPECT_EQ("file", GetJsStatementValueAsString(
+                        web_contents, "window.launchParams2.files[1].kind"));
+  EXPECT_EQ(temp_file_path2.BaseName().AsUTF8Unsafe(),
+            GetJsStatementValueAsString(web_contents,
+                                        "window.launchParams2.files[1].name"));
 }
 
 IN_PROC_BROWSER_TEST_P(SystemWebAppManagerLaunchDirectoryBrowserTest,
@@ -741,36 +815,6 @@ class SystemWebAppManagerLaunchDirectoryFileSystemProviderBrowserTest
     return volume_->mount_path().AppendASCII(file_name);
   }
 
-  // Wait for System App Launch.
-  content::WebContents* WaitForApplicationLaunch(
-      Profile* profile,
-      const base::FilePath& launch_file) {
-    apps::AppLaunchParams params = LaunchParamsForApp(GetMockAppType());
-    params.source = apps::mojom::AppLaunchSource::kSourceChromeInternal;
-    params.launch_files = {launch_file};
-
-    content::WebContents* web_contents = LaunchApp(params);
-    EXPECT_TRUE(WaitForLoadStop(web_contents));
-    return web_contents;
-  }
-
-  // Install a File Handling API launchQueue consumer, which copies the provided
-  // launch params to a JavaScript global named |js_property_name|.
-  bool WaitAndExposeLaunchParamsToWindow(
-      content::WebContents* web_contents,
-      const std::string js_property_name = "launchParams") {
-    bool launch_params_received;
-    EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-        web_contents,
-        content::JsReplace("launchQueue.setConsumer(launchParams => {"
-                           "  window[$1] = launchParams;"
-                           "  domAutomationController.send(true);"
-                           "});",
-                           js_property_name),
-        &launch_params_received));
-    return launch_params_received;
-  }
-
  private:
   base::WeakPtr<file_manager::Volume> volume_;
 };
@@ -789,20 +833,14 @@ IN_PROC_BROWSER_TEST_P(
   const base::FilePath launch_file =
       GetFileSystemProviderFilePath(kTestGifFile);
 
-  content::WebContents* web_contents =
-      WaitForApplicationLaunch(profile, launch_file);
-
+  content::WebContents* web_contents = LaunchApp({launch_file});
+  EXPECT_TRUE(PrepareToReceiveLaunchParams(web_contents));
   EXPECT_TRUE(WaitAndExposeLaunchParamsToWindow(web_contents, "launchParams"));
 
-  // Check the launch file is the one we expect.
-  std::string file_name;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      web_contents,
-      "domAutomationController.send(window.launchParams.files[1].name);",
-      &file_name));
-  EXPECT_EQ(kTestGifFile, file_name);
-
-  // Check we can read the file by looking for GIF file signature.
+  // Check the launch file is the one we expect, and we can read the file.
+  EXPECT_EQ(kTestGifFile,
+            GetJsStatementValueAsString(web_contents,
+                                        "window.launchParams.files[1].name"));
   EXPECT_TRUE(
       CheckFileIsGif(web_contents, "window.launchParams.files[1].getFile()"));
 
@@ -812,9 +850,9 @@ IN_PROC_BROWSER_TEST_P(
       web_contents,
       "(async function() {"
       "  let fileNames = [];"
-      "  const files = await window.launchParams.files[0].getEntries();"
-      "  for await (const f of files)"
-      "    fileNames.push(f.name);"
+      "  const files = await window.launchParams.files[0].keys();"
+      "  for await (const name of files)"
+      "    fileNames.push(name);"
       "  domAutomationController.send(fileNames.sort().join(';'));"
       "})();",
       &file_names));
@@ -823,7 +861,7 @@ IN_PROC_BROWSER_TEST_P(
   // Verify we can read a file (other than launch file) inside the directory.
   EXPECT_TRUE(CheckFileIsPng(
       web_contents,
-      content::JsReplace("window.launchParams.files[0].getFile($1).then("
+      content::JsReplace("window.launchParams.files[0].getFileHandle($1).then("
                          "  fileHandle => fileHandle.getFile())",
                          kTestPngFile)));
 }
@@ -837,9 +875,11 @@ IN_PROC_BROWSER_TEST_P(
 
   WaitForTestSystemAppInstall();
   InstallTestFileSystemProvider(profile);
-  content::WebContents* web_contents = WaitForApplicationLaunch(
-      profile, GetFileSystemProviderFilePath("readonly.png"));
 
+  content::WebContents* web_contents =
+      LaunchApp({GetFileSystemProviderFilePath("readonly.png")});
+
+  EXPECT_TRUE(PrepareToReceiveLaunchParams(web_contents));
   EXPECT_TRUE(WaitAndExposeLaunchParamsToWindow(web_contents, "launchParams"));
 
   // Try to write the file.
@@ -859,9 +899,11 @@ IN_PROC_BROWSER_TEST_P(
 
   WaitForTestSystemAppInstall();
   InstallTestFileSystemProvider(profile);
-  content::WebContents* web_contents = WaitForApplicationLaunch(
-      profile, GetFileSystemProviderFilePath("readonly.png"));
 
+  content::WebContents* web_contents =
+      LaunchApp({GetFileSystemProviderFilePath("readonly.png")});
+
+  EXPECT_TRUE(PrepareToReceiveLaunchParams(web_contents));
   EXPECT_TRUE(WaitAndExposeLaunchParamsToWindow(web_contents, "launchParams"));
 
   // Try to delete the file.
@@ -891,50 +933,60 @@ class SystemWebAppManagerFileHandlingOriginTrialsBrowserTest
     maybe_installation_ =
         TestSystemWebAppInstallation::SetUpAppWithEnabledOriginTrials(
             OriginTrialsMap({{GetOrigin(GURL("chrome://test-system-app/")),
-                              {"NativeFileSystem2", "FileHandling"}}}));
+                              {"NativeFileSystem2", "FileHandling"}}}),
+            install_from_web_app_info());
   }
 
   ~SystemWebAppManagerFileHandlingOriginTrialsBrowserTest() override = default;
+
+  content::WebContents* LaunchWithTestFiles() {
+    // Create temporary directory and files.
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    base::ScopedTempDir temp_directory;
+    CHECK(temp_directory.CreateUniqueTempDir());
+    base::FilePath temp_file_path;
+    CHECK(base::CreateTemporaryFileInDir(temp_directory.GetPath(),
+                                         &temp_file_path));
+
+    // Launch the App.
+    apps::AppLaunchParams params = LaunchParamsForApp(GetMockAppType());
+    params.source = apps::mojom::AppLaunchSource::kSourceChromeInternal;
+    params.launch_files = {temp_file_path};
+
+    return SystemWebAppManagerBrowserTestBase::LaunchApp(params);
+  }
+
+  bool WaitForLaunchParam(content::WebContents* web_contents) {
+    bool promise_resolved = false;
+    EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
+        web_contents,
+        "launchQueue.setConsumer(launchParams => {"
+        "  domAutomationController.send(true);"
+        "});",
+        &promise_resolved));
+    return promise_resolved;
+  }
 
  private:
   url::Origin GetOrigin(const GURL& url) { return url::Origin::Create(url); }
 };
 
+// Test that file handling works when the App is first installed.
+IN_PROC_BROWSER_TEST_P(SystemWebAppManagerFileHandlingOriginTrialsBrowserTest,
+                       PRE_FileHandlingWorks) {
+  WaitForTestSystemAppInstall();
+
+  content::WebContents* web_contents = LaunchWithTestFiles();
+  EXPECT_TRUE(WaitForLaunchParam(web_contents));
+}
+
+// Test that file handling works when after a version upgrade.
 IN_PROC_BROWSER_TEST_P(SystemWebAppManagerFileHandlingOriginTrialsBrowserTest,
                        FileHandlingWorks) {
   WaitForTestSystemAppInstall();
-  apps::AppLaunchParams params = LaunchParamsForApp(GetMockAppType());
-  params.source = apps::mojom::AppLaunchSource::kSourceChromeInternal;
 
-  base::ScopedAllowBlockingForTesting allow_blocking;
-  base::ScopedTempDir temp_directory;
-  ASSERT_TRUE(temp_directory.CreateUniqueTempDir());
-  base::FilePath temp_file_path;
-  ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_directory.GetPath(),
-                                             &temp_file_path));
-
-  const GURL& launch_url = WebAppProvider::Get(browser()->profile())
-                               ->registrar()
-                               .GetAppLaunchURL(params.app_id);
-
-  params.launch_files = {temp_file_path};
-  content::TestNavigationObserver navigation_observer(launch_url);
-  navigation_observer.StartWatchingNewWebContents();
-  content::WebContents* web_contents =
-      apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
-          ->BrowserAppLauncher()
-          .LaunchAppWithParams(params);
-  navigation_observer.Wait();
-
-  // Wait for the Promise to resolve.
-  bool promise_resolved = false;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-      web_contents,
-      "launchQueue.setConsumer(launchParams => {"
-      "  domAutomationController.send(true);"
-      "});",
-      &promise_resolved));
-  EXPECT_TRUE(promise_resolved);
+  content::WebContents* web_contents = LaunchWithTestFiles();
+  EXPECT_TRUE(WaitForLaunchParam(web_contents));
 }
 
 class SystemWebAppManagerNotShownInLauncherTest
@@ -943,13 +995,15 @@ class SystemWebAppManagerNotShownInLauncherTest
   SystemWebAppManagerNotShownInLauncherTest()
       : SystemWebAppManagerBrowserTest(/*install_mock=*/false) {
     maybe_installation_ =
-        TestSystemWebAppInstallation::SetUpAppNotShownInLauncher();
+        TestSystemWebAppInstallation::SetUpAppNotShownInLauncher(
+            install_from_web_app_info());
   }
 };
 
 IN_PROC_BROWSER_TEST_P(SystemWebAppManagerNotShownInLauncherTest,
                        NotShownInLauncher) {
-  WaitForSystemAppInstallAndLaunch(GetMockAppType());
+  WaitForTestSystemAppInstall();
+
   AppId app_id = GetManager().GetAppIdForSystemApp(GetMockAppType()).value();
 
   // OS Integration only relevant for Chrome OS.
@@ -978,13 +1032,14 @@ class SystemWebAppManagerNotShownInSearchTest
   SystemWebAppManagerNotShownInSearchTest()
       : SystemWebAppManagerBrowserTest(/*install_mock=*/false) {
     maybe_installation_ =
-        TestSystemWebAppInstallation::SetUpAppNotShownInSearch();
+        TestSystemWebAppInstallation::SetUpAppNotShownInSearch(
+            install_from_web_app_info());
   }
 };
 
 IN_PROC_BROWSER_TEST_P(SystemWebAppManagerNotShownInSearchTest,
                        NotShownInSearch) {
-  WaitForSystemAppInstallAndLaunch(GetMockAppType());
+  WaitForTestSystemAppInstall();
   AppId app_id = GetManager().GetAppIdForSystemApp(GetMockAppType()).value();
 
   // OS Integration only relevant for Chrome OS.
@@ -1004,13 +1059,14 @@ class SystemWebAppManagerAdditionalSearchTermsTest
   SystemWebAppManagerAdditionalSearchTermsTest()
       : SystemWebAppManagerBrowserTest(/*install_mock=*/false) {
     maybe_installation_ =
-        TestSystemWebAppInstallation::SetUpAppWithAdditionalSearchTerms();
+        TestSystemWebAppInstallation::SetUpAppWithAdditionalSearchTerms(
+            install_from_web_app_info());
   }
 };
 
 IN_PROC_BROWSER_TEST_P(SystemWebAppManagerAdditionalSearchTermsTest,
                        AdditionalSearchTerms) {
-  WaitForSystemAppInstallAndLaunch(GetMockAppType());
+  WaitForTestSystemAppInstall();
   AppId app_id = GetManager().GetAppIdForSystemApp(GetMockAppType()).value();
 
   apps::AppServiceProxy* proxy =
@@ -1035,7 +1091,8 @@ class SystemWebAppManagerUninstallBrowserTest
           TestSystemWebAppInstallation::SetUpAppWithEnabledOriginTrials(
               OriginTrialsMap(
                   {{url::Origin::Create(GURL("chrome://test-system-app/")),
-                    {"NativeFileSystem2", "FileHandling"}}}));
+                    {"NativeFileSystem2", "FileHandling"}}}),
+              install_from_web_app_info());
     } else {
       maybe_installation_ = TestSystemWebAppInstallation::SetUpWithoutApps();
     }
@@ -1053,6 +1110,46 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerUninstallBrowserTest, Uninstall) {
   EXPECT_TRUE(GetManager().GetAppIds().empty());
 }
 
+// We only have concrete System Web Apps on Chrome OS.
+#if defined(OS_CHROMEOS)
+
+// Test that all registered System Apps can be re-installed.
+class SystemWebAppManagerUpgradeBrowserTest
+    : public SystemWebAppManagerBrowserTest {
+ public:
+  SystemWebAppManagerUpgradeBrowserTest()
+      : SystemWebAppManagerBrowserTest(/*install_mock=*/false) {
+    SystemWebAppManager::EnableAllSystemAppsForTesting();
+  }
+  ~SystemWebAppManagerUpgradeBrowserTest() override = default;
+};
+
+IN_PROC_BROWSER_TEST_P(SystemWebAppManagerUpgradeBrowserTest, PRE_Upgrade) {
+  WaitForTestSystemAppInstall();
+  EXPECT_GE(GetManager().GetAppIds().size(), 1U);
+}
+
+IN_PROC_BROWSER_TEST_P(SystemWebAppManagerUpgradeBrowserTest, Upgrade) {
+  WaitForTestSystemAppInstall();
+  const auto& app_ids = GetManager().GetAppIds();
+
+  EXPECT_GE(app_ids.size(), 1U);
+
+  for (const auto& app_id : app_ids) {
+    const auto type = GetManager().GetSystemAppTypeForAppId(app_id).value();
+
+    // We don't launch Terminal in browsertest, because it requires resources
+    // that are only available in Chrome OS images.
+    if (type == SystemAppType::TERMINAL)
+      continue;
+
+    // Launch other System Apps normally, and check the app's launch_url loads.
+    EXPECT_TRUE(LaunchApp(type));
+  }
+}
+
+#endif  // defined(OS_CHROMEOS)
+
 // Tests that SWA-specific data is correctly migrated to Web Apps without
 // Extensions.
 class SystemWebAppManagerMigrationTest
@@ -1061,7 +1158,7 @@ class SystemWebAppManagerMigrationTest
   SystemWebAppManagerMigrationTest()
       : SystemWebAppManagerBrowserTestBase(/*install_mock=*/false) {
     maybe_installation_ =
-        TestSystemWebAppInstallation::SetUpAppWithAdditionalSearchTerms();
+        TestSystemWebAppInstallation::SetUpAppWithAdditionalSearchTerms(false);
     maybe_installation_->set_update_policy(
         SystemWebAppManager::UpdatePolicy::kOnVersionChange);
 
@@ -1128,13 +1225,19 @@ class SystemWebAppManagerChromeUntrustedTest
  public:
   SystemWebAppManagerChromeUntrustedTest()
       : SystemWebAppManagerBrowserTest(/*install_mock=*/false) {
-    maybe_installation_ =
-        TestSystemWebAppInstallation::SetUpChromeUntrustedApp();
+    maybe_installation_ = TestSystemWebAppInstallation::SetUpChromeUntrustedApp(
+        install_from_web_app_info());
   }
 };
 
 IN_PROC_BROWSER_TEST_P(SystemWebAppManagerChromeUntrustedTest, Install) {
-  Browser* app_browser = WaitForSystemAppInstallAndLaunch(GetMockAppType());
+  WaitForTestSystemAppInstall();
+
+  // Don't wait for page load because we want to verify AppController identifies
+  // the System Web App before the app loads.
+  Browser* app_browser;
+  LaunchAppWithoutWaiting(GetMockAppType(), &app_browser);
+
   AppId app_id = GetManager().GetAppIdForSystemApp(GetMockAppType()).value();
   EXPECT_EQ(app_id, app_browser->app_controller()->GetAppId());
   EXPECT_TRUE(GetManager().IsSystemWebApp(app_id));
@@ -1160,7 +1263,8 @@ class SystemWebAppManagerOriginTrialsBrowserTest
     maybe_installation_ =
         TestSystemWebAppInstallation::SetUpAppWithEnabledOriginTrials(
             OriginTrialsMap({{GetOrigin(main_url_), main_url_trials_},
-                             {GetOrigin(trial_url_), trial_url_trials_}}));
+                             {GetOrigin(trial_url_), trial_url_trials_}}),
+            install_from_web_app_info());
   }
 
   ~SystemWebAppManagerOriginTrialsBrowserTest() override = default;
@@ -1420,77 +1524,127 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerAppSuspensionBrowserTest,
                GetAppIconKey(*settings_id)->icon_effects);
 }
 // This feature will only work when DesktopPWAsWithoutExtensions launches.
-INSTANTIATE_TEST_SUITE_P(All,
-                         SystemWebAppManagerAppSuspensionBrowserTest,
-                         ::testing::Values(ProviderType::kBookmarkApps,
-                                           ProviderType::kWebApps),
-                         ProviderTypeParamToString);
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SystemWebAppManagerAppSuspensionBrowserTest,
+    ::testing::Combine(::testing::Values(ProviderType::kBookmarkApps,
+                                         ProviderType::kWebApps),
+                       ::testing::Values(InstallationType::kManifestInstall,
+                                         InstallationType::kWebAppInfoInstall)),
+    ProviderAndInstallationTypeToString);
 
 #endif  // defined(OS_CHROMEOS)
 
-// We test with and without enabling kDesktopPWAsWithoutExtensions.
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SystemWebAppManagerWebAppInfoBrowserTest,
+    ::testing::Combine(::testing::Values(ProviderType::kBookmarkApps,
+                                         ProviderType::kWebApps),
+                       ::testing::Values(InstallationType::kManifestInstall,
+                                         InstallationType::kWebAppInfoInstall)),
+    ProviderAndInstallationTypeToString);
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         SystemWebAppManagerBrowserTest,
-                         ::testing::Values(ProviderType::kBookmarkApps,
-                                           ProviderType::kWebApps),
-                         ProviderTypeParamToString);
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SystemWebAppManagerLaunchFilesBrowserTest,
+    ::testing::Combine(::testing::Values(ProviderType::kBookmarkApps,
+                                         ProviderType::kWebApps),
+                       ::testing::Values(InstallationType::kManifestInstall,
+                                         InstallationType::kWebAppInfoInstall)),
+    ProviderAndInstallationTypeToString);
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         SystemWebAppManagerLaunchFilesBrowserTest,
-                         testing::Bool());
-
-INSTANTIATE_TEST_SUITE_P(All,
-                         SystemWebAppManagerLaunchDirectoryBrowserTest,
-                         testing::Bool());
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SystemWebAppManagerLaunchDirectoryBrowserTest,
+    ::testing::Combine(::testing::Values(ProviderType::kBookmarkApps,
+                                         ProviderType::kWebApps),
+                       ::testing::Values(InstallationType::kManifestInstall,
+                                         InstallationType::kWebAppInfoInstall)),
+    ProviderAndInstallationTypeToString);
 
 #if defined(OS_CHROMEOS)
 INSTANTIATE_TEST_SUITE_P(
     All,
     SystemWebAppManagerLaunchDirectoryFileSystemProviderBrowserTest,
-    testing::Bool());
+    ::testing::Combine(::testing::Values(ProviderType::kBookmarkApps,
+                                         ProviderType::kWebApps),
+                       ::testing::Values(InstallationType::kManifestInstall,
+                                         InstallationType::kWebAppInfoInstall)),
+    ProviderAndInstallationTypeToString);
 #endif
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         SystemWebAppManagerNotShownInLauncherTest,
-                         ::testing::Values(ProviderType::kBookmarkApps,
-                                           ProviderType::kWebApps),
-                         ProviderTypeParamToString);
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SystemWebAppManagerNotShownInLauncherTest,
+    ::testing::Combine(::testing::Values(ProviderType::kBookmarkApps,
+                                         ProviderType::kWebApps),
+                       ::testing::Values(InstallationType::kManifestInstall,
+                                         InstallationType::kWebAppInfoInstall)),
+    ProviderAndInstallationTypeToString);
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         SystemWebAppManagerNotShownInSearchTest,
-                         ::testing::Values(ProviderType::kBookmarkApps,
-                                           ProviderType::kWebApps),
-                         ProviderTypeParamToString);
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SystemWebAppManagerNotShownInSearchTest,
+    ::testing::Combine(::testing::Values(ProviderType::kBookmarkApps,
+                                         ProviderType::kWebApps),
+                       ::testing::Values(InstallationType::kManifestInstall,
+                                         InstallationType::kWebAppInfoInstall)),
+    ProviderAndInstallationTypeToString);
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         SystemWebAppManagerAdditionalSearchTermsTest,
-                         ::testing::Values(ProviderType::kBookmarkApps,
-                                           ProviderType::kWebApps),
-                         ProviderTypeParamToString);
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SystemWebAppManagerAdditionalSearchTermsTest,
+    ::testing::Combine(::testing::Values(ProviderType::kBookmarkApps,
+                                         ProviderType::kWebApps),
+                       ::testing::Values(InstallationType::kManifestInstall,
+                                         InstallationType::kWebAppInfoInstall)),
+    ProviderAndInstallationTypeToString);
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         SystemWebAppManagerChromeUntrustedTest,
-                         ::testing::Values(ProviderType::kBookmarkApps,
-                                           ProviderType::kWebApps),
-                         ProviderTypeParamToString);
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SystemWebAppManagerChromeUntrustedTest,
+    ::testing::Combine(::testing::Values(ProviderType::kBookmarkApps,
+                                         ProviderType::kWebApps),
+                       ::testing::Values(InstallationType::kManifestInstall,
+                                         InstallationType::kWebAppInfoInstall)),
+    ProviderAndInstallationTypeToString);
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         SystemWebAppManagerOriginTrialsBrowserTest,
-                         ::testing::Values(ProviderType::kBookmarkApps,
-                                           ProviderType::kWebApps),
-                         ProviderTypeParamToString);
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SystemWebAppManagerOriginTrialsBrowserTest,
+    ::testing::Combine(::testing::Values(ProviderType::kBookmarkApps,
+                                         ProviderType::kWebApps),
+                       ::testing::Values(InstallationType::kManifestInstall,
+                                         InstallationType::kWebAppInfoInstall)),
+    ProviderAndInstallationTypeToString);
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         SystemWebAppManagerFileHandlingOriginTrialsBrowserTest,
-                         ::testing::Values(ProviderType::kBookmarkApps,
-                                           ProviderType::kWebApps),
-                         ProviderTypeParamToString);
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SystemWebAppManagerFileHandlingOriginTrialsBrowserTest,
+    ::testing::Combine(::testing::Values(ProviderType::kBookmarkApps,
+                                         ProviderType::kWebApps),
+                       ::testing::Values(InstallationType::kManifestInstall,
+                                         InstallationType::kWebAppInfoInstall)),
+    ProviderAndInstallationTypeToString);
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         SystemWebAppManagerUninstallBrowserTest,
-                         ::testing::Values(ProviderType::kBookmarkApps,
-                                           ProviderType::kWebApps),
-                         ProviderTypeParamToString);
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SystemWebAppManagerUninstallBrowserTest,
+    ::testing::Combine(::testing::Values(ProviderType::kBookmarkApps,
+                                         ProviderType::kWebApps),
+                       ::testing::Values(InstallationType::kManifestInstall,
+                                         InstallationType::kWebAppInfoInstall)),
+    ProviderAndInstallationTypeToString);
+
+#if defined(OS_CHROMEOS)
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SystemWebAppManagerUpgradeBrowserTest,
+    ::testing::Combine(::testing::Values(ProviderType::kBookmarkApps,
+                                         ProviderType::kWebApps),
+                       ::testing::Values(InstallationType::kManifestInstall,
+                                         InstallationType::kWebAppInfoInstall)),
+    ProviderAndInstallationTypeToString);
+#endif
 
 }  // namespace web_app

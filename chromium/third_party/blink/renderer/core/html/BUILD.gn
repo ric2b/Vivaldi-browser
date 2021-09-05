@@ -496,8 +496,12 @@ blink_core_sources("html") {
     "media/media_fragment_uri_parser.h",
     "media/media_remoting_interstitial.cc",
     "media/media_remoting_interstitial.h",
-    "media/media_source.cc",
     "media/media_source.h",
+    "media/media_source_attachment.cc",
+    "media/media_source_attachment.h",
+    "media/media_source_registry.h",
+    "media/media_source_tracer.cc",
+    "media/media_source_tracer.h",
     "media/picture_in_picture_interstitial.cc",
     "media/picture_in_picture_interstitial.h",
     "media/remote_playback_controller.cc",
@@ -517,6 +521,8 @@ blink_core_sources("html") {
     "portal/html_portal_element.h",
     "portal/portal_activate_event.cc",
     "portal/portal_activate_event.h",
+    "portal/portal_activation_delegate.cc",
+    "portal/portal_activation_delegate.h",
     "portal/portal_contents.cc",
     "portal/portal_contents.h",
     "portal/portal_host.cc",
@@ -591,9 +597,6 @@ blink_core_sources("html") {
     "window_name_collection.h",
   ]
 
-  jumbo_excluded_sources =
-      [ "canvas/canvas_rendering_context.cc" ]  # https://crbug.com/716395
-
   deps = [
     "//services/metrics/public/cpp:metrics_cpp",
     "//skia:skcms",
@@ -667,6 +670,7 @@ blink_core_tests("unit_tests") {
     "html_script_element_test.cc",
     "html_slot_element_test.cc",
     "html_table_row_element_test.cc",
+    "html_view_source_document_test.cc",
     "image_document_test.cc",
     "imports/html_import_sheets_test.cc",
     "lazy_load_frame_observer_test.cc",

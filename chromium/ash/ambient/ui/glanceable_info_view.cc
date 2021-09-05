@@ -10,6 +10,7 @@
 #include "ash/ambient/model/ambient_backend_model.h"
 #include "ash/ambient/ui/ambient_view_delegate.h"
 #include "ash/ambient/util/ambient_util.h"
+#include "ash/assistant/ui/assistant_view_ids.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/model/clock_model.h"
@@ -34,9 +35,9 @@ namespace ash {
 namespace {
 
 // Appearance.
+constexpr int kSpacingBetweenTimeAndWeatherDip = 24;
+constexpr int kSpacingBetweenWeatherIconAndTempDip = 8;
 constexpr int kWeatherIconSizeDip = 32;
-constexpr int kWeatherIconLeftPaddingDip = 24;
-constexpr int kWeatherIconRightPaddingDip = 8;
 
 // Typography.
 constexpr SkColor kTextColor = SK_ColorWHITE;
@@ -56,18 +57,15 @@ gfx::FontList GetWeatherTemperatureFontList() {
       temperature_font_size_delta);
 }
 
-// The condition icon should be baseline-aligned to the time text.
-int CalculateIconBottomPadding() {
-  return GetTimeFontList().GetHeight() - GetTimeFontList().GetBaseline();
-}
-
-// The temperature text should be baseline-aligned to the time text.
-int CalculateTemperatureTextBottomPadding() {
+// Returns the border insets for |weather_info_| to be aligned to the time text
+// baseline.
+gfx::Insets GetWeatherInfoInsets() {
   int time_font_descent =
       GetTimeFontList().GetHeight() - GetTimeFontList().GetBaseline();
   int temperature_font_descent = GetWeatherTemperatureFontList().GetHeight() -
                                  GetWeatherTemperatureFontList().GetBaseline();
-  return time_font_descent - temperature_font_descent;
+  return gfx::Insets(
+      0, 0, /*bottom=*/time_font_descent - temperature_font_descent, 0);
 }
 
 }  // namespace
@@ -75,9 +73,16 @@ int CalculateTemperatureTextBottomPadding() {
 GlanceableInfoView::GlanceableInfoView(AmbientViewDelegate* delegate)
     : delegate_(delegate) {
   DCHECK(delegate);
-  delegate_->GetAmbientBackendModel()->AddObserver(this);
+  SetID(AssistantViewID::kAmbientGlanceableInfoView);
+  auto* backend_model = delegate_->GetAmbientBackendModel();
+  backend_model->AddObserver(this);
 
   InitLayout();
+
+  if (!backend_model->weather_condition_icon().isNull()) {
+    // already has weather info, show immediately.
+    Show();
+  }
 }
 
 GlanceableInfoView::~GlanceableInfoView() {
@@ -93,14 +98,25 @@ void GlanceableInfoView::OnWeatherInfoUpdated() {
 }
 
 void GlanceableInfoView::Show() {
+  AmbientBackendModel* ambient_backend_model =
+      delegate_->GetAmbientBackendModel();
   weather_condition_icon_->SetImage(
-      delegate_->GetAmbientBackendModel()->weather_condition_icon());
+      ambient_backend_model->weather_condition_icon());
 
-  float temperature = delegate_->GetAmbientBackendModel()->temperature();
-  // TODO(b/154046129): handle Celsius format.
-  temperature_->SetText(l10n_util::GetStringFUTF16(
+  temperature_->SetText(GetTemperatureText());
+}
+
+base::string16 GlanceableInfoView::GetTemperatureText() const {
+  AmbientBackendModel* ambient_backend_model =
+      delegate_->GetAmbientBackendModel();
+  if (ambient_backend_model->show_celsius()) {
+    return l10n_util::GetStringFUTF16Int(
+        IDS_ASH_AMBIENT_MODE_WEATHER_TEMPERATURE_IN_CELSIUS,
+        static_cast<int>(ambient_backend_model->GetTemperatureInCelsius()));
+  }
+  return l10n_util::GetStringFUTF16Int(
       IDS_ASH_AMBIENT_MODE_WEATHER_TEMPERATURE_IN_FAHRENHEIT,
-      base::FormatNumber(static_cast<int>(temperature))));
+      static_cast<int>(ambient_backend_model->temperature_fahrenheit()));
 }
 
 void GlanceableInfoView::InitLayout() {
@@ -112,9 +128,11 @@ void GlanceableInfoView::InitLayout() {
   views::BoxLayout* layout =
       SetLayoutManager(std::make_unique<views::BoxLayout>(
           views::BoxLayout::Orientation::kHorizontal));
+  layout->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kCenter);
   layout->set_cross_axis_alignment(views::BoxLayout::CrossAxisAlignment::kEnd);
+  layout->set_between_child_spacing(kSpacingBetweenTimeAndWeatherDip);
 
-  // Init and layout time view.
+  // Inits the time view.
   time_view_ = AddChildView(std::make_unique<tray::TimeView>(
       ash::tray::TimeView::ClockLayout::HORIZONTAL_CLOCK,
       Shell::Get()->system_tray_model()->clock()));
@@ -122,22 +140,32 @@ void GlanceableInfoView::InitLayout() {
   time_view_->SetTextColor(kTextColor,
                            /*auto_color_readability_enabled=*/false);
 
-  // Init and layout condition icon. It is baseline-aligned to the time view.
-  weather_condition_icon_ = AddChildView(std::make_unique<views::ImageView>());
+  // Inits and layouts the weather info.
+  weather_info_ = AddChildView(std::make_unique<views::View>());
+  views::BoxLayout* weather_info_layout =
+      weather_info_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kHorizontal));
+  // Aligns its child views to the center point.
+  weather_info_layout->set_cross_axis_alignment(
+      views::BoxLayout::CrossAxisAlignment::kCenter);
+  weather_info_layout->set_between_child_spacing(
+      kSpacingBetweenWeatherIconAndTempDip);
+
+  // This view should be baseline-aligned to the time view.
+  weather_info_layout->set_inside_border_insets(GetWeatherInfoInsets());
+
+  // Inits the icon view.
+  weather_condition_icon_ =
+      weather_info_->AddChildView(std::make_unique<views::ImageView>());
   const gfx::Size size = gfx::Size(kWeatherIconSizeDip, kWeatherIconSizeDip);
   weather_condition_icon_->SetSize(size);
   weather_condition_icon_->SetImageSize(size);
-  weather_condition_icon_->SetBorder(views::CreateEmptyBorder(
-      0, kWeatherIconLeftPaddingDip, CalculateIconBottomPadding(),
-      kWeatherIconRightPaddingDip));
 
-  // Init and layout temperature view. It is baseline-aligned to the time view.
-  temperature_ = AddChildView(std::make_unique<views::Label>());
+  // Inits the temp view.
+  temperature_ = weather_info_->AddChildView(std::make_unique<views::Label>());
   temperature_->SetAutoColorReadabilityEnabled(false);
   temperature_->SetEnabledColor(kTextColor);
   temperature_->SetFontList(GetWeatherTemperatureFontList());
-  temperature_->SetBorder(views::CreateEmptyBorder(
-      0, 0, CalculateTemperatureTextBottomPadding(), 0));
 }
 
 }  // namespace ash

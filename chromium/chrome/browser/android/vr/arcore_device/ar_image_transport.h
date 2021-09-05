@@ -57,12 +57,21 @@ class ArImageTransport {
 
   virtual GLuint GetCameraTextureId();
 
-  // This transfers whatever the contents of the texture specified
-  // by GetCameraTextureId() is at the time it is called and returns
-  // a gpu::MailboxHolder with that texture copied to a shared buffer.
+  // This creates a shared buffer if one doesn't already exist, and populates it
+  // with the current animating frame's buffer data. It returns a
+  // gpu::Mailboxholder with this shared buffer data.
   virtual gpu::MailboxHolder TransferFrame(vr::WebXrPresentationState* webxr,
                                            const gfx::Size& frame_size,
                                            const gfx::Transform& uv_transform);
+
+  // This transfers whatever the contents of the texture specified
+  // by GetCameraTextureId() is at the time it is called and returns
+  // a gpu::MailboxHolder with that texture copied to a shared buffer.
+  virtual gpu::MailboxHolder TransferCameraImageFrame(
+      vr::WebXrPresentationState* webxr,
+      const gfx::Size& frame_size,
+      const gfx::Transform& uv_transform);
+
   virtual void CreateGpuFenceForSyncToken(
       const gpu::SyncToken& sync_token,
       base::OnceCallback<void(std::unique_ptr<gfx::GpuFence>)>);
@@ -84,7 +93,8 @@ class ArImageTransport {
 
  private:
   std::unique_ptr<vr::WebXrSharedBuffer> CreateBuffer();
-  void ResizeSharedBuffer(vr::WebXrPresentationState* webxr,
+  // Returns true if the buffer was resized and its sync token updated.
+  bool ResizeSharedBuffer(vr::WebXrPresentationState* webxr,
                           const gfx::Size& size,
                           vr::WebXrSharedBuffer* buffer);
   void ResizeSurface(const gfx::Size& size);
@@ -95,6 +105,7 @@ class ArImageTransport {
   // samplerExternalOES texture for the camera image.
   GLuint camera_texture_id_arcore_ = 0;
   GLuint camera_fbo_ = 0;
+  GLuint camera_image_fbo_ = 0;
 
   scoped_refptr<base::SingleThreadTaskRunner> gl_thread_task_runner_;
 
@@ -103,6 +114,10 @@ class ArImageTransport {
   // If true, use shared buffer transport aka DRAW_INTO_TEXTURE_MAILBOX.
   // If false, use Surface transport aka SUBMIT_AS_MAILBOX_HOLDER.
   bool shared_buffer_draw_ = false;
+
+  // Used to limit framebuffer complete check to occurring once, due to it being
+  // expensive.
+  bool framebuffer_complete_checked_for_camera_buffer_ = false;
 
   // Used for Surface transport (Android N)
   //

@@ -7,10 +7,10 @@
 
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
+#include "components/infobars/android/infobar_android.h"
 #include "components/translate/core/browser/translate_infobar_delegate.h"
 #include "components/translate/core/browser/translate_step.h"
 #include "components/translate/core/common/translate_errors.h"
-#include "weblayer/browser/infobar_android.h"
 
 namespace translate {
 class TranslateInfoBarDelegate;
@@ -19,17 +19,12 @@ class TranslateInfoBarDelegate;
 namespace weblayer {
 
 class TranslateCompactInfoBar
-    : public InfoBarAndroid,
+    : public infobars::InfoBarAndroid,
       public translate::TranslateInfoBarDelegate::Observer {
  public:
   explicit TranslateCompactInfoBar(
       std::unique_ptr<translate::TranslateInfoBarDelegate> delegate);
   ~TranslateCompactInfoBar() override;
-
-  enum class OverflowMenuItemId {
-    NEVER_TRANSLATE_LANGUAGE = 0,
-    NEVER_TRANSLATE_SITE = 1,
-  };
 
   // JNI method specific to string settings in translate.
   void ApplyStringTranslateOption(
@@ -65,15 +60,8 @@ class TranslateCompactInfoBar
   void OnTranslateInfoBarDelegateDestroyed(
       translate::TranslateInfoBarDelegate* delegate) override;
 
-  // Instructs the Java infobar to select the button corresponding to
-  // |action_type|.
-  void SelectButtonForTesting(ActionType action_type);
-
-  // Instructs the Java infobar to click the specified overflow menu item.
-  void ClickOverflowMenuItemForTesting(OverflowMenuItemId item_id);
-
  private:
-  // InfoBarAndroid:
+  // infobars::InfoBarAndroid:
   base::android::ScopedJavaLocalRef<jobject> CreateRenderInfoBar(
       JNIEnv* env) override;
   void ProcessButton(int action) override;

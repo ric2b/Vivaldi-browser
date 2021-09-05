@@ -190,7 +190,7 @@ PrintDialogGtk::~PrintDialogGtk() {
     aura::Window* parent = gtk::GetAuraTransientParent(dialog_);
     if (parent) {
       parent->RemoveObserver(this);
-      gtk::ClearAuraTransientParent(dialog_);
+      gtk::ClearAuraTransientParent(dialog_, parent);
     }
     gtk_widget_destroy(dialog_);
     dialog_ = nullptr;
@@ -254,8 +254,8 @@ void PrintDialogGtk::UpdateSettings(
 
   std::string color_value;
   std::string color_setting_name;
-  printing::GetColorModelForMode(settings->color(), &color_setting_name,
-                                 &color_value);
+  printing::GetColorModelForMode(static_cast<int>(settings->color()),
+                                 &color_setting_name, &color_value);
   gtk_print_settings_set(gtk_settings_, color_setting_name.c_str(),
                          color_value.c_str());
 
@@ -389,7 +389,7 @@ void PrintDialogGtk::PrintDocument(const printing::MetafilePlayer& metafile,
     success = metafile.SaveTo(&file);
     file.Close();
     if (!success)
-      base::DeleteFile(path_to_pdf_, false);
+      base::DeleteFile(path_to_pdf_);
   }
 
   if (!success) {
@@ -544,7 +544,7 @@ void PrintDialogGtk::InitPrintSettings(
 void PrintDialogGtk::OnWindowDestroying(aura::Window* window) {
   DCHECK_EQ(gtk::GetAuraTransientParent(dialog_), window);
 
-  gtk::ClearAuraTransientParent(dialog_);
+  gtk::ClearAuraTransientParent(dialog_, window);
   window->RemoveObserver(this);
   if (callback_)
     std::move(callback_).Run(PrintingContextLinux::CANCEL);

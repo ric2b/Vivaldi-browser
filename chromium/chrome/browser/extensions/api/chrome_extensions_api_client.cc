@@ -27,7 +27,6 @@
 #include "chrome/browser/extensions/api/storage/managed_value_store_cache.h"
 #include "chrome/browser/extensions/api/storage/sync_value_store_cache.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
-#include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/system_display/display_info_provider.h"
@@ -56,6 +55,7 @@
 #include "extensions/browser/api/virtual_keyboard_private/virtual_keyboard_delegate.h"
 #include "extensions/browser/api/web_request/web_request_info.h"
 #include "extensions/browser/extension_action.h"
+#include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
@@ -356,7 +356,7 @@ MetricsPrivateDelegate* ChromeExtensionsAPIClient::GetMetricsPrivateDelegate() {
 
 NetworkingCastPrivateDelegate*
 ChromeExtensionsAPIClient::GetNetworkingCastPrivateDelegate() {
-#if defined(OS_CHROMEOS) || defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_CHROMEOS) || defined(OS_WIN) || defined(OS_MAC)
   if (!networking_cast_private_delegate_)
     networking_cast_private_delegate_ =
         ChromeNetworkingCastPrivateDelegate::Create();
@@ -408,13 +408,13 @@ void ChromeExtensionsAPIClient::SaveImageDataToClipboard(
     const std::vector<char>& image_data,
     api::clipboard::ImageType type,
     AdditionalDataItemList additional_items,
-    const base::Closure& success_callback,
-    const base::Callback<void(const std::string&)>& error_callback) {
+    base::OnceClosure success_callback,
+    base::OnceCallback<void(const std::string&)> error_callback) {
   if (!clipboard_extension_helper_)
     clipboard_extension_helper_ = std::make_unique<ClipboardExtensionHelper>();
   clipboard_extension_helper_->DecodeAndSaveImageData(
-      image_data, type, std::move(additional_items), success_callback,
-      error_callback);
+      image_data, type, std::move(additional_items),
+      std::move(success_callback), std::move(error_callback));
 }
 #endif
 

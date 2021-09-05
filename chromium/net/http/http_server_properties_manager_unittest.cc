@@ -98,7 +98,7 @@ class MockPrefDelegate : public net::HttpServerProperties::PrefDelegate {
     if (!prefs_changed_callback_.is_null())
       std::move(prefs_changed_callback_).Run();
     if (!extra_prefs_changed_callback_.is_null())
-      extra_prefs_changed_callback_.Run();
+      std::move(extra_prefs_changed_callback_).Run();
     set_properties_callback_ = std::move(callback);
   }
 
@@ -122,8 +122,8 @@ class MockPrefDelegate : public net::HttpServerProperties::PrefDelegate {
 
   // Additional callback to call when prefs are updated, used to check prefs are
   // updated on destruction.
-  void set_extra_update_prefs_callback(const base::Closure& callback) {
-    extra_prefs_changed_callback_ = callback;
+  void set_extra_update_prefs_callback(base::OnceClosure callback) {
+    extra_prefs_changed_callback_ = std::move(callback);
   }
 
   // Returns the base::OnceCallback, if any, passed to the last call to
@@ -135,7 +135,7 @@ class MockPrefDelegate : public net::HttpServerProperties::PrefDelegate {
  private:
   base::DictionaryValue prefs_;
   base::OnceClosure prefs_changed_callback_;
-  base::Closure extra_prefs_changed_callback_;
+  base::OnceClosure extra_prefs_changed_callback_;
   int num_pref_updates_ = 0;
 
   base::OnceClosure set_properties_callback_;
@@ -1200,8 +1200,7 @@ TEST_F(HttpServerPropertiesManagerTest, UpdatePrefsWithCache) {
   std::string expiration_string;
   ASSERT_TRUE(broken_alt_svcs_list_entry->GetStringWithoutPathExpansion(
       "broken_until", &expiration_string));
-  broken_alt_svcs_list_entry->RemoveWithoutPathExpansion("broken_until",
-                                                         nullptr);
+  broken_alt_svcs_list_entry->RemoveKey("broken_until");
 
   // Expiration time of "www.google.com:1234" should be 5 minutes minus the
   // update-prefs-delay from when the prefs were written.
@@ -1463,7 +1462,7 @@ TEST_F(HttpServerPropertiesManagerTest, UpdatePrefsOnShutdown) {
 
   int pref_updates = 0;
   pref_delegate_->set_extra_update_prefs_callback(
-      base::Bind([](int* updates) { (*updates)++; }, &pref_updates));
+      base::BindRepeating([](int* updates) { (*updates)++; }, &pref_updates));
   http_server_props_.reset();
   EXPECT_EQ(1, pref_updates);
 }

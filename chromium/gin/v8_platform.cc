@@ -283,6 +283,7 @@ class JobDelegateImpl : public v8::JobDelegate {
   void NotifyConcurrencyIncrease() override {
     delegate_->NotifyConcurrencyIncrease();
   }
+  uint8_t GetTaskId() override { return delegate_->GetTaskId(); }
 
  private:
   base::JobDelegate* delegate_;
@@ -303,7 +304,7 @@ class JobHandleImpl : public v8::JobHandle {
   }
   void Join() override { handle_.Join(); }
   void Cancel() override { handle_.Cancel(); }
-
+  bool IsCompleted() override { return handle_.IsCompleted(); }
   bool IsRunning() override { return !!handle_; }
 
  private:
@@ -498,17 +499,19 @@ std::unique_ptr<v8::JobHandle> V8Platform::PostJob(
       task_traits = kBlockingTaskTraits;
       break;
   }
-  auto handle = base::PostJob(
-      FROM_HERE, task_traits,
-      base::BindRepeating(
-          [](v8::JobTask* job_task, base::JobDelegate* delegate) {
-            JobDelegateImpl delegate_impl(delegate);
-            job_task->Run(&delegate_impl);
-          },
-          base::Unretained(job_task.get())),
-      base::BindRepeating(
-          [](v8::JobTask* job_task) { return job_task->GetMaxConcurrency(); },
-          base::Unretained(job_task.get())));
+  auto handle =
+      base::PostJob(FROM_HERE, task_traits,
+                    base::BindRepeating(
+                        [](v8::JobTask* job_task, base::JobDelegate* delegate) {
+                          JobDelegateImpl delegate_impl(delegate);
+                          job_task->Run(&delegate_impl);
+                        },
+                        base::Unretained(job_task.get())),
+                    base::BindRepeating(
+                        [](v8::JobTask* job_task, size_t worker_count) {
+                          return job_task->GetMaxConcurrency(worker_count);
+                        },
+                        base::Unretained(job_task.get())));
 
   return std::make_unique<JobHandleImpl>(std::move(handle),
                                          std::move(job_task));

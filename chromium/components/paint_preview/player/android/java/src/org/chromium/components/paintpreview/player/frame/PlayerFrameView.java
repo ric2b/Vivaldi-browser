@@ -9,6 +9,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Matrix;
 import android.graphics.Rect;
+import android.util.Size;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -37,13 +38,14 @@ class PlayerFrameView extends FrameLayout {
      * @param playerFrameViewDelegate The interface used for forwarding events.
      */
     PlayerFrameView(@NonNull Context context, boolean canDetectZoom,
-            PlayerFrameViewDelegate playerFrameViewDelegate) {
+            PlayerFrameViewDelegate playerFrameViewDelegate,
+            PlayerFrameGestureDetectorDelegate gestureDetectorDelegate) {
         super(context);
         setWillNotDraw(false);
         mDelegate = playerFrameViewDelegate;
         mBitmapPainter = new PlayerFrameBitmapPainter(this::invalidate);
         mGestureDetector =
-                new PlayerFrameGestureDetector(context, canDetectZoom, playerFrameViewDelegate);
+                new PlayerFrameGestureDetector(context, canDetectZoom, gestureDetectorDelegate);
     }
 
     PlayerFrameGestureDetector getGestureDetector() {
@@ -73,15 +75,14 @@ class PlayerFrameView extends FrameLayout {
 
     void updateViewPort(int left, int top, int right, int bottom) {
         mBitmapPainter.updateViewPort(left, top, right, bottom);
-
-        layoutSubframes();
+        layoutSubFrames();
     }
 
     void updateBitmapMatrix(Bitmap[][] bitmapMatrix) {
         mBitmapPainter.updateBitmapMatrix(bitmapMatrix);
     }
 
-    void updateTileDimensions(int[] tileDimensions) {
+    void updateTileDimensions(Size tileDimensions) {
         mBitmapPainter.updateTileDimensions(tileDimensions);
     }
 
@@ -90,15 +91,7 @@ class PlayerFrameView extends FrameLayout {
         if (mScaleMatrix.isIdentity()) return;
 
         postInvalidate();
-        layoutSubframes();
-    }
-
-    void updateDelegateScaleMatrix(Matrix matrix, float scaleFactor) {
-        mDelegate.setBitmapScaleMatrix(matrix, scaleFactor);
-    }
-
-    void forceRedraw() {
-        mDelegate.forceRedraw();
+        layoutSubFrames();
     }
 
     @Override
@@ -114,7 +107,7 @@ class PlayerFrameView extends FrameLayout {
         return mGestureDetector.onTouchEvent(event) || super.onTouchEvent(event);
     }
 
-    private void layoutSubframes() {
+    private void layoutSubFrames() {
         // Remove all views if there are no sub-frames.
         if (mSubFrameViews == null || mSubFrameRects == null) {
             removeAllViews();
@@ -123,21 +116,20 @@ class PlayerFrameView extends FrameLayout {
 
         // Layout the sub-frames.
         for (int i = 0; i < mSubFrameViews.size(); i++) {
-            if (mSubFrameViews.get(i).getParent() == null) {
+            View subFrameView = mSubFrameViews.get(i);
+            if (subFrameView.getVisibility() != View.VISIBLE) {
+                removeView(subFrameView);
+                continue;
+            }
+
+            if (subFrameView.getParent() == null) {
                 addView(mSubFrameViews.get(i));
-            } else if (mSubFrameViews.get(i).getParent() != this) {
+            } else if (subFrameView.getParent() != this) {
                 throw new IllegalStateException("Sub-frame view already has a parent.");
             }
             Rect layoutRect = mSubFrameRects.get(i);
-            mSubFrameViews.get(i).layout(
+            subFrameView.layout(
                     layoutRect.left, layoutRect.top, layoutRect.right, layoutRect.bottom);
-        }
-
-        for (int i = 0; i < getChildCount(); i++) {
-            if (!mSubFrameViews.contains(getChildAt(i))) {
-                removeViewAt(i);
-                --i;
-            }
         }
     }
 }

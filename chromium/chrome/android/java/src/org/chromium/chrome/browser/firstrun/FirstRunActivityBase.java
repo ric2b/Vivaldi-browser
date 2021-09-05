@@ -24,6 +24,8 @@ public abstract class FirstRunActivityBase extends AsyncInitializationActivity {
     public static final String EXTRA_COMING_FROM_CHROME_ICON = "Extra.ComingFromChromeIcon";
     public static final String EXTRA_CHROME_LAUNCH_INTENT_IS_CCT =
             "Extra.FreChromeLaunchIntentIsCct";
+    public static final String EXTRA_FRE_INTENT_CREATION_ELAPSED_REALTIME_MS =
+            "Extra.FreIntentCreationElapsedRealtimeMs";
 
     // The intent to send once the FRE completes.
     public static final String EXTRA_FRE_COMPLETE_LAUNCH_INTENT = "Extra.FreChromeLaunchIntent";
@@ -139,12 +141,5 @@ public abstract class FirstRunActivityBase extends AsyncInitializationActivity {
                 IntentUtils.safeGetBundleExtra(freIntent, EXTRA_CHROME_LAUNCH_INTENT_EXTRAS);
         CustomTabsConnection.getInstance().sendFirstRunCallbackIfNecessary(
                 launchIntentExtras, complete);
-    }
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        // As first run is complete, we no longer need FirstRunAppRestrictionInfo.
-        FirstRunAppRestrictionInfo.destroy();
     }
 }

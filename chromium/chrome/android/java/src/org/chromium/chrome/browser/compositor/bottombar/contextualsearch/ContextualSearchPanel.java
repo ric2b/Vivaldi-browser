@@ -19,7 +19,7 @@ import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelContent;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager.PanelPriority;
 import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPromoControl.ContextualSearchPromoHost;
-import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
+import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.scene_layer.ContextualSearchSceneLayer;
 import org.chromium.chrome.browser.compositor.scene_layer.SceneOverlayLayer;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
@@ -27,9 +27,10 @@ import org.chromium.chrome.browser.contextualsearch.ResolvedSearchTerm.CardTag;
 import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.widget.ScrimView;
-import org.chromium.chrome.browser.widget.ScrimView.ScrimParams;
+import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
+import org.chromium.components.browser_ui.widget.scrim.ScrimProperties;
 import org.chromium.ui.base.LocalizationUtils;
+import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.resources.ResourceManager;
 
 /**
@@ -59,16 +60,16 @@ public class ContextualSearchPanel extends OverlayPanel {
     private ContextualSearchSceneLayer mSceneLayer;
 
     /**
-     * A ScrimView for adjusting the Status Bar's brightness when a scrim is present (when the panel
-     * is open).
+     * A ScrimCoordinator for adjusting the Status Bar's brightness when a scrim is present (when
+     * the panel is open).
      */
-    private ScrimView mScrimView;
+    private ScrimCoordinator mScrimCoordinator;
 
     /**
-     * Params that configure our use of the ScrimView for adjusting the Status Bar's
+     * Params that configure our use of the ScrimCoordinator for adjusting the Status Bar's
      * brightness when a scrim is present (when the panel is open).
      */
-    private ScrimParams mScrimParams;
+    private PropertyModel mScrimProperties;
 
     // ============================================================================================
     // Constructor
@@ -76,12 +77,12 @@ public class ContextualSearchPanel extends OverlayPanel {
 
     /**
      * @param context The current Android {@link Context}.
-     * @param updateHost The {@link LayoutUpdateHost} used to request updates in the Layout.
+     * @param layoutManager A layout manager for observing scene changes.
      * @param panelManager The object managing the how different panels are shown.
      */
     public ContextualSearchPanel(
-            Context context, LayoutUpdateHost updateHost, OverlayPanelManager panelManager) {
-        super(context, updateHost, panelManager);
+            Context context, LayoutManager layoutManager, OverlayPanelManager panelManager) {
+        super(context, layoutManager, panelManager);
         mSceneLayer = createNewContextualSearchSceneLayer();
         mPanelMetrics = new ContextualSearchPanelMetrics();
 
@@ -228,7 +229,7 @@ public class ContextualSearchPanel extends OverlayPanel {
         super.onClosed(reason);
 
         if (mSceneLayer != null) mSceneLayer.hideTree();
-        if (mScrimView != null) mScrimView.hideScrim(false);
+        if (mScrimCoordinator != null) mScrimCoordinator.hideScrim(false);
     }
 
     // ============================================================================================
@@ -481,16 +482,6 @@ public class ContextualSearchPanel extends OverlayPanel {
         super.maximizePanel(reason);
     }
 
-    /**
-     * Maximizes the Contextual Search Panel, then promotes it to a regular Tab.
-     * @param reason The {@code StateChangeReason} behind the maximization and promotion to tab.
-     * @param duration The animation duration in milliseconds.
-     */
-    public void maximizePanelThenPromoteToTab(@StateChangeReason int reason, long duration) {
-        mShouldPromoteToTabAfterMaximizing = true;
-        animatePanelToState(PanelState.MAXIMIZED, reason, duration);
-    }
-
     @Override
     public void peekPanel(@StateChangeReason int reason) {
         super.peekPanel(reason);
@@ -589,7 +580,7 @@ public class ContextualSearchPanel extends OverlayPanel {
         mPanelMetrics.onSearchTermResolved();
         if (cardTagEnum == CardTag.CT_DEFINITION
                 || cardTagEnum == CardTag.CT_CONTEXTUAL_DEFINITION) {
-            getSearchBarControl().updateForDictionaryDefinition(searchTerm);
+            getSearchBarControl().updateForDictionaryDefinition(searchTerm, cardTagEnum);
             return;
         }
 
@@ -714,18 +705,27 @@ public class ContextualSearchPanel extends OverlayPanel {
         float statusBarAlpha =
                 (maxBrightness - basePageBrightness) / (maxBrightness - minBrightness);
         if (statusBarAlpha == 0.0) {
-            if (mScrimView != null) mScrimView.hideScrim(false);
-            mScrimParams = null;
-            mScrimView = null;
+            if (mScrimCoordinator != null) mScrimCoordinator.hideScrim(false);
+            mScrimProperties = null;
+            mScrimCoordinator = null;
             return;
 
         } else {
-            mScrimView = mManagementDelegate.getChromeActivity().getScrim();
-            if (mScrimParams == null) {
-                mScrimParams = new ScrimParams(null, false, true, 0, null);
-                mScrimView.showScrim(mScrimParams);
+            mScrimCoordinator = mManagementDelegate.getScrimCoordinator();
+            if (mScrimProperties == null) {
+                mScrimProperties =
+                        new PropertyModel.Builder(ScrimProperties.REQUIRED_KEYS)
+                                .with(ScrimProperties.TOP_MARGIN, 0)
+                                .with(ScrimProperties.AFFECTS_STATUS_BAR, true)
+                                .with(ScrimProperties.ANCHOR_VIEW,
+                                        mActivity.getCompositorViewHolder())
+                                .with(ScrimProperties.SHOW_IN_FRONT_OF_ANCHOR_VIEW, false)
+                                .with(ScrimProperties.VISIBILITY_CALLBACK, null)
+                                .with(ScrimProperties.CLICK_DELEGATE, null)
+                                .build();
+                mScrimCoordinator.showScrim(mScrimProperties);
             }
-            mScrimView.setViewAlpha(statusBarAlpha);
+            mScrimCoordinator.setAlpha(statusBarAlpha);
         }
     }
 
@@ -880,6 +880,7 @@ public class ContextualSearchPanel extends OverlayPanel {
                         getOverlayPanelContent().showContent();
                         expandPanel(StateChangeReason.OPTIN);
                     }
+                    mManagementDelegate.onPromoOptIn();
                 }
 
                 @Override

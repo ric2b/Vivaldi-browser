@@ -43,7 +43,7 @@
 #include "services/network/transitional_url_loader_factory_owner.h"
 #include "url/url_util.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/mac/scoped_nsautorelease_pool.h"
 #endif
 
@@ -137,12 +137,12 @@ HttpHandler::HttpHandler(const std::string& url_base)
       command_map_(new CommandMap()) {}
 
 HttpHandler::HttpHandler(
-    const base::Closure& quit_func,
+    const base::RepeatingClosure& quit_func,
     const scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     const std::string& url_base,
     int adb_port)
     : quit_func_(quit_func), url_base_(url_base), received_shutdown_(false) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   base::mac::ScopedNSAutoreleasePool autorelease_pool;
 #endif
   context_getter_ = new URLRequestContextGetter(io_task_runner);
@@ -380,6 +380,11 @@ HttpHandler::HttpHandler(
           kGet, "session/:sessionId/element/:id/screenshot",
           WrapToCommand("ElementScreenshot",
                         base::BindRepeating(&ExecuteElementScreenshot))),
+
+      CommandMapping(
+          kGet, "session/:sessionId/screenshot/full",
+          WrapToCommand("FullPageScreenshot",
+                        base::BindRepeating(&ExecuteFullPageScreenshot))),
 
       CommandMapping(
           kPost, "session/:sessionId/print",
@@ -973,8 +978,8 @@ void HttpHandler::Handle(const net::HttpServerRequestInfo& request,
 Command HttpHandler::WrapToCommand(const char* name,
                                    const SessionCommand& session_command,
                                    bool w3c_standard_command) {
-  return base::Bind(&ExecuteSessionCommand, &session_thread_map_, name,
-                    session_command, w3c_standard_command, false);
+  return base::BindRepeating(&ExecuteSessionCommand, &session_thread_map_, name,
+                             session_command, w3c_standard_command, false);
 }
 
 Command HttpHandler::WrapToCommand(const char* name,
@@ -1049,12 +1054,10 @@ void HttpHandler::HandleCommand(
     return;
   }
 
-  iter->command.Run(params,
-                    session_id,
-                    base::Bind(&HttpHandler::PrepareResponse,
-                               weak_ptr_factory_.GetWeakPtr(),
-                               trimmed_path,
-                               send_response_func));
+  iter->command.Run(params, session_id,
+                    base::BindRepeating(&HttpHandler::PrepareResponse,
+                                        weak_ptr_factory_.GetWeakPtr(),
+                                        trimmed_path, send_response_func));
 }
 
 void HttpHandler::PrepareResponse(

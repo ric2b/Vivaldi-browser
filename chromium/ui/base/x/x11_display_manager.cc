@@ -12,6 +12,7 @@
 #include "ui/gfx/x/randr.h"
 #include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_atom_cache.h"
+#include "ui/gfx/x/xproto.h"
 
 namespace ui {
 
@@ -61,25 +62,11 @@ void XDisplayManager::RemoveObserver(display::DisplayObserver* observer) {
   change_notifier_.RemoveObserver(observer);
 }
 
-bool XDisplayManager::CanProcessEvent(const x11::Event& x11_event) {
-  const XEvent& xev = x11_event.xlib_event();
-  return xev.type - xrandr_event_base_ ==
-             x11::RandR::ScreenChangeNotifyEvent::opcode ||
-         xev.type - xrandr_event_base_ == x11::RandR::NotifyEvent::opcode ||
-         (xev.type == PropertyNotify &&
-          static_cast<x11::Window>(xev.xproperty.window) == x_root_window_ &&
-          xev.xproperty.atom ==
-              static_cast<uint32_t>(gfx::GetAtom("_NET_WORKAREA")));
-}
-
-bool XDisplayManager::ProcessEvent(x11::Event* x11_event) {
-  DCHECK(x11_event);
-  XEvent* xev = &x11_event->xlib_event();
-  int ev_type = xev->type - xrandr_event_base_;
-  if (ev_type == x11::RandR::NotifyEvent::opcode ||
-      (xev->type == PropertyNotify &&
-       xev->xproperty.atom ==
-           static_cast<uint32_t>(gfx::GetAtom("_NET_WORKAREA")))) {
+bool XDisplayManager::ProcessEvent(x11::Event* xev) {
+  DCHECK(xev);
+  auto* prop = xev->As<x11::PropertyNotifyEvent>();
+  if (xev->As<x11::RandR::NotifyEvent>() ||
+      (prop && prop->atom == gfx::GetAtom("_NET_WORKAREA"))) {
     DispatchDelayedDisplayListUpdate();
     return true;
   }

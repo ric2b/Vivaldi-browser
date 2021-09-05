@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">انتخاب</translation>
 <translation id="1859234291848436338">جهت نوشتن</translation>
 <translation id="1860796786778352021">بستن اعلان</translation>
+<translation id="186476001994626254">جای‌گذاری هوشمند محتوا در وب</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" />٪</translation>
 <translation id="1901303067676059328">انتخاب &amp;همه</translation>
+<translation id="19085484004813472">این ویژگی جدید است</translation>
 <translation id="2006524834898217237">مطمئن شوید دستگاه به اینترنت متصل باشد.</translation>
 <translation id="208586643495776849">لطفاً دوباره امتحان کنید</translation>
 <translation id="2090963878406559571">‏برای ارسال شماره‌ای از <ph name="ORIGIN" /> به تلفن Android خود، برای هر دو دستگاه در «تنظیمات» <ph name="TROUBLESHOOT_LINK" />.</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">مدیریت تنظیمات</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{تا ۱ ساعت دیگر}one{تا # ساعت دیگر}other{تا # ساعت دیگر}}</translation>
 <translation id="2583543531130364912">کالیبراسیون صفحه لمسی</translation>
+<translation id="2586657967955657006">بریده‌دان</translation>
 <translation id="2666092431469916601">بالا</translation>
 <translation id="2701330563083355633">هم‌رسانی‌شده از <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">جدید</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />، <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">بازکردن پوشه</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{۱ سال قبل}one{# سال قبل}other{# سال قبل}}</translation>
+<translation id="2878511608894704031">حذف همه</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{تا ۱ روز دیگر}one{تا # روز دیگر}other{تا # روز دیگر}}</translation>
 <translation id="2931838996092594335">کلیک کنید</translation>
 <translation id="2981684127883932071">نمایش پیشنهادها</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">شروع صحبت</translation>
 <translation id="430191667033048642"><ph name="MOVED_APP_NAME" /> به پوشه <ph name="FOLDER_NAME" /> منتقل شد.</translation>
 <translation id="4316910396681052118">همه برنامه‌ها</translation>
+<translation id="4491109536499578614">تصویر</translation>
 <translation id="4588090240171750605">پیمایش به راست</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />، رتبه‌بندی با ستاره <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />، توصیه برنامه</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{۱ روز و }one{# روز و }other{# روز و }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{تا ۱ سال دیگر}one{تا # سال دیگر}other{تا # سال دیگر}}</translation>
+<translation id="588258955323874662">تمام صفحه</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{۱ ثانیه باقی مانده است}one{# ثانیه باقی مانده است}other{# ثانیه باقی مانده است}}</translation>
 <translation id="5941711191222866238">کوچک کردن</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{۱ ساعت}one{# ساعت}other{# ساعت}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">‏دستیار Google</translation>
 <translation id="6430678249303439055">مسدود کردن همه اعلان‌های این برنامه</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{۱ ثانیه قبل}one{# ثانیه قبل}other{# ثانیه قبل}}</translation>
+<translation id="6503257047630241175">‏محتوای RTF</translation>
 <translation id="6539092367496845964">مشکلی پیش آمد. بعداً دوباره امتحان کنید.</translation>
 <translation id="654149438358937226">مسدود کردن همه اعلان‌ها</translation>
 <translation id="6567071839949112727">کلیک کردن روی نسخه اولیه</translation>

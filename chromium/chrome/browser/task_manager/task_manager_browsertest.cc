@@ -92,9 +92,9 @@ class TaskManagerBrowserTest : public extensions::ExtensionBrowserTest {
     // Show the task manager. This populates the model, and helps with debugging
     // (you see the task manager).
     chrome::ShowTaskManager(browser());
-    model_ = task_manager::TaskManagerTester::Create(
-        base::Bind(&TaskManagerBrowserTest::TaskManagerTableModelSanityCheck,
-                   base::Unretained(this)));
+    model_ = task_manager::TaskManagerTester::Create(base::BindRepeating(
+        &TaskManagerBrowserTest::TaskManagerTableModelSanityCheck,
+        base::Unretained(this)));
   }
 
   void HideTaskManager() {
@@ -213,7 +213,7 @@ INSTANTIATE_TEST_SUITE_P(SitePerProcess,
                          TaskManagerOOPIFBrowserTest,
                          ::testing::Values(true));
 
-#if defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_MAC) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_ShutdownWhileOpen DISABLED_ShutdownWhileOpen
 #else
 #define MAYBE_ShutdownWhileOpen ShutdownWhileOpen
@@ -673,7 +673,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, JSHeapMemory) {
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchTab("title1.html")));
 }
 
-#if defined(MEMORY_SANITIZER) || defined(OS_LINUX)
+#if defined(MEMORY_SANITIZER) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 // This tests times out when MSan is enabled. See https://crbug.com/890313.
 // Failing on Linux CFI. See https://crbug.com/995132.
 #define MAYBE_SentDataObserved DISABLED_SentDataObserved
@@ -713,7 +713,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, MAYBE_SentDataObserved) {
             model()->GetColumnValue(ColumnSpecifier::TOTAL_NETWORK_USE, 0));
 }
 
-#if defined(MEMORY_SANITIZER) || defined(OS_LINUX)
+#if defined(MEMORY_SANITIZER) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 // This tests times out when MSan is enabled. See https://crbug.com/890313.
 // Failing on Linux CFI. See https://crbug.com/995132.
 #define MAYBE_TotalSentDataObserved DISABLED_TotalSentDataObserved
@@ -792,11 +792,11 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, IdleWakeups) {
 // The script above should trigger a lot of idle wakeups - up to 1000 per
 // second. Let's make sure we get at least 100 (in case the test runs slow).
 // On Mac, set a lower threshold because Chrome Mac generates fewer wakes.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   const int kMinExpectedWakeCount = 50;
 #else
   const int kMinExpectedWakeCount = 100;
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerStatToExceed(
       MatchTab("title1.html"), ColumnSpecifier::IDLE_WAKEUPS,
       kMinExpectedWakeCount));
@@ -1276,7 +1276,9 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest,
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(0, MatchAnySubframe()));
 }
 
-IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest, OrderingOfDependentRows) {
+// TODO(https://crbug.com/1113972): disabled as test is flaky.
+IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest,
+                       DISABLED_OrderingOfDependentRows) {
   ShowTaskManager();
 
   GURL a_with_frames(embedded_test_server()->GetURL(

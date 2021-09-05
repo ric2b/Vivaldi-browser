@@ -19,10 +19,6 @@ class WebUI;
 class WebUIDataSource;
 }  // namespace content
 
-namespace local_search_service {
-class LocalSearchService;
-}  // namespace local_search_service
-
 namespace signin {
 class IdentityManager;
 }  // namespace signin
@@ -40,9 +36,17 @@ namespace android_sms {
 class AndroidSmsService;
 }  // namespace android_sms
 
+namespace local_search_service {
+class LocalSearchService;
+}  // namespace local_search_service
+
 namespace multidevice_setup {
 class MultiDeviceSetupClient;
 }  // namespace multidevice_setup
+
+namespace phonehub {
+class PhoneHubManager;
+}  // namespace phonehub
 
 namespace settings {
 
@@ -82,6 +86,7 @@ class OsSettingsManager : public KeyedService {
       Profile* profile,
       local_search_service::LocalSearchService* local_search_service,
       multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client,
+      phonehub::PhoneHubManager* phone_hub_manager,
       syncer::SyncService* sync_service,
       SupervisedUserService* supervised_user_service,
       KerberosCredentialsManager* kerberos_credentials_manager,

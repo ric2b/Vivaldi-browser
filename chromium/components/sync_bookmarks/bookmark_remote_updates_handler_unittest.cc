@@ -1179,6 +1179,58 @@ TEST_F(BookmarkRemoteUpdatesHandlerWithInitialMergeTest,
   EXPECT_THAT(tracker()->GetEntityForSyncId(kId0)->IsUnsynced(), Eq(true));
 }
 
+// Tests that recommit will be initiated in case when there is a local tombstone
+// and server's update has out of date encryption.
+TEST_F(BookmarkRemoteUpdatesHandlerWithInitialMergeTest,
+       ShouldRecommitWhenEncryptionIsOutOfDateOnConflict) {
+  const std::string kId0 = "id0";
+
+  sync_pb::ModelTypeState model_type_state;
+  model_type_state.set_encryption_key_name("encryption_key_name");
+  tracker()->set_model_type_state(model_type_state);
+
+  // Create a new node and remove it locally.
+  syncer::UpdateResponseDataList updates;
+  syncer::UpdateResponseData response_data =
+      CreateUpdateResponseData(/*server_id=*/kId0,
+                               /*parent_id=*/kBookmarkBarId,
+                               /*is_deletion=*/false,
+                               /*version=*/0);
+  response_data.encryption_key_name = "encryption_key_name";
+  updates.push_back(std::move(response_data));
+  updates_handler()->Process(updates,
+                             /*got_new_encryption_requirements=*/false);
+
+  const SyncedBookmarkTracker::Entity* entity =
+      tracker()->GetEntityForSyncId(kId0);
+  ASSERT_THAT(entity, NotNull());
+  ASSERT_THAT(entity->bookmark_node(), NotNull());
+
+  bookmark_model()->Remove(entity->bookmark_node());
+  tracker()->MarkDeleted(entity);
+  tracker()->IncrementSequenceNumber(entity);
+
+  // Process an update with outdated encryption. This should cause a conflict
+  // and the remote version must be applied. Local tombstone entity will be
+  // removed during processing conflict.
+  updates.clear();
+  response_data = CreateUpdateResponseData(/*server_id=*/kId0,
+                                           /*parent_id=*/kBookmarkBarId,
+                                           /*is_deletion=*/false,
+                                           /*version=*/1);
+  response_data.encryption_key_name = "out_of_date_encryption_key_name";
+  updates.push_back(std::move(response_data));
+
+  updates_handler()->Process(updates,
+                             /*got_new_encryption_requirements=*/false);
+  // |entity| may be deleted here while processing update during conflict
+  // resolution.
+  entity = tracker()->GetEntityForSyncId(kId0);
+  ASSERT_THAT(entity, NotNull());
+  EXPECT_THAT(entity->IsUnsynced(), Eq(true));
+  EXPECT_THAT(entity->bookmark_node(), NotNull());
+}
+
 TEST_F(BookmarkRemoteUpdatesHandlerWithInitialMergeTest,
        ShouldRecommitWhenGotNewEncryptionRequirements) {
   const std::string kId0 = "id0";
@@ -2033,6 +2085,94 @@ TEST_F(BookmarkRemoteUpdatesHandlerWithInitialMergeTest,
 
   EXPECT_TRUE(entity->IsUnsynced());
   EXPECT_TRUE(entity->has_final_guid());
+}
+
+TEST(BookmarkRemoteUpdatesHandlerTest,
+     ShouldComputeRightChildNodeIndexForEmptyParent) {
+  const std::string suffix = syncer::UniquePosition::RandomSuffix();
+  const syncer::UniquePosition pos1 =
+      syncer::UniquePosition::InitialPosition(suffix);
+
+  std::unique_ptr<bookmarks::BookmarkModel> bookmark_model =
+      bookmarks::TestBookmarkClient::CreateModel();
+  std::unique_ptr<SyncedBookmarkTracker> tracker =
+      SyncedBookmarkTracker::CreateFromBookmarkModelAndMetadata(
+          bookmark_model.get(),
+          CreateMetadataForPermanentNodes(bookmark_model.get()));
+
+  const bookmarks::BookmarkNode* bookmark_bar_node =
+      bookmark_model->bookmark_bar_node();
+
+  // Should always return 0 for any UniquePosition in the initial state.
+  EXPECT_EQ(0u, BookmarkRemoteUpdatesHandler::ComputeChildNodeIndexForTest(
+                    bookmark_bar_node, pos1.ToProto(), tracker.get()));
+}
+
+TEST(BookmarkRemoteUpdatesHandlerTest, ShouldComputeRightChildNodeIndex) {
+  std::unique_ptr<bookmarks::BookmarkModel> bookmark_model =
+      bookmarks::TestBookmarkClient::CreateModel();
+
+  const bookmarks::BookmarkNode* bookmark_bar_node =
+      bookmark_model->bookmark_bar_node();
+  const std::string suffix = syncer::UniquePosition::RandomSuffix();
+
+  const syncer::UniquePosition pos1 =
+      syncer::UniquePosition::InitialPosition(suffix);
+  const syncer::UniquePosition pos2 =
+      syncer::UniquePosition::After(pos1, suffix);
+  const syncer::UniquePosition pos3 =
+      syncer::UniquePosition::After(pos2, suffix);
+
+  // Create 3 nodes using remote update.
+  const bookmarks::BookmarkNode* node1 = bookmark_model->AddFolder(
+      bookmark_bar_node, /*index=*/0, /*title=*/base::string16());
+  const bookmarks::BookmarkNode* node2 = bookmark_model->AddFolder(
+      bookmark_bar_node, /*index=*/1, /*title=*/base::string16());
+  const bookmarks::BookmarkNode* node3 = bookmark_model->AddFolder(
+      bookmark_bar_node, /*index=*/2, /*title=*/base::string16());
+
+  sync_pb::BookmarkModelMetadata model_metadata =
+      CreateMetadataForPermanentNodes(bookmark_model.get());
+  *model_metadata.add_bookmarks_metadata() =
+      CreateNodeMetadata(node1->id(), "folder1_id", pos1);
+  *model_metadata.add_bookmarks_metadata() =
+      CreateNodeMetadata(node2->id(), "folder2_id", pos2);
+  *model_metadata.add_bookmarks_metadata() =
+      CreateNodeMetadata(node3->id(), "folder3_id", pos3);
+
+  std::unique_ptr<SyncedBookmarkTracker> tracker =
+      SyncedBookmarkTracker::CreateFromBookmarkModelAndMetadata(
+          bookmark_model.get(), std::move(model_metadata));
+
+  // Check for the same position as existing bookmarks have. In practice this
+  // shouldn't happen.
+  EXPECT_EQ(1u, BookmarkRemoteUpdatesHandler::ComputeChildNodeIndexForTest(
+                    bookmark_bar_node, pos1.ToProto(), tracker.get()));
+  EXPECT_EQ(2u, BookmarkRemoteUpdatesHandler::ComputeChildNodeIndexForTest(
+                    bookmark_bar_node, pos2.ToProto(), tracker.get()));
+  EXPECT_EQ(3u, BookmarkRemoteUpdatesHandler::ComputeChildNodeIndexForTest(
+                    bookmark_bar_node, pos3.ToProto(), tracker.get()));
+
+  EXPECT_EQ(0u, BookmarkRemoteUpdatesHandler::ComputeChildNodeIndexForTest(
+                    bookmark_bar_node,
+                    syncer::UniquePosition::Before(pos1, suffix).ToProto(),
+                    tracker.get()));
+  EXPECT_EQ(1u, BookmarkRemoteUpdatesHandler::ComputeChildNodeIndexForTest(
+                    bookmark_bar_node,
+                    syncer::UniquePosition::Between(/*before=*/pos1,
+                                                    /*after=*/pos2, suffix)
+                        .ToProto(),
+                    tracker.get()));
+  EXPECT_EQ(2u, BookmarkRemoteUpdatesHandler::ComputeChildNodeIndexForTest(
+                    bookmark_bar_node,
+                    syncer::UniquePosition::Between(/*before=*/pos2,
+                                                    /*after=*/pos3, suffix)
+                        .ToProto(),
+                    tracker.get()));
+  EXPECT_EQ(3u, BookmarkRemoteUpdatesHandler::ComputeChildNodeIndexForTest(
+                    bookmark_bar_node,
+                    syncer::UniquePosition::After(pos3, suffix).ToProto(),
+                    tracker.get()));
 }
 
 }  // namespace

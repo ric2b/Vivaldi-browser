@@ -2,10 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/apple/tweak_info_plist.gni")
 import("//build/buildflag_header.gni")
 import("//build/config/ios/rules.gni")
 import("//build/config/mac/base_rules.gni")
-import("//build/mac/tweak_info_plist.gni")
 import("//ios/build/chrome_build.gni")
 import("//ios/build/config.gni")
 import("//ios/chrome/features.gni")
@@ -27,7 +27,7 @@ source_set("app") {
     "//url",
   ]
 
-  libs = [ "Foundation.framework" ]
+  frameworks = [ "Foundation.framework" ]
 }
 
 source_set("unit_tests") {
@@ -53,6 +53,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui/main:scene",
+    "//ios/chrome/browser/ui/util:multiwindow_util",
     "//ios/chrome/common/app_group",
     "//ios/chrome/test:test_support",
     "//ios/public/provider/chrome/browser:browser",
@@ -204,6 +205,7 @@ source_set("app_internal") {
     "//ios/chrome/browser/omaha",
     "//ios/chrome/browser/passwords",
     "//ios/chrome/browser/reading_list",
+    "//ios/chrome/browser/screenshot",
     "//ios/chrome/browser/search_engines",
     "//ios/chrome/browser/search_engines:extension_search_engine_data_updater",
     "//ios/chrome/browser/share_extension",
@@ -220,6 +222,7 @@ source_set("app_internal") {
     "//ios/chrome/browser/ui/main",
     "//ios/chrome/browser/ui/main:scene",
     "//ios/chrome/browser/ui/main:scene_guts",
+    "//ios/chrome/browser/ui/scoped_ui_blocker",
     "//ios/chrome/browser/ui/tab_grid",
     "//ios/chrome/browser/ui/tab_grid:tab_grid_ui",
     "//ios/chrome/browser/ui/table_view",
@@ -227,6 +230,7 @@ source_set("app_internal") {
     "//ios/chrome/browser/ui/toolbar:toolbar_ui",
     "//ios/chrome/browser/ui/toolbar/public",
     "//ios/chrome/browser/ui/util",
+    "//ios/chrome/browser/ui/util:ios_multi_window_buildflags",
     "//ios/chrome/browser/ui/util:multiwindow_util",
     "//ios/chrome/browser/ui/webui:webui_internal",
     "//ios/chrome/browser/upgrade",
@@ -257,7 +261,7 @@ source_set("app_internal") {
     "//ui/strings:ui_strings",
   ]
 
-  libs = [
+  frameworks = [
     "CoreSpotlight.framework",
     "MediaPlayer.framework",
   ]
@@ -290,11 +294,15 @@ source_set("main") {
     ":app_internal",
     "//base",
     "//components/crash/core/common",
+    "//ios/chrome/app/startup:ios_enable_sandbox_dump_buildflags",
     "//ios/chrome/app/startup:startup_basic",
     "//ios/chrome/browser/crash_report",
     "//ios/chrome/common",
     "//ios/testing/perf:startup",
   ]
+  if (ios_enable_sandbox_dump) {
+    deps += [ "//ios/chrome/app/startup:sandbox_dump" ]
+  }
 
   if (ios_chrome_links_with_material_components_framework) {
     deps += [
@@ -370,6 +378,7 @@ ios_app_bundle("chrome") {
     "CHROMIUM_URL_SCHEME_3=$url_x_callback_scheme",
     "CHROMIUM_URL_CHANNEL_SCHEME=$url_channel_scheme",
     "SSOAUTH_URL_SCHEME=$url_ssoauth_scheme",
+    "IOS_MOVE_TAB_ACTIVITY_TYPE=$ios_move_tab_activity_type",
   ]
 
   if (ios_encryption_export_compliance_code != "") {

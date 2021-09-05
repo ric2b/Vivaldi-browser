@@ -12,6 +12,22 @@
 #include "sync/vivaldi_profile_sync_service_factory.h"
 #include "sync/vivaldi_sync_ui_helper.h"
 
+namespace {
+void OnBackupEncryptionTokenDone(JNIEnv* env,
+                                 JavaObjectWeakGlobalRef weak_java_ref,
+                                 bool result) {
+  Java_VivaldiProfileSyncService_onBackupEncryptionTokenDone(
+      env, weak_java_ref.get(env), result);
+}
+
+void OnRestoreEncryptionTokenDone(JNIEnv* env,
+                                  JavaObjectWeakGlobalRef weak_java_ref,
+                                  bool result) {
+  Java_VivaldiProfileSyncService_onRestoreEncryptionTokenDone(
+      env, weak_java_ref.get(env), result);
+}
+}  // namespace
+
 static jlong JNI_VivaldiProfileSyncService_Init(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) {
@@ -79,6 +95,26 @@ jboolean VivaldiProfileSyncServiceAndroid::IsSetupInProgress(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) {
   return sync_service_->IsSetupInProgress();
+}
+
+void VivaldiProfileSyncServiceAndroid::BackupEncryptionToken(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    const base::android::JavaParamRef<jstring>& target_file) {
+  return sync_service_->ui_helper()->BackupEncryptionToken(
+      base::FilePath::FromUTF8Unsafe(
+          base::android::ConvertJavaStringToUTF8(env, target_file)),
+      base::BindOnce(OnBackupEncryptionTokenDone, env, weak_java_ref_));
+}
+
+void VivaldiProfileSyncServiceAndroid::RestoreEncryptionToken(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    const base::android::JavaParamRef<jstring>& source_file) {
+  return sync_service_->ui_helper()->RestoreEncryptionToken(
+      base::FilePath::FromUTF8Unsafe(
+          base::android::ConvertJavaStringToUTF8(env, source_file)),
+      base::BindOnce(OnRestoreEncryptionTokenDone, env, weak_java_ref_));
 }
 
 void VivaldiProfileSyncServiceAndroid::SendCycleData() {

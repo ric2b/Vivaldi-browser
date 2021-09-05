@@ -278,7 +278,7 @@ Polymer({
   computeShowAddSiteButton_() {
     return !(
         this.readOnlyList ||
-        (this.category === ContentSettingsTypes.NATIVE_FILE_SYSTEM_WRITE &&
+        (this.category === ContentSettingsTypes.FILE_SYSTEM_WRITE &&
          this.categorySubtype === ContentSetting.ALLOW));
   },
 
@@ -536,6 +536,6 @@ Polymer({
    * @private
    */
   computeHasDiscardedExceptions_() {
-    return !!this.sites.find(exception => exception.isDiscarded);
+    return this.sites.some(exception => exception.isDiscarded);
   },
 });

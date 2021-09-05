@@ -34,6 +34,7 @@
 #include "chrome/browser/ui/app_list/arc/arc_package_syncable_service.h"
 #include "chrome/browser/ui/app_list/arc/arc_pai_starter.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
@@ -114,29 +115,70 @@ class NotificationsEnabledDeferred {
     DictionaryPrefUpdate update(
         prefs_, arc::prefs::kArcSetNotificationsEnabledDeferred);
     base::DictionaryValue* const dict = update.Get();
-    dict->RemoveWithoutPathExpansion(app_id, /* out_value */ nullptr);
+    dict->RemoveKey(app_id);
   }
 
  private:
   PrefService* const prefs_;
 };
 
-bool InstallIconFromFileThread(const base::FilePath& icon_path,
-                               const std::vector<uint8_t>& content_png) {
-  DCHECK(!content_png.empty());
+bool WriteIconFile(const base::FilePath& icon_path,
+                   const std::vector<uint8_t>& icon_png_data) {
+  if (icon_png_data.empty())
+    return false;
 
   base::CreateDirectory(icon_path.DirName());
 
-  int wrote =
-      base::WriteFile(icon_path, reinterpret_cast<const char*>(&content_png[0]),
-                      content_png.size());
-  if (wrote != static_cast<int>(content_png.size())) {
+  int wrote = base::WriteFile(icon_path,
+                              reinterpret_cast<const char*>(&icon_png_data[0]),
+                              icon_png_data.size());
+  if (wrote != static_cast<int>(icon_png_data.size())) {
     VLOG(2) << "Failed to write ARC icon file: " << icon_path.MaybeAsASCII()
             << ".";
-    if (!base::DeleteFile(icon_path, false)) {
+    if (!base::DeleteFile(icon_path)) {
       VLOG(2) << "Couldn't delete broken icon file" << icon_path.MaybeAsASCII()
               << ".";
     }
+    return false;
+  }
+  return true;
+}
+
+bool InstallIconFromFileThread(const base::FilePath& icon_path,
+                               const base::FilePath& foreground_icon_path,
+                               const base::FilePath& background_icon_path,
+                               arc::mojom::RawIconPngDataPtr icon) {
+  const std::vector<uint8_t>& icon_png_data = icon->icon_png_data.value();
+  DCHECK(!icon_png_data.empty());
+
+  if (!WriteIconFile(icon_path, icon_png_data))
+    return false;
+
+  if (!base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon))
+    return true;
+
+  if (!icon->is_adaptive_icon) {
+    // For non-adaptive icon, save the |icon_png_data| to the
+    // |foreground_icon_path|, to identify the difference between migrating to
+    // the adaptive icon feature enabled and the non-adaptive icon case. If
+    // there is a |foreground_icon_path| file without a |background_icon_path|
+    // file, that means the icon is a non-adaptive icon. Otherwise, if there is
+    // no |foreground_icon_path| file, that means we haven't fetched the
+    // adaptive icon yet, then we should request the icon.
+    if (!WriteIconFile(foreground_icon_path, icon->icon_png_data.value())) {
+      return false;
+    }
+
+    return true;
+  }
+
+  if (!WriteIconFile(foreground_icon_path,
+                     icon->foreground_icon_png_data.value())) {
+    return false;
+  }
+
+  if (!WriteIconFile(background_icon_path,
+                     icon->background_icon_png_data.value())) {
     return false;
   }
 
@@ -146,7 +188,7 @@ bool InstallIconFromFileThread(const base::FilePath& icon_path,
 void DeleteAppFolderFromFileThread(const base::FilePath& path) {
   DCHECK(path.DirName().BaseName().MaybeAsASCII() == arc::prefs::kArcApps &&
          (!base::PathExists(path) || base::DirectoryExists(path)));
-  const bool deleted = base::DeleteFileRecursively(path);
+  const bool deleted = base::DeletePathRecursively(path);
   DCHECK(deleted);
 }
 
@@ -405,6 +447,28 @@ base::FilePath ArcAppListPrefs::MaybeGetIconPathForDefaultApp(
       MapDefaultAppIconDescriptor(descriptor).GetName());
 }
 
+base::FilePath ArcAppListPrefs::MaybeGetForegroundIconPathForDefaultApp(
+    const std::string& app_id,
+    const ArcAppIconDescriptor& descriptor) const {
+  const ArcDefaultAppList::AppInfo* default_app = default_apps_->GetApp(app_id);
+  if (!default_app || default_app->app_path.empty())
+    return base::FilePath();
+
+  return default_app->app_path.AppendASCII(
+      MapDefaultAppIconDescriptor(descriptor).GetForegroundIconName());
+}
+
+base::FilePath ArcAppListPrefs::MaybeGetBackgroundIconPathForDefaultApp(
+    const std::string& app_id,
+    const ArcAppIconDescriptor& descriptor) const {
+  const ArcDefaultAppList::AppInfo* default_app = default_apps_->GetApp(app_id);
+  if (!default_app || default_app->app_path.empty())
+    return base::FilePath();
+
+  return default_app->app_path.AppendASCII(
+      MapDefaultAppIconDescriptor(descriptor).GetBackgroundIconName());
+}
+
 base::FilePath ArcAppListPrefs::GetIconPath(
     const std::string& app_id,
     const ArcAppIconDescriptor& descriptor) {
@@ -419,7 +483,7 @@ base::FilePath ArcAppListPrefs::GetForegroundIconPath(
   active_icons_[app_id].insert(descriptor);
   return GetAppPath(app_id).AppendASCII(descriptor.GetForegroundIconName());
 }
-// Constructs path to the app background icon for specific scale factor.
+
 base::FilePath ArcAppListPrefs::GetBackgroundIconPath(
     const std::string& app_id,
     const ArcAppIconDescriptor& descriptor) {
@@ -486,26 +550,50 @@ void ArcAppListPrefs::RequestIcon(const std::string& app_id,
 void ArcAppListPrefs::SendIconRequest(const std::string& app_id,
                                       const AppInfo& app_info,
                                       const ArcAppIconDescriptor& descriptor) {
-  base::OnceCallback<void(const std::vector<uint8_t>& /* icon_png_data */)>
-      callback =
-          base::BindOnce(&ArcAppListPrefs::OnIcon,
-                         weak_ptr_factory_.GetWeakPtr(), app_id, descriptor);
+  auto callback =
+      base::BindOnce(&ArcAppListPrefs::OnIcon, weak_ptr_factory_.GetWeakPtr(),
+                     app_id, descriptor);
   if (app_info.icon_resource_id.empty()) {
     auto* app_instance =
-        ARC_GET_INSTANCE_FOR_METHOD(app_connection_holder(), RequestAppIcon);
-    if (!app_instance)
+        ARC_GET_INSTANCE_FOR_METHOD(app_connection_holder(), GetAppIcon);
+    if (!app_instance) {
+      // TODO(crbug.com/1083331): Remove the RequestAppIcon related change, when
+      // the ARC change is rolled in Chrome OS.
+      app_instance =
+          ARC_GET_INSTANCE_FOR_METHOD(app_connection_holder(), RequestAppIcon);
+      if (app_instance) {
+        auto callback =
+            base::BindOnce(&ArcAppListPrefs::OnGetIcon,
+                           weak_ptr_factory_.GetWeakPtr(), app_id, descriptor);
+        app_instance->RequestAppIcon(app_info.package_name, app_info.activity,
+                                     descriptor.GetSizeInPixels(),
+                                     std::move(callback));
+      }
       return;  // Error is logged in macro.
-    app_instance->RequestAppIcon(app_info.package_name, app_info.activity,
-                                 descriptor.GetSizeInPixels(),
-                                 std::move(callback));
+    }
+    app_instance->GetAppIcon(app_info.package_name, app_info.activity,
+                             descriptor.GetSizeInPixels(), std::move(callback));
   } else {
     auto* app_instance = ARC_GET_INSTANCE_FOR_METHOD(app_connection_holder(),
-                                                     RequestShortcutIcon);
-    if (!app_instance)
+                                                     GetAppShortcutIcon);
+    if (!app_instance) {
+      // TODO(crbug.com/1083331): Remove the RequestAppIcon related change, when
+      // the ARC change is rolled in Chrome OS.
+      app_instance = ARC_GET_INSTANCE_FOR_METHOD(app_connection_holder(),
+                                                 RequestShortcutIcon);
+      if (app_instance) {
+        auto callback =
+            base::BindOnce(&ArcAppListPrefs::OnGetIcon,
+                           weak_ptr_factory_.GetWeakPtr(), app_id, descriptor);
+        app_instance->RequestAppIcon(app_info.package_name, app_info.activity,
+                                     descriptor.GetSizeInPixels(),
+                                     std::move(callback));
+      }
       return;  // Error is logged in macro.
-    app_instance->RequestShortcutIcon(app_info.icon_resource_id,
-                                      descriptor.GetSizeInPixels(),
-                                      std::move(callback));
+    }
+    app_instance->GetAppShortcutIcon(app_info.icon_resource_id,
+                                     descriptor.GetSizeInPixels(),
+                                     std::move(callback));
   }
 }
 
@@ -864,7 +952,7 @@ void ArcAppListPrefs::OnArcPlayStoreEnabledChanged(bool enabled) {
 }
 
 void ArcAppListPrefs::SetDefaultAppsFilterLevel() {
-  // There is no a blacklisting mechanism for Android apps. Until there is
+  // There is no a blocklisting mechanism for Android apps. Until there is
   // one, we have no option but to ban all pre-installed apps on Android side.
   // Match this requirement and don't show pre-installed apps for managed users
   // in app list.
@@ -1583,12 +1671,25 @@ void ArcAppListPrefs::OnPackageRemoved(const std::string& package_name) {
     observer.OnPackageRemoved(package_name, true);
 }
 
-void ArcAppListPrefs::OnIcon(const std::string& app_id,
-                             const ArcAppIconDescriptor& descriptor,
-                             const std::vector<uint8_t>& icon_png_data) {
+void ArcAppListPrefs::OnGetIcon(const std::string& app_id,
+                                const ArcAppIconDescriptor& descriptor,
+                                const std::vector<uint8_t>& icon_png_data) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (icon_png_data.empty()) {
+  arc::mojom::RawIconPngDataPtr icon = arc::mojom::RawIconPngData::New();
+  icon->is_adaptive_icon = false;
+  icon->icon_png_data =
+      std::vector<uint8_t>(icon_png_data.begin(), icon_png_data.end());
+  OnIcon(app_id, descriptor, std::move(icon));
+}
+
+void ArcAppListPrefs::OnIcon(const std::string& app_id,
+                             const ArcAppIconDescriptor& descriptor,
+                             arc::mojom::RawIconPngDataPtr icon) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  if (!icon || !icon->icon_png_data.has_value() ||
+      icon->icon_png_data->empty()) {
     LOG(WARNING) << "Cannot fetch icon for " << app_id;
     return;
   }
@@ -1598,7 +1699,25 @@ void ArcAppListPrefs::OnIcon(const std::string& app_id,
     return;
   }
 
-  InstallIcon(app_id, descriptor, icon_png_data);
+  InstallIcon(app_id, descriptor, std::move(icon));
+}
+
+void ArcAppListPrefs::OnIconLoaded(const std::string& app_id,
+                                   const ArcAppIconDescriptor& descriptor,
+                                   arc::mojom::RawIconPngDataPtr icon) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  if (icon->icon_png_data->empty()) {
+    LOG(WARNING) << "Cannot fetch icon for " << app_id;
+    return;
+  }
+
+  if (!IsRegistered(app_id)) {
+    VLOG(2) << "Request to update icon for non-registered app: " << app_id;
+    return;
+  }
+
+  InstallIcon(app_id, descriptor, std::move(icon));
 }
 
 void ArcAppListPrefs::OnTaskCreated(int32_t task_id,
@@ -1619,8 +1738,20 @@ void ArcAppListPrefs::OnTaskDescriptionUpdated(
     int32_t task_id,
     const std::string& label,
     const std::vector<uint8_t>& icon_png_data) {
+  arc::mojom::RawIconPngDataPtr icon = arc::mojom::RawIconPngData::New();
+  icon->is_adaptive_icon = false;
+  icon->icon_png_data =
+      std::vector<uint8_t>(icon_png_data.begin(), icon_png_data.end());
   for (auto& observer : observer_list_)
-    observer.OnTaskDescriptionUpdated(task_id, label, icon_png_data);
+    observer.OnTaskDescriptionChanged(task_id, label, *icon);
+}
+
+void ArcAppListPrefs::OnTaskDescriptionChanged(
+    int32_t task_id,
+    const std::string& label,
+    arc::mojom::RawIconPngDataPtr icon) {
+  for (auto& observer : observer_list_)
+    observer.OnTaskDescriptionChanged(task_id, label, *icon);
 }
 
 void ArcAppListPrefs::OnTaskDestroyed(int32_t task_id) {
@@ -1775,11 +1906,17 @@ base::Time ArcAppListPrefs::GetInstallTime(const std::string& app_id) const {
 
 void ArcAppListPrefs::InstallIcon(const std::string& app_id,
                                   const ArcAppIconDescriptor& descriptor,
-                                  const std::vector<uint8_t>& content_png) {
+                                  arc::mojom::RawIconPngDataPtr icon) {
   const base::FilePath icon_path = GetIconPath(app_id, descriptor);
+  const base::FilePath foreground_icon_path =
+      GetForegroundIconPath(app_id, descriptor);
+  const base::FilePath background_icon_path =
+      GetBackgroundIconPath(app_id, descriptor);
   base::PostTaskAndReplyWithResult(
       file_task_runner_.get(), FROM_HERE,
-      base::BindOnce(&InstallIconFromFileThread, icon_path, content_png),
+      base::BindOnce(&InstallIconFromFileThread, icon_path,
+                     foreground_icon_path, background_icon_path,
+                     std::move(icon)),
       base::BindOnce(&ArcAppListPrefs::OnIconInstalled,
                      weak_ptr_factory_.GetWeakPtr(), app_id, descriptor));
 }

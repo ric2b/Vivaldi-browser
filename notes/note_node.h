@@ -12,10 +12,9 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/time/time.h"
 #include "content/public/browser/notification_observer.h"
+#include "notes/note_attachment.h"
 #include "ui/base/models/tree_node_model.h"
 #include "url/gurl.h"
-
-#include "notes/note_attachment.h"
 
 class Profile;
 
@@ -27,13 +26,12 @@ class SequencedTaskRunner;
 
 namespace vivaldi {
 class NotesStorage;
-class NotesLoadDetails;
+class NoteLoadDetails;
 
 class NoteNode : public ui::TreeNode<NoteNode> {
  public:
   enum Type { NOTE, FOLDER, MAIN, OTHER, TRASH, SEPARATOR };
 
-  static const int64_t kInvalidSyncTransactionVersion;
   static const char kRootNodeGuid[];
   static const char kMainNodeGuid[];
   static const char kOtherNotesNodeGuid[];
@@ -41,8 +39,6 @@ class NoteNode : public ui::TreeNode<NoteNode> {
 
   NoteNode(int64_t id, const std::string& guid, Type type);
   ~NoteNode() override;
-
-  static std::string RootNodeGuid();
 
   // Returns true if the node is a NotePermanentNode (which does not include
   // the root).
@@ -100,11 +96,6 @@ class NoteNode : public ui::TreeNode<NoteNode> {
     attachments_.swap(node->attachments_);
   }
 
-  void set_sync_transaction_version(int64_t sync_transaction_version) {
-    sync_transaction_version_ = sync_transaction_version;
-  }
-  int64_t sync_transaction_version() const { return sync_transaction_version_; }
-
  protected:
   NoteNode(int64_t id,
            const std::string& guid,
@@ -133,9 +124,6 @@ class NoteNode : public ui::TreeNode<NoteNode> {
   // The unique identifier for this node.
   int64_t id_;
 
-  // The sync transaction version. Defaults to kInvalidSyncTransactionVersion.
-  int64_t sync_transaction_version_;
-
   const bool is_permanent_node_;
 
   DISALLOW_COPY_AND_ASSIGN(NoteNode);
@@ -144,10 +132,22 @@ class NoteNode : public ui::TreeNode<NoteNode> {
 // Node used for the permanent folders (excluding the root).
 class PermanentNoteNode : public NoteNode {
  public:
-  PermanentNoteNode(int64_t id, Type type);
   ~PermanentNoteNode() override;
 
  private:
+  friend class NoteLoadDetails;
+
+  // Permanent nodes are well-known, it's not allowed to create arbitrary ones.
+  static std::unique_ptr<PermanentNoteNode> CreateMainNotes(int64_t id);
+  static std::unique_ptr<PermanentNoteNode> CreateOtherNotes(int64_t id);
+  static std::unique_ptr<PermanentNoteNode> CreateNoteTrash(int64_t id);
+
+  // Constructor is private to disallow the construction of permanent nodes
+  // other than the well-known ones, see factory methods.
+  PermanentNoteNode(int64_t id,
+                    Type type,
+                    const std::string& guid,
+                    const base::string16& title);
   DISALLOW_COPY_AND_ASSIGN(PermanentNoteNode);
 };
 

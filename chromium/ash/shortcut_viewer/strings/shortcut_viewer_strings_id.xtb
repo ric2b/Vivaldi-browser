@@ -47,6 +47,7 @@
 <translation id="2488661730534396940">Mengaktifkan desktop di sisi kiri</translation>
 <translation id="2515586267016047495">Alt</translation>
 <translation id="2530339807289914946">Men-scroll halaman ke bawah</translation>
+<translation id="2530896289327917474">Mengaktifkan atau menonaktifkan penjelajahan dengan keyboard</translation>
 <translation id="2574014812750545982">Mereset tingkat perbesaran/perkecilan di halaman</translation>
 <translation id="2596078834055697711">Mengambil screenshot jendela</translation>
 <translation id="2685170433750953446"><ph name="SHIFT" /><ph name="SEPARATOR1" /><ph name="ALT" /><ph name="SEPARATOR2" /><ph name="L" />, lalu <ph name="TAB" /> atau <ph name="RIGHT" /></translation>
@@ -137,7 +138,7 @@
 <translation id="6143669479988153888">Melakukan zoom in di halaman</translation>
 <translation id="6185696379715117369">Page up</translation>
 <translation id="6228457605945141550">Mengurangi kecerahan</translation>
-<translation id="6276708887952587684">Melihat sumber halaman</translation>
+<translation id="6276708887952587684">Lihat sumber halaman</translation>
 <translation id="6321940490215594447">Membuka halaman Histori</translation>
 <translation id="6340769215862220182">Menampilkan fitur Perbesar</translation>
 <translation id="6359811074279051077"><ph name="MODIFIER" /><ph name="SEPARATOR" /><ph name="KEY" /></translation>

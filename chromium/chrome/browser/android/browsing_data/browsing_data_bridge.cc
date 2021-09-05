@@ -49,7 +49,8 @@ using content::BrowsingDataRemover;
 namespace {
 
 void OnBrowsingDataRemoverDone(
-    JavaObjectWeakGlobalRef weak_chrome_native_preferences) {
+    JavaObjectWeakGlobalRef weak_chrome_native_preferences,
+    uint64_t failed_data_types) {
   JNIEnv* env = AttachCurrentThread();
   auto java_obj = weak_chrome_native_preferences.get(env);
   if (java_obj.is_null())
@@ -145,7 +146,7 @@ static void JNI_BrowsingDataBridge_ClearBrowsingData(
                                          &ignoring_domain_reasons);
   std::unique_ptr<content::BrowsingDataFilterBuilder> filter_builder(
       content::BrowsingDataFilterBuilder::Create(
-          content::BrowsingDataFilterBuilder::BLACKLIST));
+          content::BrowsingDataFilterBuilder::Mode::kPreserve));
   for (const std::string& domain : excluding_domains) {
     filter_builder->AddRegisterableDomain(domain);
   }
@@ -156,7 +157,7 @@ static void JNI_BrowsingDataBridge_ClearBrowsingData(
         ignoring_domain_reasons);
   }
 
-  base::OnceClosure callback = base::BindOnce(
+  base::OnceCallback<void(uint64_t)> callback = base::BindOnce(
       &OnBrowsingDataRemoverDone, JavaObjectWeakGlobalRef(env, obj));
 
   browsing_data::TimePeriod period =

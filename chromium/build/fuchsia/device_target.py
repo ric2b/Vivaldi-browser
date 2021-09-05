@@ -84,9 +84,8 @@ class DeviceTarget(target.Target):
 
     self._port = port if port else 22
     self._system_log_file = system_log_file
-    self._loglistener = None
     self._host = host
-    self._fuchsia_out_dir = os.path.expanduser(fuchsia_out_dir)
+    self._fuchsia_out_dir = fuchsia_out_dir
     self._node_name = node_name
     self._os_check = os_check
     self._amber_repo = None
@@ -99,6 +98,7 @@ class DeviceTarget(target.Target):
         raise Exception('Only one of "--fuchsia-out-dir" or "--ssh_config" can '
                         'be specified.')
 
+      self._fuchsia_out_dir = os.path.expanduser(fuchsia_out_dir)
       # Use SSH keys from the Fuchsia output directory.
       self._ssh_config_path = os.path.join(self._fuchsia_out_dir, 'ssh-keys',
                                            'ssh_config')
@@ -112,10 +112,6 @@ class DeviceTarget(target.Target):
       # Default to using an automatically generated SSH config and keys.
       boot_data.ProvisionSSH(output_dir)
       self._ssh_config_path = boot_data.GetSSHConfigPath(output_dir)
-
-  def __exit__(self, exc_type, exc_val, exc_tb):
-    if self._loglistener:
-      self._loglistener.kill()
 
   def _SDKHashMatches(self):
     """Checks if /data/.hash on the device matches SDK_ROOT/.hash.
@@ -268,14 +264,6 @@ class DeviceTarget(target.Target):
       raise Exception('Couldn\'t parse nodename from bootserver output.')
     self._node_name = m.groupdict()['nodename']
     logging.info('Booted device "%s".' % self._node_name)
-
-    # Start loglistener to save system logs.
-    if self._system_log_file:
-      loglistener_path = GetHostToolPathFromPlatform('loglistener')
-      self._loglistener = subprocess.Popen(
-          [loglistener_path, self._node_name],
-          stdout=self._system_log_file,
-          stderr=subprocess.STDOUT, stdin=open(os.devnull))
 
     # Repeatdly query mDNS until we find the device, or we hit the timeout of
     # DISCOVERY_TIMEOUT_SECS.

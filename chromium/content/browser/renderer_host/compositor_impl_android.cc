@@ -117,6 +117,10 @@ gpu::ContextCreationAttribs GetCompositorContextAttributes(
   } else if (display_color_space == gfx::ColorSpace::CreateDisplayP3D65()) {
     attributes.color_space = gpu::COLOR_SPACE_DISPLAY_P3;
   } else {
+    // We don't support HDR on Android yet, but when we do, this function should
+    // be updated to support it.
+    DCHECK(!display_color_space.IsHDR());
+
     attributes.color_space = gpu::COLOR_SPACE_UNSPECIFIED;
     DLOG(ERROR) << "Android color space is neither sRGB nor P3, output color "
                    "will be incorrect.";
@@ -251,7 +255,7 @@ CompositorImpl::ReadbackRefImpl::~ReadbackRefImpl() {
 // static
 Compositor* Compositor::Create(CompositorClient* client,
                                gfx::NativeWindow root_window) {
-  return client ? new CompositorImpl(client, root_window) : NULL;
+  return client ? new CompositorImpl(client, root_window) : nullptr;
 }
 
 // static
@@ -281,7 +285,7 @@ CompositorImpl::CompositorImpl(CompositorClient* client,
                                gfx::NativeWindow root_window)
     : frame_sink_id_(AllocateFrameSinkId()),
       resource_manager_(root_window),
-      window_(NULL),
+      window_(nullptr),
       surface_handle_(gpu::kNullSurfaceHandle),
       client_(client),
       needs_animate_(false),
@@ -374,11 +378,11 @@ void CompositorImpl::SetSurface(jobject surface,
     SetVisible(false);
     tracker->RemoveSurface(surface_handle_);
     ANativeWindow_release(window_);
-    window_ = NULL;
+    window_ = nullptr;
     surface_handle_ = gpu::kNullSurfaceHandle;
   }
 
-  ANativeWindow* window = NULL;
+  ANativeWindow* window = nullptr;
   if (surface) {
     // Note: This ensures that any local references used by
     // ANativeWindow_fromSurface are released immediately. This is needed as a

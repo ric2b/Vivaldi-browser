@@ -35,7 +35,7 @@
 
 #if defined(OS_ANDROID)
 #include "device/bluetooth/test/bluetooth_test_android.h"
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 #include "device/bluetooth/test/bluetooth_test_mac.h"
 #elif defined(OS_WIN)
 #include "base/win/windows_version.h"
@@ -74,8 +74,8 @@ class TestBluetoothAdapter final : public BluetoothAdapter {
   std::string GetName() const override { return ""; }
 
   void SetName(const std::string& name,
-               const base::Closure& callback,
-               const ErrorCallback& error_callback) override {}
+               base::OnceClosure callback,
+               ErrorCallback error_callback) override {}
 
   bool IsInitialized() const override { return false; }
 
@@ -84,45 +84,43 @@ class TestBluetoothAdapter final : public BluetoothAdapter {
   bool IsPowered() const override { return false; }
 
   void SetPowered(bool powered,
-                  const base::Closure& callback,
-                  const ErrorCallback& error_callback) override {}
+                  base::OnceClosure callback,
+                  ErrorCallback error_callback) override {}
 
   bool IsDiscoverable() const override { return false; }
 
   void SetDiscoverable(bool discoverable,
-                       const base::Closure& callback,
-                       const ErrorCallback& error_callback) override {}
+                       base::OnceClosure callback,
+                       ErrorCallback error_callback) override {}
 
   bool IsDiscovering() const override { return false; }
 
   UUIDList GetUUIDs() const override { return UUIDList(); }
 
-  void CreateRfcommService(
-      const BluetoothUUID& uuid,
-      const ServiceOptions& options,
-      const CreateServiceCallback& callback,
-      const CreateServiceErrorCallback& error_callback) override {}
+  void CreateRfcommService(const BluetoothUUID& uuid,
+                           const ServiceOptions& options,
+                           CreateServiceCallback callback,
+                           CreateServiceErrorCallback error_callback) override {
+  }
 
-  void CreateL2capService(
-      const BluetoothUUID& uuid,
-      const ServiceOptions& options,
-      const CreateServiceCallback& callback,
-      const CreateServiceErrorCallback& error_callback) override {}
+  void CreateL2capService(const BluetoothUUID& uuid,
+                          const ServiceOptions& options,
+                          CreateServiceCallback callback,
+                          CreateServiceErrorCallback error_callback) override {}
 
   void RegisterAdvertisement(
       std::unique_ptr<BluetoothAdvertisement::Data> advertisement_data,
-      const CreateAdvertisementCallback& callback,
-      const AdvertisementErrorCallback& error_callback) override {}
+      CreateAdvertisementCallback callback,
+      AdvertisementErrorCallback error_callback) override {}
 
 #if defined(OS_CHROMEOS) || defined(OS_LINUX)
   void SetAdvertisingInterval(
       const base::TimeDelta& min,
       const base::TimeDelta& max,
-      const base::Closure& callback,
-      const AdvertisementErrorCallback& error_callback) override {}
-  void ResetAdvertising(
-      const base::Closure& callback,
-      const AdvertisementErrorCallback& error_callback) override {}
+      base::OnceClosure callback,
+      AdvertisementErrorCallback error_callback) override {}
+  void ResetAdvertising(base::OnceClosure callback,
+                        AdvertisementErrorCallback error_callback) override {}
 #endif
 
   BluetoothLocalGattService* GetGattService(
@@ -130,24 +128,22 @@ class TestBluetoothAdapter final : public BluetoothAdapter {
     return nullptr;
   }
 
-  void TestErrorCallback() {}
-
   void OnStartDiscoverySessionQuitLoop(
-      base::Closure run_loop_quit,
+      base::OnceClosure run_loop_quit,
       std::unique_ptr<device::BluetoothDiscoverySession> discovery_session) {
     ++callback_count_;
-    run_loop_quit.Run();
+    std::move(run_loop_quit).Run();
     discovery_sessions_holder_.push(std::move(discovery_session));
   }
 
-  void OnRemoveDiscoverySession(base::Closure run_loop_quit) {
+  void OnRemoveDiscoverySession(base::OnceClosure run_loop_quit) {
     ++callback_count_;
-    run_loop_quit.Run();
+    std::move(run_loop_quit).Run();
   }
 
-  void OnRemoveDiscoverySessionError(base::Closure run_loop_quit) {
+  void OnRemoveDiscoverySessionError(base::OnceClosure run_loop_quit) {
     ++callback_count_;
-    run_loop_quit.Run();
+    std::move(run_loop_quit).Run();
   }
 
   void set_discovery_session_outcome(
@@ -155,32 +151,28 @@ class TestBluetoothAdapter final : public BluetoothAdapter {
     discovery_session_outcome_ = outcome;
   }
 
-  void StopDiscoverySession(base::Closure run_loop_quit) {
+  void StopDiscoverySession(base::OnceClosure run_loop_quit) {
+    auto copyable_callback =
+        base::AdaptCallbackForRepeating(std::move(run_loop_quit));
     discovery_sessions_holder_.front()->Stop(
-        base::BindRepeating(&TestBluetoothAdapter::OnRemoveDiscoverySession,
-                            this, run_loop_quit),
-        base::BindRepeating(
-            &TestBluetoothAdapter::OnRemoveDiscoverySessionError, this,
-            run_loop_quit));
+        base::BindOnce(&TestBluetoothAdapter::OnRemoveDiscoverySession, this,
+                       copyable_callback),
+        base::BindOnce(&TestBluetoothAdapter::OnRemoveDiscoverySessionError,
+                       this, copyable_callback));
     discovery_sessions_holder_.pop();
   }
 
-  void StopAllDiscoverySessions(base::Closure run_loop_quit) {
-    int num_stop_requests = discovery_sessions_holder_.size();
+  void StopAllDiscoverySessions(base::OnceClosure run_loop_quit) {
+    base::RepeatingClosure closure = base::BarrierClosure(
+        discovery_sessions_holder_.size(), std::move(run_loop_quit));
     while (!discovery_sessions_holder_.empty()) {
       discovery_sessions_holder_.front()->Stop(
-          base::BindLambdaForTesting(
-              [run_loop_quit, num_stop_requests, this]() {
-                num_requests_returned_++;
-                ++callback_count_;
-                if (num_requests_returned_ == num_stop_requests) {
-                  num_requests_returned_ = 0;
-                  run_loop_quit.Run();
-                }
-              }),
-          base::BindRepeating(
-              &TestBluetoothAdapter::OnRemoveDiscoverySessionError, this,
-              run_loop_quit));
+          base::BindLambdaForTesting([closure, this]() {
+            ++callback_count_;
+            closure.Run();
+          }),
+          base::BindOnce(&TestBluetoothAdapter::OnRemoveDiscoverySessionError,
+                         this, closure));
       discovery_sessions_holder_.pop();
     }
   }
@@ -191,32 +183,29 @@ class TestBluetoothAdapter final : public BluetoothAdapter {
     std::swap(discovery_sessions_holder_, empty_queue);
   }
 
-  void QueueStartRequests(base::Closure run_loop_quit, int num_requests) {
+  void QueueStartRequests(base::OnceClosure run_loop_quit, int num_requests) {
+    base::RepeatingClosure closure =
+        base::BarrierClosure(num_requests, std::move(run_loop_quit));
     for (int i = 0; i < num_requests; ++i) {
       StartDiscoverySession(
           base::BindLambdaForTesting(
-              [run_loop_quit, num_requests,
-               this](std::unique_ptr<device::BluetoothDiscoverySession>
-                         discovery_session) {
+              [closure, this](std::unique_ptr<device::BluetoothDiscoverySession>
+                                  discovery_session) {
                 ++callback_count_;
-                num_requests_returned_++;
                 discovery_sessions_holder_.push(std::move(discovery_session));
-                if (num_requests_returned_ == num_requests) {
-                  num_requests_returned_ = 0;
-                  run_loop_quit.Run();
-                }
+                closure.Run();
               }),
-          base::BindOnce(&TestBluetoothAdapter::TestErrorCallback, this));
-    };
+          closure);
+    }
   }
 
   void StartSessionWithFilter(
       std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter,
-      base::RepeatingClosure run_loop_quit) {
+      base::OnceClosure run_loop_quit) {
     StartDiscoverySessionWithFilter(
         std::move(discovery_filter),
         base::BindOnce(&TestBluetoothAdapter::OnStartDiscoverySessionQuitLoop,
-                       this, run_loop_quit),
+                       this, std::move(run_loop_quit)),
         base::DoNothing());
   }
 
@@ -291,8 +280,6 @@ class TestBluetoothAdapter final : public BluetoothAdapter {
 
   void RemovePairingDelegateInternal(
       BluetoothDevice::PairingDelegate* pairing_delegate) override {}
-
-  int num_requests_returned_ = 0;
 
  private:
   void PostDelayedTask(base::OnceClosure callback) {
@@ -686,7 +673,7 @@ TEST_F(BluetoothAdapterTest, StartDiscoverySessionError_Destroy) {
 }
 
 // TODO(scheib): Enable BluetoothTest fixture tests on all platforms.
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MAC)
 #define MAYBE_ConstructDefaultAdapter ConstructDefaultAdapter
 #else
 #define MAYBE_ConstructDefaultAdapter DISABLED_ConstructDefaultAdapter
@@ -705,9 +692,9 @@ TEST_F(BluetoothTest, MAYBE_ConstructDefaultAdapter) {
 
   bool expected = false;
 // MacOS returns empty for name and address if the adapter is off.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   expected = !adapter_->IsPowered();
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
   EXPECT_EQ(expected, adapter_->GetAddress().empty());
   EXPECT_EQ(expected, adapter_->GetName().empty());
@@ -721,7 +708,7 @@ TEST_F(BluetoothTest, MAYBE_ConstructDefaultAdapter) {
 }  // namespace device
 
 // TODO(scheib): Enable BluetoothTest fixture tests on all platforms.
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MAC)
 #define MAYBE_ConstructWithoutDefaultAdapter ConstructWithoutDefaultAdapter
 #else
 #define MAYBE_ConstructWithoutDefaultAdapter \
@@ -743,7 +730,7 @@ TEST_F(BluetoothTest, MAYBE_ConstructWithoutDefaultAdapter) {
 }
 
 // TODO(scheib): Enable BluetoothTest fixture tests on all platforms.
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MAC)
 #define MAYBE_ConstructFakeAdapter ConstructFakeAdapter
 #else
 #define MAYBE_ConstructFakeAdapter DISABLED_ConstructFakeAdapter
@@ -865,7 +852,7 @@ TEST_F(BluetoothTest, AdapterIllegalStateBeforeStopScan) {
 }
 #endif  // defined(OS_ANDROID)
 
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MAC)
 #define MAYBE_NoPermissions NoPermissions
 #else
 #define MAYBE_NoPermissions DISABLED_NoPermissions
@@ -912,7 +899,7 @@ TEST_F(BluetoothTest, NoLocationServices) {
 }
 #endif  // defined(OS_ANDROID)
 
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MAC)
 #define MAYBE_DiscoverLowEnergyDevice DiscoverLowEnergyDevice
 #else
 #define MAYBE_DiscoverLowEnergyDevice DISABLED_DiscoverLowEnergyDevice
@@ -938,7 +925,7 @@ TEST_F(BluetoothTest, MAYBE_DiscoverLowEnergyDevice) {
   EXPECT_TRUE(device);
 }
 
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MAC)
 #define MAYBE_DiscoverLowEnergyDeviceTwice DiscoverLowEnergyDeviceTwice
 #else
 #define MAYBE_DiscoverLowEnergyDeviceTwice DISABLED_DiscoverLowEnergyDeviceTwice
@@ -971,7 +958,7 @@ TEST_F(BluetoothTest, MAYBE_DiscoverLowEnergyDeviceTwice) {
   EXPECT_EQ(1u, adapter_->GetDevices().size());
 }
 
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MAC)
 #define MAYBE_DiscoverLowEnergyDeviceWithUpdatedUUIDs \
   DiscoverLowEnergyDeviceWithUpdatedUUIDs
 #else
@@ -1013,7 +1000,7 @@ TEST_F(BluetoothTest, MAYBE_DiscoverLowEnergyDeviceWithUpdatedUUIDs) {
   EXPECT_EQ(1u, adapter_->GetDevices().size());
 }
 
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MAC)
 #define MAYBE_DiscoverMultipleLowEnergyDevices DiscoverMultipleLowEnergyDevices
 #else
 #define MAYBE_DiscoverMultipleLowEnergyDevices \
@@ -1195,7 +1182,7 @@ TEST_F(BluetoothTest, TogglePowerFakeAdapter) {
   EXPECT_EQ(2, observer.powered_changed_count());
 }
 
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MAC)
 #define MAYBE_TogglePowerFakeAdapter_Twice TogglePowerFakeAdapter_Twice
 #else
 #define MAYBE_TogglePowerFakeAdapter_Twice DISABLED_TogglePowerFakeAdapter_Twice
@@ -1242,7 +1229,7 @@ TEST_F(BluetoothTest, MAYBE_TogglePowerFakeAdapter_Twice) {
   EXPECT_EQ(2, observer.powered_changed_count());
 }
 
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MAC)
 #define MAYBE_TogglePowerFakeAdapter_WithinCallback_On_Off \
   TogglePowerFakeAdapter_WithinCallback_On_Off
 #else
@@ -1279,7 +1266,7 @@ TEST_F(BluetoothTest, MAYBE_TogglePowerFakeAdapter_WithinCallback_On_Off) {
   EXPECT_EQ(2, observer.powered_changed_count());
 }
 
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MAC)
 #define MAYBE_TogglePowerFakeAdapter_WithinCallback_Off_On \
   TogglePowerFakeAdapter_WithinCallback_Off_On
 #else
@@ -1323,7 +1310,7 @@ TEST_F(BluetoothTest, MAYBE_TogglePowerFakeAdapter_WithinCallback_Off_On) {
   EXPECT_EQ(3, observer.powered_changed_count());
 }
 
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MAC)
 #define MAYBE_TogglePowerFakeAdapter_DestroyWithPending \
   TogglePowerFakeAdapter_DestroyWithPending
 #else
@@ -1443,7 +1430,7 @@ TEST_P(BluetoothTestWinrtOnly, DiscoverySessionFailure) {
 }
 #endif  // defined(OS_WIN)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_TurnOffAdapterWithConnectedDevice \
   TurnOffAdapterWithConnectedDevice
 #else
@@ -1831,7 +1818,7 @@ TEST_F(BluetoothTest, MAYBE_RegisterLocalGattServices) {
 // This test should only be enabled for platforms that uses the
 // BluetoothAdapter#RemoveOutdatedDevices function to purge outdated
 // devices.
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MAC)
 #define MAYBE_EnsureUpdatedTimestamps EnsureUpdatedTimestamps
 #else
 #define MAYBE_EnsureUpdatedTimestamps DISABLED_EnsureUpdatedTimestamps
@@ -1870,7 +1857,7 @@ TEST_F(BluetoothTest, MAYBE_EnsureUpdatedTimestamps) {
 // This test should only be enabled for platforms that uses the
 // BluetoothAdapter#RemoveOutdatedDevices function to purge outdated
 // devices.
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MAC)
 #define MAYBE_RemoveOutdatedDevices RemoveOutdatedDevices
 #else
 #define MAYBE_RemoveOutdatedDevices DISABLED_RemoveOutdatedDevices
@@ -1899,7 +1886,7 @@ TEST_F(BluetoothTest, MAYBE_RemoveOutdatedDevices) {
 // This test should only be enabled for platforms that uses the
 // BluetoothAdapter#RemoveOutdatedDevices function to purge outdated
 // devices.
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MAC)
 #define MAYBE_RemoveOutdatedDeviceGattConnect RemoveOutdatedDeviceGattConnect
 #else
 #define MAYBE_RemoveOutdatedDeviceGattConnect \
@@ -1926,7 +1913,7 @@ TEST_F(BluetoothTest, MAYBE_RemoveOutdatedDeviceGattConnect) {
   EXPECT_EQ(1u, adapter_->GetDevices().size());
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // Simulate two devices being connected before calling
 // RetrieveGattConnectedDevicesWithDiscoveryFilter() with no service filter.
 TEST_F(BluetoothTest, DiscoverConnectedLowEnergyDeviceWithNoFilter) {
@@ -1954,9 +1941,9 @@ TEST_F(BluetoothTest, DiscoverConnectedLowEnergyDeviceWithNoFilter) {
   EXPECT_EQ(2, observer.device_added_count());
   EXPECT_EQ(2u, adapter_->GetDevices().size());
 }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // Simulate two devices being connected before calling
 // RetrieveGattConnectedDevicesWithDiscoveryFilter() with one service filter.
 TEST_F(BluetoothTest, DiscoverConnectedLowEnergyDeviceWithFilter) {
@@ -1987,9 +1974,9 @@ TEST_F(BluetoothTest, DiscoverConnectedLowEnergyDeviceWithFilter) {
   EXPECT_EQ(1, observer.device_added_count());
   EXPECT_EQ(1u, adapter_->GetDevices().size());
 }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // Simulate two devices being connected before calling
 // RetrieveGattConnectedDevicesWithDiscoveryFilter() with one service filter
 // that doesn't match.
@@ -2016,9 +2003,9 @@ TEST_F(BluetoothTest, DiscoverConnectedLowEnergyDeviceWithWrongFilter) {
   EXPECT_EQ(0, observer.device_added_count());
   EXPECT_EQ(0u, adapter_->GetDevices().size());
 }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // Simulate two devices being connected before calling
 // RetrieveGattConnectedDevicesWithDiscoveryFilter() with two service filters
 // that both match.
@@ -2061,9 +2048,9 @@ TEST_F(BluetoothTest, DiscoverConnectedLowEnergyDeviceWithTwoFilters) {
   EXPECT_EQ(2, observer.device_added_count());
   EXPECT_EQ(2u, adapter_->GetDevices().size());
 }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // Simulate two devices being connected before calling
 // RetrieveGattConnectedDevicesWithDiscoveryFilter() with one service filter
 // that one match device, and then
@@ -2113,7 +2100,7 @@ TEST_F(BluetoothTest, DiscoverConnectedLowEnergyDeviceTwice) {
   EXPECT_EQ(0, observer.device_added_count());
   EXPECT_EQ(1u, adapter_->GetDevices().size());
 }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
 #if defined(OS_WIN)
 INSTANTIATE_TEST_SUITE_P(All,

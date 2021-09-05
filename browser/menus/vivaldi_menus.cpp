@@ -177,12 +177,12 @@ void VivaldiAddLinkItems(SimpleMenuModel* menu,
 #if !defined(OFFICIAL_BUILD)
       // Text under context menu is always auto selected on mac so we can not
       // test for selected text to determine behavior in that OS.
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
       if (params.selection_text.empty()) {
 #endif
         menu->InsertItemWithStringIdAt(++index, IDC_VIV_SEND_LINK_BY_MAIL,
                                        IDS_VIV_SEND_LINK_BY_MAIL);
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
       }
 #endif
 #endif  // OFFICIAL_BUILD
@@ -389,7 +389,7 @@ bool IsVivaldiCommandIdEnabled(const SimpleMenuModel& menu,
 
       std::vector<base::string16> types;
       ui::Clipboard::GetForCurrentThread()->ReadAvailableTypes(
-          ui::ClipboardBuffer::kCopyPaste, &types);
+          ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &types);
       *enabled = !types.empty();
       break;
     }
@@ -462,10 +462,10 @@ void OnUseLocalImageAsBackground(content::WebContents* web_contents,
   // called after UpdateMapping calls our callback, we will need a weak pointer
   // for WebContents, which is messy until https://crbug.com/952390 is
   // resolved.
-  extensions::VivaldiDataSourcesAPI::UpdateMapping(
+  VivaldiDataSourcesAPI::UpdateMapping(
       web_contents->GetBrowserContext(), 0,
-      extensions::VivaldiDataSourcesAPI::kStartpageImagePathCustom_Index,
-      std::move(path), base::DoNothing());
+      VivaldiDataSourcesAPI::kStartpageImagePathCustom_Index, std::move(path),
+      base::DoNothing());
   SendSimpleAction(web_contents, event_flags, "useLocalImageAsBackground");
 }
 
@@ -527,7 +527,7 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
       if (IsVivaldiRunning()) {
         base::string16 text;
         ui::Clipboard::GetForCurrentThread()->ReadText(
-            ui::ClipboardBuffer::kCopyPaste, &text);
+            ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &text);
         std::string target;
         if (params.vivaldi_input_type == "vivaldi-addressfield")
           target = "url";

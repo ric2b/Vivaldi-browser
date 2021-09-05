@@ -7,6 +7,7 @@
 
 #include "base/path_service.h"
 #include "base/stl_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/connectors/common.h"
@@ -32,6 +33,10 @@ using ::testing::Mock;
 namespace safe_browsing {
 
 namespace {
+
+base::string16 text() {
+  return base::UTF8ToUTF16(std::string(100, 'a'));
+}
 
 class FakeBinaryUploadService : public BinaryUploadService {
  public:
@@ -292,7 +297,7 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogDelegateSimpleBrowserTest,
   DeepScanningDialogDelegate::Data data;
   data.do_dlp_scan = true;
   data.do_malware_scan = true;
-  data.text.emplace_back(base::UTF8ToUTF16("foo"));
+  data.text.emplace_back(text());
   data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.doc"));
   ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
       browser()->profile(), GURL(kTestUrl), &data,
@@ -358,7 +363,8 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogDelegateSimpleBrowserTest, Files) {
       /*threat_type*/ "DANGEROUS",
       /*trigger*/ SafeBrowsingPrivateEventRouter::kTriggerFileUpload,
       /*mimetypes*/ ExeMimeTypes(),
-      /*size*/ std::string("bad file content").size());
+      /*size*/ std::string("bad file content").size(),
+      /*result*/ EventResultToString(EventResult::BLOCKED));
 
   if (use_legacy_protos()) {
     DeepScanningClientResponse ok_response;
@@ -390,9 +396,8 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogDelegateSimpleBrowserTest, Files) {
         enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS);
     bad_result->set_tag("malware");
     auto* bad_rule = bad_result->add_triggered_rules();
-    bad_rule->set_action(enterprise_connectors::ContentAnalysisResponse::
-                             Result::TriggeredRule::BLOCK);
-    bad_rule->set_rule_name("MALWARE");
+    bad_rule->set_action(enterprise_connectors::TriggeredRule::BLOCK);
+    bad_rule->set_rule_name("malware");
 
     FakeBinaryUploadServiceStorage()->SetResponseForFile(
         "ok.doc", BinaryUploadService::Result::SUCCESS, ok_response);
@@ -485,14 +490,12 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogDelegateSimpleBrowserTest, Texts) {
     result->set_tag("dlp");
 
     auto* rule1 = result->add_triggered_rules();
-    rule1->set_action(enterprise_connectors::ContentAnalysisResponse::Result::
-                          TriggeredRule::REPORT_ONLY);
+    rule1->set_action(enterprise_connectors::TriggeredRule::REPORT_ONLY);
     rule1->set_rule_id("1");
     rule1->set_rule_name("resource rule 1");
 
     auto* rule2 = result->add_triggered_rules();
-    rule2->set_action(enterprise_connectors::ContentAnalysisResponse::Result::
-                          TriggeredRule::BLOCK);
+    rule2->set_action(enterprise_connectors::TriggeredRule::BLOCK);
     rule2->set_rule_id("3");
     rule2->set_rule_name("resource rule 2");
 
@@ -502,8 +505,8 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogDelegateSimpleBrowserTest, Texts) {
   }
 
   // The DLP verdict means an event should be reported. The content size is
-  // equal to the length of the concatenated texts ("text1" and "text2") times
-  // 2 since they are wide characters ((5 + 5) * 2 = 20).
+  // equal to the length of the concatenated texts (2 * 100 * 'a') times
+  // 2 since they are wide characters ((100 + 100) * 2 = 400).
   validator.ExpectSensitiveDataEvent(
       /*url*/ "about:blank",
       /*filename*/ "Text data",
@@ -512,7 +515,8 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogDelegateSimpleBrowserTest, Texts) {
       /*trigger*/ SafeBrowsingPrivateEventRouter::kTriggerWebContentUpload,
       /*dlp_verdict*/ dlp_verdict,
       /*mimetype*/ TextMimeTypes(),
-      /*size*/ 20);
+      /*size*/ 400,
+      /*result*/ EventResultToString(EventResult::BLOCKED));
 
   bool called = false;
   base::RunLoop run_loop;
@@ -521,8 +525,8 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogDelegateSimpleBrowserTest, Texts) {
   DeepScanningDialogDelegate::Data data;
   data.do_dlp_scan = true;
   data.do_malware_scan = true;
-  data.text.emplace_back(base::UTF8ToUTF16("text1"));
-  data.text.emplace_back(base::UTF8ToUTF16("text2"));
+  data.text.emplace_back(text());
+  data.text.emplace_back(text());
   ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
       browser()->profile(), GURL(kTestUrl), &data,
       enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY));
@@ -624,7 +628,11 @@ IN_PROC_BROWSER_TEST_P(
       /*reason*/ "FILE_PASSWORD_PROTECTED",
       /*mimetypes*/ ZipMimeTypes(),
       // du chrome/test/data/safe_browsing/download_protection/encrypted.zip -b
-      /*size*/ 20015);
+      /*size*/ 20015,
+      /*result*/
+      expected_result()
+          ? EventResultToString(safe_browsing::EventResult::ALLOWED)
+          : EventResultToString(safe_browsing::EventResult::BLOCKED));
 
   // Start test.
   DeepScanningDialogDelegate::ShowForWebContents(
@@ -716,7 +724,11 @@ IN_PROC_BROWSER_TEST_P(
       /*trigger*/ SafeBrowsingPrivateEventRouter::kTriggerFileUpload,
       /*reason*/ "DLP_SCAN_UNSUPPORTED_FILE_TYPE",
       /*mimetype*/ ShellScriptMimeTypes(),
-      /*size*/ std::string("file content").size());
+      /*size*/ std::string("file content").size(),
+      /*result*/
+      expected_result()
+          ? EventResultToString(safe_browsing::EventResult::ALLOWED)
+          : EventResultToString(safe_browsing::EventResult::BLOCKED));
 
   bool called = false;
   base::RunLoop run_loop;
@@ -817,7 +829,11 @@ IN_PROC_BROWSER_TEST_P(
       /*trigger*/ SafeBrowsingPrivateEventRouter::kTriggerFileUpload,
       /*reason*/ "FILE_TOO_LARGE",
       /*mimetypes*/ DocMimeTypes(),
-      /*size*/ BinaryUploadService::kMaxUploadSizeBytes + 1);
+      /*size*/ BinaryUploadService::kMaxUploadSizeBytes + 1,
+      /*result*/
+      expected_result()
+          ? EventResultToString(safe_browsing::EventResult::ALLOWED)
+          : EventResultToString(safe_browsing::EventResult::BLOCKED));
 
   bool called = false;
   base::RunLoop run_loop;
@@ -925,17 +941,15 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogDelegateDelayDeliveryUntilVerdictTest,
         enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS);
     malware_result->set_tag("malware");
     auto* malware_rule = malware_result->add_triggered_rules();
-    malware_rule->set_action(enterprise_connectors::ContentAnalysisResponse::
-                                 Result::TriggeredRule::BLOCK);
-    malware_rule->set_rule_name("MALWARE");
+    malware_rule->set_action(enterprise_connectors::TriggeredRule::BLOCK);
+    malware_rule->set_rule_name("malware");
 
     auto* dlp_result = response.add_results();
     dlp_result->set_status(
         enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS);
     dlp_result->set_tag("dlp");
     auto* dlp_rule = dlp_result->add_triggered_rules();
-    dlp_rule->set_action(enterprise_connectors::ContentAnalysisResponse::
-                             Result::TriggeredRule::BLOCK);
+    dlp_rule->set_action(enterprise_connectors::TriggeredRule::BLOCK);
     dlp_rule->set_rule_id("0");
     dlp_rule->set_rule_name("some_dlp_rule");
 
@@ -954,7 +968,8 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogDelegateDelayDeliveryUntilVerdictTest,
       extensions::SafeBrowsingPrivateEventRouter::kTriggerFileUpload,
       /*dlp_verdict*/ dlp_verdict,
       /*mimetypes*/ DocMimeTypes(),
-      /*size*/ std::string("foo content").size());
+      /*size*/ std::string("foo content").size(),
+      /*result*/ EventResultToString(EventResult::BLOCKED));
 
   bool called = false;
   base::RunLoop run_loop;

@@ -4,7 +4,9 @@
 
 #include "chromeos/printing/ppd_metadata_parser.h"
 
+#include "base/json/json_reader.h"
 #include "base/strings/string_piece.h"
+#include "chromeos/printing/ppd_metadata_matchers.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -12,46 +14,18 @@
 namespace chromeos {
 namespace {
 
+using ::testing::AllOf;
 using ::testing::ElementsAre;
+using ::testing::Eq;
 using ::testing::ExplainMatchResult;
 using ::testing::Field;
-using ::testing::IsEmpty;
+using ::testing::Ne;
+using ::testing::Optional;
 using ::testing::Pair;
 using ::testing::StrEq;
 using ::testing::UnorderedElementsAre;
 
 constexpr base::StringPiece kInvalidJson = "blah blah invalid JSON";
-
-// Matches a ReverseIndexLeaf struct against its |manufacturer| and
-// |model| members.
-MATCHER_P2(ReverseIndexLeafLike,
-           manufacturer,
-           model,
-           "is a ReverseIndexLeaf with manufacturer ``" +
-               std::string(manufacturer) + "'' and model ``" +
-               std::string(model) + "''") {
-  return ExplainMatchResult(
-             Field(&ReverseIndexLeaf::manufacturer, StrEq(manufacturer)), arg,
-             result_listener) &&
-         ExplainMatchResult(Field(&ReverseIndexLeaf::model, StrEq(model)), arg,
-                            result_listener);
-}
-
-// Matches a ParsedPrinter struct against its
-// |user_visible_printer_name| and |effective_make_and_model| members.
-MATCHER_P2(ParsedPrinterLike,
-           name,
-           emm,
-           "is a ParsedPrinter with user_visible_printer_name``" +
-               std::string(name) + "'' and effective_make_and_model ``" +
-               std::string(emm) + "''") {
-  return ExplainMatchResult(
-             Field(&ParsedPrinter::user_visible_printer_name, StrEq(name)), arg,
-             result_listener) &&
-         ExplainMatchResult(
-             Field(&ParsedPrinter::effective_make_and_model, StrEq(emm)), arg,
-             result_listener);
-}
 
 // Verifies that ParseLocales() can parse locales metadata.
 TEST(PpdMetadataParserTest, CanParseLocales) {
@@ -185,10 +159,13 @@ TEST(PpdMetadataParserTest, ParseManufacturersFailsGracefully) {
 TEST(PpdMetadataParserTest, CanParsePrinters) {
   constexpr base::StringPiece kPrintersJson = R"(
   {
-    "modelToEmm": {
-      "An die Musik": "d 547b",
-      "Auf der Donau": "d 553"
-    }
+    "printers": [ {
+      "emm": "d 547b",
+      "name": "An die Musik"
+    }, {
+      "emm": "d 553",
+      "name": "Auf der Donau"
+    } ]
   }
   )";
 
@@ -203,18 +180,18 @@ TEST(PpdMetadataParserTest, CanParsePrinters) {
 // Verifies that ParsePrinters() can parse printers and return a partial
 // list even when it encounters unexpected values.
 TEST(PpdMetadataParserTest, CanPartiallyParsePrinters) {
-  // Contains an embedded dictionary keyed on "Dearie me."
-  // ParsePrinters() shall ignore this.
+  // Contains an extra value keyed on "hello" in an otherwise valid leaf
+  // value in Printers metadata. ParsePrinters() shall ignore this.
   constexpr base::StringPiece kPrintersJson = R"(
   {
-    "modelToEmm": {
-      "Dearie me": {
-        "I didn't": "expect",
-        "to go": "deeper"
-      },
-      "Hänflings Liebeswerbung": "d 552",
-      "Auf der Donau": "d 553"
-    }
+    "printers": [ {
+      "emm": "d 552",
+      "name": "Hänflings Liebeswerbung",
+      "hello": "there!"
+    }, {
+      "emm": "d 553",
+      "name": "Auf der Donau"
+    } ]
   }
   )";
 
@@ -227,30 +204,445 @@ TEST(PpdMetadataParserTest, CanPartiallyParsePrinters) {
                   ParsedPrinterLike("Auf der Donau", "d 553")));
 }
 
-// Verifies that ParsePrinters() returns base::nullopt rather than an
-// empty container.
-TEST(PpdMetadataParserTest, ParsePrintersDoesNotReturnEmptyContainer) {
-  // Contains an embedded dictionary keyed on "Dearie me."
-  // ParsePrinters() shall ignore this, but in doing so shall make the
-  // returned ParsedPrinters empty.
+// Verifies that ParsePrinters() can parse printers and their
+// well-formed restrictions (if any are specified).
+TEST(PpdMetadataParserTest, CanParsePrintersWithRestrictions) {
+  // Specifies
+  // *  a printer with a minimum milestone,
+  // *  a printer with a maximum milestone, and
+  // *  a printer with both minimum and maximum milestones.
   constexpr base::StringPiece kPrintersJson = R"(
   {
-    "modelToEmm": {
-      "Dearie me": {
-        "I didn't": "expect",
-        "to go": "deeper"
+    "printers": [ {
+      "emm": "d 121",
+      "name": "Schäfers Klagelied",
+      "restriction": {
+        "minMilestone": 121
       }
-    }
+    }, {
+      "emm": "d 216",
+      "name": "Meeres Stille",
+      "restriction": {
+        "maxMilestone": 216
+      }
+    }, {
+      "emm": "d 257",
+      "name": "Heidenröslein",
+      "restriction": {
+        "minMilestone": 216,
+        "maxMilestone": 257
+      }
+    } ]
   }
   )";
 
-  EXPECT_FALSE(ParsePrinters(kPrintersJson).has_value());
+  const auto parsed = ParsePrinters(kPrintersJson);
+  ASSERT_TRUE(parsed.has_value());
+
+  EXPECT_THAT(
+      *parsed,
+      UnorderedElementsAre(
+          AllOf(ParsedPrinterLike("Schäfers Klagelied", "d 121"),
+                Field(&ParsedPrinter::restrictions,
+                      Optional(RestrictionsWithMinMilestone(121)))),
+          AllOf(ParsedPrinterLike("Meeres Stille", "d 216"),
+                Field(&ParsedPrinter::restrictions,
+                      Optional(RestrictionsWithMaxMilestone(216)))),
+          AllOf(
+              ParsedPrinterLike("Heidenröslein", "d 257"),
+              Field(&ParsedPrinter::restrictions,
+                    Optional(RestrictionsWithMinAndMaxMilestones(216, 257))))));
+}
+
+// Verifies that ParsePrinters() can parse printers and ignore
+// malformed restrictions.
+TEST(PpdMetadataParserTest, CanParsePrintersWithMalformedRestrictions) {
+  // Specifies a printer with invalid restrictions.
+  constexpr base::StringPiece kPrintersJson = R"(
+  {
+    "printers": [ {
+      "emm": "d 368",
+      "name": "Jägers Abendlied",
+      "restriction": {
+        "hello": "there!"
+      }
+    } ]
+  }
+  )";
+
+  const auto parsed = ParsePrinters(kPrintersJson);
+  ASSERT_TRUE(parsed.has_value());
+
+  EXPECT_THAT(*parsed,
+              UnorderedElementsAre(AllOf(
+                  ParsedPrinterLike("Jägers Abendlied", "d 368"),
+                  Field(&ParsedPrinter::restrictions, Eq(base::nullopt)))));
+}
+
+// Verifies that ParsePrinters() returns base::nullopt rather than an
+// empty container.
+TEST(PpdMetadataParserTest, ParsePrintersDoesNotReturnEmptyContainer) {
+  // No printers are specified in this otherwise valid JSON dictionary.
+  EXPECT_FALSE(ParsePrinters("{}").has_value());
 }
 
 // Verifies that ParsePrinters() returns base::nullopt on irrecoverable
 // parse error.
 TEST(PpdMetadataParserTest, ParsePrintersFailsGracefully) {
   EXPECT_FALSE(ParsePrinters(kInvalidJson).has_value());
+}
+
+// Verifies that ParseForwardIndex() can parse forward index metadata.
+TEST(PpdMetadataParserTest, CanParseForwardIndex) {
+  constexpr base::StringPiece kJsonForwardIndex = R"({
+  "ppdIndex": {
+    "der wanderer": {
+      "ppdMetadata": [ {
+        "name": "d-489.ppd.gz"
+      } ]
+    },
+    "morgenlied": {
+      "ppdMetadata": [ {
+        "name": "d-685.ppd.gz"
+      } ]
+    },
+    "wandrers nachtlied": {
+      "ppdMetadata": [ {
+        "name": "d-224.ppd.gz"
+      } ]
+    }
+  }
+})";
+
+  const auto parsed = ParseForwardIndex(kJsonForwardIndex);
+  ASSERT_TRUE(parsed.has_value());
+  EXPECT_THAT(
+      parsed.value(),
+      UnorderedElementsAre(
+          ParsedIndexEntryLike(
+              "der wanderer",
+              UnorderedElementsAre(
+                  ParsedIndexLeafWithPpdBasename("d-489.ppd.gz"))),
+          ParsedIndexEntryLike(
+              "morgenlied", UnorderedElementsAre(ParsedIndexLeafWithPpdBasename(
+                                "d-685.ppd.gz"))),
+          ParsedIndexEntryLike(
+              "wandrers nachtlied",
+              UnorderedElementsAre(
+                  ParsedIndexLeafWithPpdBasename("d-224.ppd.gz")))));
+}
+
+// Verifies that ParseForwardIndex() can parse forward index metadata
+// and return a partial list even when it encounters unexpected values.
+TEST(PpdMetadataParserTest, CanPartiallyParseForwardIndex) {
+  // Uses the same value as the CanParseForwardIndex test, but
+  // with garbage values mixed in.
+  constexpr base::StringPiece kJsonForwardIndex = R"({
+  "ppdIndex": {
+    "garbage": "unused value",
+    "more garbage": [ "more", "unused", "values" ],
+    "der wanderer": {
+      "ppdMetadata": [ {
+        "name": "d-489.ppd.gz",
+        "more garbage still": "unused value"
+      }, {
+        "also garbage": "unused value"
+      } ],
+      "unending garbage": "unused value"
+    },
+    "morgenlied": {
+      "ppdMetadata": [ {
+        "name": "d-685.ppd.gz"
+      } ]
+    },
+    "wandrers nachtlied": {
+      "ppdMetadata": [ {
+        "name": "d-224.ppd.gz"
+      } ]
+    }
+  }
+})";
+
+  const auto parsed = ParseForwardIndex(kJsonForwardIndex);
+  ASSERT_TRUE(parsed.has_value());
+  EXPECT_THAT(
+      parsed.value(),
+      UnorderedElementsAre(
+          ParsedIndexEntryLike(
+              "der wanderer",
+              UnorderedElementsAre(
+                  ParsedIndexLeafWithPpdBasename("d-489.ppd.gz"))),
+          ParsedIndexEntryLike(
+              "morgenlied", UnorderedElementsAre(ParsedIndexLeafWithPpdBasename(
+                                "d-685.ppd.gz"))),
+          ParsedIndexEntryLike(
+              "wandrers nachtlied",
+              UnorderedElementsAre(
+                  ParsedIndexLeafWithPpdBasename("d-224.ppd.gz")))));
+}
+
+// Verifies that ParseForwardIndex() can parse forward index metadata
+// in which leaf values have multiple ppdMetadata key-value pairs.
+TEST(PpdMetadataParserTest, CanParseForwardIndexWithMultiplePpdMetadataLeafs) {
+  constexpr base::StringPiece kJsonForwardIndex = R"({
+  "ppdIndex": {
+    "rastlose liebe": {
+      "ppdMetadata": [ {
+        "name": "d-138.ppd.gz"
+      }, {
+        "name": "1815.ppd.gz"
+      } ]
+    }
+  }
+})";
+
+  const auto parsed = ParseForwardIndex(kJsonForwardIndex);
+  ASSERT_TRUE(parsed.has_value());
+  EXPECT_THAT(parsed.value(),
+              UnorderedElementsAre(ParsedIndexEntryLike(
+                  "rastlose liebe",
+                  UnorderedElementsAre(
+                      ParsedIndexLeafWithPpdBasename("d-138.ppd.gz"),
+                      ParsedIndexLeafWithPpdBasename("1815.ppd.gz")))));
+}
+
+// Verifies that ParseForwardIndex() can parse forward index metadata
+// and its well-formed restrictions (if any are specified).
+TEST(PpdMetadataParserTest, CanParseForwardIndexWithRestrictions) {
+  // Specifies
+  // *  a PPD metadata leaf with a minimum milestone,
+  // *  a PPD metadata leaf with a maximum milestone, and
+  // *  a PPD metadata leaf with both minimum and maximum milestones.
+  constexpr base::StringPiece kJsonForwardIndex = R"({
+  "ppdIndex": {
+    "nähe des geliebten": {
+      "ppdMetadata": [ {
+        "name": "d-162.ppd.gz",
+        "restriction": {
+          "minMilestone": 25
+        }
+      } ]
+    },
+    "der fischer": {
+      "ppdMetadata": [ {
+        "name": "d-225.ppd.gz",
+        "restriction": {
+          "maxMilestone": 35
+        }
+      } ]
+    },
+    "erster verlust": {
+      "ppdMetadata": [ {
+        "name": "d-226.ppd.gz",
+        "restriction": {
+          "minMilestone": 45,
+          "maxMilestone": 46
+        }
+      } ]
+    }
+  }
+})";
+
+  const auto parsed = ParseForwardIndex(kJsonForwardIndex);
+  ASSERT_TRUE(parsed.has_value());
+  EXPECT_THAT(parsed.value(),
+              UnorderedElementsAre(
+                  ParsedIndexEntryLike(
+                      "nähe des geliebten",
+                      UnorderedElementsAre(AllOf(
+                          ParsedIndexLeafWithPpdBasename("d-162.ppd.gz"),
+                          Field(&ParsedIndexLeaf::restrictions,
+                                Optional(RestrictionsWithMinMilestone(25)))))),
+                  ParsedIndexEntryLike(
+                      "der fischer",
+                      UnorderedElementsAre(AllOf(
+                          ParsedIndexLeafWithPpdBasename("d-225.ppd.gz"),
+                          Field(&ParsedIndexLeaf::restrictions,
+                                Optional(RestrictionsWithMaxMilestone(35)))))),
+                  ParsedIndexEntryLike(
+                      "erster verlust",
+                      UnorderedElementsAre(AllOf(
+                          ParsedIndexLeafWithPpdBasename("d-226.ppd.gz"),
+                          Field(&ParsedIndexLeaf::restrictions,
+                                Optional(RestrictionsWithMinAndMaxMilestones(
+                                    45, 46))))))));
+}
+
+// Verifies that ParseForwardIndex() can parse forward index metadata
+// and ignore malformed restrictions.
+TEST(PpdMetadataParserTest, CanParseForwardIndexWithMalformedRestrictions) {
+  // Same test data as the CanParseForwardIndexWithRestrictions test
+  // above, but defines
+  // *  a PPD metadata leaf with a malformed minimum milestone,
+  // *  a PPD metadata leaf with a malformed maximum milestone, and
+  // *  a PPD metadata leaf with malformed minimum and maximum
+  //    milestones.
+  constexpr base::StringPiece kJsonForwardIndex = R"({
+  "ppdIndex": {
+    "nähe des geliebten": {
+      "ppdMetadata": [ {
+        "name": "d-162.ppd.gz",
+        "restriction": {
+          "minMilestone": "garbage value",
+          "maxMilestone": 25
+        }
+      } ]
+    },
+    "der fischer": {
+      "ppdMetadata": [ {
+        "name": "d-225.ppd.gz",
+        "restriction": {
+          "minMilestone": 35,
+          "maxMilestone": "garbage value"
+        }
+      } ]
+    },
+    "erster verlust": {
+      "ppdMetadata": [ {
+        "name": "d-226.ppd.gz",
+        "restriction": {
+          "minMilestone": "garbage value",
+          "maxMilestone": "garbage value"
+        }
+      } ]
+    }
+  }
+})";
+
+  const auto parsed = ParseForwardIndex(kJsonForwardIndex);
+  ASSERT_TRUE(parsed.has_value());
+  EXPECT_THAT(
+      parsed.value(),
+      UnorderedElementsAre(
+          ParsedIndexEntryLike(
+              "nähe des geliebten",
+              UnorderedElementsAre(
+                  AllOf(ParsedIndexLeafWithPpdBasename("d-162.ppd.gz"),
+                        Field(&ParsedIndexLeaf::restrictions,
+                              Optional(RestrictionsWithMaxMilestone(25)))))),
+          ParsedIndexEntryLike(
+              "der fischer",
+              UnorderedElementsAre(
+                  AllOf(ParsedIndexLeafWithPpdBasename("d-225.ppd.gz"),
+                        Field(&ParsedIndexLeaf::restrictions,
+                              Optional(RestrictionsWithMinMilestone(35)))))),
+          ParsedIndexEntryLike(
+              "erster verlust",
+              UnorderedElementsAre(AllOf(
+                  ParsedIndexLeafWithPpdBasename("d-226.ppd.gz"),
+                  Field(&ParsedIndexLeaf::restrictions, Eq(base::nullopt)))))));
+}
+
+// Verifies that ParseForwardIndex() returns base::nullopt rather than
+// an empty container.
+TEST(PpdMetadataParserTest, ParseForwardIndexDoesNotReturnEmptyContainer) {
+  // Specifies a forward index that is valid JSON but which has
+  // no PPDs whose leaf values are non-empty.
+  constexpr base::StringPiece kJsonForwardIndex = R"({
+  "ppdIndex": {
+    "der könig in thule": {
+      "ppdMetadata": [ {
+        "garbage": "unused value"
+      } ]
+    }
+  }
+})";
+
+  EXPECT_FALSE(ParseForwardIndex(kJsonForwardIndex).has_value());
+}
+
+// Verifies that ParseForwardIndex() returns base::nullopt on
+// irrecoverable parse error.
+TEST(PpdMetadataParserTest, ParseForwardIndexFailsGracefully) {
+  EXPECT_FALSE(ParseForwardIndex(kInvalidJson).has_value());
+}
+
+// Verifies that ParseUsbIndex() can parse USB index metadata.
+TEST(PpdMetadataParserTest, CanParseUsbIndex) {
+  constexpr base::StringPiece kJsonUsbIndex = R"({
+  "usbIndex": {
+    "1": {
+      "effectiveMakeAndModel": "d 541"
+    },
+    "10": {
+      "effectiveMakeAndModel": "d 504"
+    }
+  }
+})";
+
+  EXPECT_THAT(ParseUsbIndex(kJsonUsbIndex),
+              Optional(UnorderedElementsAre(Pair(1, StrEq("d 541")),
+                                            Pair(10, StrEq("d 504")))));
+}
+
+// Verifies that ParseUsbIndex() can parse USB index metadata and return
+// a partial ParsedUsbIndex even when it encounters garbage values.
+TEST(PpdMetadataParserTest, CanPartiallyParseUsbIndex) {
+  constexpr base::StringPiece kJsonUsbIndex = R"({
+  "usbIndex": {
+    "garbage key": {
+      "effectiveMakeAndModel": "garbage value"
+    },
+    "1": {
+      "effectiveMakeAndModel": "d 541"
+    },
+    "10": {
+      "effectiveMakeAndModel": "d 504"
+    }
+  }
+})";
+
+  EXPECT_THAT(ParseUsbIndex(kJsonUsbIndex),
+              Optional(UnorderedElementsAre(Pair(1, StrEq("d 541")),
+                                            Pair(10, StrEq("d 504")))));
+}
+
+// Verifies that ParseUsbIndex() returns base::nullopt rather than an
+// empty container.
+TEST(PpdMetadataParserTest, ParseUsbIndexDoesNotReturnEmptyContainer) {
+  constexpr base::StringPiece kEmptyJsonUsbIndex = R"({
+  "usbIndex": { }
+})";
+  ASSERT_THAT(base::JSONReader::Read(kEmptyJsonUsbIndex), Ne(base::nullopt));
+  EXPECT_THAT(ParseUsbIndex(kEmptyJsonUsbIndex), Eq(base::nullopt));
+
+  constexpr base::StringPiece kJsonUsbIndexWithBadStringKeys = R"({
+  "usbIndex": {
+    "non-integral key": { }
+  }
+})";
+  ASSERT_THAT(base::JSONReader::Read(kJsonUsbIndexWithBadStringKeys),
+              Ne(base::nullopt));
+  EXPECT_THAT(ParseUsbIndex(kJsonUsbIndexWithBadStringKeys), Eq(base::nullopt));
+
+  constexpr base::StringPiece kJsonUsbIndexWithoutEmmAtLeaf = R"({
+  "usbIndex": {
+    "1": {
+      "some key that is not ``effectiveMakeAndModel''": "d 504"
+    }
+  }
+})";
+  ASSERT_THAT(base::JSONReader::Read(kJsonUsbIndexWithoutEmmAtLeaf),
+              Ne(base::nullopt));
+  EXPECT_THAT(ParseUsbIndex(kJsonUsbIndexWithoutEmmAtLeaf), Eq(base::nullopt));
+
+  constexpr base::StringPiece kJsonUsbIndexWithEmptyEmmAtLeaf = R"({
+  "usbIndex": {
+    "1": {
+      "effectiveMakeAndModel": ""
+    }
+  }
+})";
+  ASSERT_THAT(base::JSONReader::Read(kJsonUsbIndexWithEmptyEmmAtLeaf),
+              Ne(base::nullopt));
+  EXPECT_THAT(ParseUsbIndex(kJsonUsbIndexWithEmptyEmmAtLeaf),
+              Eq(base::nullopt));
+}
+
+// Verifies that ParseUsbIndex() returns base::nullopt on irrecoverable
+// parse error.
+TEST(PpdMetadataParserTest, ParseUsbIndexFailsGracefully) {
+  EXPECT_THAT(ParseUsbIndex(kInvalidJson), Eq(base::nullopt));
 }
 
 // Verifies that ParseReverseIndex() can parse reverse index metadata.

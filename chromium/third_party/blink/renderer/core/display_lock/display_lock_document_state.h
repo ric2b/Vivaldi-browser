@@ -54,7 +54,7 @@ class CORE_EXPORT DisplayLockDocumentState final
   // Returns true if all activatable locks have been forced.
   bool ActivatableDisplayLocksForced() const;
 
-  class ScopedForceActivatableDisplayLocks {
+  class CORE_EXPORT ScopedForceActivatableDisplayLocks {
     STACK_ALLOCATED();
 
    public:
@@ -133,6 +133,8 @@ class CORE_EXPORT DisplayLockDocumentState final
       const HeapVector<Member<IntersectionObserverEntry>>&);
 
   void ForceLockIfNeededForInfo(Element*, ForcedNodeInfo*);
+
+  void ScheduleAnimation();
 
   Member<Document> document_;
 

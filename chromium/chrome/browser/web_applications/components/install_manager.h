@@ -31,8 +31,7 @@ namespace web_app {
 enum class InstallResultCode;
 class InstallFinalizer;
 class AppRegistrar;
-class AppShortcutManager;
-class FileHandlerManager;
+class OsIntegrationManager;
 
 // TODO(loyso): Rework this interface. Unify the API and merge similar
 // InstallWebAppZZZZ functions.
@@ -63,18 +62,19 @@ class InstallManager {
     kInstallable,
     kAlreadyInstalled,
   };
-  // Callback with the result of an installability check.
-  // |web_contents| owns the WebContents that was used to check installability.
+  // Callback with the result of manifest check.
+  // |web_contents| owns the WebContents that was used to check for a manifest.
   // |app_id| will be present iff already installed.
-  using WebAppInstallabilityCheckCallback = base::OnceCallback<void(
+  using WebAppManifestCheckCallback = base::OnceCallback<void(
       std::unique_ptr<content::WebContents> web_contents,
       InstallableCheckResult result,
       base::Optional<AppId> app_id)>;
 
-  // Checks a WebApp installability, retrieves manifest and icons and
-  // than performs the actual installation.
+  // Checks a WebApp installability (service worker check optional), retrieves
+  // manifest and icons and then performs the actual installation.
   virtual void InstallWebAppFromManifest(
       content::WebContents* web_contents,
+      bool bypass_service_worker_check,
       WebappInstallSource install_source,
       WebAppInstallDialogCallback dialog_callback,
       OnceInstallCallback callback) = 0;
@@ -89,16 +89,6 @@ class InstallManager {
       bool force_shortcut_app,
       WebappInstallSource install_source,
       WebAppInstallDialogCallback dialog_callback,
-      OnceInstallCallback callback) = 0;
-
-  // Starts a web app installation process using prefilled
-  // |web_application_info| which holds all the data needed for installation.
-  // This doesn't fetch a manifest and doesn't perform all required steps for
-  // External installed apps: use |PendingAppManager::Install| instead.
-  virtual void InstallWebAppFromInfo(
-      std::unique_ptr<WebApplicationInfo> web_application_info,
-      ForInstallableSite for_installable_site,
-      WebappInstallSource install_source,
       OnceInstallCallback callback) = 0;
 
   // See related ExternalInstallOptions struct and
@@ -140,6 +130,23 @@ class InstallManager {
                                        WebappInstallSource install_source,
                                        OnceInstallCallback callback) = 0;
 
+  // Starts a web app installation process using prefilled
+  // |web_application_info| which holds all the data needed for installation.
+  // This doesn't fetch a manifest and doesn't perform all required steps for
+  // External installed apps: use |PendingAppManager::Install| instead.
+  virtual void InstallWebAppFromInfo(
+      std::unique_ptr<WebApplicationInfo> web_application_info,
+      ForInstallableSite for_installable_site,
+      WebappInstallSource install_source,
+      OnceInstallCallback callback) = 0;
+
+  virtual void InstallWebAppFromInfo(
+      std::unique_ptr<WebApplicationInfo> web_application_info,
+      ForInstallableSite for_installable_site,
+      const base::Optional<InstallParams>& install_params,
+      WebappInstallSource install_source,
+      OnceInstallCallback callback) = 0;
+
   // For backward compatibility with ExtensionSyncService-based system:
   // Starts background installation or an update of a bookmark app from the sync
   // system. |web_application_info| contains received sync data. Icons will be
@@ -160,16 +167,15 @@ class InstallManager {
   virtual ~InstallManager();
 
   void SetSubsystems(AppRegistrar* registrar,
-                     AppShortcutManager* shortcut_manager,
-                     FileHandlerManager* file_handler_manager,
+                     OsIntegrationManager* os_integration_manager,
                      InstallFinalizer* finalizer);
 
-  // Loads |web_app_url| in a new WebContents and determines whether it is
-  // installable. Calls |callback| with results.
-  virtual void LoadWebAppAndCheckInstallability(
+  // Loads |web_app_url| in a new WebContents and determines whether it has a
+  // valid manifest. Calls |callback| with results.
+  virtual void LoadWebAppAndCheckManifest(
       const GURL& web_app_url,
       WebappInstallSource install_source,
-      WebAppInstallabilityCheckCallback callback) = 0;
+      WebAppManifestCheckCallback callback) = 0;
 
   void DisableBookmarkAppSyncInstallForTesting() {
     disable_bookmark_app_sync_install_for_testing_ = true;
@@ -181,8 +187,9 @@ class InstallManager {
  protected:
   Profile* profile() { return profile_; }
   AppRegistrar* registrar() { return registrar_; }
-  AppShortcutManager* shortcut_manager() { return shortcut_manager_; }
-  FileHandlerManager* file_handler_manager() { return file_handler_manager_; }
+  OsIntegrationManager* os_integration_manager() {
+    return os_integration_manager_;
+  }
   InstallFinalizer* finalizer() { return finalizer_; }
 
   bool disable_bookmark_app_sync_install_for_testing() const {
@@ -197,8 +204,7 @@ class InstallManager {
   WebAppUrlLoader url_loader_;
 
   AppRegistrar* registrar_ = nullptr;
-  AppShortcutManager* shortcut_manager_ = nullptr;
-  FileHandlerManager* file_handler_manager_ = nullptr;
+  OsIntegrationManager* os_integration_manager_ = nullptr;
   InstallFinalizer* finalizer_ = nullptr;
 
   bool disable_bookmark_app_sync_install_for_testing_ = false;

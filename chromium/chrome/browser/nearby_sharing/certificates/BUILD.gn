@@ -8,6 +8,13 @@ source_set("certificates") {
     "common.h",
     "constants.cc",
     "constants.h",
+    "nearby_share_certificate_manager.cc",
+    "nearby_share_certificate_manager.h",
+    "nearby_share_certificate_manager_impl.cc",
+    "nearby_share_certificate_manager_impl.h",
+    "nearby_share_certificate_storage.h",
+    "nearby_share_certificate_storage_impl.cc",
+    "nearby_share_certificate_storage_impl.h",
     "nearby_share_decrypted_public_certificate.cc",
     "nearby_share_decrypted_public_certificate.h",
     "nearby_share_encrypted_metadata_key.cc",
@@ -19,7 +26,15 @@ source_set("certificates") {
 
   deps = [
     "//base",
+    "//base/util/values:values_util",
+    "//chrome/browser/nearby_sharing/client",
+    "//chrome/browser/nearby_sharing/common",
+    "//chrome/browser/nearby_sharing/local_device_data",
+    "//chrome/browser/nearby_sharing/logging",
     "//chrome/browser/nearby_sharing/proto",
+    "//chrome/browser/nearby_sharing/scheduling",
+    "//components/leveldb_proto",
+    "//components/prefs",
     "//crypto",
   ]
 }
@@ -28,6 +43,10 @@ source_set("test_support") {
   testonly = true
 
   sources = [
+    "fake_nearby_share_certificate_manager.cc",
+    "fake_nearby_share_certificate_manager.h",
+    "fake_nearby_share_certificate_storage.cc",
+    "fake_nearby_share_certificate_storage.h",
     "test_util.cc",
     "test_util.h",
   ]
@@ -36,6 +55,8 @@ source_set("test_support") {
     ":certificates",
     "//base",
     "//chrome/browser/nearby_sharing/proto",
+    "//components/leveldb_proto",
+    "//components/prefs",
     "//crypto",
   ]
 }
@@ -45,6 +66,8 @@ source_set("unit_tests") {
 
   sources = [
     "common_unittest.cc",
+    "nearby_share_certificate_manager_impl_unittest.cc",
+    "nearby_share_certificate_storage_impl_unittest.cc",
     "nearby_share_decrypted_public_certificate_unittest.cc",
     "nearby_share_private_certificate_unittest.cc",
   ]
@@ -54,7 +77,14 @@ source_set("unit_tests") {
     ":test_support",
     "//base",
     "//base/test:test_support",
+    "//base/util/values:values_util",
+    "//chrome/browser/nearby_sharing/client:test_support",
+    "//chrome/browser/nearby_sharing/common",
+    "//chrome/browser/nearby_sharing/local_device_data:test_support",
     "//chrome/browser/nearby_sharing/proto",
+    "//chrome/browser/nearby_sharing/scheduling:test_support",
+    "//components/leveldb_proto:test_support",
+    "//components/prefs:test_support",
     "//crypto",
     "//testing/gtest",
   ]

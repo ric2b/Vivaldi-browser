@@ -95,7 +95,7 @@ class CORE_EXPORT CSSAnimations final {
   enum class PropertyPass { kCustom, kStandard };
   static void CalculateTransitionUpdate(CSSAnimationUpdate&,
                                         PropertyPass,
-                                        const Element* animating_element,
+                                        Element* animating_element,
                                         const ComputedStyle&);
 
   static void SnapshotCompositorKeyframes(Element&,
@@ -151,10 +151,10 @@ class CORE_EXPORT CSSAnimations final {
     Vector<EAnimPlayState> play_state_list;
   };
 
-  struct RunningTransition {
-    DISALLOW_NEW();
-
+  struct RunningTransition : public GarbageCollected<RunningTransition> {
    public:
+    virtual ~RunningTransition() = default;
+
     void Trace(Visitor* visitor) const { visitor->Trace(animation); }
 
     Member<Animation> animation;
@@ -166,7 +166,7 @@ class CORE_EXPORT CSSAnimations final {
 
   HeapVector<Member<RunningAnimation>> running_animations_;
 
-  using TransitionMap = HeapHashMap<PropertyHandle, RunningTransition>;
+  using TransitionMap = HeapHashMap<PropertyHandle, Member<RunningTransition>>;
   TransitionMap transitions_;
 
   CSSAnimationUpdate pending_update_;
@@ -180,13 +180,14 @@ class CORE_EXPORT CSSAnimations final {
 
    public:
     CSSAnimationUpdate& update;
-    const Element* animating_element = nullptr;
+    Element* animating_element = nullptr;
     const ComputedStyle& old_style;
     const ComputedStyle& style;
+    scoped_refptr<const ComputedStyle> before_change_style;
     scoped_refptr<const ComputedStyle> cloned_style;
     const TransitionMap* active_transitions;
     HashSet<PropertyHandle>& listed_properties;
-    const CSSTransitionData& transition_data;
+    const CSSTransitionData* transition_data;
   };
 
   static void CalculateTransitionUpdateForCustomProperty(
@@ -211,6 +212,14 @@ class CORE_EXPORT CSSAnimations final {
       CSSAnimationUpdate&,
       PropertyPass,
       const Element* animating_element);
+
+  // The before-change style is defined as the computed values of all properties
+  // on the element as of the previous style change event, except with any
+  // styles derived from declarative animations updated to the current time.
+  // https://drafts.csswg.org/css-transitions-1/#before-change-style
+  static scoped_refptr<const ComputedStyle> CalculateBeforeChangeStyle(
+      Element* animating_element,
+      const ComputedStyle& base_style);
 
   class AnimationEventDelegate final : public AnimationEffect::EventDelegate {
    public:

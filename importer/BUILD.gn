@@ -1,4 +1,3 @@
-import("//build/config/jumbo.gni")
 
 static_library("importer") {
   if (!is_android) {

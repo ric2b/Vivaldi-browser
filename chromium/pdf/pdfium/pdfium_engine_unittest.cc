@@ -4,6 +4,9 @@
 
 #include "pdf/pdfium/pdfium_engine.h"
 
+#include <stdint.h>
+
+#include "base/hash/md5.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -14,13 +17,16 @@
 #include "pdf/pdfium/pdfium_page.h"
 #include "pdf/pdfium/pdfium_test_base.h"
 #include "pdf/test/test_client.h"
+#include "pdf/test/test_document_loader.h"
 #include "pdf/test/test_utils.h"
 #include "ppapi/c/ppb_input_event.h"
 #include "ppapi/cpp/size.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace chrome_pdf {
+
 namespace {
 
 using ::testing::InSequence;
@@ -31,7 +37,7 @@ using ::testing::Return;
 using ::testing::StrictMock;
 
 MATCHER_P2(LayoutWithSize, width, height, "") {
-  return arg.size() == pp::Size(width, height);
+  return arg.size() == gfx::Size(width, height);
 }
 
 MATCHER_P(LayoutWithOptions, options, "") {
@@ -47,19 +53,74 @@ class MockTestClient : public TestClient {
         });
   }
 
-  // TODO(crbug.com/989095): MOCK_METHOD() triggers static_assert on Windows.
-  MOCK_METHOD1(ProposeDocumentLayout, void(const DocumentLayout& layout));
-  MOCK_METHOD1(ScrollToPage, void(int page));
+  MOCK_METHOD(void,
+              ProposeDocumentLayout,
+              (const DocumentLayout& layout),
+              (override));
+  MOCK_METHOD(void, ScrollToPage, (int page), (override));
 };
+
+}  // namespace
 
 class PDFiumEngineTest : public PDFiumTestBase {
  protected:
-  void ExpectPageRect(PDFiumEngine* engine,
+  void ExpectPageRect(const PDFiumEngine& engine,
                       size_t page_index,
                       const pp::Rect& expected_rect) {
-    PDFiumPage* page = GetPDFiumPageForTest(engine, page_index);
-    ASSERT_TRUE(page);
-    CompareRect(expected_rect, page->rect());
+    const PDFiumPage& page = GetPDFiumPageForTest(engine, page_index);
+    CompareRect(expected_rect, page.rect());
+  }
+
+  // Tries to load a PDF incrementally, returning `true` if the PDF actually was
+  // loaded incrementally. Note that this function will return `false` if
+  // incremental loading fails, but also if incremental loading is disabled.
+  bool TryLoadIncrementally() {
+    NiceMock<MockTestClient> client;
+    InitializeEngineResult initialize_result = InitializeEngineWithoutLoading(
+        &client, FILE_PATH_LITERAL("linearized.pdf"));
+    if (!initialize_result.engine) {
+      ADD_FAILURE();
+      return false;
+    }
+    PDFiumEngine& engine = *initialize_result.engine;
+
+    // Load enough for the document to become partially available.
+    initialize_result.document_loader->SimulateLoadData(8192);
+
+    bool loaded_incrementally;
+    if (engine.GetNumberOfPages() == 0) {
+      // This is not necessarily a test failure; it just indicates incremental
+      // loading is not occurring.
+      loaded_incrementally = false;
+    } else {
+      // Note: Plugin size chosen so all pages of the document are visible. The
+      // engine only updates availability incrementally for visible pages.
+      EXPECT_EQ(0, CountAvailablePages(engine));
+      engine.PluginSizeUpdated({1024, 4096});
+      int available_pages = CountAvailablePages(engine);
+      loaded_incrementally =
+          0 < available_pages && available_pages < engine.GetNumberOfPages();
+    }
+
+    // Verify that loading can finish.
+    while (initialize_result.document_loader->SimulateLoadData(UINT32_MAX))
+      continue;
+
+    EXPECT_EQ(engine.GetNumberOfPages(), CountAvailablePages(engine));
+
+    return loaded_incrementally;
+  }
+
+ private:
+  // Counts the number of available pages. Returns `int` instead of `size_t` for
+  // consistency with `PDFiumEngine::GetNumberOfPages()`.
+  int CountAvailablePages(const PDFiumEngine& engine) {
+    int available_pages = 0;
+    for (int i = 0; i < engine.GetNumberOfPages(); ++i) {
+      if (GetPDFiumPageForTest(engine, i).available())
+        ++available_pages;
+    }
+    return available_pages;
   }
 };
 
@@ -80,11 +141,11 @@ TEST_F(PDFiumEngineTest, InitializeWithRectanglesMultiPagesPdf) {
   ASSERT_TRUE(engine);
   ASSERT_EQ(5, engine->GetNumberOfPages());
 
-  ExpectPageRect(engine.get(), 0, {38, 3, 266, 333});
-  ExpectPageRect(engine.get(), 1, {5, 350, 333, 266});
-  ExpectPageRect(engine.get(), 2, {38, 630, 266, 333});
-  ExpectPageRect(engine.get(), 3, {38, 977, 266, 333});
-  ExpectPageRect(engine.get(), 4, {38, 1324, 266, 333});
+  ExpectPageRect(*engine, 0, {38, 3, 266, 333});
+  ExpectPageRect(*engine, 1, {5, 350, 333, 266});
+  ExpectPageRect(*engine, 2, {38, 630, 266, 333});
+  ExpectPageRect(*engine, 3, {38, 977, 266, 333});
+  ExpectPageRect(*engine, 4, {38, 1324, 266, 333});
 }
 
 TEST_F(PDFiumEngineTest, InitializeWithRectanglesMultiPagesPdfInTwoUpView) {
@@ -103,11 +164,11 @@ TEST_F(PDFiumEngineTest, InitializeWithRectanglesMultiPagesPdfInTwoUpView) {
 
   ASSERT_EQ(5, engine->GetNumberOfPages());
 
-  ExpectPageRect(engine.get(), 0, {72, 3, 266, 333});
-  ExpectPageRect(engine.get(), 1, {340, 3, 333, 266});
-  ExpectPageRect(engine.get(), 2, {72, 346, 266, 333});
-  ExpectPageRect(engine.get(), 3, {340, 346, 266, 333});
-  ExpectPageRect(engine.get(), 4, {68, 689, 266, 333});
+  ExpectPageRect(*engine, 0, {72, 3, 266, 333});
+  ExpectPageRect(*engine, 1, {340, 3, 333, 266});
+  ExpectPageRect(*engine, 2, {72, 346, 266, 333});
+  ExpectPageRect(*engine, 3, {340, 346, 266, 333});
+  ExpectPageRect(*engine, 4, {68, 689, 266, 333});
 }
 
 TEST_F(PDFiumEngineTest, AppendBlankPagesWithFewerPages) {
@@ -126,9 +187,9 @@ TEST_F(PDFiumEngineTest, AppendBlankPagesWithFewerPages) {
   engine->AppendBlankPages(3);
   ASSERT_EQ(3, engine->GetNumberOfPages());
 
-  ExpectPageRect(engine.get(), 0, {5, 3, 266, 333});
-  ExpectPageRect(engine.get(), 1, {5, 350, 266, 333});
-  ExpectPageRect(engine.get(), 2, {5, 697, 266, 333});
+  ExpectPageRect(*engine, 0, {5, 3, 266, 333});
+  ExpectPageRect(*engine, 1, {5, 350, 266, 333});
+  ExpectPageRect(*engine, 2, {5, 697, 266, 333});
 }
 
 TEST_F(PDFiumEngineTest, AppendBlankPagesWithMorePages) {
@@ -147,13 +208,13 @@ TEST_F(PDFiumEngineTest, AppendBlankPagesWithMorePages) {
   engine->AppendBlankPages(7);
   ASSERT_EQ(7, engine->GetNumberOfPages());
 
-  ExpectPageRect(engine.get(), 0, {5, 3, 266, 333});
-  ExpectPageRect(engine.get(), 1, {5, 350, 266, 333});
-  ExpectPageRect(engine.get(), 2, {5, 697, 266, 333});
-  ExpectPageRect(engine.get(), 3, {5, 1044, 266, 333});
-  ExpectPageRect(engine.get(), 4, {5, 1391, 266, 333});
-  ExpectPageRect(engine.get(), 5, {5, 1738, 266, 333});
-  ExpectPageRect(engine.get(), 6, {5, 2085, 266, 333});
+  ExpectPageRect(*engine, 0, {5, 3, 266, 333});
+  ExpectPageRect(*engine, 1, {5, 350, 266, 333});
+  ExpectPageRect(*engine, 2, {5, 697, 266, 333});
+  ExpectPageRect(*engine, 3, {5, 1044, 266, 333});
+  ExpectPageRect(*engine, 4, {5, 1391, 266, 333});
+  ExpectPageRect(*engine, 5, {5, 1738, 266, 333});
+  ExpectPageRect(*engine, 6, {5, 2085, 266, 333});
 }
 
 TEST_F(PDFiumEngineTest, ProposeDocumentLayoutWithOverlap) {
@@ -179,15 +240,15 @@ TEST_F(PDFiumEngineTest, ApplyDocumentLayoutAvoidsInfiniteLoop) {
 
   DocumentLayout::Options options;
   EXPECT_CALL(client, ScrollToPage(-1)).Times(0);
-  CompareSize({343, 1664}, engine->ApplyDocumentLayout(options));
+  EXPECT_EQ(gfx::Size(343, 1664), engine->ApplyDocumentLayout(options));
 
   options.RotatePagesClockwise();
   EXPECT_CALL(client, ScrollToPage(-1)).Times(1);
-  CompareSize({343, 1463}, engine->ApplyDocumentLayout(options));
-  CompareSize({343, 1463}, engine->ApplyDocumentLayout(options));
+  EXPECT_EQ(gfx::Size(343, 1463), engine->ApplyDocumentLayout(options));
+  EXPECT_EQ(gfx::Size(343, 1463), engine->ApplyDocumentLayout(options));
 }
 
-TEST_F(PDFiumEngineTest, GetDocumentAttachmentInfo) {
+TEST_F(PDFiumEngineTest, GetDocumentAttachments) {
   NiceMock<MockTestClient> client;
   std::unique_ptr<PDFiumEngine> engine =
       InitializeEngine(&client, FILE_PATH_LITERAL("embedded_attachments.pdf"));
@@ -200,29 +261,71 @@ TEST_F(PDFiumEngineTest, GetDocumentAttachmentInfo) {
   {
     const DocumentAttachmentInfo& attachment = attachments[0];
     EXPECT_EQ("1.txt", base::UTF16ToUTF8(attachment.name));
+    EXPECT_TRUE(attachment.is_readable);
     EXPECT_EQ(4u, attachment.size_bytes);
     EXPECT_EQ("D:20170712214438-07'00'",
               base::UTF16ToUTF8(attachment.creation_date));
     EXPECT_EQ("D:20160115091400", base::UTF16ToUTF8(attachment.modified_date));
+
+    std::vector<uint8_t> content = engine->GetAttachmentData(0);
+    ASSERT_EQ(attachment.size_bytes, content.size());
+    std::string content_str(content.begin(), content.end());
+    EXPECT_EQ("test", content_str);
   }
 
   {
+    static constexpr char kCheckSum[] = "72afcddedf554dda63c0c88e06f1ce18";
     const DocumentAttachmentInfo& attachment = attachments[1];
     EXPECT_EQ("attached.pdf", base::UTF16ToUTF8(attachment.name));
+    EXPECT_TRUE(attachment.is_readable);
     EXPECT_EQ(5869u, attachment.size_bytes);
     EXPECT_EQ("D:20170712214443-07'00'",
               base::UTF16ToUTF8(attachment.creation_date));
     EXPECT_EQ("D:20170712214410", base::UTF16ToUTF8(attachment.modified_date));
+
+    std::vector<uint8_t> content = engine->GetAttachmentData(1);
+    ASSERT_EQ(attachment.size_bytes, content.size());
+    // The whole attachment content is too long to do string comparison.
+    // Instead, we only verify the checksum value here.
+    base::MD5Digest hash;
+    base::MD5Sum(content.data(), content.size(), &hash);
+    EXPECT_EQ(kCheckSum, base::MD5DigestToBase16(hash));
   }
 
   {
     // Test attachments with no creation date or last modified date.
     const DocumentAttachmentInfo& attachment = attachments[2];
     EXPECT_EQ("附錄.txt", base::UTF16ToUTF8(attachment.name));
+    EXPECT_TRUE(attachment.is_readable);
     EXPECT_EQ(5u, attachment.size_bytes);
     EXPECT_THAT(attachment.creation_date, IsEmpty());
     EXPECT_THAT(attachment.modified_date, IsEmpty());
+
+    std::vector<uint8_t> content = engine->GetAttachmentData(2);
+    ASSERT_EQ(attachment.size_bytes, content.size());
+    std::string content_str(content.begin(), content.end());
+    EXPECT_EQ("test\n", content_str);
   }
+}
+
+TEST_F(PDFiumEngineTest, DocumentWithInvalidAttachment) {
+  NiceMock<MockTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine = InitializeEngine(
+      &client, FILE_PATH_LITERAL("embedded_attachments_invalid_data.pdf"));
+  ASSERT_TRUE(engine);
+
+  const std::vector<DocumentAttachmentInfo>& attachments =
+      engine->GetDocumentAttachmentInfoList();
+  ASSERT_EQ(1u, attachments.size());
+
+  // Test on an attachment which FPDFAttachment_GetFile() fails to retrieve data
+  // from.
+  const DocumentAttachmentInfo& attachment = attachments[0];
+  EXPECT_EQ("1.txt", base::UTF16ToUTF8(attachment.name));
+  EXPECT_FALSE(attachment.is_readable);
+  EXPECT_EQ(0u, attachment.size_bytes);
+  EXPECT_THAT(attachment.creation_date, IsEmpty());
+  EXPECT_THAT(attachment.modified_date, IsEmpty());
 }
 
 TEST_F(PDFiumEngineTest, NoDocumentAttachmentInfo) {
@@ -276,7 +379,21 @@ TEST_F(PDFiumEngineTest, GetBadPdfVersion) {
   EXPECT_EQ(PdfVersion::kUnknown, doc_metadata.version);
 }
 
-}  // namespace
+TEST_F(PDFiumEngineTest, IncrementalLoadingFeatureDefault) {
+  EXPECT_TRUE(TryLoadIncrementally());
+}
+
+TEST_F(PDFiumEngineTest, IncrementalLoadingFeatureEnabled) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kPdfIncrementalLoading);
+  EXPECT_TRUE(TryLoadIncrementally());
+}
+
+TEST_F(PDFiumEngineTest, IncrementalLoadingFeatureDisabled) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(features::kPdfIncrementalLoading);
+  EXPECT_FALSE(TryLoadIncrementally());
+}
 
 class TabbingTestClient : public TestClient {
  public:
@@ -286,7 +403,7 @@ class TabbingTestClient : public TestClient {
   TabbingTestClient& operator=(const TabbingTestClient&) = delete;
 
   // Mock PDFEngine::Client methods.
-  MOCK_METHOD1(DocumentFocusChanged, void(bool));
+  MOCK_METHOD(void, DocumentFocusChanged, (bool), (override));
 };
 
 class PDFiumEngineTabbingTest : public PDFiumTestBase {
@@ -815,8 +932,8 @@ class ScrollingTestClient : public TestClient {
   ScrollingTestClient& operator=(const ScrollingTestClient&) = delete;
 
   // Mock PDFEngine::Client methods.
-  MOCK_METHOD1(ScrollToX, void(int));
-  MOCK_METHOD2(ScrollToY, void(int, bool));
+  MOCK_METHOD(void, ScrollToX, (int), (override));
+  MOCK_METHOD(void, ScrollToY, (int, bool), (override));
 };
 
 TEST_F(PDFiumEngineTabbingTest, MaintainViewportWhenFocusIsUpdated) {
@@ -825,7 +942,7 @@ TEST_F(PDFiumEngineTabbingTest, MaintainViewportWhenFocusIsUpdated) {
       &client, FILE_PATH_LITERAL("annotation_form_fields.pdf"));
   ASSERT_TRUE(engine);
   ASSERT_EQ(2, engine->GetNumberOfPages());
-  engine->PluginSizeUpdated(pp::Size(60, 40));
+  engine->PluginSizeUpdated(gfx::Size(60, 40));
 
   {
     InSequence sequence;
@@ -878,7 +995,7 @@ TEST_F(PDFiumEngineTabbingTest, ScrollFocusedAnnotationIntoView) {
       &client, FILE_PATH_LITERAL("annotation_form_fields.pdf"));
   ASSERT_TRUE(engine);
   ASSERT_EQ(2, engine->GetNumberOfPages());
-  engine->PluginSizeUpdated(pp::Size(60, 40));
+  engine->PluginSizeUpdated(gfx::Size(60, 40));
 
   {
     InSequence sequence;

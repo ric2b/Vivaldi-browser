@@ -38,7 +38,6 @@
 #include "ui/views/border.h"
 #include "ui/views/focus/focus_search.h"
 #include "ui/views/layout/box_layout.h"
-#include "ui/views/layout/fill_layout.h"
 #include "ui/views/painter.h"
 
 namespace ash {
@@ -163,6 +162,10 @@ class UnifiedSystemTrayView::SystemTrayContainer : public views::View {
   }
 
   // views::View:
+  void ChildPreferredSizeChanged(views::View* child) override {
+    PreferredSizeChanged();
+  }
+
   const char* GetClassName() const override { return "SystemTrayContainer"; }
 
  private:
@@ -219,7 +222,6 @@ UnifiedSystemTrayView::UnifiedSystemTrayView(
           std::make_unique<InteractedByTapRecorder>(this)) {
   DCHECK(controller_);
 
-  SetLayoutManager(std::make_unique<views::FillLayout>());
   auto add_layered_child = [](views::View* parent, views::View* child) {
     parent->AddChildView(child);
     child->SetPaintToLayer();
@@ -241,14 +243,15 @@ UnifiedSystemTrayView::UnifiedSystemTrayView(
   system_tray_container_->AddChildView(feature_pods_container_);
   system_tray_container_->AddChildView(page_indicator_view_);
   system_tray_container_->AddChildView(sliders_container_);
+
+  if (features::IsManagedDeviceUIRedesignEnabled()) {
+    managed_device_view_ = new UnifiedManagedDeviceView(controller_);
+    add_layered_child(system_tray_container_, managed_device_view_);
+  }
+
   add_layered_child(system_tray_container_, system_info_view_);
 
   system_tray_container_->SetFlexForView(page_indicator_view_);
-
-  if (features::IsManagedDeviceUIRedesignEnabled()) {
-    managed_device_view_ = new UnifiedManagedDeviceView();
-    system_tray_container_->AddChildView(managed_device_view_);
-  }
 
   detailed_view_container_->SetVisible(false);
   add_layered_child(this, detailed_view_container_);
@@ -264,6 +267,10 @@ UnifiedSystemTrayView::~UnifiedSystemTrayView() = default;
 void UnifiedSystemTrayView::SetMaxHeight(int max_height) {
   max_height_ = max_height;
 
+  int managed_device_view_height =
+      managed_device_view_ ? managed_device_view_->GetPreferredSize().height()
+                           : 0;
+
   // FeaturePodsContainer can adjust it's height by reducing the number of rows
   // it uses. It will calculate how many rows to use based on the max height
   // passed here.
@@ -271,7 +278,8 @@ void UnifiedSystemTrayView::SetMaxHeight(int max_height) {
       max_height - top_shortcuts_view_->GetPreferredSize().height() -
       page_indicator_view_->GetPreferredSize().height() -
       sliders_container_->GetExpandedHeight() -
-      system_info_view_->GetPreferredSize().height());
+      system_info_view_->GetPreferredSize().height() -
+      managed_device_view_height);
 }
 
 void UnifiedSystemTrayView::AddFeaturePodButton(FeaturePodButton* button) {
@@ -327,22 +335,16 @@ void UnifiedSystemTrayView::SetExpandedAmount(double expanded_amount) {
   page_indicator_view_->SetExpandedAmount(expanded_amount);
   sliders_container_->SetExpandedAmount(expanded_amount);
 
-  if (!IsTransformEnabled()) {
-    PreferredSizeChanged();
-    // It is possible that the ratio between |message_center_view_| and others
-    // can change while the bubble size remain unchanged.
-    Layout();
-    return;
-  }
-
-  // Note: currently transforms are only enabled when there are no
-  // notifications, so we can consider only the system tray height.
-  if (height() != GetExpandedSystemTrayHeight())
-    PreferredSizeChanged();
+  PreferredSizeChanged();
+  // It is possible that the ratio between |message_center_view_| and others
+  // can change while the bubble size remain unchanged.
   Layout();
 }
 
 int UnifiedSystemTrayView::GetExpandedSystemTrayHeight() const {
+  int managed_device_view_height =
+      managed_device_view_ ? managed_device_view_->GetPreferredSize().height()
+                           : 0;
   return (notification_hidden_view_->GetVisible()
               ? notification_hidden_view_->GetPreferredSize().height()
               : 0) +
@@ -350,29 +352,27 @@ int UnifiedSystemTrayView::GetExpandedSystemTrayHeight() const {
          feature_pods_container_->GetExpandedHeight() +
          page_indicator_view_->GetExpandedHeight() +
          sliders_container_->GetExpandedHeight() +
-         system_info_view_->GetPreferredSize().height();
+         system_info_view_->GetPreferredSize().height() +
+         managed_device_view_height;
 }
 
 int UnifiedSystemTrayView::GetCollapsedSystemTrayHeight() const {
+  int managed_device_view_height =
+      managed_device_view_ && managed_device_view_->GetVisible()
+          ? managed_device_view_->GetPreferredSize().height()
+          : 0;
   return (notification_hidden_view_->GetVisible()
               ? notification_hidden_view_->GetPreferredSize().height()
               : 0) +
          top_shortcuts_view_->GetPreferredSize().height() +
          feature_pods_container_->GetCollapsedHeight() +
-         system_info_view_->GetPreferredSize().height();
+         system_info_view_->GetPreferredSize().height() +
+         managed_device_view_height;
 }
 
 int UnifiedSystemTrayView::GetCurrentHeight() const {
   return GetPreferredSize().height();
 }
-
-bool UnifiedSystemTrayView::IsTransformEnabled() const {
-  // TODO(amehfooz): Remove transform code completely, the code does not work
-  // and isn't needed after Oshima's performance improvement changes for the
-  // tray.
-  return false;
-}
-
 
 int UnifiedSystemTrayView::GetVisibleFeaturePodCount() const {
   return feature_pods_container_->GetVisibleCount();
@@ -445,6 +445,13 @@ void UnifiedSystemTrayView::OnGestureEvent(ui::GestureEvent* event) {
     default:
       break;
   }
+}
+
+void UnifiedSystemTrayView::Layout() {
+  if (system_tray_container_->GetVisible())
+    system_tray_container_->SetBoundsRect(GetContentsBounds());
+  else if (detailed_view_container_->GetVisible())
+    detailed_view_container_->SetBoundsRect(GetContentsBounds());
 }
 
 void UnifiedSystemTrayView::ChildPreferredSizeChanged(views::View* child) {

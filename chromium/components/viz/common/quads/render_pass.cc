@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <memory>
 
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
@@ -37,85 +38,21 @@ const size_t kDefaultNumQuadsToReserve = 128;
 
 namespace viz {
 
-QuadList::QuadList()
-    : ListContainer<DrawQuad>(LargestDrawQuadAlignment(),
-                              LargestDrawQuadSize(),
-                              kDefaultNumSharedQuadStatesToReserve) {}
+RenderPassInternal::RenderPassInternal()
+    : RenderPassInternal(kDefaultNumSharedQuadStatesToReserve,
+                         kDefaultNumQuadsToReserve) {}
+// Each layer usually produces one shared quad state, so the number of layers
+// is a good hint for what to reserve here.
+RenderPassInternal::RenderPassInternal(size_t num_layers)
+    : RenderPassInternal(num_layers, kDefaultNumQuadsToReserve) {}
+RenderPassInternal::RenderPassInternal(size_t shared_quad_state_list_size,
+                                       size_t quad_list_size)
+    : quad_list(quad_list_size),
+      shared_quad_state_list(alignof(SharedQuadState),
+                             sizeof(SharedQuadState),
+                             shared_quad_state_list_size) {}
 
-QuadList::QuadList(size_t default_size_to_reserve)
-    : ListContainer<DrawQuad>(LargestDrawQuadAlignment(),
-                              LargestDrawQuadSize(),
-                              default_size_to_reserve) {}
-
-void QuadList::ReplaceExistingQuadWithOpaqueTransparentSolidColor(Iterator at) {
-  // In order to fill the backbuffer with transparent black, the replacement
-  // solid color quad needs to set |needs_blending| to false, and
-  // ShouldDrawWithBlending() returns false so it is drawn without blending.
-  const gfx::Rect rect = at->rect;
-  bool needs_blending = false;
-  const SharedQuadState* shared_quad_state = at->shared_quad_state;
-
-  auto* replacement = QuadList::ReplaceExistingElement<SolidColorDrawQuad>(at);
-  replacement->SetAll(shared_quad_state, rect, rect /* visible_rect */,
-                      needs_blending, SK_ColorTRANSPARENT, true);
-}
-
-QuadList::Iterator QuadList::InsertCopyBeforeDrawQuad(Iterator at,
-                                                      size_t count) {
-  DCHECK(at->shared_quad_state);
-  switch (at->material) {
-    case DrawQuad::Material::kDebugBorder: {
-      const auto copy = *DebugBorderDrawQuad::MaterialCast(*at);
-      return InsertBeforeAndInvalidateAllPointers<DebugBorderDrawQuad>(
-          at, count, copy);
-    }
-    case DrawQuad::Material::kPictureContent: {
-      const auto copy = *PictureDrawQuad::MaterialCast(*at);
-      return InsertBeforeAndInvalidateAllPointers<PictureDrawQuad>(at, count,
-                                                                   copy);
-    }
-    case DrawQuad::Material::kTextureContent: {
-      const auto copy = *TextureDrawQuad::MaterialCast(*at);
-      return InsertBeforeAndInvalidateAllPointers<TextureDrawQuad>(at, count,
-                                                                   copy);
-    }
-    case DrawQuad::Material::kSolidColor: {
-      const auto copy = *SolidColorDrawQuad::MaterialCast(*at);
-      return InsertBeforeAndInvalidateAllPointers<SolidColorDrawQuad>(at, count,
-                                                                      copy);
-    }
-    case DrawQuad::Material::kTiledContent: {
-      const auto copy = *TileDrawQuad::MaterialCast(*at);
-      return InsertBeforeAndInvalidateAllPointers<TileDrawQuad>(at, count,
-                                                                copy);
-    }
-    case DrawQuad::Material::kStreamVideoContent: {
-      const auto copy = *StreamVideoDrawQuad::MaterialCast(*at);
-      return InsertBeforeAndInvalidateAllPointers<StreamVideoDrawQuad>(
-          at, count, copy);
-    }
-    case DrawQuad::Material::kSurfaceContent: {
-      const auto copy = *SurfaceDrawQuad::MaterialCast(*at);
-      return InsertBeforeAndInvalidateAllPointers<SurfaceDrawQuad>(at, count,
-                                                                   copy);
-    }
-    case DrawQuad::Material::kVideoHole: {
-      const auto copy = *VideoHoleDrawQuad::MaterialCast(*at);
-      return InsertBeforeAndInvalidateAllPointers<VideoHoleDrawQuad>(at, count,
-                                                                     copy);
-    }
-    case DrawQuad::Material::kYuvVideoContent: {
-      const auto copy = *YUVVideoDrawQuad::MaterialCast(*at);
-      return InsertBeforeAndInvalidateAllPointers<YUVVideoDrawQuad>(at, count,
-                                                                    copy);
-    }
-    // RenderPass quads should not be copied.
-    case DrawQuad::Material::kRenderPass:
-    case DrawQuad::Material::kInvalid:
-      NOTREACHED();  // Invalid DrawQuad material.
-      return at;
-  }
-}
+RenderPassInternal::~RenderPassInternal() = default;
 
 std::unique_ptr<RenderPass> RenderPass::Create() {
   return base::WrapUnique(new RenderPass());
@@ -132,39 +69,19 @@ std::unique_ptr<RenderPass> RenderPass::Create(
       new RenderPass(shared_quad_state_list_size, quad_list_size));
 }
 
-RenderPass::RenderPass()
-    : quad_list(kDefaultNumQuadsToReserve),
-      shared_quad_state_list(alignof(SharedQuadState),
-                             sizeof(SharedQuadState),
-                             kDefaultNumSharedQuadStatesToReserve) {}
-
-// Each layer usually produces one shared quad state, so the number of layers
-// is a good hint for what to reserve here.
-RenderPass::RenderPass(size_t num_layers)
-    : has_transparent_background(true),
-      cache_render_pass(false),
-      has_damage_from_contributing_content(false),
-      quad_list(kDefaultNumQuadsToReserve),
-      shared_quad_state_list(alignof(SharedQuadState),
-                             sizeof(SharedQuadState),
-                             num_layers) {}
-
+RenderPass::RenderPass() = default;
+RenderPass::RenderPass(size_t num_layers) : RenderPassInternal(num_layers) {}
 RenderPass::RenderPass(size_t shared_quad_state_list_size,
                        size_t quad_list_size)
-    : has_transparent_background(true),
-      cache_render_pass(false),
-      has_damage_from_contributing_content(false),
-      quad_list(quad_list_size),
-      shared_quad_state_list(alignof(SharedQuadState),
-                             sizeof(SharedQuadState),
-                             shared_quad_state_list_size) {}
+    : RenderPassInternal(shared_quad_state_list_size, quad_list_size) {}
 
 RenderPass::~RenderPass() {
-  TRACE_EVENT_OBJECT_DELETED_WITH_ID(TRACE_DISABLED_BY_DEFAULT("viz.quads"),
-                                     "RenderPass", reinterpret_cast<void*>(id));
+  TRACE_EVENT_OBJECT_DELETED_WITH_ID(
+      TRACE_DISABLED_BY_DEFAULT("viz.quads"), "RenderPass",
+      reinterpret_cast<void*>(static_cast<uint64_t>(id)));
 }
 
-std::unique_ptr<RenderPass> RenderPass::Copy(int new_id) const {
+std::unique_ptr<RenderPass> RenderPass::Copy(RenderPassId new_id) const {
   std::unique_ptr<RenderPass> copy_pass(
       Create(shared_quad_state_list.size(), quad_list.size()));
   copy_pass->SetAll(new_id, output_rect, damage_rect, transform_to_root_target,
@@ -225,13 +142,11 @@ void RenderPass::CopyAll(const std::vector<std::unique_ptr<RenderPass>>& in,
     out->push_back(source->DeepCopy());
 }
 
-void RenderPass::SetNew(uint64_t id,
+void RenderPass::SetNew(RenderPassId id,
                         const gfx::Rect& output_rect,
                         const gfx::Rect& damage_rect,
                         const gfx::Transform& transform_to_root_target) {
-  // TODO(boliu): Temporarily making this a release check to catch
-  // crbug.com/1072407.
-  CHECK(id);
+  DCHECK(id);
   DCHECK(damage_rect.IsEmpty() || output_rect.Contains(damage_rect))
       << "damage_rect: " << damage_rect.ToString()
       << " output_rect: " << output_rect.ToString();
@@ -246,7 +161,7 @@ void RenderPass::SetNew(uint64_t id,
 }
 
 void RenderPass::SetAll(
-    uint64_t id,
+    RenderPassId id,
     const gfx::Rect& output_rect,
     const gfx::Rect& damage_rect,
     const gfx::Transform& transform_to_root_target,
@@ -258,9 +173,7 @@ void RenderPass::SetAll(
     bool cache_render_pass,
     bool has_damage_from_contributing_content,
     bool generate_mipmap) {
-  // TODO(boliu): Temporarily making this a release check to catch
-  // crbug.com/1072407.
-  CHECK(id);
+  DCHECK(id);
 
   this->id = id;
   this->output_rect = output_rect;
@@ -323,7 +236,7 @@ void RenderPass::AsValueInto(base::trace_event::TracedValue* value) const {
 
   TracedValue::MakeDictIntoImplicitSnapshotWithCategory(
       TRACE_DISABLED_BY_DEFAULT("viz.quads"), value, "RenderPass",
-      reinterpret_cast<void*>(id));
+      reinterpret_cast<void*>(static_cast<uint64_t>(id)));
 }
 
 SharedQuadState* RenderPass::CreateAndAppendSharedQuadState() {

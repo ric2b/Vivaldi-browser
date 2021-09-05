@@ -33,7 +33,7 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
   LayoutBlockFlow* GetLayoutBlockFlow() const {
     return To<LayoutBlockFlow>(box_);
   }
-  NGLayoutInputNode NextSibling() { return nullptr; }
+  NGLayoutInputNode NextSibling() const { return nullptr; }
 
   // True in quirks mode or limited-quirks mode, which require line-height
   // quirks.
@@ -99,7 +99,7 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
 
   // Returns the DOM to text content offset mapping of this block. If it is not
   // computed before, compute and store it in NGInlineNodeData.
-  // This funciton must be called with clean layout.
+  // This function must be called with clean layout.
   const NGOffsetMapping* ComputeOffsetMappingIfNeeded() const;
 
   // Get |NGOffsetMapping| for the |layout_block_flow|. |layout_block_flow|
@@ -126,6 +126,11 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
 
   bool UseFirstLineStyle() const;
   void CheckConsistency() const;
+
+  bool ShouldReportLetterSpacingUseCounterForTesting(
+      const LayoutObject* layout_object,
+      bool first_line,
+      const LayoutBlockFlow* block_flow);
 
   String ToString() const;
 

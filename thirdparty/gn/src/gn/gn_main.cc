@@ -42,12 +42,6 @@ int main(int argc, char** argv) {
 #endif
   base::CommandLine::Init(argc, argv);
 
-#if defined(OS_WIN)
-  // Vivaldi devs will never have this set to 1.
-  std::unique_ptr<base::Environment> env = base::Environment::Create();
-  env->SetVar("DEPOT_TOOLS_WIN_TOOLCHAIN", "0");
-#endif
-
   const base::CommandLine& cmdline = *base::CommandLine::ForCurrentProcess();
   std::vector<std::string> args = GetArgs(cmdline);
 

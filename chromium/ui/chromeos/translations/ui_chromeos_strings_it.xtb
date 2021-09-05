@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Occhiali da sole</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Catalan</translation>
+<translation id="1172970565351728681">Tempo rimanente: circa <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Rinomina</translation>
 <translation id="117624967391683467">Copia di <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">Pausa</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Esiste già un file denominato "<ph name="FILENAME" />". Che cosa vuoi fare?</translation>
 <translation id="2121825465123208577">Ridimensiona</translation>
 <translation id="2136953289241069843">Traslitterazione (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Impossibile aprire "<ph name="PATH" />": <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Carattere non valido: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Tastiera Vietnamita (TCVN)</translation>
 <translation id="2168214441502403371">Tastiera Persiano</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">La proprietà verrà trasferita a <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">Irlandese</translation>
 <translation id="3245321423178950146">Artista sconosciuto</translation>
+<translation id="3248185426436836442">In attesa</translation>
 <translation id="3252266817569339921">Francese</translation>
 <translation id="3254434849914415189">Seleziona l'applicazione predefinita per i file <ph name="FILE_TYPE" />:</translation>
 <translation id="3264582393905923483">Contesto</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Anno di registrazione</translation>
 <translation id="3338239663705455570">Tastiera slovena</translation>
 <translation id="3353984535370177728">Seleziona una cartella da caricare</translation>
+<translation id="3356580349448036450">Fine</translation>
 <translation id="3399597614303179694">Tastiera macedone</translation>
 <translation id="3414856743105198592">La formattazione del supporto rimovibile comporterà la cancellazione di tutti i dati. Vuoi continuare?</translation>
 <translation id="3437801641691368414">Data/ora creazione</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Non hai l'autorizzazione per spostare questi file in "<ph name="FOLDER_NAME" />".</translation>
 <translation id="3786301125658655746">Sei offline</translation>
 <translation id="3789841737615482174">Installa</translation>
+<translation id="3793469551756281394">Tempo rimanente: circa <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /></translation>
 <translation id="3798449238516105146">Versione</translation>
 <translation id="3801082500826908679">Faroese</translation>
 <translation id="3809272675881623365">Coniglio</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Questa cartella è condivisa con Windows</translation>
 <translation id="4487088045714738411">Tastiera belga</translation>
 <translation id="4522570452068850558">Dettagli</translation>
+<translation id="4542387084127299777">Impossibile aprire "<ph name="PATH" />"</translation>
 <translation id="4552678318981539154">Acquista più spazio di archiviazione</translation>
 <translation id="4559767610552730302">Bokeh</translation>
 <translation id="4572815280350369984">File <ph name="FILE_TYPE" /></translation>
@@ -510,7 +514,8 @@
 <translation id="6629841649550503054">Backup di tutti gli elementi su <ph name="BEGIN_LINK" />Google Drive<ph name="END_LINK" /> completato.</translation>
 <translation id="6643016212128521049">Cancella</translation>
 <translation id="6650726141019353908">Farfalla rosa</translation>
-<translation id="6710213216561001401">Indietro</translation>
+<translation id="6657585470893396449">Password</translation>
+<translation id="6710213216561001401">Precedente</translation>
 <translation id="6718273304615422081">Compressione...</translation>
 <translation id="6751256176799620176">1 cartella selezionata</translation>
 <translation id="6760765581316020278">Tastiera Vietnamita (VNI)</translation>
@@ -550,7 +555,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Installazione non riuscita.</translation>
 <translation id="7040138676081995583">Apri con...</translation>
-<translation id="7059566040011178088">Meno di <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> elementi selezionati</translation>
 <translation id="7106346894903675391">Acquista più spazio di archiviazione...</translation>
 <translation id="7126604456862387217">"&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;" - &lt;em&gt;cerca in Drive&lt;/em&gt;</translation>
@@ -661,7 +665,6 @@
 <translation id="8193175696669055101">Modello dispositivo</translation>
 <translation id="8208580316430297579">Copertina</translation>
 <translation id="8223479393428528563">Per salvare i file da utilizzare offline, torna online, fai clic con il pulsante destro del mouse sui file e seleziona l'opzione <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Circa <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Interrompi</translation>
 <translation id="8261506727792406068">Elimina</translation>
 <translation id="8269755669432358899">Comprimi i riquadri di feedback dei file</translation>
@@ -724,6 +727,7 @@
 <translation id="9065203028668620118">Modifica</translation>
 <translation id="9099674669267916096">Numero di pagine</translation>
 <translation id="9110990317705400362">Cerchiamo costantemente nuovi modi per rendere più sicura la navigazione. In passato, qualsiasi sito web poteva chiederti di aggiungere un'estensione nel browser. Nelle ultime versioni di Google Chrome, devi indicare esplicitamente a Chrome di voler installare le estensioni aggiungendole tramite la pagina Estensioni. <ph name="BEGIN_LINK" />Ulteriori informazioni<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Sblocca</translation>
 <translation id="912419004897138677">Codec</translation>
 <translation id="9129931661813833980">Blocca cartella</translation>
 <translation id="9130775360844693113">I membri di "<ph name="DESTINATION_NAME" />" avranno accesso a questi elementi.</translation>

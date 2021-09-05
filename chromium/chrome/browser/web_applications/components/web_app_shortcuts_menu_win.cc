@@ -125,7 +125,7 @@ base::string16 GenerateAppUserModelId(const base::FilePath& profile_path,
                                       const web_app::AppId& app_id) {
   base::string16 app_name =
       base::UTF8ToUTF16(web_app::GenerateApplicationNameFromAppId(app_id));
-  return shell_integration::win::GetAppModelIdForProfile(app_name,
+  return shell_integration::win::GetAppUserModelIdForApp(app_name,
                                                          profile_path);
 }
 
@@ -139,7 +139,8 @@ void RegisterShortcutsMenuWithOsTask(
     const AppId& app_id,
     const base::FilePath& profile_path,
     const base::FilePath& shortcut_data_dir,
-    const std::vector<WebApplicationShortcutsMenuItemInfo>& shortcut_infos,
+    const std::vector<WebApplicationShortcutsMenuItemInfo>&
+        shortcuts_menu_item_infos,
     const ShortcutsMenuIconsBitmaps& shortcuts_menu_icons_bitmaps) {
   // Each entry in the ShortcutsMenu (JumpList on Windows) needs an icon in .ico
   // format. This helper writes these icon files to disk as a series of
@@ -162,8 +163,8 @@ void RegisterShortcutsMenuWithOsTask(
   ShellLinkItemList shortcut_list;
 
   // Limit JumpList entries.
-  int num_entries =
-      std::min(static_cast<int>(shortcut_infos.size()), kMaxJumpListItems);
+  int num_entries = std::min(static_cast<int>(shortcuts_menu_item_infos.size()),
+                             kMaxJumpListItems);
   for (int i = 0; i < num_entries; i++) {
     scoped_refptr<ShellLinkItem> shortcut_link =
         base::MakeRefCounted<ShellLinkItem>();
@@ -174,12 +175,12 @@ void RegisterShortcutsMenuWithOsTask(
 
     shortcut_link->GetCommandLine()->AppendSwitchASCII(
         switches::kAppLaunchUrlForShortcutsMenuItem,
-        shortcut_infos[i].url.spec());
+        shortcuts_menu_item_infos[i].url.spec());
 
     // Set JumpList Item title and icon. The icon needs to be a .ico file.
     // We downloaded these in a shortcut icons folder in the OS integration
     // resources directory for this app.
-    shortcut_link->set_title(shortcut_infos[i].name);
+    shortcut_link->set_title(shortcuts_menu_item_infos[i].name);
     base::FilePath shortcut_icon_path =
         GetShortcutIconPath(shortcut_data_dir, i);
     shortcut_link->set_icon(shortcut_icon_path.value(), 0);
@@ -202,31 +203,33 @@ void RegisterShortcutsMenuWithOs(
     const AppId& app_id,
     const base::FilePath& profile_path,
     const base::FilePath& shortcut_data_dir,
-    const std::vector<WebApplicationShortcutsMenuItemInfo>& shortcut_infos,
+    const std::vector<WebApplicationShortcutsMenuItemInfo>&
+        shortcuts_menu_item_infos,
     const ShortcutsMenuIconsBitmaps& shortcuts_menu_icons_bitmaps) {
   base::ThreadPool::PostTask(
       FROM_HERE, {base::MayBlock(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
       base::BindOnce(&RegisterShortcutsMenuWithOsTask, app_id, profile_path,
-                     shortcut_data_dir, shortcut_infos,
+                     shortcut_data_dir, shortcuts_menu_item_infos,
                      shortcuts_menu_icons_bitmaps));
 }
 
-void UnregisterShortcutsMenuWithOs(const AppId& app_id,
+bool UnregisterShortcutsMenuWithOs(const AppId& app_id,
                                    const base::FilePath& profile_path) {
   if (!JumpListUpdater::DeleteJumpList(
           GenerateAppUserModelId(profile_path, app_id))) {
     RecordUnregistration(UnregistrationResult::kFailedToDeleteJumpList);
-    return;
+    return false;
   }
   RecordUnregistration(UnregistrationResult::kSuccess);
+  return true;
 }
 
 namespace internals {
 
-void DeleteShortcutsMenuIcons(const base::FilePath& shortcut_data_dir) {
+bool DeleteShortcutsMenuIcons(const base::FilePath& shortcut_data_dir) {
   base::FilePath shortcuts_menu_icons_path =
       GetShortcutsMenuIconsDirectory(shortcut_data_dir);
-  base::DeleteFileRecursively(shortcuts_menu_icons_path);
+  return base::DeletePathRecursively(shortcuts_menu_icons_path);
 }
 
 }  // namespace internals

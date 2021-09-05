@@ -6,8 +6,6 @@ package org.chromium.chrome.browser;
 
 import android.content.Context;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.annotation.UiThreadTest;
-import android.support.test.rule.UiThreadTestRule;
 
 import androidx.test.filters.SmallTest;
 
@@ -16,10 +14,10 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.task.PostTask;
+import org.chromium.base.test.UiThreadTest;
 import org.chromium.base.test.params.ParameterAnnotations.UseMethodParameter;
 import org.chromium.base.test.params.ParameterAnnotations.UseRunnerDelegate;
 import org.chromium.base.test.params.ParameterProvider;
@@ -34,14 +32,12 @@ import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
-import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.WebContentsUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 
 import java.util.Arrays;
-import java.util.concurrent.Callable;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -61,8 +57,7 @@ public class WarmupManagerTest {
     }
 
     @Rule
-    public final RuleChain mChain =
-            RuleChain.outerRule(new ChromeBrowserTestRule()).around(new UiThreadTestRule());
+    public final ChromeBrowserTestRule mChromeBrowserTestRule = new ChromeBrowserTestRule();
 
     private WarmupManager mWarmupManager;
     private Context mContext;
@@ -72,13 +67,9 @@ public class WarmupManagerTest {
         mContext = InstrumentationRegistry.getInstrumentation()
                            .getTargetContext()
                            .getApplicationContext();
-        TestThreadUtils.runOnUiThreadBlocking(new Callable<Void>() {
-            @Override
-            public Void call() {
-                ChromeBrowserInitializer.getInstance().handleSynchronousStartup();
-                mWarmupManager = WarmupManager.getInstance();
-                return null;
-            }
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            ChromeBrowserInitializer.getInstance().handleSynchronousStartup();
+            mWarmupManager = WarmupManager.getInstance();
         });
     }
 
@@ -112,12 +103,8 @@ public class WarmupManagerTest {
             webContents.addObserver(observer);
             webContentsReference.set(webContents);
         });
-        CriteriaHelper.pollUiThread(new Criteria("Spare renderer is not initialized") {
-            @Override
-            public boolean isSatisfied() {
-                return isRenderViewReady.get();
-            }
-        });
+        CriteriaHelper.pollUiThread(
+                () -> isRenderViewReady.get(), "Spare renderer is not initialized");
         PostTask.runOrPostTask(
                 UiThreadTaskTraits.DEFAULT, () -> webContentsReference.get().destroy());
     }

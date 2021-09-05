@@ -8,7 +8,11 @@
 
 #include "ash/public/cpp/network_config_service.h"
 #include "base/metrics/histogram_functions.h"
+#include "chrome/browser/nearby_sharing/nearby_share_settings.h"
+#include "chrome/browser/nearby_sharing/nearby_sharing_service_factory.h"
+#include "chrome/browser/nearby_sharing/nearby_sharing_service_impl.h"
 #include "chrome/browser/ui/webui/managed_ui_handler.h"
+#include "chrome/browser/ui/webui/nearby_share/shared_resources.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_storage_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/os_settings_manager.h"
 #include "chrome/browser/ui/webui/settings/chromeos/os_settings_manager_factory.h"
@@ -24,6 +28,7 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 
 namespace chromeos {
 namespace settings {
@@ -54,6 +59,7 @@ OSSettingsUI::OSSettingsUI(content::WebUI* web_ui)
   OsSettingsManager* manager = OsSettingsManagerFactory::GetForProfile(profile);
   manager->AddHandlers(web_ui);
   manager->AddLoadTimeData(html_source);
+  html_source->DisableTrustedTypesCSP();
 
   // TODO(khorimoto): Move to DeviceSection::AddHandler() once |html_source|
   // parameter is removed.
@@ -62,22 +68,39 @@ OSSettingsUI::OSSettingsUI(content::WebUI* web_ui)
                                                            html_source));
 
 #if BUILDFLAG(OPTIMIZE_WEBUI)
-  html_source->AddResourcePath("crisper.js", IDR_OS_SETTINGS_CRISPER_JS);
-  html_source->AddResourcePath("lazy_load.crisper.js",
-                               IDR_OS_SETTINGS_LAZY_LOAD_CRISPER_JS);
-  html_source->AddResourcePath("chromeos/lazy_load.html",
-                               IDR_OS_SETTINGS_LAZY_LOAD_VULCANIZED_HTML);
-  html_source->SetDefaultResource(IDR_OS_SETTINGS_VULCANIZED_HTML);
-  html_source->AddResourcePath("chromeos/os_settings_v3.html",
-                               IDR_OS_SETTINGS_OS_SETTINGS_V3_HTML);
-  html_source->AddResourcePath("chromeos/os_settings.js",
-                               IDR_OS_SETTINGS_SETTINGS_ROLLUP_JS);
+  if (base::FeatureList::IsEnabled(::chromeos::features::kOsSettingsPolymer3)) {
+    // Polymer3 Source files
+    webui::SetupBundledWebUIDataSource(html_source, "chromeos/os_settings.js",
+                                       IDR_OS_SETTINGS_OS_SETTINGS_ROLLUP_JS,
+                                       IDR_OS_SETTINGS_OS_SETTINGS_V3_HTML);
+    html_source->AddResourcePath("chromeos/shared.rollup.js",
+                                 IDR_OS_SETTINGS_SHARED_ROLLUP_JS);
+    html_source->AddResourcePath("chromeos/lazy_load.js",
+                                 IDR_OS_SETTINGS_LAZY_LOAD_ROLLUP_JS);
+  } else {
+    // Polymer2 Source files
+    html_source->AddResourcePath("crisper.js", IDR_OS_SETTINGS_CRISPER_JS);
+    html_source->AddResourcePath("lazy_load.crisper.js",
+                                 IDR_OS_SETTINGS_LAZY_LOAD_CRISPER_JS);
+    html_source->AddResourcePath("chromeos/lazy_load.html",
+                                 IDR_OS_SETTINGS_LAZY_LOAD_VULCANIZED_HTML);
+    html_source->SetDefaultResource(IDR_OS_SETTINGS_VULCANIZED_HTML);
+  }
 #else
   webui::SetupWebUIDataSource(
       html_source,
       base::make_span(kOsSettingsResources, kOsSettingsResourcesSize),
-      kOsGeneratedPath, IDR_OS_SETTINGS_SETTINGS_HTML);
+      kOsGeneratedPath,
+      base::FeatureList::IsEnabled(chromeos::features::kOsSettingsPolymer3)
+          ? IDR_OS_SETTINGS_OS_SETTINGS_V3_HTML
+          : IDR_OS_SETTINGS_SETTINGS_HTML);
 #endif
+
+  // Register chrome://nearby resources so they are available at
+  // chrome://os-settings. This allows the sharing of resources without having
+  // to put everything in chrome://resources. This is necessary because portions
+  // of the nearby UI need to be re-used in both places.
+  RegisterNearbySharedResources(html_source);
 
   ManagedUIHandler::Initialize(web_ui, html_source);
 
@@ -123,6 +146,14 @@ void OSSettingsUI::BindInterface(
             Profile::FromWebUI(web_ui()));
   }
   app_management_page_handler_factory_->Bind(std::move(receiver));
+}
+
+void OSSettingsUI::BindInterface(
+    mojo::PendingReceiver<nearby_share::mojom::NearbyShareSettings> receiver) {
+  NearbySharingService* service =
+      NearbySharingServiceFactory::GetForBrowserContext(
+          Profile::FromWebUI(web_ui()));
+  service->GetSettings()->Bind(std::move(receiver));
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(OSSettingsUI)

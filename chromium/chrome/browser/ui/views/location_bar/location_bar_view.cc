@@ -118,6 +118,7 @@
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/style/typography.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -193,9 +194,19 @@ void LocationBarView::Init() {
   omnibox_view_ = AddChildView(std::move(omnibox_view));
 
   // Initiate the Omnibox additional-text label.
-  if (OmniboxFieldTrial::IsRichAutocompletionEnabled()) {
+  if (OmniboxFieldTrial::RichAutocompletionShowAdditionalText()) {
+    // TODO (manukh) When the titles UI is disabled,
+    // |omnibox_additional_text_view| will only contain URLs and never page
+    // titles. It can safely be styled with STYLE_LINK. When the titles UI is
+    // enabled, it can contain either URLs or page titles. Ideally, its style
+    // would be updated appropriately, but given early consensus suggests titles
+    // UI is unlikely to launch, we don't have to worry about this case for now.
+    auto style = OmniboxFieldTrial::RichAutocompletionShowTitles()
+                     ? views::style::STYLE_PRIMARY
+                     : views::style::STYLE_LINK;
     auto omnibox_additional_text_view = std::make_unique<views::Label>(
-        base::string16(), ChromeTextContext::CONTEXT_OMNIBOX_DEEMPHASIZED);
+        base::string16(), ChromeTextContext::CONTEXT_OMNIBOX_DEEMPHASIZED,
+        style);
     omnibox_additional_text_view->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     omnibox_additional_text_view_ =
         AddChildView(std::move(omnibox_additional_text_view));
@@ -364,16 +375,16 @@ void LocationBarView::SelectAll() {
 void LocationBarView::FocusLocation(bool is_user_initiated) {
   const bool omnibox_already_focused = omnibox_view_->HasFocus();
 
+  if (is_user_initiated)
+    omnibox_view()->model()->Unelide();
+
   omnibox_view_->SetFocus(is_user_initiated);
 
   if (omnibox_already_focused)
     omnibox_view()->model()->ClearKeyword();
 
-  if (!is_user_initiated)
-    return;
-
-  omnibox_view_->SelectAll(true);
-  omnibox_view()->model()->Unelide();
+  if (is_user_initiated)
+    omnibox_view_->SelectAll(true);
 }
 
 void LocationBarView::Revert() {
@@ -565,8 +576,10 @@ void LocationBarView::Layout() {
   }
   // Because IMEs may eat the tab key, we don't show "press tab to search" while
   // IME composition is in progress.
-  if (HasFocus() && !keyword.empty() &&
-      omnibox_view_->model()->is_keyword_hint() &&
+  // The keyword hint is also not shown when the keyword button is enabled since
+  // it's redundant with that and is no longer accurate.
+  if (!OmniboxFieldTrial::IsKeywordSearchButtonEnabled() && HasFocus() &&
+      !keyword.empty() && omnibox_view_->model()->is_keyword_hint() &&
       !omnibox_view_->IsImeComposing()) {
     trailing_decorations.AddDecoration(vertical_padding, location_height, true,
                                        0, edge_padding, keyword_hint_view_);
@@ -584,7 +597,7 @@ void LocationBarView::Layout() {
 
   // Compute widths needed for location bar.
   int location_needed_width = omnibox_view_->GetTextWidth();
-  if (OmniboxFieldTrial::IsRichAutocompletionEnabled()) {
+  if (OmniboxFieldTrial::RichAutocompletionShowAdditionalText()) {
     // Calculate location_needed_width based on the omnibox view and omnibox
     // additional text widths. If RichAutocompletionTwoLineOmnibox is enabled,
     // location_needed_width only needs to be large enough to contain the
@@ -637,31 +650,32 @@ void LocationBarView::Layout() {
 
   // If rich autocompletion is enabled, split |location_bounds| for the
   // |omnibox_view_| and |omnibox_additional_text_view_|.
-  if (OmniboxFieldTrial::RichAutocompletionTwoLineOmnibox()) {
-    // Split vertically.
-    auto omnibox_bounds = location_bounds;
-    omnibox_bounds.set_height(location_bounds.height() / 2);
-    omnibox_view_->SetBoundsRect(omnibox_bounds);
-    auto omnibox_additional_text_bounds = omnibox_bounds;
-    omnibox_additional_text_bounds.set_x(location_bounds.x() + 3);
-    omnibox_additional_text_bounds.set_y(omnibox_bounds.bottom());
-    omnibox_additional_text_view_->SetBoundsRect(
-        omnibox_additional_text_bounds);
+  if (OmniboxFieldTrial::RichAutocompletionShowAdditionalText()) {
+    if (OmniboxFieldTrial::RichAutocompletionTwoLineOmnibox()) {
+      // Split vertically.
+      auto omnibox_bounds = location_bounds;
+      omnibox_bounds.set_height(location_bounds.height() / 2);
+      omnibox_view_->SetBoundsRect(omnibox_bounds);
+      auto omnibox_additional_text_bounds = omnibox_bounds;
+      omnibox_additional_text_bounds.set_x(location_bounds.x() + 3);
+      omnibox_additional_text_bounds.set_y(omnibox_bounds.bottom());
+      omnibox_additional_text_view_->SetBoundsRect(
+          omnibox_additional_text_bounds);
 
-  } else if (OmniboxFieldTrial::IsRichAutocompletionEnabled() &&
-             !omnibox_view_->GetText().empty()) {
-    // Split horizontally.
-    auto omnibox_bounds = location_bounds;
-    omnibox_bounds.set_width(std::min(
-        omnibox_view_->GetUnelidedTextWidth() + 10, location_bounds.width()));
-    omnibox_view_->SetBoundsRect(omnibox_bounds);
-    auto omnibox_additional_text_bounds = location_bounds;
-    omnibox_additional_text_bounds.set_x(omnibox_bounds.x() +
-                                         omnibox_bounds.width());
-    omnibox_additional_text_bounds.set_width(
-        std::max(location_bounds.width() - omnibox_bounds.width(), 0));
-    omnibox_additional_text_view_->SetBoundsRect(
-        omnibox_additional_text_bounds);
+    } else if (!omnibox_view_->GetText().empty()) {
+      // Split horizontally.
+      auto omnibox_bounds = location_bounds;
+      omnibox_bounds.set_width(std::min(
+          omnibox_view_->GetUnelidedTextWidth() + 10, location_bounds.width()));
+      omnibox_view_->SetBoundsRect(omnibox_bounds);
+      auto omnibox_additional_text_bounds = location_bounds;
+      omnibox_additional_text_bounds.set_x(omnibox_bounds.x() +
+                                           omnibox_bounds.width());
+      omnibox_additional_text_bounds.set_width(
+          std::max(location_bounds.width() - omnibox_bounds.width(), 0));
+      omnibox_additional_text_view_->SetBoundsRect(
+          omnibox_additional_text_bounds);
+    }
 
   } else {
     omnibox_view_->SetBoundsRect(location_bounds);
@@ -693,7 +707,7 @@ void LocationBarView::ChildPreferredSizeChanged(views::View* child) {
 
 void LocationBarView::SetOmniboxAdditionalText(const base::string16& text) {
   DCHECK(OmniboxFieldTrial::IsRichAutocompletionEnabled() || text.empty());
-  if (!OmniboxFieldTrial::IsRichAutocompletionEnabled())
+  if (!OmniboxFieldTrial::RichAutocompletionShowAdditionalText())
     return;
   auto wrappedText =
       text.empty() ? text
@@ -1239,7 +1253,7 @@ void LocationBarView::OnLocationIconPressed(const ui::MouseEvent& event) {
           ui::ClipboardBuffer::kSelection)) {
     base::string16 text;
     ui::Clipboard::GetForCurrentThread()->ReadText(
-        ui::ClipboardBuffer::kSelection, &text);
+        ui::ClipboardBuffer::kSelection, /* data_dst = */ nullptr, &text);
     text = OmniboxView::SanitizeTextForPaste(text);
 
     if (!GetOmniboxView()->model()->CanPasteAndGo(text)) {

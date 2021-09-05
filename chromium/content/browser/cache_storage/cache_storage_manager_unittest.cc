@@ -6,8 +6,8 @@
 #include <stdint.h>
 
 #include <list>
-#include <set>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/containers/flat_map.h"
@@ -53,9 +53,11 @@
 #include "storage/browser/test/fake_blob.h"
 #include "storage/browser/test/mock_quota_manager_proxy.h"
 #include "storage/browser/test/mock_special_storage_policy.h"
+#include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
+#include "url/gurl.h"
 #include "url/origin.h"
 
 using blink::mojom::CacheStorageError;
@@ -269,8 +271,6 @@ class CacheStorageManagerTest : public testing::Test {
         blob_storage_context_(nullptr),
         observers_(
             base::MakeRefCounted<CacheStorageContextImpl::ObserverList>()),
-        callback_bool_(false),
-        callback_error_(CacheStorageError::kSuccess),
         origin1_(url::Origin::Create(GURL("http://example1.com"))),
         origin2_(url::Origin::Create(GURL("http://example2.com"))) {}
 
@@ -660,9 +660,9 @@ class CacheStorageManagerTest : public testing::Test {
     auto response = blink::mojom::FetchAPIResponse::New(
         std::vector<GURL>({request->url}), status_code, "OK", response_type,
         network::mojom::FetchResponseSource::kUnspecified, response_headers,
-        base::nullopt /* mime_type */, std::move(blob),
-        blink::mojom::ServiceWorkerResponseError::kUnknown, base::Time(),
-        std::string() /* cache_storage_cache_name */,
+        base::nullopt /* mime_type */, net::HttpRequestHeaders::kGetMethod,
+        std::move(blob), blink::mojom::ServiceWorkerResponseError::kUnknown,
+        base::Time(), std::string() /* cache_storage_cache_name */,
         std::vector<std::string>() /* cors_exposed_header_names */,
         nullptr /* side_data_blob */,
         nullptr /* side_data_blob_for_cache_put */,
@@ -819,8 +819,8 @@ class CacheStorageManagerTest : public testing::Test {
   scoped_refptr<CacheStorageManager> cache_manager_;
 
   CacheStorageCacheHandle callback_cache_handle_;
-  int callback_bool_;
-  CacheStorageError callback_error_;
+  int callback_bool_ = false;
+  CacheStorageError callback_error_ = CacheStorageError::kSuccess;
   blink::mojom::FetchAPIResponsePtr callback_cache_handle_response_;
   std::vector<std::string> cache_names_;
 
@@ -1440,65 +1440,6 @@ TEST_F(CacheStorageManagerTest, TestErrorInitializingCache) {
 
   EXPECT_TRUE(Open(origin1_, kCacheName));
   EXPECT_EQ(0, Size(origin1_));
-}
-
-// TODO(crbug.com/1041371): Flaky on platforms which use POSIX file I/O.
-TEST_F(CacheStorageManagerTest, DISABLED_PutResponseWithExistingFileTest) {
-  const GURL kFooURL("http://example.com/foo");
-  const std::string kCacheName = "foo";
-
-  // Create a cache with an entry in it.
-  EXPECT_TRUE(Open(origin1_, kCacheName));
-  auto cache_handle = std::move(callback_cache_handle_);
-  EXPECT_TRUE(CachePut(cache_handle.value(), kFooURL));
-
-  // Find where the files are stored on disk.
-  base::FilePath cache_path =
-      LegacyCacheStorageCache::From(cache_handle)->path();
-
-  // Find the name of the file used to store the single entry.
-  base::FileEnumerator iter(cache_path, /* recursive = */ false,
-                            base::FileEnumerator::FILES,
-                            FILE_PATH_LITERAL("*_0"));
-  ASSERT_FALSE(iter.Next().empty());
-  base::FilePath entry_file_name = cache_path.Append(iter.GetInfo().GetName());
-
-  // Derive the name of the stream 2 file that contains side data.
-  base::FilePath::StringType stream_2_file_name_string(entry_file_name.value());
-  stream_2_file_name_string.back() = '1';
-  base::FilePath stream_2_file_name(stream_2_file_name_string);
-
-  // Delete the entry from the cache.
-  EXPECT_TRUE(CacheDelete(cache_handle.value(), kFooURL));
-
-  // Close the cache and storage so we can modify the underlying files.
-  cache_handle = CacheStorageCacheHandle();
-  FlushCacheStorageIndex(origin1_);
-  DestroyStorageManager();
-
-  // Create a fake, empty file where the entry previously existed.
-  const std::string kFakeData("foobar");
-  EXPECT_TRUE(base::WriteFile(entry_file_name, kFakeData));
-  EXPECT_TRUE(base::WriteFile(stream_2_file_name, kFakeData));
-
-  // Re-open the cache.
-  CreateStorageManager();
-  EXPECT_TRUE(Open(origin1_, kCacheName));
-  cache_handle = std::move(callback_cache_handle_);
-
-  // Try to put the entry back into the cache.  This should overwrite
-  // the fake file and create the entry successfully.
-  EXPECT_TRUE(CachePut(cache_handle.value(), kFooURL));
-  EXPECT_TRUE(CacheMatch(cache_handle.value(), kFooURL));
-
-  // The main entry file should exist and the fake data should be overwritten.
-  int64_t file_size = 0;
-  EXPECT_TRUE(base::GetFileSize(entry_file_name, &file_size));
-  EXPECT_NE(file_size, static_cast<int64_t>(kFakeData.size()));
-
-  // The stream 2 file should be removed because the response does not have
-  // any side data.
-  EXPECT_FALSE(base::PathExists(stream_2_file_name));
 }
 
 TEST_F(CacheStorageManagerTest, CacheSizeCorrectAfterReopen) {
@@ -2430,7 +2371,7 @@ TEST_P(CacheStorageManagerTestP, SlowPutCompletesWithoutExternalRef) {
 
 class CacheStorageQuotaClientTest : public CacheStorageManagerTest {
  protected:
-  CacheStorageQuotaClientTest() {}
+  CacheStorageQuotaClientTest() = default;
 
   void SetUp() override {
     CacheStorageManagerTest::SetUp();
@@ -2444,7 +2385,7 @@ class CacheStorageQuotaClientTest : public CacheStorageManagerTest {
   }
 
   void OriginsCallback(base::RunLoop* run_loop,
-                       const std::set<url::Origin>& origins) {
+                       const std::vector<url::Origin>& origins) {
     callback_origins_ = origins;
     run_loop->Quit();
   }
@@ -2499,7 +2440,7 @@ class CacheStorageQuotaClientTest : public CacheStorageManagerTest {
 
   blink::mojom::QuotaStatusCode callback_status_;
   int64_t callback_quota_usage_ = 0;
-  std::set<url::Origin> callback_origins_;
+  std::vector<url::Origin> callback_origins_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CacheStorageQuotaClientTest);
@@ -2553,9 +2494,9 @@ TEST_P(CacheStorageQuotaClientTestP, QuotaGetOriginsForHost) {
   EXPECT_TRUE(Open(url::Origin::Create(GURL("http://example2.com")), "foo"));
   EXPECT_EQ(3u, QuotaGetOriginsForHost("example.com"));
   EXPECT_EQ(1u, QuotaGetOriginsForHost("example2.com"));
-  EXPECT_NE(
-      callback_origins_.find(url::Origin::Create(GURL("http://example2.com"))),
-      callback_origins_.end());
+  EXPECT_THAT(
+      callback_origins_,
+      testing::Contains(url::Origin::Create(GURL("http://example2.com"))));
   EXPECT_EQ(0u, QuotaGetOriginsForHost("unknown.com"));
 }
 

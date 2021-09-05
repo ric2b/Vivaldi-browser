@@ -148,6 +148,20 @@
   return nil;
 }
 
++ (NSError*)addBookmarkWithTitle:(NSString*)title URL:(NSString*)url {
+  if (![BookmarkEarlGreyAppInterface waitForBookmarkModelLoaded:YES])
+    return testing::NSErrorWithLocalizedDescription(
+        @"Bookmark model was not loaded");
+
+  GURL bookmarkURL = GURL(base::SysNSStringToUTF8(url));
+  bookmarks::BookmarkModel* bookmark_model =
+      [BookmarkEarlGreyAppInterface bookmarkModel];
+  bookmark_model->AddURL(bookmark_model->mobile_node(), 0,
+                         base::SysNSStringToUTF16(title), bookmarkURL);
+
+  return nil;
+}
+
 + (NSError*)removeBookmarkWithTitle:(NSString*)title {
   base::string16 name16(base::SysNSStringToUTF16(title));
   bookmarks::BookmarkModel* bookmarkModel =
@@ -308,16 +322,6 @@
 + (int)numberOfTimesPromoAlreadySeen {
   PrefService* prefs = chrome_test_util::GetOriginalBrowserState()->GetPrefs();
   return prefs->GetInteger(prefs::kIosBookmarkSigninPromoDisplayedCount);
-}
-
-+ (NSString*)setupFakeIdentity {
-  FakeChromeIdentity* identity =
-      [FakeChromeIdentity identityWithEmail:@"foo1@gmail.com"
-                                     gaiaID:@"foo1ID"
-                                       name:@"Fake Foo 1"];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
-  return identity.userEmail;
 }
 
 #pragma mark - Helpers

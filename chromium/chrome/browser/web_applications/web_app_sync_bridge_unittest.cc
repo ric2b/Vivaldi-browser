@@ -14,6 +14,8 @@
 #include "base/test/bind_test_util.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_provider_base.h"
+#include "chrome/browser/web_applications/os_integration_manager.h"
 #include "chrome/browser/web_applications/test/test_web_app_database_factory.h"
 #include "chrome/browser/web_applications/test/test_web_app_registry_controller.h"
 #include "chrome/browser/web_applications/test/web_app_install_observer.h"
@@ -54,6 +56,7 @@ bool IsSyncDataEqualIfApplied(const WebApp& expected_app,
   // ApplySyncDataToApp enforces kSync source on |app_to_apply_sync_data|.
   ApplySyncDataToApp(entity_data.specifics.web_app(),
                      app_to_apply_sync_data.get());
+  app_to_apply_sync_data->SetName(entity_data.name);
   return expected_app == *app_to_apply_sync_data;
 }
 
@@ -102,6 +105,7 @@ std::unique_ptr<WebApp> CreateWebAppWithSyncOnlyFields(const std::string& url) {
   auto web_app = std::make_unique<WebApp>(app_id);
   web_app->AddSource(Source::kSync);
   web_app->SetLaunchUrl(launch_url);
+  web_app->SetName("Name");
   web_app->SetUserDisplayMode(DisplayMode::kStandalone);
   return web_app;
 }
@@ -198,6 +202,10 @@ class WebAppSyncBridgeTest : public WebAppTest {
  public:
   void SetUp() override {
     WebAppTest::SetUp();
+
+    WebAppProviderBase::GetProviderBase(profile())
+        ->os_integration_manager()
+        .SuppressOsHooksForTesting();
 
     test_registry_controller_ =
         std::make_unique<TestWebAppRegistryController>();

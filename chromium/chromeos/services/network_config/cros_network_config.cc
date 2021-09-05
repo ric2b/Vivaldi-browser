@@ -312,17 +312,11 @@ mojom::NetworkStatePropertiesPtr NetworkStateToMojo(
   result->priority = network->priority();
   result->prohibited_by_policy = network->blocked_by_policy();
   result->source = GetMojoOncSource(network);
-
-  // NetworkHandler and UIProxyConfigService may not exist in tests.
-  UIProxyConfigService* ui_proxy_config_service =
-      NetworkHandler::IsInitialized() &&
-              NetworkHandler::Get()->has_ui_proxy_config_service()
-          ? NetworkHandler::Get()->ui_proxy_config_service()
-          : nullptr;
   result->proxy_mode =
-      ui_proxy_config_service
+      NetworkHandler::HasUiProxyConfigService()
           ? mojom::ProxyMode(
-                ui_proxy_config_service->ProxyModeForNetwork(network))
+                NetworkHandler::GetUiProxyConfigService()->ProxyModeForNetwork(
+                    network))
           : mojom::ProxyMode::kDirect;
 
   const NetworkState::CaptivePortalProviderInfo* captive_portal_provider =
@@ -1185,7 +1179,7 @@ mojom::ManagedOpenVPNPropertiesPtr GetManagedOpenVPNProperties(
 mojom::ManagedPropertiesPtr ManagedPropertiesToMojo(
     const NetworkState* network_state,
     const std::vector<mojom::VpnProviderPtr>& vpn_providers,
-    const base::DictionaryValue* properties) {
+    const base::Value* properties) {
   DCHECK(network_state);
   DCHECK(properties);
   base::Optional<std::string> onc_type =
@@ -1432,7 +1426,6 @@ mojom::ManagedPropertiesPtr ManagedPropertiesToMojo(
       wifi->frequency = GetInt32(wifi_dict, ::onc::wifi::kFrequency);
       wifi->frequency_list =
           GetInt32List(wifi_dict, ::onc::wifi::kFrequencyList);
-      wifi->ft_enabled = GetManagedBoolean(wifi_dict, ::onc::wifi::kFTEnabled);
       wifi->hex_ssid = GetManagedString(wifi_dict, ::onc::wifi::kHexSSID);
       wifi->hidden_ssid =
           GetManagedBoolean(wifi_dict, ::onc::wifi::kHiddenSSID);
@@ -1873,33 +1866,33 @@ void CrosNetworkConfig::GetManagedProperties(
     return;
   }
 
-  int callback_id = callback_id_++;
-  get_managed_properties_callbacks_[callback_id] = std::move(callback);
-
   network_configuration_handler_->GetManagedProperties(
       chromeos::LoginState::Get()->primary_user_hash(), network->path(),
-      base::BindOnce(&CrosNetworkConfig::GetManagedPropertiesSuccess,
-                     weak_factory_.GetWeakPtr(), callback_id),
-      base::Bind(&CrosNetworkConfig::GetManagedPropertiesFailure,
-                 weak_factory_.GetWeakPtr(), guid, callback_id));
+      base::BindOnce(&CrosNetworkConfig::OnGetManagedProperties,
+                     weak_factory_.GetWeakPtr(), std::move(callback), guid));
 }
 
-void CrosNetworkConfig::GetManagedPropertiesSuccess(
-    int callback_id,
+void CrosNetworkConfig::OnGetManagedProperties(
+    GetManagedPropertiesCallback callback,
+    std::string guid,
     const std::string& service_path,
-    const base::DictionaryValue& properties) {
-  auto iter = get_managed_properties_callbacks_.find(callback_id);
-  DCHECK(iter != get_managed_properties_callbacks_.end());
+    base::Optional<base::Value> properties,
+    base::Optional<std::string> error) {
+  if (!properties) {
+    NET_LOG(ERROR) << "GetManagedProperties failed for: " << guid
+                   << " Error: " << error.value_or("Failed");
+    std::move(callback).Run(nullptr);
+    return;
+  }
   const NetworkState* network_state =
       network_state_handler_->GetNetworkState(service_path);
   if (!network_state) {
     NET_LOG(ERROR) << "Network not found: " << service_path;
-    std::move(iter->second).Run(nullptr);
-    get_managed_properties_callbacks_.erase(iter);
+    std::move(callback).Run(nullptr);
     return;
   }
-  mojom::ManagedPropertiesPtr managed_properties =
-      ManagedPropertiesToMojo(network_state, vpn_providers_, &properties);
+  mojom::ManagedPropertiesPtr managed_properties = ManagedPropertiesToMojo(
+      network_state, vpn_providers_, &properties.value());
 
   // For Ethernet networks with no authentication, check for a separate
   // EthernetEAP configuration.
@@ -1915,8 +1908,7 @@ void CrosNetworkConfig::GetManagedPropertiesSuccess(
   }
   if (!eap_state) {
     // No EAP properties, return the managed properties as-is.
-    std::move(iter->second).Run(std::move(managed_properties));
-    get_managed_properties_callbacks_.erase(iter);
+    std::move(callback).Run(std::move(managed_properties));
     return;
   }
 
@@ -1925,74 +1917,35 @@ void CrosNetworkConfig::GetManagedPropertiesSuccess(
   // be returned as-is.
   NET_LOG(DEBUG) << "Requesting EAP state for: " + service_path
                  << " from: " << eap_state->path();
-  managed_properties_[callback_id] = std::move(managed_properties);
   network_configuration_handler_->GetManagedProperties(
       chromeos::LoginState::Get()->primary_user_hash(), eap_state->path(),
-      base::BindOnce(&CrosNetworkConfig::GetManagedPropertiesSuccessEap,
-                     weak_factory_.GetWeakPtr(), callback_id),
-      base::Bind(&CrosNetworkConfig::GetManagedPropertiesSuccessNoEap,
-                 weak_factory_.GetWeakPtr(), callback_id));
+      base::BindOnce(&CrosNetworkConfig::OnGetManagedPropertiesEap,
+                     weak_factory_.GetWeakPtr(), std::move(callback),
+                     std::move(managed_properties)));
 }
 
-void CrosNetworkConfig::GetManagedPropertiesSuccessEap(
-    int callback_id,
+void CrosNetworkConfig::OnGetManagedPropertiesEap(
+    GetManagedPropertiesCallback callback,
+    mojom::ManagedPropertiesPtr managed_properties,
     const std::string& service_path,
-    const base::DictionaryValue& eap_properties) {
-  auto iter = get_managed_properties_callbacks_.find(callback_id);
-  DCHECK(iter != get_managed_properties_callbacks_.end());
-
-  auto properties_iter = managed_properties_.find(callback_id);
-  DCHECK(properties_iter != managed_properties_.end());
-  mojom::ManagedPropertiesPtr managed_properties =
-      std::move(properties_iter->second);
-  managed_properties_.erase(properties_iter);
-
-  // Copy the EAP properties to |managed_properties_| before sending.
-  const base::Value* ethernet_dict =
-      GetDictionary(&eap_properties, ::onc::network_config::kEthernet);
-  if (ethernet_dict) {
-    auto ethernet = mojom::ManagedEthernetProperties::New();
-    ethernet->authentication =
-        GetManagedString(ethernet_dict, ::onc::ethernet::kAuthentication);
-    ethernet->eap =
-        GetManagedEAPProperties(ethernet_dict, ::onc::ethernet::kEAP);
-    managed_properties->type_properties =
-        mojom::NetworkTypeManagedProperties::NewEthernet(std::move(ethernet));
+    base::Optional<base::Value> eap_properties,
+    base::Optional<std::string> error) {
+  if (eap_properties) {
+    // Copy the EAP properties to |managed_properties| before sending.
+    const base::Value* ethernet_dict =
+        eap_properties->FindDictKey(::onc::network_config::kEthernet);
+    if (ethernet_dict) {
+      auto ethernet = mojom::ManagedEthernetProperties::New();
+      ethernet->authentication =
+          GetManagedString(ethernet_dict, ::onc::ethernet::kAuthentication);
+      ethernet->eap =
+          GetManagedEAPProperties(ethernet_dict, ::onc::ethernet::kEAP);
+      managed_properties->type_properties =
+          mojom::NetworkTypeManagedProperties::NewEthernet(std::move(ethernet));
+    }
   }
 
-  std::move(iter->second).Run(std::move(managed_properties));
-  get_managed_properties_callbacks_.erase(iter);
-}
-
-void CrosNetworkConfig::GetManagedPropertiesSuccessNoEap(
-    int callback_id,
-    const std::string& error_name,
-    std::unique_ptr<base::DictionaryValue> error_data) {
-  auto iter = get_managed_properties_callbacks_.find(callback_id);
-  DCHECK(iter != get_managed_properties_callbacks_.end());
-
-  auto properties_iter = managed_properties_.find(callback_id);
-  DCHECK(properties_iter != managed_properties_.end());
-  mojom::ManagedPropertiesPtr managed_properties =
-      std::move(properties_iter->second);
-  managed_properties_.erase(properties_iter);
-
-  // No EAP properties, send the unmodified managed_properties_.
-  std::move(iter->second).Run(std::move(managed_properties));
-  get_managed_properties_callbacks_.erase(iter);
-}
-
-void CrosNetworkConfig::GetManagedPropertiesFailure(
-    std::string guid,
-    int callback_id,
-    const std::string& error_name,
-    std::unique_ptr<base::DictionaryValue> error_data) {
-  auto iter = get_managed_properties_callbacks_.find(callback_id);
-  DCHECK(iter != get_managed_properties_callbacks_.end());
-  NET_LOG(ERROR) << "Failed to get network properties: " << guid
-                 << " Error: " << error_name;
-  std::move(iter->second).Run(nullptr);
-  get_managed_properties_callbacks_.erase(iter);
+  std::move(callback).Run(std::move(managed_properties));
 }
 
 void CrosNetworkConfig::SetProperties(const std::string& guid,
@@ -2403,7 +2356,7 @@ void CrosNetworkConfig::GetGlobalPolicy(GetGlobalPolicyCallback callback) {
         global_policy_dict, ::onc::global_network_config::
                                 kAllowOnlyPolicyNetworksToConnectIfAvailable);
     base::Optional<std::vector<std::string>> blocked_hex_ssids = GetStringList(
-        global_policy_dict, ::onc::global_network_config::kBlacklistedHexSSIDs);
+        global_policy_dict, ::onc::global_network_config::kBlockedHexSSIDs);
     if (blocked_hex_ssids)
       result->blocked_hex_ssids = std::move(*blocked_hex_ssids);
   }

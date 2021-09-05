@@ -12,7 +12,7 @@
 
 namespace switches {
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
 COMPONENT_EXPORT(UI_BASE) extern const char kDisableAVFoundationOverlays[];
 COMPONENT_EXPORT(UI_BASE) extern const char kDisableMacOverlays[];
 COMPONENT_EXPORT(UI_BASE) extern const char kDisableModalAnimations[];
@@ -22,7 +22,6 @@ COMPONENT_EXPORT(UI_BASE) extern const char kShowMacOverlayBorders[];
 
 COMPONENT_EXPORT(UI_BASE) extern const char kDisableCompositedAntialiasing[];
 COMPONENT_EXPORT(UI_BASE) extern const char kDisableDwmComposition[];
-COMPONENT_EXPORT(UI_BASE) extern const char kDisableTouchAdjustment[];
 COMPONENT_EXPORT(UI_BASE) extern const char kDisableTouchDragDrop[];
 COMPONENT_EXPORT(UI_BASE) extern const char kEnableTouchDragDrop[];
 COMPONENT_EXPORT(UI_BASE) extern const char kForceCaptionStyle[];
@@ -31,7 +30,7 @@ COMPONENT_EXPORT(UI_BASE) extern const char kForceHighContrast[];
 COMPONENT_EXPORT(UI_BASE) extern const char kLang[];
 COMPONENT_EXPORT(UI_BASE) extern const char kShowOverdrawFeedback[];
 COMPONENT_EXPORT(UI_BASE) extern const char kSlowDownCompositingScaleFactor[];
-COMPONENT_EXPORT(UI_BASE) extern const char kTintGlCompositedContent[];
+COMPONENT_EXPORT(UI_BASE) extern const char kTintCompositedContent[];
 COMPONENT_EXPORT(UI_BASE) extern const char kTopChromeTouchUi[];
 COMPONENT_EXPORT(UI_BASE) extern const char kTopChromeTouchUiAuto[];
 COMPONENT_EXPORT(UI_BASE) extern const char kTopChromeTouchUiDisabled[];

@@ -93,14 +93,14 @@ MediaStream* MediaStream::Create(ExecutionContext* context,
 MediaStream* MediaStream::Create(ExecutionContext* context,
                                  MediaStreamDescriptor* stream_descriptor) {
   return MakeGarbageCollected<MediaStream>(context, stream_descriptor,
-                                           /*pan_tilt_zoom_allowed=*/false);
+                                           /*callback=*/base::DoNothing());
 }
 
-MediaStream* MediaStream::Create(ExecutionContext* context,
-                                 MediaStreamDescriptor* stream_descriptor,
-                                 bool pan_tilt_zoom_allowed) {
-  return MakeGarbageCollected<MediaStream>(context, stream_descriptor,
-                                           pan_tilt_zoom_allowed);
+void MediaStream::Create(ExecutionContext* context,
+                         MediaStreamDescriptor* stream_descriptor,
+                         base::OnceCallback<void(MediaStream*)> callback) {
+  MakeGarbageCollected<MediaStream>(context, stream_descriptor,
+                                    std::move(callback));
 }
 
 MediaStream* MediaStream::Create(ExecutionContext* context,
@@ -113,9 +113,10 @@ MediaStream* MediaStream::Create(ExecutionContext* context,
 
 MediaStream::MediaStream(ExecutionContext* context,
                          MediaStreamDescriptor* stream_descriptor,
-                         bool pan_tilt_zoom_allowed)
+                         base::OnceCallback<void(MediaStream*)> callback)
     : ExecutionContextClient(context),
       descriptor_(stream_descriptor),
+      media_stream_initialized_callback_(std::move(callback)),
       scheduled_event_timer_(
           context->GetTaskRunner(TaskType::kMediaElementEvent),
           this,
@@ -135,13 +136,29 @@ MediaStream::MediaStream(ExecutionContext* context,
   video_tracks_.ReserveCapacity(number_of_video_tracks);
   for (uint32_t i = 0; i < number_of_video_tracks; i++) {
     auto* new_track = MakeGarbageCollected<MediaStreamTrack>(
-        context, descriptor_->VideoComponent(i), pan_tilt_zoom_allowed);
+        context, descriptor_->VideoComponent(i),
+        WTF::Bind(&MediaStream::OnMediaStreamTrackInitialized,
+                  WrapPersistent(this)));
     new_track->RegisterMediaStream(this);
     video_tracks_.push_back(new_track);
   }
 
   if (EmptyOrOnlyEndedTracks()) {
     descriptor_->SetActive(false);
+  }
+
+  if (number_of_video_tracks == 0) {
+    context->GetTaskRunner(TaskType::kInternalMedia)
+        ->PostTask(FROM_HERE,
+                   WTF::Bind(std::move(media_stream_initialized_callback_),
+                             WrapPersistent(this)));
+  }
+}
+
+void MediaStream::OnMediaStreamTrackInitialized() {
+  if (++number_of_video_tracks_initialized_ ==
+      descriptor_->NumberOfVideoComponents()) {
+    std::move(media_stream_initialized_callback_).Run(this);
   }
 }
 

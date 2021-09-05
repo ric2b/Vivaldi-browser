@@ -42,7 +42,6 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_javascript_dialog_manager.h"
-#include "net/url_request/url_request.h"
 
 namespace content {
 
@@ -312,7 +311,7 @@ FileChooserDelegate::~FileChooserDelegate() = default;
 
 void FileChooserDelegate::RunFileChooser(
     RenderFrameHost* render_frame_host,
-    std::unique_ptr<content::FileSelectListener> listener,
+    scoped_refptr<content::FileSelectListener> listener,
     const blink::mojom::FileChooserParams& params) {
   // Send the selected file to the renderer process.
   auto file_info = blink::mojom::FileChooserFileInfo::NewNativeFile(
@@ -378,7 +377,7 @@ RenderProcessHostBadIpcMessageWaiter::Wait() {
 }
 
 ShowWidgetMessageFilter::ShowWidgetMessageFilter(WebContents* web_contents)
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(OS_MAC) || defined(OS_ANDROID)
     : BrowserMessageFilter(FrameMsgStart),
 #else
     : BrowserMessageFilter(ViewMsgStart),
@@ -398,7 +397,7 @@ void ShowWidgetMessageFilter::Shutdown() {
 
 bool ShowWidgetMessageFilter::OnMessageReceived(const IPC::Message& message) {
   IPC_BEGIN_MESSAGE_MAP(ShowWidgetMessageFilter, message)
-#if !defined(OS_MACOSX) && !defined(OS_ANDROID)
+#if !defined(OS_MAC) && !defined(OS_ANDROID)
     IPC_MESSAGE_HANDLER(ViewHostMsg_ShowWidget, OnShowWidget)
 #endif
   IPC_END_MESSAGE_MAP()
@@ -424,7 +423,7 @@ void ShowWidgetMessageFilter::OnShowWidget(int route_id,
                                 this, route_id, initial_rect));
 }
 
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(OS_MAC) || defined(OS_ANDROID)
 bool ShowWidgetMessageFilter::ShowPopupMenu(
     RenderFrameHost* render_frame_host,
     mojo::PendingRemote<blink::mojom::PopupMenuClient>* popup_client,

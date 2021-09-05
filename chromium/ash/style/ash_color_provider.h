@@ -8,6 +8,12 @@
 #include "ash/ash_export.h"
 #include "base/macros.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/gfx/vector_icon_types.h"
+
+namespace views {
+class ImageButton;
+class LabelButton;
+}  // namespace views
 
 namespace ash {
 
@@ -65,9 +71,6 @@ class ASH_EXPORT AshColorProvider {
 
     // Base layer is opaque.
     kOpaque,
-
-    // Base layer is red. e.g, the "sign out" button inside status area.
-    kRed,
   };
 
   // Types of Controls layer.
@@ -75,22 +78,36 @@ class ASH_EXPORT AshColorProvider {
     kHairlineBorderColor,
     kControlBackgroundColorActive,
     kControlBackgroundColorInactive,
+    kControlBackgroundColorAlert,
+    kControlBackgroundColorWarning,
+    kControlBackgroundColorPositive,
     kFocusRingColor,
   };
 
   enum class ContentLayerType {
     kSeparatorColor,
+
     kTextColorPrimary,
     kTextColorSecondary,
+    kTextColorAlert,
+    kTextColorWarning,
+    kTextColorPositive,
+
     kIconColorPrimary,
     kIconColorSecondary,
-    kIconAlert,
-    // Color for prominent icon button, e.g, "Add connection" icon button inside
+    kIconColorAlert,
+    kIconColorWarning,
+    kIconColorPositive,
+    // Color for prominent icon, e.g, "Add connection" icon button inside
     // VPN detailed view.
-    kButtonIconColorProminent,
+    kIconColorProminent,
 
     // The default color for button labels.
     kButtonLabelColor,
+    kButtonLabelColorPrimary,
+
+    kButtonIconColor,
+    kButtonIconColorPrimary,
 
     // Color for system menu icon buttons with inverted dark mode colors, e.g,
     // FeaturePodIconButton
@@ -100,6 +117,16 @@ class ASH_EXPORT AshColorProvider {
     // Color for sliders (volume, brightness etc.)
     kSliderThumbColorEnabled,
     kSliderThumbColorDisabled,
+
+    // Color for app state indicator.
+    kAppStateIndicatorColor,
+    kAppStateIndicatorColorInactive,
+  };
+
+  // Types of ash styled buttons.
+  enum class ButtonType {
+    kPillButtonWithIcon,
+    kCloseButtonWithSmallBase,
   };
 
   // Attributes of ripple, includes the base color, opacity of inkdrop and
@@ -172,7 +199,21 @@ class ASH_EXPORT AshColorProvider {
   // |is_themed_|).
   SkColor GetBackgroundColor(AshColorMode color_mode) const;
 
+  // Helpers to style buttons based on the desired |type| and theme. Depending
+  // on the type may style text, icon and background colors for both enabled and
+  // disabled states. May overwrite an prior styles on |button|.
+  void DecoratePillButton(views::LabelButton* button,
+                          ButtonType type,
+                          AshColorMode given_color_mode,
+                          const gfx::VectorIcon& icon);
+  void DecorateCloseButton(views::ImageButton* button,
+                           ButtonType type,
+                           AshColorMode given_color_mode,
+                           int button_size,
+                           const gfx::VectorIcon& icon);
+
   AshColorMode color_mode() const { return color_mode_; }
+  bool is_themed() const { return is_themed_; }
 
  private:
   // Gets Shield layer color on |type| and |color_mode|. This function will be

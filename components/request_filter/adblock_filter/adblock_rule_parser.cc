@@ -61,7 +61,7 @@ const std::map<base::StringPiece, ActivationTypeDetails> kActivationStringMap{
 bool GetMetadata(base::StringPiece comment,
                  const std::string& tag_name,
                  base::StringPiece* result) {
-  if (!comment.starts_with(tag_name))
+  if (!base::StartsWith(comment, tag_name))
     return false;
 
   *result = base::TrimWhitespaceASCII(comment.substr(tag_name.length()),
@@ -184,7 +184,7 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
                                                FilterRule* rule) {
   // TODO(julien): Add optional support for plain hostnames
 
-  if (rule_string.starts_with("@@")) {
+  if (base::StartsWith(rule_string, "@@")) {
     rule->is_allow_rule = true;
     rule_string.remove_prefix(2);
   }
@@ -207,7 +207,7 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
 
   base::StringPiece pattern = rule_string.substr(0, options_start);
 
-  if (pattern.starts_with("/") && pattern.ends_with("/") &&
+  if (base::StartsWith(pattern, "/") && base::EndsWith(pattern, "/") &&
       pattern.length() > 1) {
     pattern.remove_prefix(1);
     pattern.remove_suffix(1);
@@ -220,22 +220,22 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
   bool process_hostname = false;
   bool maybe_pure_host = true;
 
-  if (pattern.starts_with("||")) {
+  if (base::StartsWith(pattern, "||")) {
     pattern.remove_prefix(2);
 
     // The host part would never start with a separator, so a separator
     // would not make sense.
-    if (pattern.starts_with("^"))
+    if (base::StartsWith(pattern, "^"))
       return kUnsupported;
 
     process_hostname = true;
     rule->anchor_type.set(FilterRule::kAnchorHost);
-  } else if (pattern.starts_with("|")) {
+  } else if (base::StartsWith(pattern, "|")) {
     rule->anchor_type.set(FilterRule::kAnchorStart);
     pattern.remove_prefix(1);
   }
 
-  if (pattern.starts_with("*")) {
+  if (base::StartsWith(pattern, "*")) {
     // Starting with a wildcard makes anchoring at the start meaningless
     pattern.remove_prefix(1);
     rule->anchor_type.reset(FilterRule::kAnchorHost);
@@ -243,17 +243,17 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
 
     // Only try to find a hostname in hostname anchored patterns if the pattern
     // starts with *. or without a wildcard.
-    if (!pattern.starts_with(".")) {
+    if (!base::StartsWith(pattern, ".")) {
       process_hostname = false;
     }
   }
 
   // Stars at the start don't contribute to the pattern
-  while (pattern.starts_with("*")) {
+  while (base::StartsWith(pattern, "*")) {
     pattern.remove_prefix(1);
   }
 
-  if (pattern.ends_with("|")) {
+  if (base::EndsWith(pattern, "|")) {
     pattern.remove_suffix(1);
     rule->anchor_type.set(FilterRule::kAnchorEnd);
   }
@@ -263,7 +263,7 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
     rule->anchor_type.reset(FilterRule::kAnchorEnd);
   }
 
-  if (pattern.ends_with("*")) {
+  if (base::EndsWith(pattern, "*")) {
     // Ending with a wildcard makes anchoring at the end meaningless
     pattern.remove_suffix(1);
     rule->anchor_type.reset(FilterRule::kAnchorEnd);
@@ -271,7 +271,7 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
   }
 
   // Stars at the end don't contribute to the pattern
-  while (pattern.ends_with("*")) {
+  while (base::EndsWith(pattern, "*")) {
     pattern.remove_suffix(1);
   }
 
@@ -296,7 +296,7 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
   std::string canonicalized_pattern;
   size_t authority_begin = 0;
 
-  if (pattern.starts_with(".")) {
+  if (base::StartsWith(pattern, ".")) {
     authority_begin = 1;
     canonicalized_pattern = ".";
     maybe_pure_host = false;
@@ -440,7 +440,7 @@ RuleParser::Result RuleParser::ParseFilterRuleOptions(base::StringPiece options,
       case OptionType::kRewrite:
         if (!rule->redirect.empty())
           return kError;
-        if (!option_value.starts_with(kRewritePrefix))
+        if (!base::StartsWith(option_value, kRewritePrefix))
           return kError;
         option_value.remove_prefix(base::size(kRewritePrefix) - 1);
         rule->redirect = std::string(option_value);
@@ -456,9 +456,9 @@ RuleParser::Result RuleParser::ParseFilterRuleOptions(base::StringPiece options,
         for (auto csp :
              base::SplitStringPiece(option_value, ";", base::TRIM_WHITESPACE,
                                     base::SPLIT_WANT_NONEMPTY)) {
-          if (csp.starts_with("base-uri") || csp.starts_with("referrer") ||
-              csp.starts_with("report") ||
-              csp.starts_with("upgrade-insecure-requests"))
+          if (base::StartsWith(csp, "base-uri") || base::StartsWith(csp, "referrer") ||
+              base::StartsWith(csp, "report") ||
+              base::StartsWith(csp, "upgrade-insecure-requests"))
             return kError;
         }
         rule->csp = std::string(option_value);

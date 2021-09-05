@@ -122,6 +122,14 @@ void CmaAudioOutput::Initialize(
   timestamp_helper_.SetBaseTimestamp(base::TimeDelta());
 }
 
+void CmaAudioOutput::SetObserver(CmaBackend::AudioDecoder::Observer* observer) {
+  DCHECK_CALLED_ON_VALID_THREAD(media_thread_checker_);
+  DCHECK(observer);
+  if (audio_decoder_) {
+    audio_decoder_->SetObserver(observer);
+  }
+}
+
 bool CmaAudioOutput::Start(int64_t start_pts) {
   DCHECK_CALLED_ON_VALID_THREAD(media_thread_checker_);
   if (!cma_backend_ || !cma_backend_->Start(start_pts)) {
@@ -185,6 +193,11 @@ CmaBackend::AudioDecoder::RenderingDelay CmaAudioOutput::GetRenderingDelay() {
   DCHECK_CALLED_ON_VALID_THREAD(media_thread_checker_);
   DCHECK(audio_decoder_);
   return audio_decoder_->GetRenderingDelay();
+}
+
+int64_t CmaAudioOutput::GetTotalFrames() {
+  DCHECK_CALLED_ON_VALID_THREAD(media_thread_checker_);
+  return timestamp_helper_.frame_count();
 }
 
 }  // namespace media

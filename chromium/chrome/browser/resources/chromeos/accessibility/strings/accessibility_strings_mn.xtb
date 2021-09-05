@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Зүйлүүдийг жагсаа</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Хоёр хурууг баруун тийш шудрах</translation>
+<translation id="1016393160682012902">Qwerty товч, сэргээх боломжтой брайл товч, эсвэл мэдрэгч дээрх зангааны функцийг сурахын тулд дээр нь дарна уу. Гарах бол control-г w-тай цуг эсвэл escape-г дарна уу.</translation>
 <translation id="1022586497894531524">Та ChromeVox-н хэлсэн саналыг анх удаа ашиглаж байна уу? Энэхүү богино практик хичээлээр ChromeVox-г ашиглаж эхлэхэд шаардлагатай зүйлсийг тайлбарлах болно.</translation>
 <translation id="1025074108959230262">Наалдамхай горимыг идэвхгүй болгосон.</translation>
 <translation id="1031961866430398710">Тэгээд</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Дотоод холбоос</translation>
 <translation id="4909019435900810068">Нэг үгээр хойшоо зөөвөрлөх</translation>
 <translation id="4911349081560453449">Өмнөх checkbox алга байна</translation>
-<translation id="4915087353619183190">Сургалтын горимыг эхлүүлж байна. Qwerty түлхүүр буюу товчлуурын хэсэгтээ мэдрэгчтэй хавтан, сэргээх боломжтой брайл түлхүүр эсвэл мэдрэгч зангааны функцийг сурахын тулд дээр нь дарна уу. Гарахын тулд control+ w эсвэл escape гэснийг дарна уу.</translation>
 <translation id="492295894462528572">Өмнөх үг</translation>
 <translation id="495046168593986294">Дээш гүйлгэх</translation>
 <translation id="495170559598752135">Авах арга хэмжээ</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Ногоон</translation>
 <translation id="602001110135236999">Зүүн тийш гүйлгэх</translation>
 <translation id="6034000775414344507">Бүдэг саарал</translation>
+<translation id="6036135911048686884">Хүрч судлах</translation>
 <translation id="6037602951055904232">Цаашаа явах</translation>
 <translation id="6044160928851315051">Дэлгэцийг бараан болгох</translation>
 <translation id="6082768461603900813">Үндсэн шилжилт</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{ фунт}other{ # фунтын тэмдэгтүүд}}</translation>
 <translation id="8378855320830505539">Хамрах бүс</translation>
 <translation id="8382679411218029383">Autocompletion-ны мөр ба жагсаалт</translation>
+<translation id="8394908167088220973">Медиа тоглуулах/түр зогсоох</translation>
 <translation id="8428213095426709021">Тохиргоо</translation>
 <translation id="8428603554127842284">Түвшин <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">Хүснэгт мэтийн бүтэцлэгдсэн агуулгаас гарах</translation>
 <translation id="8779057862865475116">Өмнөх холбоос алга байна</translation>
 <translation id="8796411681063377102">Дараагийн 3-р түвшний гарчиг</translation>
+<translation id="8823311177246872527"><ph name="TOTALPAGES" />-н <ph name="CURRENTPAGE" />-р хуудас</translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">Гол</translation>
 <translation id="8882002077197914455">Мөрний толгой</translation>

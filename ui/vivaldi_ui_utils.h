@@ -26,6 +26,10 @@ extern extensions::WebViewGuest* GetActiveWebViewGuest();
 // taskbar on Windows.
 extern VivaldiBrowserWindow* GetActiveAppWindow();
 
+// Return the most recently active main window excluding settings and debug
+// windows.
+extern VivaldiBrowserWindow* GetLastActiveMainWindow();
+
 extern extensions::WebViewGuest* GetActiveWebGuestFromBrowser(Browser* browser);
 
 extern content::WebContents* GetWebContentsFromTabStrip(
@@ -34,13 +38,6 @@ extern content::WebContents* GetWebContentsFromTabStrip(
     std::string* error = nullptr);
 
 extern bool IsOutsideAppWindow(int screen_x, int screen_y);
-
-extern bool EncodeBitmap(
-    const SkBitmap& bitmap,
-    std::vector<unsigned char>* data,
-    std::string* mime_type,
-    extensions::api::extension_types::ImageFormat image_format,
-    int image_quality);
 
 extern Browser* FindBrowserForPinnedTabs(Browser* current_browser);
 extern bool MoveTabToWindow(Browser* source_browser,

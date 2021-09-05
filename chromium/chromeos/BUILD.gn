@@ -37,14 +37,16 @@ component("chromeos") {
   if (is_chromeos_device) {
     configs += [ "//build/config/compiler:use_orderfile_for_hugepage" ]
   }
-  public_deps = [ "//chromeos/constants" ]
+  public_deps = [
+    "//chromeos/constants",
+    "//components/policy/proto",
+  ]
   deps = [
     ":chromeos_export",
     "//base",
     "//base:i18n",
     "//chromeos/dbus",
     "//chromeos/dbus/constants",
-    "//components/policy/proto",
     "//google_apis",
     "//services/network/public/cpp:cpp",
     "//third_party/protobuf:protobuf_lite",
@@ -73,8 +75,6 @@ component("chromeos") {
     "printing/printer_translator.h",
     "printing/uri.cc",
     "printing/uri.h",
-    "printing/uri_components.cc",
-    "printing/uri_components.h",
     "printing/uri_impl.cc",
     "printing/uri_impl.h",
     "printing/usb_printer_id.cc",
@@ -85,6 +85,8 @@ component("chromeos") {
     "process_proxy/process_proxy.h",
     "process_proxy/process_proxy_registry.cc",
     "process_proxy/process_proxy_registry.h",
+    "scanning/scanner.cc",
+    "scanning/scanner.h",
   ]
   if (current_cpu == "arm" || current_cpu == "x86") {
     defines = [ "BINDER_IPC_32BIT" ]
@@ -92,9 +94,12 @@ component("chromeos") {
 
   if (is_printing_ppd_provider_v3) {
     sources += [
+      "printing/ppd_metadata_manager.cc",
+      "printing/ppd_metadata_manager.h",
       "printing/ppd_metadata_parser.cc",
       "printing/ppd_metadata_parser.h",
       "printing/ppd_provider_v3.cc",
+      "printing/ppd_provider_v3.h",
       "printing/printer_config_cache.cc",
       "printing/printer_config_cache.h",
     ]
@@ -154,6 +159,7 @@ test("chromeos_unittests") {
     "//build/config/linux/dbus",
     "//build/config/linux/nss:system_nss_no_ssl_config",
   ]
+
   deps = [
     ":chromeos_buildflags",
     ":test_support",
@@ -219,7 +225,10 @@ test("chromeos_unittests") {
     sources += [
       "printing/fake_printer_config_cache.cc",
       "printing/fake_printer_config_cache.h",
+      "printing/ppd_metadata_manager_unittest.cc",
+      "printing/ppd_metadata_matchers.h",
       "printing/ppd_metadata_parser_unittest.cc",
+      "printing/ppd_provider_v3_unittest.cc",
       "printing/printer_config_cache_unittest.cc",
     ]
   } else {
@@ -278,6 +287,10 @@ if (is_chromeos_device) {
   tast_test("chrome_all_tast_tests") {
     # To disable a specific test, add it the following list and cite a bug.
     tast_disabled_tests = [
+      # crbug.com/1115622
+      "ui.ChromeLoginGAIA",
+      "inputs.VirtualKeyboardOOBE",
+
       # crbug.com/1097630
       "security.OpenFDs",
 
@@ -300,6 +313,15 @@ if (is_chromeos_device) {
 
       # crbug.com/1098810
       "security.SELinuxFilesSystem",
+
+      # crbug.com/1099695
+      "platform.Drivefs",
+
+      # crbug.com/1114654
+      "crostini.Restart.artifact",
+
+      # crbug.com/1114752
+      "arc.ContainerMount",
     ]
   }
 
@@ -329,15 +351,6 @@ if (is_chromeos_device) {
 fuzzer_test("ppd_line_reader_fuzzer") {
   sources = [ "printing/ppd_line_reader_fuzzer.cc" ]
   deps = [ ":chromeos" ]
-}
-
-fuzzer_test("printer_configuration_fuzzer") {
-  sources = [ "printing/printer_configuration_fuzzer.cc" ]
-  seed_corpus = "printing/uri_fuzzer_seed_corpus"
-  deps = [
-    ":chromeos",
-    "//base",
-  ]
 }
 
 fuzzer_test("uri_fuzzer") {

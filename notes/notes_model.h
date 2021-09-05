@@ -10,13 +10,14 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/notification_observer.h"
 #include "importer/imported_notes_entry.h"
+#include "notes/note_model_loader.h"
 #include "notes/note_node.h"
 #include "notes/notes_model_observer.h"
 
 class Profile;
 
 namespace base {
-class SequencedTaskRunner;
+class FilePath;
 }
 
 namespace content {
@@ -29,7 +30,7 @@ class NoteSyncService;
 
 namespace vivaldi {
 
-class NotesLoadDetails;
+class NoteLoadDetails;
 class NotesStorage;
 
 class NotesModel : public KeyedService {
@@ -41,20 +42,15 @@ class NotesModel : public KeyedService {
   };
 
  public:
-  explicit NotesModel(content::BrowserContext* context,
-                      sync_notes::NoteSyncService* sync_service);
+  explicit NotesModel(sync_notes::NoteSyncService* sync_service);
 
   ~NotesModel() override;
 
-  static std::unique_ptr<NotesModel> CreateForTests();
-
-  // Loads the notes. This is called upon creation of the
-  // NotesModel. You need not invoke this directly.
-  // All load operations will be executed on |task_runner|.
-  void Load(const scoped_refptr<base::SequencedTaskRunner>& task_runner);
-
-  // Called from shutdown service before shutting down the browser
-  void Shutdown() override;
+  // Triggers the loading of notes, which is an asynchronous operation with
+  // most heavy-lifting taking place in a background sequence. Upon completion,
+  // loaded() will return true and observers will be notified via
+  // NotesModelLoaded().
+  void Load(const base::FilePath& profile_path);
 
   bool LoadNotes();
   bool SaveNotes();
@@ -75,8 +71,8 @@ class NotesModel : public KeyedService {
   bool IsDoingExtensiveChanges() const { return extensive_changes_ > 0; }
 
   // The root node, parent of the main node, trash and other nodes
-  const NoteNode* root_node() const { return &root_; }
-  NoteNode* root_node() { return &root_; }
+  const NoteNode* root_node() const { return root_.get(); }
+  NoteNode* root_node() { return root_.get(); }
 
   // The parent node of all normal notes (deleted  notes are parented by the
   // trash node). Child of the root node
@@ -93,7 +89,7 @@ class NotesModel : public KeyedService {
 
   // Returns whether the given |node| is one of the permanent nodes - root node,
   bool is_permanent_node(const NoteNode* node) const {
-    return node && (node == &root_ || node->parent() == &root_);
+    return node && (node == root_.get() || node->parent() == root_.get());
   }
 
   NoteNode* AddFolder(const NoteNode* parent,
@@ -137,8 +133,6 @@ class NotesModel : public KeyedService {
   // Moves |node| to |new_parent| and inserts it at the given |index|.
   bool Move(const NoteNode* node, const NoteNode* new_parent, size_t index);
 
-  void DoneLoading(std::unique_ptr<NotesLoadDetails> details);
-
   void SetURL(const NoteNode* node, const GURL& url);
   void SetTitle(const NoteNode* node, const base::string16& title);
 
@@ -161,19 +155,12 @@ class NotesModel : public KeyedService {
   // NOTE: This is a function only used by unit tests
   void GetNotes(std::vector<NotesModel::URLAndTitle>* urls);
 
-  void BlockTillLoaded();
-
   bool loaded() const { return loaded_; }
-  // Note that |root_| gets 0 as |id_|.
-  int64_t GetNewIndex() { return ++current_index_; }
 
-  // Sets the sync transaction version of |node|.
-  void SetNodeSyncTransactionVersion(const NoteNode* node,
-                                     int64_t sync_transaction_version);
   // Returns true if the parent and index are valid.
   bool IsValidIndex(const NoteNode* parent, size_t index, bool allow_end);
 
-  bool is_root_node(const NoteNode* node) const { return node == &root_; }
+  bool is_root_node(const NoteNode* node) const { return node == root_.get(); }
   bool is_main_node(const NoteNode* node) const { return node == main_node_; }
   bool is_other_node(const NoteNode* node) const { return node == other_node_; }
 
@@ -181,6 +168,9 @@ class NotesModel : public KeyedService {
   // action is about to happen and has completed.
   void BeginGroupedChanges();
   void EndGroupedChanges();
+
+  // Generates and returns the next node ID.
+  int64_t generate_next_node_id();
 
   // Sorts the children of |parent|, notifying observers by way of the
   // NotesNodeChildrenReordered method.
@@ -203,7 +193,7 @@ class NotesModel : public KeyedService {
   // Returns the set of nodes with the |url|.
   void GetNodesByURL(const GURL& url, std::vector<const NoteNode*>* nodes);
 
-  void set_next_index_id(int64_t next_index) { current_index_ = next_index; }
+  void set_next_node_id(int64_t id) { next_node_id_ = id; }
 
   void GetNotesMatching(const base::string16& text,
                         size_t max_count,
@@ -211,8 +201,13 @@ class NotesModel : public KeyedService {
 
   sync_notes::NoteSyncService* sync_service() { return sync_service_; }
 
+  base::WeakPtr<NotesModel> AsWeakPtr() { return weak_factory_.GetWeakPtr(); }
+
  private:
-  std::unique_ptr<NotesLoadDetails> CreateLoadDetails();
+  friend class NotesCodecTest;
+  friend std::unique_ptr<NotesModel> CreateTestNotesModel();
+
+  std::unique_ptr<NoteLoadDetails> CreateLoadDetails();
   NoteNode* GetOrCreateTrashNode();
 
   // Used to order NoteNodes by URL.
@@ -230,17 +225,16 @@ class NotesModel : public KeyedService {
 
   void RemoveAndDeleteNode(NoteNode* parent, size_t index, NoteNode* node_ptr);
 
+  void DoneLoading(std::unique_ptr<NoteLoadDetails> details);
+
   content::BrowserContext* context_;
-  NoteNode root_;
-  NoteNode* main_node_;
-  NoteNode* other_node_;
+  std::unique_ptr<NoteNode> root_;
 
-  // Points to the permanent trash node in the model.
-  NoteNode* trash_node_;
+  PermanentNoteNode* main_node_ = nullptr;
+  PermanentNoteNode* other_node_ = nullptr;
+  PermanentNoteNode* trash_node_ = nullptr;
 
-  bool loaded_;
-
-  base::WaitableEvent loaded_signal_;
+  bool loaded_ = false;
 
   // The observers.
   base::ObserverList<NotesModelObserver> observers_;
@@ -254,15 +248,17 @@ class NotesModel : public KeyedService {
   base::Lock url_lock_;
 
   // See description of IsDoingExtensiveChanges above.
-  int extensive_changes_;
+  int extensive_changes_ = 0;
 
-  // Reads/writes notes to disk.
+  // Writes notes to disk.
   std::unique_ptr<NotesStorage> store_;
 
   // current id for nodes. Used in getNewIndex()
-  int64_t current_index_;
+  int64_t next_node_id_ = 1;
 
   sync_notes::NoteSyncService* sync_service_;
+
+  base::WeakPtrFactory<NotesModel> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(NotesModel);
 };

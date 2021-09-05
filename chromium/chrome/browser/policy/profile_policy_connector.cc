@@ -21,11 +21,13 @@
 #include "components/policy/core/common/cloud/cloud_policy_manager.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "components/policy/core/common/configuration_policy_provider.h"
+#include "components/policy/core/common/legacy_chrome_policy_migrator.h"
 #include "components/policy/core/common/policy_bundle.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_service_impl.h"
 #include "components/policy/core/common/schema_registry_tracking_policy_provider.h"
+#include "components/policy/policy_constants.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/browser_process_platform_part.h"
@@ -213,13 +215,24 @@ void ProfilePolicyConnector::Init(
   }
 #endif
 
-  std::vector<std::unique_ptr<ExtensionPolicyMigrator>> migrators;
+  std::vector<std::unique_ptr<PolicyMigrator>> migrators;
 #if defined(OS_WIN)
   migrators.push_back(
       std::make_unique<browser_switcher::BrowserSwitcherPolicyMigrator>());
 #endif
 
 #if defined(OS_CHROMEOS)
+  migrators.push_back(std::make_unique<LegacyChromePolicyMigrator>(
+      policy::key::kDeviceNativePrinters, policy::key::kDevicePrinters));
+  migrators.push_back(std::make_unique<LegacyChromePolicyMigrator>(
+      policy::key::kNoteTakingAppsLockScreenWhitelist,
+      policy::key::kNoteTakingAppsLockScreenAllowlist));
+  migrators.push_back(std::make_unique<LegacyChromePolicyMigrator>(
+      policy::key::kDeviceUserWhitelist, policy::key::kDeviceUserAllowlist));
+  migrators.push_back(std::make_unique<LegacyChromePolicyMigrator>(
+      policy::key::kNativePrintersBulkConfiguration,
+      policy::key::kPrintersBulkConfiguration));
+
   ConfigurationPolicyProvider* user_policy_delegate_candidate =
       configuration_policy_provider ? configuration_policy_provider
                                     : special_user_policy_provider_.get();
@@ -344,7 +357,7 @@ ConfigurationPolicyProvider* ProfilePolicyConnector::GetPlatformProvider(
 std::unique_ptr<PolicyService>
 ProfilePolicyConnector::CreatePolicyServiceWithInitializationThrottled(
     const std::vector<ConfigurationPolicyProvider*>& policy_providers,
-    std::vector<std::unique_ptr<ExtensionPolicyMigrator>> migrators,
+    std::vector<std::unique_ptr<PolicyMigrator>> migrators,
     ConfigurationPolicyProvider* user_policy_delegate) {
   DCHECK(user_policy_delegate);
 

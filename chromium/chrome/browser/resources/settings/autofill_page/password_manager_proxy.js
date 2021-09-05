@@ -43,6 +43,15 @@ export class PasswordManagerProxy {
   recordPasswordsPageAccessInSettings() {}
 
   /**
+   * Changes the saved password corresponding to |ids|.
+   * @param {!Array<number>} ids The ids for the password entry being updated.
+   * @param {string} new_password
+   * @return {!Promise<void>} A promise that resolves when the password is
+   *     updated for all ids.
+   */
+  changeSavedPassword(ids, new_password) {}
+
+  /**
    * Should remove the saved password and notify that the list has changed.
    * @param {number} id The id for the password entry being removed.
    *     No-op if |id| is not in the list.
@@ -300,7 +309,8 @@ PasswordManagerProxy.PasswordCheckStatus;
  * These values are persisted to logs. Entries should not be renumbered and
  * numeric values should never be reused.
  *
- * Needs to stay in sync with PasswordCheckInteraction in enums.xml.
+ * Needs to stay in sync with PasswordCheckInteraction in enums.xml and
+ * password_manager_metrics_util.h.
  *
  * @enum {number}
  */
@@ -360,6 +370,13 @@ export class PasswordManagerImpl {
   /** @override */
   recordPasswordsPageAccessInSettings() {
     chrome.passwordsPrivate.recordPasswordsPageAccessInSettings();
+  }
+
+  /** @override */
+  changeSavedPassword(ids, new_password) {
+    return new Promise(resolve => {
+      chrome.passwordsPrivate.changeSavedPassword(ids, new_password, resolve);
+    });
   }
 
   /** @override */

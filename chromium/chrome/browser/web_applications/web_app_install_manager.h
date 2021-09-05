@@ -41,11 +41,12 @@ class WebAppInstallManager final : public InstallManager,
   void Shutdown();
 
   // InstallManager:
-  void LoadWebAppAndCheckInstallability(
+  void LoadWebAppAndCheckManifest(
       const GURL& web_app_url,
       WebappInstallSource install_source,
-      WebAppInstallabilityCheckCallback callback) override;
+      WebAppManifestCheckCallback callback) override;
   void InstallWebAppFromManifest(content::WebContents* contents,
+                                 bool bypass_service_worker_check,
                                  WebappInstallSource install_source,
                                  WebAppInstallDialogCallback dialog_callback,
                                  OnceInstallCallback callback) override;
@@ -55,9 +56,17 @@ class WebAppInstallManager final : public InstallManager,
       WebappInstallSource install_source,
       WebAppInstallDialogCallback dialog_callback,
       OnceInstallCallback callback) override;
+
   void InstallWebAppFromInfo(
       std::unique_ptr<WebApplicationInfo> web_application_info,
       ForInstallableSite for_installable_site,
+      WebappInstallSource install_source,
+      OnceInstallCallback callback) override;
+
+  void InstallWebAppFromInfo(
+      std::unique_ptr<WebApplicationInfo> web_application_info,
+      ForInstallableSite for_installable_site,
+      const base::Optional<InstallParams>& install_params,
       WebappInstallSource install_source,
       OnceInstallCallback callback) override;
   void InstallWebAppWithParams(content::WebContents* web_contents,
@@ -125,9 +134,9 @@ class WebAppInstallManager final : public InstallManager,
                                     OnceUninstallCallback callback,
                                     bool uninstalled);
 
-  void OnLoadWebAppAndCheckInstallabilityCompleted(
+  void OnLoadWebAppAndCheckManifestCompleted(
       WebAppInstallTask* task,
-      WebAppInstallabilityCheckCallback callback,
+      WebAppManifestCheckCallback callback,
       std::unique_ptr<content::WebContents> web_contents,
       const AppId& app_id,
       InstallResultCode code);

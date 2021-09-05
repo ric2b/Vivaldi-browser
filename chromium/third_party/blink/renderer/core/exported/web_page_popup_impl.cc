@@ -75,6 +75,7 @@
 #include "third_party/blink/renderer/platform/keyboard_codes.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "third_party/blink/renderer/platform/web_test_support.h"
+#include "third_party/blink/renderer/platform/widget/input/widget_input_handler_manager.h"
 #include "third_party/blink/renderer/platform/widget/widget_base.h"
 
 namespace blink {
@@ -172,9 +173,9 @@ class PagePopupChromeClient final : public EmptyChromeClient {
         timeline->GetAnimationTimeline());
   }
 
-  WebScreenInfo GetScreenInfo(LocalFrame&) const override {
+  ScreenInfo GetScreenInfo(LocalFrame&) const override {
     // LocalFrame is ignored since there is only 1 frame in a popup.
-    return popup_->WidgetClient()->GetScreenInfo();
+    return popup_->GetScreenInfo();
   }
 
   WebViewImpl* GetWebView() const override { return popup_->web_view_; }
@@ -344,7 +345,7 @@ void WebPagePopupImpl::Initialize(WebViewImpl* web_view,
         owner_settings->GetAllowUniversalAccessFromFileURLs());
   }
 
-  frame->Init();
+  frame->Init(nullptr);
   frame->View()->SetParentVisible(true);
   frame->View()->SetSelfVisible(true);
 
@@ -370,13 +371,19 @@ void WebPagePopupImpl::Initialize(WebViewImpl* web_view,
 }
 
 cc::LayerTreeHost* WebPagePopupImpl::InitializeCompositing(
+    bool never_composited,
+    scheduler::WebThreadScheduler* main_thread_scheduler,
     cc::TaskGraphRunner* task_graph_runner,
-    const cc::LayerTreeSettings& settings,
-    std::unique_ptr<cc::UkmRecorderFactory> ukm_recorder_factory) {
+    bool for_child_local_root_frame,
+    const ScreenInfo& screen_info,
+    std::unique_ptr<cc::UkmRecorderFactory> ukm_recorder_factory,
+    const cc::LayerTreeSettings* settings) {
   // Careful Initialize() is called after InitializeCompositing, so don't do
   // much work here.
-  widget_base_->InitializeCompositing(task_graph_runner, settings,
-                                      std::move(ukm_recorder_factory));
+  widget_base_->InitializeCompositing(
+      never_composited, main_thread_scheduler, task_graph_runner,
+      for_child_local_root_frame, screen_info, std::move(ukm_recorder_factory),
+      settings);
   return widget_base_->LayerTreeHost();
 }
 
@@ -407,10 +414,6 @@ void WebPagePopupImpl::UpdateTextInputState() {
   widget_base_->UpdateTextInputState();
 }
 
-void WebPagePopupImpl::UpdateCompositionInfo() {
-  widget_base_->UpdateCompositionInfo(/*immediate_request=*/false);
-}
-
 void WebPagePopupImpl::UpdateSelectionBounds() {
   widget_base_->UpdateSelectionBounds();
 }
@@ -419,21 +422,75 @@ void WebPagePopupImpl::ShowVirtualKeyboard() {
   widget_base_->ShowVirtualKeyboard();
 }
 
-void WebPagePopupImpl::ForceTextInputStateUpdate() {
-  widget_base_->ForceTextInputStateUpdate();
-}
-
-void WebPagePopupImpl::RequestCompositionUpdates(bool immediate_request,
-                                                 bool monitor_updates) {
-  widget_base_->RequestCompositionUpdates(immediate_request, monitor_updates);
-}
-
 void WebPagePopupImpl::SetFocus(bool focus) {
   widget_base_->SetFocus(focus);
 }
 
 bool WebPagePopupImpl::HasFocus() {
   return widget_base_->has_focus();
+}
+
+void WebPagePopupImpl::FlushInputProcessedCallback() {
+  widget_base_->FlushInputProcessedCallback();
+}
+
+void WebPagePopupImpl::CancelCompositionForPepper() {
+  widget_base_->CancelCompositionForPepper();
+}
+
+void WebPagePopupImpl::RequestMouseLock(
+    bool has_transient_user_activation,
+    bool priviledged,
+    bool request_unadjusted_movement,
+    base::OnceCallback<void(
+        mojom::blink::PointerLockResult,
+        CrossVariantMojoRemote<mojom::blink::PointerLockContextInterfaceBase>)>
+        callback) {
+  widget_base_->RequestMouseLock(has_transient_user_activation, priviledged,
+                                 request_unadjusted_movement,
+                                 std::move(callback));
+}
+
+#if defined(OS_ANDROID)
+SynchronousCompositorRegistry*
+WebPagePopupImpl::GetSynchronousCompositorRegistry() {
+  return widget_base_->widget_input_handler_manager()
+      ->GetSynchronousCompositorRegistry();
+}
+#endif
+
+void WebPagePopupImpl::ApplyVisualProperties(
+    const VisualProperties& visual_properties) {
+  widget_base_->UpdateVisualProperties(visual_properties);
+}
+
+void WebPagePopupImpl::UpdateSurfaceAndScreenInfo(
+    const viz::LocalSurfaceIdAllocation& new_local_surface_id_allocation,
+    const gfx::Rect& compositor_viewport_pixel_rect,
+    const ScreenInfo& new_screen_info) {
+  widget_base_->UpdateSurfaceAndScreenInfo(new_local_surface_id_allocation,
+                                           compositor_viewport_pixel_rect,
+                                           new_screen_info);
+}
+
+void WebPagePopupImpl::UpdateScreenInfo(const ScreenInfo& new_screen_info) {
+  widget_base_->UpdateScreenInfo(new_screen_info);
+}
+
+void WebPagePopupImpl::UpdateCompositorViewportAndScreenInfo(
+    const gfx::Rect& compositor_viewport_pixel_rect,
+    const ScreenInfo& new_screen_info) {
+  widget_base_->UpdateCompositorViewportAndScreenInfo(
+      compositor_viewport_pixel_rect, new_screen_info);
+}
+
+void WebPagePopupImpl::UpdateCompositorViewportRect(
+    const gfx::Rect& compositor_viewport_pixel_rect) {
+  widget_base_->UpdateCompositorViewportRect(compositor_viewport_pixel_rect);
+}
+
+const ScreenInfo& WebPagePopupImpl::GetScreenInfo() {
+  return widget_base_->GetScreenInfo();
 }
 
 void WebPagePopupImpl::SetCompositorVisible(bool visible) {
@@ -575,10 +632,6 @@ void WebPagePopupImpl::BeginMainFrame(base::TimeTicks last_frame_time) {
   PageWidgetDelegate::Animate(*page_, base::TimeTicks::Now());
 }
 
-void WebPagePopupImpl::DispatchRafAlignedInput(base::TimeTicks frame_time) {
-  WidgetClient()->DispatchRafAlignedInput(frame_time);
-}
-
 bool WebPagePopupImpl::WillHandleGestureEvent(const WebGestureEvent& event) {
   return WidgetClient()->WillHandleGestureEvent(event);
 }
@@ -594,28 +647,6 @@ void WebPagePopupImpl::ObserveGestureEventAndResult(
     bool event_processed) {
   WidgetClient()->DidHandleGestureScrollEvent(
       gesture_event, unused_delta, overscroll_behavior, event_processed);
-}
-
-void WebPagePopupImpl::QueueSyntheticEvent(
-    std::unique_ptr<blink::WebCoalescedInputEvent> event) {
-  WidgetClient()->QueueSyntheticEvent(std::move(event));
-}
-
-void WebPagePopupImpl::GetWidgetInputHandler(
-    mojo::PendingReceiver<mojom::blink::WidgetInputHandler> request,
-    mojo::PendingRemote<mojom::blink::WidgetInputHandlerHost> host) {
-  WidgetClient()->GetWidgetInputHandler(std::move(request), std::move(host));
-}
-
-bool WebPagePopupImpl::HasCurrentImeGuard(
-    bool request_to_show_virtual_keyboard) {
-  return WidgetClient()->HasCurrentImeGuard(request_to_show_virtual_keyboard);
-}
-
-void WebPagePopupImpl::SendCompositionRangeChanged(
-    const gfx::Range& range,
-    const std::vector<gfx::Rect>& character_bounds) {
-  WidgetClient()->SendCompositionRangeChanged(range, character_bounds);
 }
 
 WebInputEventResult WebPagePopupImpl::HandleCharEvent(
@@ -743,6 +774,28 @@ void WebPagePopupImpl::FocusChanged(bool enable) {
   WidgetClient()->FocusChanged(enable);
 }
 
+void WebPagePopupImpl::ScheduleAnimation() {
+  WidgetClient()->ScheduleAnimation();
+}
+
+void WebPagePopupImpl::UpdateVisualProperties(
+    const VisualProperties& visual_properties) {
+  WidgetClient()->UpdateVisualProperties(visual_properties);
+}
+
+void WebPagePopupImpl::UpdateScreenRects(const gfx::Rect& widget_screen_rect,
+                                         const gfx::Rect& window_screen_rect) {
+  WidgetClient()->UpdateScreenRects(widget_screen_rect, window_screen_rect);
+}
+
+ScreenInfo WebPagePopupImpl::GetOriginalScreenInfo() {
+  return WidgetClient()->GetOriginalScreenInfo();
+}
+
+gfx::Rect WebPagePopupImpl::ViewportVisibleRect() {
+  return widget_base_->CompositorViewportRect();
+}
+
 WebURL WebPagePopupImpl::GetURLForDebugTrace() {
   if (!page_)
     return {};
@@ -753,8 +806,7 @@ WebURL WebPagePopupImpl::GetURLForDebugTrace() {
 }
 
 void WebPagePopupImpl::Close(
-    scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner,
-    base::OnceCallback<void()> cleanup_task) {
+    scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner) {
   // If the popup is closed from the renderer via Cancel(), then ClosePopup()
   // has already run on another stack, and destroyed |page_|. If the popup is
   // closed from the browser via IPC to RenderWidget, then we come here first
@@ -767,7 +819,7 @@ void WebPagePopupImpl::Close(
     Cancel();
   }
 
-  widget_base_->Shutdown(std::move(cleanup_runner), std::move(cleanup_task));
+  widget_base_->Shutdown(std::move(cleanup_runner));
   widget_base_.reset();
   web_page_popup_client_ = nullptr;
 

@@ -16,6 +16,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "components/captive_portal/core/captive_portal_detector.h"
+#include "components/lookalikes/core/lookalike_url_util.h"
 #import "components/safe_browsing/ios/browser/safe_browsing_url_allow_list.h"
 #include "components/security_interstitials/core/unsafe_resource.h"
 #include "components/strings/grit/components_strings.h"
@@ -30,12 +31,17 @@
 #import "ios/chrome/browser/web/error_page_util.h"
 #include "ios/chrome/browser/web/features.h"
 #import "ios/components/security_interstitials/ios_blocking_page_tab_helper.h"
+#import "ios/components/security_interstitials/lookalikes/lookalike_url_container.h"
+#import "ios/components/security_interstitials/lookalikes/lookalike_url_error.h"
+#import "ios/net/protocol_handler_util.h"
 #include "ios/web/common/features.h"
 #import "ios/web/common/web_view_creation_util.h"
 #import "ios/web/public/test/error_test_util.h"
+#import "ios/web/public/test/fakes/test_navigation_manager.h"
 #import "ios/web/public/test/fakes/test_web_state.h"
 #import "ios/web/public/test/js_test_util.h"
 #include "ios/web/public/test/scoped_testing_web_client.h"
+#include "net/base/net_errors.h"
 #include "net/http/http_status_code.h"
 #include "net/ssl/ssl_info.h"
 #include "net/test/cert_test_util.h"
@@ -392,6 +398,126 @@ TEST_F(ChromeWebClientTest, PrepareErrorPageForSafeBrowsingError) {
   EXPECT_TRUE(callback_called);
   NSString* error_string = l10n_util::GetNSString(IDS_PHISHING_V4_HEADING);
   EXPECT_TRUE([page containsString:error_string]);
+}
+
+// Tests PrepareErrorPage for a lookalike error, which results in a
+// committed lookalike interstitial.
+TEST_F(ChromeWebClientTest, PrepareErrorPageForLookalikeUrlError) {
+  web::TestWebState web_state;
+  web_state.SetBrowserState(browser_state());
+  LookalikeUrlContainer::CreateForWebState(&web_state);
+  security_interstitials::IOSBlockingPageTabHelper::CreateForWebState(
+      &web_state);
+  auto navigation_manager = std::make_unique<web::TestNavigationManager>();
+  web_state.SetNavigationManager(std::move(navigation_manager));
+
+  LookalikeUrlContainer::FromWebState(&web_state)
+      ->SetLookalikeUrlInfo(GURL("https://www.safe.test"), GURL(kTestUrl),
+                            LookalikeUrlMatchType::kSkeletonMatchTop5k);
+
+  NSError* error = [NSError errorWithDomain:kLookalikeUrlErrorDomain
+                                       code:kLookalikeUrlErrorCode
+                                   userInfo:nil];
+  __block bool callback_called = false;
+  __block NSString* page = nil;
+  base::OnceCallback<void(NSString*)> callback =
+      base::BindOnce(^(NSString* error_html) {
+        callback_called = true;
+        page = error_html;
+      });
+
+  ChromeWebClient web_client;
+  web_client.PrepareErrorPage(&web_state, GURL(kTestUrl), error,
+                              /*is_post=*/false,
+                              /*is_off_the_record=*/false,
+                              /*info=*/base::Optional<net::SSLInfo>(),
+                              /*navigation_id=*/0, std::move(callback));
+
+  EXPECT_TRUE(callback_called);
+  NSString* error_string =
+      l10n_util::GetNSString(IDS_LOOKALIKE_URL_PRIMARY_PARAGRAPH);
+  EXPECT_TRUE([page containsString:error_string])
+      << base::SysNSStringToUTF8(page);
+}
+
+// Tests PrepareErrorPage for a lookalike error with no suggested URL,
+// which results in a committed lookalike interstitial that has a 'Close page'
+// button instead of 'Back to safety' (when there is no back item).
+TEST_F(ChromeWebClientTest, PrepareErrorPageForLookalikeUrlErrorNoSuggestion) {
+  web::TestWebState web_state;
+  web_state.SetBrowserState(browser_state());
+  LookalikeUrlContainer::CreateForWebState(&web_state);
+  security_interstitials::IOSBlockingPageTabHelper::CreateForWebState(
+      &web_state);
+  auto navigation_manager = std::make_unique<web::TestNavigationManager>();
+  web_state.SetNavigationManager(std::move(navigation_manager));
+
+  LookalikeUrlContainer::FromWebState(&web_state)
+      ->SetLookalikeUrlInfo(GURL(""), GURL(kTestUrl),
+                            LookalikeUrlMatchType::kSkeletonMatchTop5k);
+
+  NSError* error = [NSError errorWithDomain:kLookalikeUrlErrorDomain
+                                       code:kLookalikeUrlErrorCode
+                                   userInfo:nil];
+  __block bool callback_called = false;
+  __block NSString* page = nil;
+  base::OnceCallback<void(NSString*)> callback =
+      base::BindOnce(^(NSString* error_html) {
+        callback_called = true;
+        page = error_html;
+      });
+
+  ChromeWebClient web_client;
+  web_client.PrepareErrorPage(&web_state, GURL(kTestUrl), error,
+                              /*is_post=*/false,
+                              /*is_off_the_record=*/false,
+                              /*info=*/base::Optional<net::SSLInfo>(),
+                              /*navigation_id=*/0, std::move(callback));
+
+  EXPECT_TRUE(callback_called);
+  NSString* close_page_string =
+      l10n_util::GetNSString(IDS_LOOKALIKE_URL_CLOSE_PAGE);
+  NSString* back_to_safety_string =
+      l10n_util::GetNSString(IDS_LOOKALIKE_URL_BACK_TO_SAFETY);
+  EXPECT_TRUE([page containsString:close_page_string])
+      << base::SysNSStringToUTF8(page);
+  EXPECT_FALSE([page containsString:back_to_safety_string])
+      << base::SysNSStringToUTF8(page);
+}
+
+// Tests PrepareErrorPage for a legacy TLS error, which results in a
+// committed legacy TLS interstitial.
+TEST_F(ChromeWebClientTest, PrepareErrorPageForLegacyTLSError) {
+  web::TestWebState web_state;
+  web_state.SetBrowserState(browser_state());
+  security_interstitials::IOSBlockingPageTabHelper::CreateForWebState(
+      &web_state);
+  auto navigation_manager = std::make_unique<web::TestNavigationManager>();
+  web_state.SetNavigationManager(std::move(navigation_manager));
+
+  NSError* error = [NSError errorWithDomain:net::kNSErrorDomain
+                                       code:net::ERR_SSL_OBSOLETE_VERSION
+                                   userInfo:nil];
+  __block bool callback_called = false;
+  __block NSString* page = nil;
+  base::OnceCallback<void(NSString*)> callback =
+      base::BindOnce(^(NSString* error_html) {
+        callback_called = true;
+        page = error_html;
+      });
+
+  ChromeWebClient web_client;
+  web_client.PrepareErrorPage(&web_state, GURL(kTestUrl), error,
+                              /*is_post=*/false,
+                              /*is_off_the_record=*/false,
+                              /*info=*/base::Optional<net::SSLInfo>(),
+                              /*navigation_id=*/0, std::move(callback));
+
+  EXPECT_TRUE(callback_called);
+  NSString* error_string =
+      l10n_util::GetNSString(IDS_LEGACY_TLS_PRIMARY_PARAGRAPH);
+  EXPECT_TRUE([page containsString:error_string])
+      << base::SysNSStringToUTF8(page);
 }
 
 // Tests the default user agent for different views.

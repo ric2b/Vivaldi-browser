@@ -128,7 +128,6 @@ NGMathFractionLayoutAlgorithm::NGMathFractionLayoutAlgorithm(
   DCHECK(params.space.IsNewFormattingContext());
   container_builder_.SetIsNewFormattingContext(
       params.space.IsNewFormattingContext());
-  container_builder_.SetInitialFragmentGeometry(params.fragment_geometry);
   container_builder_.SetIsMathMLFraction();
 }
 
@@ -186,14 +185,12 @@ scoped_refptr<const NGLayoutResult> NGMathFractionLayoutAlgorithm::Layout() {
       To<NGPhysicalBoxFragment>(denominator_layout_result->PhysicalFragment()));
 
   LayoutUnit numerator_ascent =
-      numerator_margins.block_start +
-      numerator_fragment.Baseline().value_or(numerator_fragment.BlockSize());
+      numerator_margins.block_start + numerator_fragment.BaselineOrSynthesize();
   LayoutUnit numerator_descent = numerator_fragment.BlockSize() +
                                  numerator_margins.BlockSum() -
                                  numerator_ascent;
   LayoutUnit denominator_ascent = denominator_margins.block_start +
-                                  denominator_fragment.Baseline().value_or(
-                                      denominator_fragment.BlockSize());
+                                  denominator_fragment.BaselineOrSynthesize();
   LayoutUnit denominator_descent = denominator_fragment.BlockSize() +
                                    denominator_margins.BlockSum() -
                                    denominator_ascent;
@@ -272,9 +269,7 @@ scoped_refptr<const NGLayoutResult> NGMathFractionLayoutAlgorithm::Layout() {
   container_builder_.SetIntrinsicBlockSize(total_block_size);
   container_builder_.SetFragmentsTotalBlockSize(block_size);
 
-  NGOutOfFlowLayoutPart(Node(), ConstraintSpace(), container_builder_.Borders(),
-                        &container_builder_)
-      .Run();
+  NGOutOfFlowLayoutPart(Node(), ConstraintSpace(), &container_builder_).Run();
 
   return container_builder_.ToBoxFragment();
 }
@@ -292,8 +287,8 @@ MinMaxSizesResult NGMathFractionLayoutAlgorithm::ComputeMinMaxSizes(
        child = child.NextSibling()) {
     if (child.IsOutOfFlowPositioned())
       continue;
-    auto child_result =
-        ComputeMinAndMaxContentContribution(Style(), child, child_input);
+    auto child_result = ComputeMinAndMaxContentContribution(
+        Style(), To<NGBlockNode>(child), child_input);
     NGBoxStrut margins = ComputeMinMaxMargins(Style(), child);
     child_result.sizes += margins.InlineSum();
 

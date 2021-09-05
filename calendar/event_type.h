@@ -352,15 +352,15 @@ class EventQueryResults {
   DISALLOW_COPY_AND_ASSIGN(EventQueryResults);
 };
 
-class CreateEventResult {
+class EventResultCB {
  public:
-  CreateEventResult();
+  EventResultCB() = default;
   bool success;
   std::string message;
   EventResult createdEvent;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(CreateEventResult);
+  DISALLOW_COPY_AND_ASSIGN(EventResultCB);
 };
 
 class CreateEventsResult {

@@ -33,8 +33,8 @@ enum class DismissNudgeReason {
   kTimeout = 5,
   kActiveWindowChanged = 6,     // dismisses back gesture nudge
   kNavigationEntryChanged = 7,  // dismisses back gesture nudge
-  kBackGestureStarted = 8,      // deprecated
-  kUserSessionInactive = 9,     // dismisses back gesture nudge
+  // kBackGestureStarted = 8,   deprecated
+  kUserSessionInactive = 9,  // dismisses back gesture nudge
   kMaxValue = kUserSessionInactive,
 };
 

@@ -13,8 +13,10 @@
 #include "chrome/browser/profiles/profile_statistics_common.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
+#include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/json_pref_store.h"
 #include "extensions/browser/extension_function.h"
+#include "extensions/schema/runtime_private.h"
 
 class ProfileAttributesStorage;
 
@@ -241,6 +243,11 @@ class RuntimePrivateGetUserProfilesFunction : public ExtensionFunction {
 
  private:
   ~RuntimePrivateGetUserProfilesFunction() override = default;
+
+  void ProcessImagesOnWorkerThread(
+      std::vector<vivaldi::runtime_private::UserProfile> profiles);
+  void FinishProcessImagesOnUIThread(
+      std::vector<vivaldi::runtime_private::UserProfile> profiles);
 
   ResponseAction Run() override;
 

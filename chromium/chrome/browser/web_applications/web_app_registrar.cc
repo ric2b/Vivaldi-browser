@@ -4,7 +4,6 @@
 
 #include "chrome/browser/web_applications/web_app_registrar.h"
 
-#include <memory>
 #include <utility>
 #include <vector>
 
@@ -13,6 +12,8 @@
 #include "base/strings/string_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/web_applications/components/web_app_provider_base.h"
+#include "chrome/browser/web_applications/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app.h"
 
 namespace web_app {
@@ -80,6 +81,12 @@ base::Optional<SkColor> WebAppRegistrar::GetAppThemeColor(
   return web_app ? web_app->theme_color() : base::nullopt;
 }
 
+base::Optional<SkColor> WebAppRegistrar::GetAppBackgroundColor(
+    const AppId& app_id) const {
+  auto* web_app = GetAppById(app_id);
+  return web_app ? web_app->background_color() : base::nullopt;
+}
+
 const GURL& WebAppRegistrar::GetAppLaunchURL(const AppId& app_id) const {
   auto* web_app = GetAppById(app_id);
   return web_app ? web_app->launch_url() : GURL::EmptyGURL();
@@ -111,6 +118,13 @@ DisplayMode WebAppRegistrar::GetAppUserDisplayMode(const AppId& app_id) const {
   return web_app ? web_app->user_display_mode() : DisplayMode::kUndefined;
 }
 
+std::vector<DisplayMode> WebAppRegistrar::GetAppDisplayModeOverride(
+    const AppId& app_id) const {
+  auto* web_app = GetAppById(app_id);
+  return web_app ? web_app->display_mode_override()
+                 : std::vector<DisplayMode>();
+}
+
 base::Time WebAppRegistrar::GetAppLastLaunchTime(const AppId& app_id) const {
   auto* web_app = GetAppById(app_id);
   return web_app ? web_app->last_launch_time() : base::Time();
@@ -128,17 +142,17 @@ std::vector<WebApplicationIconInfo> WebAppRegistrar::GetAppIconInfos(
                  : std::vector<WebApplicationIconInfo>();
 }
 
-std::vector<SquareSizePx> WebAppRegistrar::GetAppDownloadedIconSizes(
+std::vector<SquareSizePx> WebAppRegistrar::GetAppDownloadedIconSizesAny(
     const AppId& app_id) const {
   auto* web_app = GetAppById(app_id);
-  return web_app ? web_app->downloaded_icon_sizes()
+  return web_app ? web_app->downloaded_icon_sizes(IconPurpose::ANY)
                  : std::vector<SquareSizePx>();
 }
 
 std::vector<WebApplicationShortcutsMenuItemInfo>
-WebAppRegistrar::GetAppShortcutInfos(const AppId& app_id) const {
+WebAppRegistrar::GetAppShortcutsMenuItemInfos(const AppId& app_id) const {
   auto* web_app = GetAppById(app_id);
-  return web_app ? web_app->shortcut_infos()
+  return web_app ? web_app->shortcuts_menu_item_infos()
                  : std::vector<WebApplicationShortcutsMenuItemInfo>();
 }
 
@@ -163,6 +177,13 @@ std::vector<AppId> WebAppRegistrar::GetAppIds() const {
   return app_ids;
 }
 
+RunOnOsLoginMode WebAppRegistrar::GetAppRunOnOsLoginMode(
+    const AppId& app_id) const {
+  auto* web_app = GetAppById(app_id);
+  return web_app ? web_app->run_on_os_login_mode()
+                 : RunOnOsLoginMode::kUndefined;
+}
+
 WebAppRegistrar* WebAppRegistrar::AsWebAppRegistrar() {
   return this;
 }
@@ -172,9 +193,12 @@ void WebAppRegistrar::OnProfileMarkedForPermanentDeletion(
   if (profile() != profile_to_be_deleted)
     return;
 
-  for (const auto& app : AllApps())
+  for (const auto& app : AllApps()) {
     NotifyWebAppProfileWillBeDeleted(app.app_id());
-
+    WebAppProviderBase::GetProviderBase(profile())
+        ->os_integration_manager()
+        .UninstallOsHooks(app.app_id(), base::DoNothing());
+  }
   // We can't do registry_.clear() here because it makes in-memory registry
   // diverged from the sync server registry and from the on-disk registry
   // (WebAppDatabase/LevelDB and "Web Applications" profile directory).

@@ -76,6 +76,9 @@ WebUIDataSource* CreateGpuHTMLSource() {
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources 'self' 'unsafe-eval';");
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::TrustedTypes,
+      "trusted-types jstemplate;");
 
   source->UseStringsJs();
   source->AddResourcePath("gpu_internals.js", IDR_GPU_INTERNALS_JS);
@@ -379,7 +382,7 @@ std::unique_ptr<base::ListValue> GpuMemoryBufferInfo(
 
   gpu::GpuMemoryBufferConfigurationSet native_config;
 #if defined(USE_X11)
-  if (features::IsUsingOzonePlatform()) {
+  if (!features::IsUsingOzonePlatform()) {
     for (const auto& config : gpu_extra_info.gpu_memory_buffer_support_x11) {
       native_config.emplace(config);
     }
@@ -821,7 +824,7 @@ void GpuMessageHandler::OnGpuInfoUpdate() {
       GpuDataManagerImpl::GetInstance()->GetGpuExtraInfo();
   auto gpu_info_val = GpuInfoAsDictionaryValue();
 
-  // Add in blacklisting features
+  // Add in blocklisting features
   auto feature_status = std::make_unique<base::DictionaryValue>();
   feature_status->Set("featureStatus", GetFeatureStatus());
   feature_status->Set("problems", GetProblems());

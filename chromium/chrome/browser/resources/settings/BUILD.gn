@@ -94,6 +94,7 @@ js_type_check("settings_resources") {
     ":lifetime_browser_proxy",
     ":router",
     ":search_settings",
+    ":setting_id_param_util",
   ]
 }
 
@@ -133,6 +134,13 @@ js_library("search_settings") {
     "//ui/webui/resources/js:util",
   ]
   externs_list = [ "$externs_path/pending_polymer.js" ]
+}
+
+js_library("setting_id_param_util") {
+  deps = [
+    ":router",
+    "//ui/webui/resources/js:load_time_data",
+  ]
 }
 
 # Polymer 3 related rules.
@@ -201,6 +209,7 @@ js_type_check("closure_compile_local_module") {
     ":route",
     ":router.m",
     ":search_settings.m",
+    ":setting_id_param_util.m",
     ":settings",
     ":settings_routes",
     ":site_favicon",
@@ -253,8 +262,11 @@ js_library("lazy_load") {
   deps = [
     "autofill_page:autofill_section",
     "autofill_page:payments_section",
+    "chrome_cleanup_page:chrome_cleanup_proxy",
+    "languages_page:languages_browser_proxy.m",
+    "languages_page:languages_metrics_proxy",
+    "languages_page:languages_page",
     "privacy_page:cookies_page",
-    "privacy_page:safe_browsing_browser_proxy",
     "privacy_page:security_page",
     "site_settings:local_data_browser_proxy",
     "site_settings:protocol_handlers",
@@ -310,6 +322,15 @@ js_library("search_settings.m") {
     "//ui/webui/resources/js:promise_resolver.m",
     "//ui/webui/resources/js:search_highlight_utils.m",
     "//ui/webui/resources/js:util.m",
+  ]
+  extra_deps = [ ":modulize" ]
+}
+
+js_library("setting_id_param_util.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/setting_id_param_util.m.js" ]
+  deps = [
+    ":router.m",
+    "//ui/webui/resources/js:load_time_data.m",
   ]
   extra_deps = [ ":modulize" ]
 }
@@ -412,6 +433,7 @@ js_modulizer("modulize") {
     "lifetime_browser_proxy.js",
     "router.js",
     "search_settings.js",
+    "setting_id_param_util.js",
   ]
   namespace_rewrites = settings_namespace_rewrites + [
                          "cr.search_highlight_utils.createEmptySearchBubble|createEmptySearchBubble",

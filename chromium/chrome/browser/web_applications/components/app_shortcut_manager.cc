@@ -13,14 +13,9 @@
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/components/app_icon_manager.h"
-#include "chrome/browser/web_applications/components/web_app_run_on_os_login.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-
-#if defined(OS_MACOSX)
-#include "chrome/browser/web_applications/components/app_shim_registry_mac.h"
-#endif
 
 namespace web_app {
 
@@ -43,37 +38,8 @@ void AppShortcutManager::SetSubsystems(AppIconManager* icon_manager,
   registrar_ = registrar;
 }
 
-void AppShortcutManager::Start() {
-  DCHECK(registrar_);
-  app_registrar_observer_.Add(registrar_);
-
-#if defined(OS_MACOSX)
-  // Ensure that all installed apps are included in the AppShimRegistry when the
-  // profile is loaded. This is redundant, because apps are registered when they
-  // are installed. It is necessary, however, because app registration was added
-  // long after app installation launched. This should be removed after shipping
-  // for a few versions (whereupon it may be assumed that most applications have
-  // been registered).
-  std::vector<AppId> app_ids = registrar_->GetAppIds();
-  for (const auto& app_id : app_ids) {
-    AppShimRegistry::Get()->OnAppInstalledForProfile(app_id,
-                                                     profile_->GetPath());
-  }
-#endif
-}
-
-void AppShortcutManager::Shutdown() {
-  app_registrar_observer_.RemoveAll();
-}
-
-void AppShortcutManager::OnWebAppInstalled(const AppId& app_id) {
-#if defined(OS_MACOSX)
-  AppShimRegistry::Get()->OnAppInstalledForProfile(app_id, profile_->GetPath());
-#endif
-}
-
-void AppShortcutManager::OnWebAppManifestUpdated(const AppId& app_id,
-                                                 base::StringPiece old_name) {
+void AppShortcutManager::UpdateShortcuts(const AppId& app_id,
+                                         base::StringPiece old_name) {
   if (!CanCreateShortcuts())
     return;
 
@@ -83,46 +49,9 @@ void AppShortcutManager::OnWebAppManifestUpdated(const AppId& app_id,
                   weak_ptr_factory_.GetWeakPtr(), base::UTF8ToUTF16(old_name)));
 }
 
-void AppShortcutManager::OnWebAppUninstalled(const AppId& app_id) {
-  std::unique_ptr<ShortcutInfo> shortcut_info = BuildShortcutInfo(app_id);
-  base::FilePath shortcut_data_dir =
-      internals::GetShortcutDataDir(*shortcut_info);
-
-  if (base::FeatureList::IsEnabled(features::kDesktopPWAsRunOnOsLogin)) {
-    internals::GetShortcutIOTaskRunner()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&internals::UnregisterRunOnOsLogin,
-                       shortcut_info->profile_path, shortcut_info->title));
-  }
-
-  internals::PostShortcutIOTask(
-      base::BindOnce(&internals::DeletePlatformShortcuts, shortcut_data_dir),
-      std::move(shortcut_info));
-
-  DeleteSharedAppShims(app_id);
-}
-
-void AppShortcutManager::OnWebAppProfileWillBeDeleted(const AppId& app_id) {
-  DeleteSharedAppShims(app_id);
-}
-
 void AppShortcutManager::SetShortcutUpdateCallbackForTesting(
     base::OnceCallback<void(const ShortcutInfo*)> callback) {
   GetShortcutUpdateCallbackForTesting() = std::move(callback);
-}
-
-void AppShortcutManager::DeleteSharedAppShims(const AppId& app_id) {
-#if defined(OS_MACOSX)
-  bool delete_multi_profile_shortcuts =
-      AppShimRegistry::Get()->OnAppUninstalledForProfile(app_id,
-                                                         profile_->GetPath());
-  if (delete_multi_profile_shortcuts) {
-    web_app::internals::GetShortcutIOTaskRunner()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&web_app::internals::DeleteMultiProfileShortcutsForApp,
-                       app_id));
-  }
-#endif
 }
 
 bool AppShortcutManager::CanCreateShortcuts() const {
@@ -169,7 +98,8 @@ void AppShortcutManager::ReadAllShortcutsMenuIconsAndRegisterShortcutsMenu(
 
 void AppShortcutManager::RegisterShortcutsMenuWithOs(
     const AppId& app_id,
-    const std::vector<WebApplicationShortcutsMenuItemInfo>& shortcut_infos,
+    const std::vector<WebApplicationShortcutsMenuItemInfo>&
+        shortcuts_menu_item_infos,
     const ShortcutsMenuIconsBitmaps& shortcuts_menu_icons_bitmaps) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!web_app::ShouldRegisterShortcutsMenuWithOs() ||
@@ -188,7 +118,8 @@ void AppShortcutManager::RegisterShortcutsMenuWithOs(
       internals::GetShortcutDataDir(*shortcut_info);
   web_app::RegisterShortcutsMenuWithOs(
       shortcut_info->extension_id, shortcut_info->profile_path,
-      shortcut_data_dir, shortcut_infos, shortcuts_menu_icons_bitmaps);
+      shortcut_data_dir, shortcuts_menu_item_infos,
+      shortcuts_menu_icons_bitmaps);
 }
 
 void AppShortcutManager::UnregisterShortcutsMenuWithOs(const AppId& app_id) {
@@ -198,6 +129,7 @@ void AppShortcutManager::UnregisterShortcutsMenuWithOs(const AppId& app_id) {
 
   web_app::UnregisterShortcutsMenuWithOs(app_id, profile_->GetPath());
 }
+
 
 void AppShortcutManager::OnShortcutsCreated(const AppId& app_id,
                                             CreateShortcutsCallback callback,
@@ -243,32 +175,14 @@ void AppShortcutManager::OnShortcutsMenuIconsReadRegisterShortcutsMenu(
     const AppId& app_id,
     RegisterShortcutsMenuCallback callback,
     ShortcutsMenuIconsBitmaps shortcuts_menu_icons_bitmaps) {
-  std::vector<WebApplicationShortcutsMenuItemInfo> shortcut_infos =
-      registrar_->GetAppShortcutInfos(app_id);
-  if (!shortcut_infos.empty()) {
-    RegisterShortcutsMenuWithOs(app_id, shortcut_infos,
+  std::vector<WebApplicationShortcutsMenuItemInfo> shortcuts_menu_item_infos =
+      registrar_->GetAppShortcutsMenuItemInfos(app_id);
+  if (!shortcuts_menu_item_infos.empty()) {
+    RegisterShortcutsMenuWithOs(app_id, shortcuts_menu_item_infos,
                                 shortcuts_menu_icons_bitmaps);
   }
 
   std::move(callback).Run(/*shortcuts_menu_registered=*/true);
-}
-
-void AppShortcutManager::RegisterRunOnOsLogin(
-    const AppId& app_id,
-    RegisterRunOnOsLoginCallback callback) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  GetShortcutInfoForApp(
-      app_id,
-      base::BindOnce(
-          &AppShortcutManager::OnShortcutInfoRetrievedRegisterRunOnOsLogin,
-          weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
-}
-
-void AppShortcutManager::OnShortcutInfoRetrievedRegisterRunOnOsLogin(
-    RegisterRunOnOsLoginCallback callback,
-    std::unique_ptr<ShortcutInfo> info) {
-  ScheduleRegisterRunOnOsLogin(std::move(info), std::move(callback));
 }
 
 void AppShortcutManager::OnShortcutInfoRetrievedUpdateShortcuts(

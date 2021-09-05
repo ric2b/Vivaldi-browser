@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
-import("//build/config/jumbo.gni")
 import("//build/config/linux/pkg_config.gni")
 import("//build/config/ui.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
@@ -41,7 +40,7 @@ mojom_component("ax_enums_mojo") {
 # included by Blink. The rule of thumb (for now) is that it's
 # anything platform-neutral (no platform/ directory) that
 # relates to a single accessibility node (no trees, etc.).
-jumbo_component("ax_base") {
+component("ax_base") {
   defines = [ "AX_BASE_IMPLEMENTATION" ]
 
   sources = [
@@ -64,6 +63,8 @@ jumbo_component("ax_base") {
     "ax_relative_bounds.h",
     "ax_role_properties.cc",
     "ax_role_properties.h",
+    "ax_tree_id.cc",
+    "ax_tree_id.h",
   ]
 
   public_deps = [
@@ -71,6 +72,7 @@ jumbo_component("ax_base") {
     ":ax_enums_mojo",
     "//base",
     "//base:i18n",
+    "//base/util/values:values_util",
     "//ui/base",
     "//ui/gfx",
     "//ui/gfx/geometry",
@@ -86,7 +88,7 @@ jumbo_component("ax_base") {
 #  }
 #}
 
-jumbo_component("accessibility") {
+component("accessibility") {
   defines = [ "AX_IMPLEMENTATION" ]
 
   sources = [
@@ -94,6 +96,8 @@ jumbo_component("accessibility") {
     "ax_action_data.h",
     "ax_action_handler.cc",
     "ax_action_handler.h",
+    "ax_action_handler_base.cc",
+    "ax_action_handler_base.h",
     "ax_action_target.h",
     "ax_active_popup.cc",
     "ax_active_popup.h",
@@ -127,8 +131,6 @@ jumbo_component("accessibility") {
     "ax_tree_combiner.h",
     "ax_tree_data.cc",
     "ax_tree_data.h",
-    "ax_tree_id.cc",
-    "ax_tree_id.h",
     "ax_tree_id_registry.cc",
     "ax_tree_id_registry.h",
     "ax_tree_manager.h",

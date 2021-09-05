@@ -293,7 +293,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, SelectionClipboard) {
 #endif  // OS_LINUX && !OS_CHROMEOS
 
 // No touch on desktop Mac. Tracked in http://crbug.com/445520.
-#if !defined(OS_MACOSX) || defined(USE_AURA)
+#if !defined(OS_MAC) || defined(USE_AURA)
 
 IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, SelectAllOnTap) {
   OmniboxView* omnibox_view = NULL;
@@ -375,7 +375,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest,
   EXPECT_FALSE(textfield_test_api.touch_selection_controller());
 }
 
-#endif  // !defined(OS_MACOSX) || defined(USE_AURA)
+#endif  // !defined(OS_MAC) || defined(USE_AURA)
 
 IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, SelectAllOnTabToFocus) {
   OmniboxView* omnibox_view = NULL;
@@ -708,7 +708,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, ReloadAfterKill) {
 
   // Reload the tab.
   tab->GetController().Reload(content::ReloadType::NORMAL, false);
-  content::WaitForLoadStop(tab);
+  EXPECT_TRUE(content::WaitForLoadStop(tab));
 
   // Verify the omnibox contents, URL and icon.
   EXPECT_EQ(base::ASCIIToUTF16(""), omnibox_view_views->GetText());

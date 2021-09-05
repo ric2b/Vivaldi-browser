@@ -24,8 +24,10 @@ class TextNavigationManager {
     /** @private {boolean} */
     this.currentlySelecting_ = false;
 
-    /** @private {function(chrome.automation.AutomationEvent): undefined} */
-    this.selectionListener_ = this.onNavChange_.bind(this);
+    /** @private {!EventHandler} */
+    this.selectionListener_ = new EventHandler(
+        [], chrome.automation.EventType.TEXT_SELECTION_CHANGED,
+        this.onNavChange_.bind(this));
 
     /**
      * Keeps track of when there's a selection in the current node.
@@ -45,8 +47,11 @@ class TextNavigationManager {
     }
   }
 
-  static initialize() {
-    TextNavigationManager.instance = new TextNavigationManager();
+  static get instance() {
+    if (!TextNavigationManager.instance_) {
+      TextNavigationManager.instance_ = new TextNavigationManager();
+    }
+    return TextNavigationManager.instance_;
   }
 
   // =============== Static Methods ==============
@@ -281,13 +286,10 @@ class TextNavigationManager {
     }
 
     if (addListener) {
-      this.selectionStartObject_.addEventListener(
-          chrome.automation.EventType.TEXT_SELECTION_CHANGED,
-          this.selectionListener_, false /** Don't use capture.*/);
+      this.selectionListener_.setNodes(this.selectionStartObject_);
+      this.selectionListener_.start();
     } else {
-      this.selectionStartObject_.removeEventListener(
-          chrome.automation.EventType.TEXT_SELECTION_CHANGED,
-          this.selectionListener_, false /** Don't use capture.*/);
+      this.selectionListener_.stop();
     }
   }
 
@@ -319,24 +321,18 @@ class TextNavigationManager {
   }
 
   /**
-   * Sets the selection using the selectionStart and selectionEnd
-   * as the offset input for setDocumentSelection and the parameter
-   * textNode as the object input for setDocumentSelection.
+   * Sets the selection after verifying that the bounds are set.
    * @private
    */
   saveSelection_() {
     if (this.selectionStartIndex_ == TextNavigationManager.NO_SELECT_INDEX ||
         this.selectionEndIndex_ == TextNavigationManager.NO_SELECT_INDEX) {
-      console.log(
-          'Selection bounds are not set properly:', this.selectionStartIndex_,
-          this.selectionEndIndex_);
+      console.error(SwitchAccess.error(
+          SAConstants.ErrorType.INVALID_SELECTION_BOUNDS,
+          'Selection bounds are not set properly: ' +
+              this.selectionStartIndex_ + ' ' + this.selectionEndIndex_));
     } else {
-      chrome.automation.setDocumentSelection({
-        anchorObject: this.selectionStartObject_,
-        anchorOffset: this.selectionStartIndex_,
-        focusObject: this.selectionEndObject_,
-        focusOffset: this.selectionEndIndex_
-      });
+      this.setSelection_();
     }
   }
 
@@ -357,15 +353,29 @@ class TextNavigationManager {
       if (TextNavigationManager.currentlySelecting() &&
           this.selectionEndIndex_ != TextNavigationManager.NO_SELECT_INDEX) {
         // Move the cursor to the end of the existing selection.
-        chrome.automation.setDocumentSelection({
-          anchorObject: this.selectionEndObject_,
-          anchorOffset: this.selectionEndIndex_,
-          focusObject: this.selectionEndObject_,
-          focusOffset: this.selectionEndIndex_
-        });
+        this.setSelection_();
       }
     }
     this.manageNavigationListener_(true /** Add the listener */);
+  }
+
+  /**
+   * Sets the selection. If start and end object are equal, uses
+   * AutomationNode.setSelection. Otherwise calls
+   * chrome.automation.setDocumentSelection.
+   */
+  setSelection_() {
+    if (this.selectionStartObject_ === this.selectionEndObject_) {
+      this.selectionStartObject_.setSelection(
+          this.selectionStartIndex_, this.selectionEndIndex_);
+    } else {
+      chrome.automation.setDocumentSelection({
+        anchorObject: this.selectionStartObject_,
+        anchorOffset: this.selectionStartIndex_,
+        focusObject: this.selectionEndObject_,
+        focusOffset: this.selectionEndIndex_
+      });
+    }
   }
 
   /*

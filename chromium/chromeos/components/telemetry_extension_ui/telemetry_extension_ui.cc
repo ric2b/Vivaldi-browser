@@ -7,43 +7,25 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "chromeos/components/telemetry_extension_ui/diagnostics_service.h"
+#include "chromeos/components/telemetry_extension_ui/mojom/diagnostics_service.mojom.h"
 #include "chromeos/components/telemetry_extension_ui/mojom/probe_service.mojom.h"
 #include "chromeos/components/telemetry_extension_ui/probe_service.h"
+#include "chromeos/components/telemetry_extension_ui/telemetry_extension_untrusted_source.h"
 #include "chromeos/components/telemetry_extension_ui/url_constants.h"
 #include "chromeos/grit/chromeos_telemetry_extension_resources.h"
-#include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/url_constants.h"
+#include "mojo/public/js/grit/mojo_bindings_resources.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 
 namespace chromeos {
+
 namespace {
-content::WebUIDataSource* CreateUntrustedTelemetryExtensionDataSource() {
-  content::WebUIDataSource* untrusted_source =
-      content::WebUIDataSource::Create(kChromeUIUntrustedTelemetryExtensionURL);
-  untrusted_source->AddResourcePath("untrusted.html",
-                                    IDR_TELEMETRY_EXTENSION_UNTRUSTED_HTML);
-  untrusted_source->AddResourcePath("untrusted.js",
-                                    IDR_TELEMETRY_EXTENSION_UNTRUSTED_JS);
-  untrusted_source->AddResourcePath(
-      "untrusted_worker.js", IDR_TELEMETRY_EXTENSION_UNTRUSTED_WORKER_JS);
-  untrusted_source->AddFrameAncestor(GURL(kChromeUITelemetryExtensionURL));
 
-  // TODO(https://crbug.com/1085330): tighten CSP.
-  untrusted_source->OverrideContentSecurityPolicy(
-      network::mojom::CSPDirectiveName::DefaultSrc, std::string());
-
-  // Allow chrome-untrusted:// to load Web Worker scripts.
-  untrusted_source->OverrideContentSecurityPolicy(
-      network::mojom::CSPDirectiveName::WorkerSrc, "worker-src 'self';");
-
-  return untrusted_source;
-}
-}  // namespace
-
-TelemetryExtensionUI::TelemetryExtensionUI(content::WebUI* web_ui)
-    : ui::MojoWebUIController(web_ui) {
+std::unique_ptr<content::WebUIDataSource>
+CreateTrustedTelemetryExtensionDataSource() {
   auto trusted_source = base::WrapUnique(
       content::WebUIDataSource::Create(kChromeUITelemetryExtensionHost));
 
@@ -53,8 +35,11 @@ TelemetryExtensionUI::TelemetryExtensionUI(content::WebUI* web_ui)
                                   IDR_TELEMETRY_EXTENSION_MANIFEST);
   trusted_source->AddResourcePath("app_icon_96.png",
                                   IDR_TELEMETRY_EXTENSION_ICON_96);
-  trusted_source->AddResourcePath("trusted.js",
-                                  IDR_TELEMETRY_EXTENSION_TRUSTED_JS);
+  trusted_source->AddResourcePath("trusted_scripts.js",
+                                  IDR_TELEMETRY_EXTENSION_TRUSTED_SCRIPTS_JS);
+  trusted_source->AddResourcePath(
+      "diagnostics_service.mojom-lite.js",
+      IDR_TELEMETRY_EXTENSION_DIAGNOSTICS_SERVICE_MOJO_LITE_JS);
   trusted_source->AddResourcePath(
       "probe_service.mojom-lite.js",
       IDR_TELEMETRY_EXTENSION_PROBE_SERVICE_MOJO_LITE_JS);
@@ -71,11 +56,41 @@ TelemetryExtensionUI::TelemetryExtensionUI(content::WebUI* web_ui)
   std::string csp =
       std::string("frame-src ") + kChromeUIUntrustedTelemetryExtensionURL + ";";
   trusted_source->OverrideContentSecurityPolicy(
-      network::mojom::CSPDirectiveName::ChildSrc, csp);
+      network::mojom::CSPDirectiveName::FrameSrc, csp);
+
+  return trusted_source;
+}
+
+std::unique_ptr<TelemetryExtensionUntrustedSource>
+CreateUntrustedTelemetryExtensionDataSource() {
+  auto untrusted_source = TelemetryExtensionUntrustedSource::Create(
+      chromeos::kChromeUIUntrustedTelemetryExtensionURL);
+
+  untrusted_source->AddResourcePath("dpsl.js", IDR_TELEMETRY_EXTENSION_DPSL_JS);
+
+  untrusted_source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::FrameAncestors,
+      std::string("frame-ancestors ") +
+          chromeos::kChromeUITelemetryExtensionURL + ";");
+  untrusted_source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::WorkerSrc, "worker-src 'self';");
+  untrusted_source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::TrustedTypes,
+      "trusted-types telemetry-extension-static;");
+
+  return untrusted_source;
+}
+
+}  // namespace
+
+TelemetryExtensionUI::TelemetryExtensionUI(content::WebUI* web_ui)
+    : ui::MojoWebUIController(web_ui) {
   auto* browser_context = web_ui->GetWebContents()->GetBrowserContext();
-  content::WebUIDataSource::Add(browser_context, trusted_source.release());
-  content::WebUIDataSource::Add(browser_context,
-                                CreateUntrustedTelemetryExtensionDataSource());
+
+  content::WebUIDataSource::Add(
+      browser_context, CreateTrustedTelemetryExtensionDataSource().release());
+  content::URLDataSource::Add(browser_context,
+                              CreateUntrustedTelemetryExtensionDataSource());
 
   // Add ability to request chrome-untrusted: URLs
   web_ui->AddRequestableScheme(content::kChromeUIUntrustedScheme);
@@ -86,6 +101,12 @@ TelemetryExtensionUI::~TelemetryExtensionUI() = default;
 void TelemetryExtensionUI::BindInterface(
     mojo::PendingReceiver<health::mojom::ProbeService> receiver) {
   probe_service_ = std::make_unique<ProbeService>(std::move(receiver));
+}
+
+void TelemetryExtensionUI::BindInterface(
+    mojo::PendingReceiver<health::mojom::DiagnosticsService> receiver) {
+  diagnostics_service_ =
+      std::make_unique<DiagnosticsService>(std::move(receiver));
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(TelemetryExtensionUI)

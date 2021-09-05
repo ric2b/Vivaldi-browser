@@ -36,7 +36,6 @@ struct WebWindowFeatures;
 namespace content {
 class AccessibilityController;
 class BlinkTestRunner;
-class TestInterfaces;
 class TestRunner;
 class TextInputController;
 
@@ -61,7 +60,7 @@ class WebViewTestProxy : public RenderViewImpl {
  public:
   explicit WebViewTestProxy(CompositorDependencies* compositor_deps,
                             const mojom::CreateViewParams& params,
-                            TestInterfaces* interfaces);
+                            TestRunner* test_runner);
 
   // WebViewClient implementation.
   blink::WebView* CreateView(blink::WebLocalFrame* creator,
@@ -70,14 +69,14 @@ class WebViewTestProxy : public RenderViewImpl {
                              const blink::WebString& frame_name,
                              blink::WebNavigationPolicy policy,
                              network::mojom::WebSandboxFlags sandbox_flags,
-                             const blink::FeaturePolicy::FeatureState&,
+                             const blink::FeaturePolicyFeatureState&,
                              const blink::SessionStorageNamespaceId&
                                  session_storage_namespace_id) override;
   void PrintPage(blink::WebLocalFrame* frame) override;
   blink::WebString AcceptLanguages() override;
 
   BlinkTestRunner* blink_test_runner() { return &blink_test_runner_; }
-  TestInterfaces* test_interfaces() { return test_interfaces_; }
+  TestRunner* GetTestRunner() { return test_runner_; }
   AccessibilityController* accessibility_controller() {
     return &accessibility_controller_;
   }
@@ -89,11 +88,9 @@ class WebViewTestProxy : public RenderViewImpl {
   // RenderViewImpl has no public destructor.
   ~WebViewTestProxy() override;
 
-  TestRunner* GetTestRunner();
+  TestRunner* const test_runner_;
 
   BlinkTestRunner blink_test_runner_{this};
-
-  TestInterfaces* test_interfaces_ = nullptr;
 
   AccessibilityController accessibility_controller_{this};
   TextInputController text_input_controller_{this};

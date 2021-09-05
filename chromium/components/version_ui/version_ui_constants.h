@@ -61,6 +61,7 @@ extern const char kFlashVersion[];
 extern const char kJSEngine[];
 extern const char kJSVersion[];
 #endif
+extern const char kLogoAltText[];
 extern const char kOfficial[];
 #if !defined(OS_CHROMEOS)
 extern const char kOSName[];
@@ -86,8 +87,8 @@ extern const char kUserAgentName[];
 extern const char kVariationsCmdName[];
 extern const char kVariationsName[];
 extern const char kVersion[];
-extern const char kVersionBitSize[];
 extern const char kVersionModifier[];
+extern const char kVersionProcessorVariation[];
 
 }  // namespace version_ui
 

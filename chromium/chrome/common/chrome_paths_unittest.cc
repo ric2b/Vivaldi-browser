@@ -22,7 +22,7 @@ namespace chrome {
 // See that function's comments for discussion of the subtleties.
 TEST(ChromePaths, UserCacheDir) {
   base::FilePath test_profile_dir, cache_dir;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   ASSERT_TRUE(base::PathService::Get(base::DIR_APP_DATA, &test_profile_dir));
   test_profile_dir = test_profile_dir.Append("foobar");
   base::FilePath expected_cache_dir;
@@ -61,7 +61,7 @@ TEST(ChromePaths, UserCacheDir) {
 #endif
 }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 TEST(ChromePaths, DefaultUserDataDir) {
   std::unique_ptr<base::Environment> env(base::Environment::Create());
   std::string orig_chrome_config_home;

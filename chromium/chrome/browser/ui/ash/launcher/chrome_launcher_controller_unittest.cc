@@ -45,6 +45,7 @@
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/app_service_test.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_test_helper.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
@@ -64,12 +65,12 @@
 #include "chrome/browser/ui/app_list/internal_app/internal_app_metadata.h"
 #include "chrome/browser/ui/apps/chrome_app_delegate.h"
 #include "chrome/browser/ui/ash/chrome_launcher_prefs.h"
+#include "chrome/browser/ui/ash/launcher/app_service/app_service_app_window_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/app_window_launcher_controller.h"
+#include "chrome/browser/ui/ash/launcher/app_window_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_window.h"
-#include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/browser_status_monitor.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
-#include "chrome/browser/ui/ash/launcher/extension_app_window_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/launcher_controller_helper.h"
 #include "chrome/browser/ui/ash/launcher/shelf_spinner_controller.h"
 #include "chrome/browser/ui/ash/launcher/shelf_spinner_item_controller.h"
@@ -252,7 +253,8 @@ class TestV2AppLauncherItemController : public ash::ShelfItemDelegate {
   void ItemSelected(std::unique_ptr<ui::Event> event,
                     int64_t display_id,
                     ash::ShelfLaunchSource source,
-                    ItemSelectedCallback callback) override {
+                    ItemSelectedCallback callback,
+                    const ItemFilterPredicate& filter_predicate) override {
     std::move(callback).Run(ash::SHELF_ACTION_WINDOW_ACTIVATED, {});
   }
   void ExecuteCommand(bool, int64_t, int32_t, int64_t) override {}
@@ -268,7 +270,8 @@ void SelectItem(ash::ShelfItemDelegate* delegate) {
       ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(), ui::EventTimeForNow(),
       ui::EF_NONE, 0);
   delegate->ItemSelected(std::move(event), display::kInvalidDisplayId,
-                         ash::LAUNCH_FROM_UNKNOWN, base::DoNothing());
+                         ash::LAUNCH_FROM_UNKNOWN, base::DoNothing(),
+                         base::NullCallback());
 }
 
 bool IsWindowOnDesktopOfUser(aura::Window* window,
@@ -800,7 +803,7 @@ class ChromeLauncherControllerTest
             result += "Platform_App";
           } else if (app == arc_support_host_->id()) {
             result += "Play Store";
-          } else if (app == crostini::GetTerminalId()) {
+          } else if (app == crostini::kCrostiniTerminalSystemAppId) {
             result += "Terminal";
           } else {
             bool arc_app_found = false;
@@ -2131,7 +2134,8 @@ TEST_P(ChromeLauncherControllerWithArcTest, ArcDeferredLaunchForActiveApp) {
   // platform app.
   model_->SetShelfItemDelegate(
       shelf_id,
-      std::make_unique<ExtensionAppWindowLauncherItemController>(shelf_id));
+      std::make_unique<AppServiceAppWindowLauncherItemController>(
+          shelf_id, launcher_controller_->app_service_app_window_controller()));
   launcher_controller_->SetItemStatus(shelf_id, ash::STATUS_RUNNING);
 
   // This launch request should be ignored in case of active app.
@@ -2541,10 +2545,13 @@ TEST_P(ChromeLauncherControllerWithArcTest, DISABLED_ArcCustomAppIcon) {
 
   // Generate icon for the testing app and use compressed png content as test
   // input. Take shortcut to separate from default app icon.
-  std::string png_data;
-  EXPECT_TRUE(arc_test_.app_instance()->GenerateIconResponse(
-      extension_misc::EXTENSION_ICON_SMALL, false /* app_icon */, &png_data));
-  EXPECT_FALSE(png_data.empty());
+  auto icon = arc_test_.app_instance()->GenerateIconResponse(
+      extension_misc::EXTENSION_ICON_SMALL, false /* app_icon */);
+  ASSERT_TRUE(icon);
+  ASSERT_TRUE(icon->icon_png_data.has_value());
+  EXPECT_FALSE(icon->icon_png_data->empty());
+  std::string png_data(icon->icon_png_data->begin(),
+                       icon->icon_png_data->end());
   // Some input that represents invalid png content.
   std::string invalid_png_data("aaaaaa");
 
@@ -3164,7 +3171,7 @@ void CheckAppMenu(ChromeLauncherController* controller,
   auto items = controller->GetAppMenuItemsForTesting(item);
   ASSERT_EQ(expected_item_count, items.size());
   for (size_t i = 0; i < expected_item_count; i++)
-    EXPECT_EQ(expected_item_titles[i], items[i].first);
+    EXPECT_EQ(expected_item_titles[i], items[i].title);
 }
 
 // Check that browsers get reflected correctly in the launcher menu.
@@ -4050,7 +4057,8 @@ TEST_P(ChromeLauncherControllerTest, MultipleAppIconLoaders) {
                     std::unique_ptr<AppIconLoader>(app_icon_loader2));
 
   launcher_controller_->CreateAppLauncherItem(
-      std::make_unique<ExtensionAppWindowLauncherItemController>(shelf_id3),
+      std::make_unique<AppServiceAppWindowLauncherItemController>(
+          shelf_id3, launcher_controller_->app_service_app_window_controller()),
       ash::STATUS_RUNNING);
   EXPECT_EQ(0, app_icon_loader1->fetch_count());
   EXPECT_EQ(0, app_icon_loader1->clear_count());
@@ -4058,7 +4066,8 @@ TEST_P(ChromeLauncherControllerTest, MultipleAppIconLoaders) {
   EXPECT_EQ(0, app_icon_loader2->clear_count());
 
   launcher_controller_->CreateAppLauncherItem(
-      std::make_unique<ExtensionAppWindowLauncherItemController>(shelf_id2),
+      std::make_unique<AppServiceAppWindowLauncherItemController>(
+          shelf_id2, launcher_controller_->app_service_app_window_controller()),
       ash::STATUS_RUNNING);
   EXPECT_EQ(0, app_icon_loader1->fetch_count());
   EXPECT_EQ(0, app_icon_loader1->clear_count());
@@ -4066,7 +4075,8 @@ TEST_P(ChromeLauncherControllerTest, MultipleAppIconLoaders) {
   EXPECT_EQ(0, app_icon_loader2->clear_count());
 
   launcher_controller_->CreateAppLauncherItem(
-      std::make_unique<ExtensionAppWindowLauncherItemController>(shelf_id1),
+      std::make_unique<AppServiceAppWindowLauncherItemController>(
+          shelf_id1, launcher_controller_->app_service_app_window_controller()),
       ash::STATUS_RUNNING);
   EXPECT_EQ(1, app_icon_loader1->fetch_count());
   EXPECT_EQ(0, app_icon_loader1->clear_count());
@@ -4204,7 +4214,7 @@ TEST_P(ChromeLauncherControllerWithArcTest, ShelfItemWithMultipleWindows) {
 
   // Command ids are just app window indices. Note, apps are registered in
   // opposite order. Last created goes in front.
-  auto items = item_delegate->GetAppMenuItems(0);
+  auto items = item_delegate->GetAppMenuItems(0, base::NullCallback());
   ASSERT_EQ(items.size(), 2U);
 
   // Execute command 1 to activate the first window.
@@ -4749,7 +4759,7 @@ TEST_P(ChromeLauncherControllerTest, CrostiniTerminalPinUnpin) {
 
   // Load pinned Terminal from prefs without Crostini UI being allowed
   syncer::SyncChangeList sync_list;
-  InsertAddPinChange(&sync_list, 1, crostini::GetTerminalId());
+  InsertAddPinChange(&sync_list, 1, crostini::kCrostiniTerminalSystemAppId);
   SendPinChanges(sync_list, true);
   EXPECT_EQ("Chrome", GetPinnedAppStatus());
 
@@ -4762,11 +4772,11 @@ TEST_P(ChromeLauncherControllerTest, CrostiniTerminalPinUnpin) {
   EXPECT_EQ("Chrome, Terminal", GetPinnedAppStatus());
 
   // Unpin the Terminal
-  launcher_controller_->UnpinAppWithID(crostini::GetTerminalId());
+  launcher_controller_->UnpinAppWithID(crostini::kCrostiniTerminalSystemAppId);
   EXPECT_EQ("Chrome", GetPinnedAppStatus());
 
   // Pin Terminal again.
-  launcher_controller_->PinAppWithID(crostini::GetTerminalId());
+  launcher_controller_->PinAppWithID(crostini::kCrostiniTerminalSystemAppId);
   EXPECT_EQ("Chrome, Terminal", GetPinnedAppStatus());
 }
 

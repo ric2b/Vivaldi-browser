@@ -196,3 +196,39 @@ var NewTabPageBackgroundManagerTest = class extends NewTabPageBrowserTest {
 TEST_F('NewTabPageBackgroundManagerTest', 'All', function() {
   mocha.run();
 });
+
+// eslint-disable-next-line no-var
+var NewTabPageModuleWrapperTest = class extends NewTabPageBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/module_wrapper_test.js';
+  }
+};
+
+TEST_F('NewTabPageModuleWrapperTest', 'All', function() {
+  mocha.run();
+});
+
+// eslint-disable-next-line no-var
+var NewTabPageModulesModuleRegistryTest = class extends NewTabPageBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/module_registry_test.js';
+  }
+};
+
+TEST_F('NewTabPageModulesModuleRegistryTest', 'All', function() {
+  mocha.run();
+});
+
+// eslint-disable-next-line no-var
+var NewTabPageModulesDummyModuleTest = class extends NewTabPageBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/dummy/module_test.js';
+  }
+};
+
+TEST_F('NewTabPageModulesDummyModuleTest', 'All', function() {
+  mocha.run();
+});

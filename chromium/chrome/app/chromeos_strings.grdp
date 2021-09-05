@@ -210,6 +210,9 @@
   <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_AWM_DESCRIPTION" desc="Description of a feature that shows text messages received by the user's phone as notification on their Chromebook and a link to an information page.">
     Send you notifications and default to remembering this computer for Messages. <ph name="LINK_BEGIN">&lt;a href="$1<ex>https://support.google.com/chromebook/?p=messages</ex>"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
   </message>
+  <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_MIRROR_PHONE_NOTIFICATIONS" desc="Tell the user that Better Together can automatically mirror notifications from their phone to their Chromebook.">
+    Mirror notifications from your phone
+  </message>
   <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_INSTALL_APPS_DESCRIPTION" desc="Tell the user that Better Together can automatically install apps on their Chromebook">
     Automatically install apps
   </message>
@@ -364,6 +367,57 @@
   </message>
   <message name="IDS_UPDATE_AVAILABLE" desc="Notification for available update">
     System update available. Preparing to download&#x2026;
+  </message>
+  <message name="IDS_UPDATE_COMPLETED_REBOOTING" desc="Notification for update completed and reboot is in progress">
+    Restarting to apply updates
+  </message>
+  <message name="IDS_UPDATE_STATUS_TITLE" desc="Title of update screeen telling the status of update.">
+    Downloading the latest update
+  </message>
+  <message name="IDS_UPDATE_STATUS_SUBTITLE_PERCENT" desc="Subtitle of update screeen telling the status of update: percent complete and time left.">
+    <ph name="PERCENT">$1<ex>100%</ex></ph> complete
+  </message>
+  <message name="IDS_UPDATE_STATUS_SUBTITLE_TIME_LEFT" desc="Subtitle of update screeen telling the status of update: percent complete and time left.">
+    About <ph name="TIME_LEFT">$1<ex>5 minutes</ex></ph> left
+  </message>
+  <message name="IDS_UPDATE_SLIDE_UPDATE_TITLE" desc="Title of educative slide.">
+    After this, no waiting for updates
+  </message>
+  <message name="IDS_UPDATE_SLIDE_UPDATE_TEXT" desc="Text of educative slide.">
+    This is the only time you’ll wait for an update. On Chromebooks, software updates happen in the background.
+  </message>
+  <message name="IDS_UPDATE_SLIDE_ANTIVIRUS_TITLE" desc="Title of educative slide.">
+    Built-in virus protection
+  </message>
+  <message name="IDS_UPDATE_SLIDE_ANTIVIRUS_TEXT" desc="Text of educative slide.">
+    Chromebooks are designed for security. Your device is protected from malware automatically – no extra software required.
+  </message>
+  <message name="IDS_UPDATE_SLIDE_APPS_TITLE" desc="Title of educative slide.">
+    Find apps on the Google Play Store
+  </message>
+  <message name="IDS_UPDATE_SLIDE_APPS_TEXT" desc="Text of educative slide.">
+    Chromebooks use apps instead of traditional software. Get apps for productivity, entertainment, and more.
+  </message>
+  <message name="IDS_UPDATE_SLIDE_ACCOUNT_TITLE" desc="Title of educative slide.">
+    Your Google Account is your Chromebook sign-in
+  </message>
+  <message name="IDS_UPDATE_SLIDE_ACCOUNT_TEXT" desc="Text of educative slide.">
+    You’ll use your Google Account to sign in to your Chromebook – the same account you use for Gmail, Drive, YouTube, and more.
+  </message>
+  <message name="IDS_UPDATE_BATTERY_WARNING_TITLE" desc="Title of battery warning which is shown during update process if battery is running out.">
+    Charge your Chromebook
+  </message>
+  <message name="IDS_UPDATE_BATTERY_WARNING_TEXT" desc="Text of battery warning which is shown during update process if battery is running out.">
+    Looks like your Chromebook will run out of power before the update is complete. Make sure it's charging correctly to avoid interruption.
+  </message>
+  <message name="IDS_UPDATE_SLIDE_LABEL" desc="Text of slide label for accessibility.">
+    Extra content <ph name="CURRENT_ELEMENT">$1<ex>1</ex></ph> out of <ph name="TOTAL_ELEMENTS">$2<ex>2</ex></ph>
+  </message>
+  <message name="IDS_UPDATE_SELECTED_BUTTON_LABEL" desc="Text of carousel selected button label for accessibility.">
+    Selected, extra content <ph name="CURRENT_ELEMENT">$1<ex>1</ex></ph> out of <ph name="TOTAL_ELEMENTS">$2<ex>2</ex></ph>
+  </message>
+  <message name="IDS_UPDATE_UNSELECTED_BUTTON_LABEL" desc="Text of carousel unselected button label for accessibility.">
+    Navigate to extra content <ph name="CURRENT_ELEMENT">$1<ex>1</ex></ph> out of <ph name="TOTAL_ELEMENTS">$2<ex>2</ex></ph>
   </message>
   <message name="IDS_UPDATE_COMPLETED" desc="Notification for update completed">
     System update complete. Please restart the system.
@@ -671,6 +725,38 @@
     Don't enroll
   </message>
 
+  <!-- Strings for the OOBE user creation screen -->
+  <message name="IDS_OOBE_USER_CREATION_TITLE" desc="Title of the screen which allows users to choose whom the device is set up for.">
+    Who's using this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>?
+  </message>
+  <message name="IDS_OOBE_USER_CREATION_SUBTITLE" desc="Subtitle of the screen which allows users to choose whom the device is set up for.">
+    You can always add more people after setup. Each person can personalize their account and keep data private.
+  </message>
+  <message name="IDS_OOBE_USER_CREATION_SELF_BUTTON_LABEL" desc="The label of the button that leads to set up device for self.">
+    You
+  </message>
+  <message name="IDS_OOBE_USER_CREATION_SELF_BUTTON_DESCRIPTION" desc="The description of the button that leads to set up device for self.">
+    Set up this device for work or personal use
+  </message>
+  <message name="IDS_OOBE_USER_CREATION_CHILD_BUTTON_LABEL" desc="The label of the button that leads to set up device for child.">
+    Your child
+  </message>
+  <message name="IDS_OOBE_USER_CREATION_CHILD_BUTTON_DESCRIPTION" desc="The description of the button that leads to set up device for child.">
+    Set digital ground rules to help your child learn, play, and explore
+  </message>
+  <message name="IDS_OOBE_USER_CREATION_CHILD_SIGNIN_TITLE" desc="Title of the screen which allows users to choose signin method for child.">
+    Set up this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> for your child
+  </message>
+  <message name="IDS_OOBE_USER_CREATION_CHILD_SIGNIN_SUBTITLE" desc="Subtitle of the screen which allows users to choose signin method for child.">
+    To set up parental controls, your child must have a Google Account that you'll help manage. You can set screen time limits, approve or block websites, and more with the Family Link app.
+  </message>
+  <message name="IDS_OOBE_USER_CREATION_CHILD_ACCOUNT_CREATION_BUTTON_LABEL" desc="The label of the button that leads to child account creation.">
+    Create a Google Account for your child
+  </message>
+  <message name="IDS_OOBE_USER_CREATION_CHILD_SIGN_IN_BUTTON_LABEL" desc="The label of the button that leads to child sign in using existing account.">
+    Sign in with your child's Google Account
+  </message>
+
    <!-- Strings for the OOBE demo setup flow -->
   <message name="IDS_OOBE_DEMO_SETUP_PREFERENCES_SCREEN_TITLE" desc="The title of the dialog that allows to choose demo setup preferences.">
     Choose your demo preferences
@@ -815,6 +901,26 @@
   </message>
   <message name="IDS_DEMO_SETUP_RECOVERY_FATAL" desc="Error recovery recommendation to contact support. Shown on demo setup screen.">
     Please retry. If you see this error again please contact your support representative.
+  </message>
+
+  <!-- Strings for family link notice screen -->
+  <message name="IDS_LOGIN_FAMILY_LINK_NOTICE_SCREEN_TITLE" desc="Title of the screen which tells user they can add parental control later.">
+    Add parental controls after setup
+  </message>
+  <message name="IDS_LOGIN_FAMILY_LINK_NOTICE_SCREEN_NEW_ACCOUNT_SUBTITLE" desc="Title of the screen which tells user they can add parental control later after they create a new account for their child.">
+    For older children, you can add parental controls once you finish setup. You'll find information on parental controls in the Explore app.
+  </message>
+  <message name="IDS_LOGIN_FAMILY_LINK_NOTICE_SCREEN_EXISTING_ACCOUNT_SUBTITLE" desc="Title of the screen which tells user they can add parental control later after they sign in with an existing account for their child.">
+    You child's account isn't set up for Family Link parental controls. You can add parental controls once you finish setup. You'll find information on parental controls in the Explore app.
+  </message>
+  <message name="IDS_LOGIN_FAMILY_LINK_NOTICE_SCREEN_NOT_ELIGIBLE_TITLE" desc="Title of the screen which tells user the account is not eligible for parental controls.">
+    This account isn't eligible for parental controls
+  </message>
+  <message name="IDS_LOGIN_FAMILY_LINK_NOTICE_SCREEN_NOT_ELIGIBLE_SUBTITLE" desc="Subtitle of the screen which tells user the account is not eligible for parental controls.">
+    <ph name="USER_EMAIL">$1<ex>john.doe@example.com</ex></ph> is already being managed by <ph name="DOMAIN">$2<ex>google.com</ex></ph>. To use parental controls with a different Google Account, sign out after setup, then select "Add person" on the sign-in screen.
+  </message>
+  <message name="IDS_LOGIN_FAMILY_LINK_NOTICE_SCREEN_CONTINUE_BUTTON" desc="Continue button on family link notice screen.">
+    Continue
   </message>
 
   <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_TITLE" desc="The title of the dialog that welcomes the user on the first log in, and explains Chrome Sync and privacy options.">
@@ -1134,7 +1240,7 @@
   <message name="IDS_OFFLINE_LOGIN_CLOSE_BUTTON_TEXT" desc="Text shown on forgot password dialog close button during offline signin flow.">
     Close
   </message>
-  <message name="IDS_WHITELIST_ERROR_TRY_AGAIN_BUTTON" desc="The text of the try again button on the whitelist error UI.">
+  <message name="IDS_ALLOWLIST_ERROR_TRY_AGAIN_BUTTON" desc="The text of the try again button on the allowlist error UI.">
     Try again
   </message>
   <message name="IDS_BROWSE_WITHOUT_SIGNING_IN_HTML" desc="Text shown on side of Google sign-in UI.">
@@ -1727,6 +1833,9 @@
   </message>
   <message name="IDS_ONC_WIFI_SSID" desc="ONC Property label for WiFi.SSID">
     SSID
+  </message>
+  <message name="IDS_ONC_WIFI_BSSID" desc="Settings > Network > Wifi Network Detail Page > label for BSSID property. BSSID is a a unique 48 bit identifier for a wireless access point.">
+    BSSID
   </message>
 
   <!-- Settings Internet Page-->
@@ -2462,10 +2571,10 @@
     Aw, Snap! There was an error during renaming.
   </message>
 
-  <message name="IDS_LOGIN_ERROR_WHITELIST" desc="Couldn't sign in because user is not whitelisted by the device owner.">
+  <message name="IDS_LOGIN_ERROR_ALLOWLIST" desc="Couldn't sign in because user is not authorized by the device owner.">
     You are not authorized to use this device. Please contact the device owner for sign-in permission.
   </message>
-  <message name="IDS_ENTERPRISE_LOGIN_ERROR_WHITELIST" desc="Couldn't sign in because user is not whitelisted by the administrator.">
+  <message name="IDS_ENTERPRISE_LOGIN_ERROR_ALLOWLIST" desc="Couldn't sign in because user is not authorized by the administrator.">
     You are not authorized to use this device. Please contact the administrator for sign-in permission.
   </message>
   <message name="IDS_LOGIN_ERROR_GOOGLE_ACCOUNT_NOT_ALLOWED" desc="Couldn't sign into Google account on the Active Directory managed device.">
@@ -2815,10 +2924,10 @@
      Update now
   </message>
   <message name="IDS_UPDATE_REQUIRED_SCREEN_EOL_TITLE" desc="The title on login screen to inform the user that policy prevents the device from being used as it has reached its end of life.">
-    Device has been blocked
+    <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> has been blocked
   </message>
   <message name="IDS_UPDATE_REQUIRED_SCREEN_EOL_MESSAGE" desc="The message on login screen to inform the user that policy prevents the device from being used as it has reached its end of life.">
-    The deadline to return this device has passed.
+    The deadline to return this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> has passed.
   </message>
   <message name="IDS_UPDATE_REQUIRED_SCREEN_METERED_MESSAGE" desc="The message on the dialog shown to the user in Chrome OS before forced update is attempted if the Chrome OS device is connected to a cellular/metered network. The dialog warns the user that procceeding on a metered network can cause overage charges.">
     <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to connect to Wi-Fi now and download an update. Or, download from a metered connection (charges may apply).
@@ -2827,46 +2936,53 @@
     Use metered connection
   </message>
   <message name="IDS_UPDATE_REQUIRED_SCREEN_NO_NETWORK_MESSAGE" desc="The message on the dialog shown to the user in Chrome OS before forced update is attempted if the Chrome OS device is not connected to a network.">
-    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to connect to Wi-Fi now and download an update. The update will download automatically when you connect to the internet.
+    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to connect to Wi-Fi now and download an update.
   </message>
   <message name="IDS_UPDATE_REQUIRED_SCREEN_OPEN_NETWORK_SETTINGS" desc="Label for network configuration button on the update required dialog on the login screen to open network settings so that the user can connect to a network.">
     Open network settings
   </message>
   <message name="IDS_UPDATE_REQUIRED_UPDATING_MESSAGE" desc="The message of the update required dialog on the login screen to inform the user that the device is updating and will restart after the update is complete.">
-    Device will restart when updates are complete.
+    <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> will restart when updates are complete.
   </message>
   <message name="IDS_UPDATE_REQUIRED_EOL_ADMIN_MESSAGE" desc="The title of the message on the update required dialog on the login screen showing return instructions from the device administrator as the device has reached its end of life.">
     Instructions from your device administrator:
   </message>
 
-  <!-- Update Required Notiifcation Strings-->
+  <!-- Update Required Notification Strings-->
   <message name="IDS_UPDATE_REQUIRED_NETWORK_LIMITATION_TITLE_DAYS" desc="The title of the notification dialog informing the user that the device is not connected to a network suitable for downloading updates and an update is required within one or more days.">
-    {0, plural,
-      =1 {Last day to update device}
-      other {Update device within # days}}
+    {NUM_DAYS, plural,
+      =1 {Last day to update <ph name="DEVICE_TYPE">{1}<ex>Chromebook</ex></ph>}
+      other {Update <ph name="DEVICE_TYPE">{1}<ex>Chromebook</ex></ph> within {NUM_DAYS} days}}
   </message>
-  <message name="IDS_UPDATE_REQUIRED_NO_NETWORK_MESSAGE" desc="The body text of the notification dialog informing the user that the device is not connected to the internet and an update is required.">
-    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to download an update before the deadline. The update will download automatically when you connect to the internet.
+  <message name="IDS_UPDATE_REQUIRED_NETWORK_LIMITATION_TITLE_WEEKS" desc="The title of the notification dialog informing the user that the device is not connected to a network suitable for downloading updates and an update is required within one or more weeks.">
+    {NUM_WEEKS, plural,
+      =1 {Update <ph name="DEVICE_TYPE">{1}<ex>Chromebook</ex></ph> within 1 week}
+      other {Update <ph name="DEVICE_TYPE">{1}<ex>Chromebook</ex></ph> within {NUM_WEEKS} weeks}}
   </message>
-  <message name="IDS_UPDATE_REQUIRED_NO_NETWORK_MESSAGE_IMMEDIATE" desc="The body text of the notification dialog informing the user that the device is not connected to the internet and it is last day to update the device.">
-    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to download an update today. The update will download automatically when you connect to the internet.
+  <message name="IDS_UPDATE_REQUIRED_NO_NETWORK_MESSAGE" desc="The body text of the notification dialog informing the user that the device is not connected to the internet and an update is required before the deadline which is within one or more days.">
+    {NUM_DAYS, plural,
+      =1 {<ph name="DOMAIN">{1}<ex>example.com</ex></ph> requires you to download an update today. The update will download automatically when you connect to the internet.}
+      other {<ph name="DOMAIN">{1}<ex>example.com</ex></ph> requires you to download an update before the deadline. The update will download automatically when you connect to the internet.}}
   </message>
-  <message name="IDS_UPDATE_REQUIRED_METERED_NETWORK_MESSAGE" desc="The body text of the notification dialog informing the user that the device is connected to a metered network and an update is required.">
-    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to connect to Wi-Fi and download an update before the deadline. Or, download from a metered connection (charges may apply).
-  </message>
-  <message name="IDS_UPDATE_REQUIRED_METERED_NETWORK_MESSAGE_IMMEDIATE" desc="The body text of the notification dialog informing the user that the device is connected to a metered network and it is last day to update the device.">
-    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to connect to Wi-Fi today to download an update. Or, download from a metered connection (charges may apply).
+  <message name="IDS_UPDATE_REQUIRED_METERED_NETWORK_MESSAGE" desc="The body text of the notification dialog informing the user that the device is connected to a metered network and an update is required before the deadline which is within one or more days.">
+    {NUM_DAYS, plural,
+      =1 {<ph name="DOMAIN">{1}<ex>example.com</ex></ph> requires you to connect to Wi-Fi today to download an update. Or, download from a metered connection (charges may apply).}
+      other {<ph name="DOMAIN">{1}<ex>example.com</ex></ph> requires you to connect to Wi-Fi and download an update before the deadline. Or, download from a metered connection (charges may apply).}}
   </message>
   <message name="IDS_UPDATE_REQUIRED_EOL_TITLE_DAYS" desc="The title of the notification dialog informing the user that the device has reached end of life and should be returned before the deadline.">
-    {0, plural,
+    {NUM_DAYS, plural,
       =1 {Immediate return required}
-      other {Return device within # days}}
+      other {Return <ph name="DEVICE_TYPE">{1}<ex>Chromebook</ex></ph> within {NUM_DAYS} days}}
   </message>
-  <message name="IDS_UPDATE_REQUIRED_EOL_MESSAGE_IMMEDIATE" desc="The body text of the noti fication dialog informing the user that the device has reached end of life and it is last day to return it.">
-    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to back up your data and return this device today.
+  <message name="IDS_UPDATE_REQUIRED_EOL_TITLE_WEEKS" desc="The title of the notification dialog informing the user that the device has reached end of life and should be returned within one or more weeks.">
+    {NUM_WEEKS, plural,
+      =1 {Return <ph name="DEVICE_TYPE">{1}<ex>Chromebook</ex></ph> within {NUM_WEEKS} week}
+      other {Return <ph name="DEVICE_TYPE">{1}<ex>Chromebook</ex></ph> within {NUM_WEEKS} weeks}}
   </message>
-  <message name="IDS_UPDATE_REQUIRED_EOL_MESSAGE" desc="The body text of the notification dialog informing the user that the device has reached end of life and should be returned before the deadline.">
-    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to back up your data and return this device before the deadline.
+  <message name="IDS_UPDATE_REQUIRED_EOL_MESSAGE" desc="The body text of the notification dialog informing the user that the device has reached end of life and should be returned before the deadline which is within one or more days.">
+    {NUM_DAYS, plural,
+      =1 {<ph name="DOMAIN">{1}<ex>example.com</ex></ph> requires you to back up your data and return this <ph name="DEVICE_TYPE">{2}<ex>Chromebook</ex></ph> today.}
+      other {<ph name="DOMAIN">{1}<ex>example.com</ex></ph> requires you to back up your data and return this <ph name="DEVICE_TYPE">{2}<ex>Chromebook</ex></ph> before the deadline.}}
   </message>
   <message name="IDS_UPDATE_REQUIRED_EOL_SEE_DETAILS" desc="The button text of the notification dialog which can be clicked to view return instructions from the admin on the settings page.">
     See Details
@@ -3450,8 +3566,11 @@
   <message name="IDS_NETWORK_UI_GLOBAL_POLICY" desc="Label for global policy properties">
     Global Policy:
   </message>
-  <message name="IDS_NETWORK_UI_NETWORK_HEALTH" desc="Label for network health section">
+  <message name="IDS_NETWORK_UI_NETWORK_HEALTH" desc="Label for network health snapshot. 'Network Health' is a condensend summary of all networking devices on the system and their active networks">
     Network Health Snapshot
+  </message>
+  <message name="IDS_NETWORK_UI_NETWORK_DIAGNOSTICS" desc="Label for network diagnostics routines">
+    Network Diagnostic Routines
   </message>
   <message name="IDS_NETWORK_UI_NETWORK_LISTS" desc="Label for network lists section">
     Network (Service) and Device properties
@@ -3531,33 +3650,73 @@
   </message>
 
   <!-- Network Health display strings -->
-  <message name="IDS_NETWORK_HEALTH_STATE" desc="Network Health State label">
+  <message name="IDS_NETWORK_HEALTH_STATE" desc="Label for the current state of a networking device.">
     State
   </message>
-  <message name="IDS_NETWORK_HEALTH_STATE_UNINITIALIZED" desc="Network Health State - Uninitialized">
+  <message name="IDS_NETWORK_HEALTH_STATE_UNINITIALIZED" desc="Network State - Uninitialized. This states is when a network device has not been initialized by the device.">
     Uninitialized
   </message>
-  <message name="IDS_NETWORK_HEALTH_STATE_DISABLED" desc="Network Health State - Disabled">
+  <message name="IDS_NETWORK_HEALTH_STATE_DISABLED" desc="Network State - Disabled. This state is when the network device has been disabled (Turning off WiFi).">
     Disabled
   </message>
-  <message name="IDS_NETWORK_HEALTH_STATE_PROHIBITED" desc="Network Health State - Prohibited">
+  <message name="IDS_NETWORK_HEALTH_STATE_PROHIBITED" desc="Network State - Prohibited. This state represents a network device that has been explicitly disabled by admin policy.">
     Prohibited
   </message>
-  <message name="IDS_NETWORK_HEALTH_STATE_NOT_CONNECTED" desc="Network Health State - Not Connected">
+  <message name="IDS_NETWORK_HEALTH_STATE_NOT_CONNECTED" desc="Network State - Not Connected. This state represents when a device is enabled, but has no active network connection.">
     Not Connected
   </message>
-  <message name="IDS_NETWORK_HEALTH_STATE_CONNECTING" desc="Network Health State - Connecting">
+  <message name="IDS_NETWORK_HEALTH_STATE_CONNECTING" desc="Network State - Connecting. This is a transient state when the network device is in the process of connecting to a network.">
     Connecting
   </message>
-  <message name="IDS_NETWORK_HEALTH_STATE_PORTAL" desc="Network Health State - Portal">
+  <message name="IDS_NETWORK_HEALTH_STATE_PORTAL" desc="Network State - Portal. This state represents a connected network device, but the active network is in a captive portal. (When you login at an airport and need to enter additional information before accessing the internet).">
     Portal
   </message>
-  <message name="IDS_NETWORK_HEALTH_STATE_CONNECTED" desc="Network Health State - Connected">
+  <message name="IDS_NETWORK_HEALTH_STATE_CONNECTED" desc="Network State - Connected. This state is when a network device is connected to network, but cannot access the internet.">
     Connected
   </message>
-  <message name="IDS_NETWORK_HEALTH_STATE_ONLINE" desc="Network Health State - Online">
+  <message name="IDS_NETWORK_HEALTH_STATE_ONLINE" desc="Network State - Online. This state is when a network device is connected to a network and can access the internet.">
     Online
   </message>
+  <message name="IDS_NETWORK_DIAGNOSTICS_LAN_CONNECTIVITY" desc="Label for Network diagnostics `LAN connectivity` test. This test determines if the device is connected to a Local Area Network (LAN)">
+    Lan Connectivity
+  </message>
+  <message name="IDS_NETWORK_DIAGNOSTICS_SIGNAL_STRENGTH" desc="Label for Network diagnostics `signal strength` test. This test ensures that a WiFi signal is strong enough for a stable connection.">
+    Signal Strength
+  </message>
+  <message name="IDS_NETWORK_DIAGNOSTICS_GATEWAY_CAN_BE_PINGED" desc="Label for Network diagnostics `gateway can be pinged` test. This test ensures that there is a connection to the network gateway.">
+    Gateway can be Pinged
+  </message>
+  <message name="IDS_NETWORK_DIAGNOSTICS_HAS_SECURE_WIFI_CONNECTION" desc="Label for Network diagnostics `has secure WiFi connection` test. This test ensures that the WiFi connection is properly secure.">
+    Secure WiFi Connection
+  </message>
+  <message name="IDS_NETWORK_DIAGNOSTICS_DNS_RESOLVER_PRESENT" desc="Label for Network diagnostics `DNS resolver present` test. This test ensures that the Domain Name Service (DNS) exists.">
+    DNS Resolver Present
+  </message>
+  <message name="IDS_NETWORK_DIAGNOSTICS_DNS_LATENCY" desc="Label for Network diagnostics `DNS latency` test. This test makes sure the latency between the device and the Domain Name Server (DNS) is acceptable.">
+    DNS Latency
+  </message>
+  <message name="IDS_NETWORK_DIAGNOSTICS_DNS_RESOLUTION" desc="Label for Network diagnostics `DNS resolution` test. This test ensures that the Domain Name Server (DNS) can resolve network requests.">
+    DNS Resolution
+  </message>
+  <message name="IDS_NETWORK_DIAGNOSTICS_PASSED" desc="Label shown when a Network diagnostics routine passed">
+    Passed
+  </message>
+  <message name="IDS_NETWORK_DIAGNOSTICS_FAILED" desc="Label shown when a Network diagnostics routine failed">
+    Failed
+  </message>
+  <message name="IDS_NETWORK_DIAGNOSTICS_NOT_RUN" desc="Label shown when a Network diagnostics routine did not run">
+    Not Run
+  </message>
+  <message name="IDS_NETWORK_DIAGNOSTICS_RUN" desc="Label for Network diagnostics run routine button">
+    Run
+  </message>
+  <message name="IDS_NETWORK_DIAGNOSTICS_RUN_ALL" desc="Label for Network diagnostics run all routines button">
+    Run All Routines
+  </message>
+  <message name="IDS_NETWORK_DIAGNOSTICS_SEND_FEEDBACK" desc="Label for Network diagnostics send feedback report button">
+    Send Feedback Report
+  </message>
+
 
   <!-- Set time/date UI display strings -->
   <message name="IDS_SET_TIME_TITLE" desc="Title of the set time/date UI.">
@@ -3887,6 +4046,27 @@
   </message>
   <message name="IDS_ARC_SIGN_IN_CLOUD_PROVISION_FLOW_FAIL_ERROR" desc="Android sign-in error because of cloud provision flow failed">
     Provisioning flow was interrupted. Please try again or contact your device owner or administrator.
+  </message>
+  <message name="IDS_ARC_SIGN_IN_CLOUD_PROVISION_FLOW_ACCOUNT_MISSING_ERROR" desc="Android permament sign-in error because of cloud provision flow failed">
+    Provisioning failed because your account details could not be retrieved. Please try again. Error code: <ph name="ERROR_CODE">$1<ex>7</ex></ph>.
+  </message>
+  <message name="IDS_ARC_SIGN_IN_CLOUD_PROVISION_FLOW_DOMAIN_JOIN_FAIL_ERROR" desc="Android permament sign-in error because of cloud provision flow failed">
+    Can't join the device to the domain. Please try again or contact your device owner or administrator. Error code: <ph name="ERROR_CODE">$1<ex>7</ex></ph>.
+  </message>
+  <message name="IDS_ARC_SIGN_IN_CLOUD_PROVISION_FLOW_ENROLLMENT_TOKEN_INVALID" desc="Android permament sign-in error because of cloud provision flow failed">
+    Device enrollment token is invalid. Please contact your device owner or administrator. Error code: <ph name="ERROR_CODE">$1<ex>7</ex></ph>.
+  </message>
+  <message name="IDS_ARC_SIGN_IN_CLOUD_PROVISION_FLOW_INTERRUPTED_ERROR" desc="Android permament sign-in error because of cloud provision flow failed">
+    Provisioning flow was interrupted. Please try again or contact your device owner or administrator. Error code: <ph name="ERROR_CODE">$1<ex>7</ex></ph>.
+  </message>
+  <message name="IDS_ARC_SIGN_IN_CLOUD_PROVISION_FLOW_NETWORK_ERROR" desc="Android permament sign-in error because of cloud provision flow failed">
+    Couldn’t connect with the server. Please check your network connection and try again. If the problem persists, restart your Chromebook. Error code: <ph name="ERROR_CODE">$1<ex>7</ex></ph>.
+  </message>
+  <message name="IDS_ARC_SIGN_IN_CLOUD_PROVISION_FLOW_PERMANENT_ERROR" desc="Android permament sign-in error because of cloud provision flow failed">
+    Something went wrong. Please contact your device owner or administrator. Error code: <ph name="ERROR_CODE">$1<ex>7</ex></ph>.
+  </message>
+  <message name="IDS_ARC_SIGN_IN_CLOUD_PROVISION_FLOW_TRANSIENT_ERROR" desc="Android transient sign-in error because of cloud provision flow failed">
+    Something went wrong. Please try again or contact your device owner or administrator. Error code: <ph name="ERROR_CODE">$1<ex>7</ex></ph>.
   </message>
   <message name="IDS_ARC_SIGN_IN_UNKNOWN_ERROR" desc="Android sign-in error because of unknown error">
     Something went wrong
@@ -4480,11 +4660,20 @@
   <message name="IDS_CROSTINI_UPGRADING_SUBTEXT" desc="Description for upgrade dialog warning user of delay starting container due to running upgrades.">
     Your app will open when the upgrade is finished. Upgrades can take a few minutes.
   </message>
+  <message name="IDS_CROSTINI_UPGRADE_AVAILABLE_NOTIFICATION_TITLE" desc="Title of the notification shown to the user when a Linux upgrade is available.">
+    Linux
+  </message>
+  <message name="IDS_CROSTINI_UPGRADE_AVAILABLE_NOTIFICATION_BODY" desc="Body text  of the notification shown to the user when a Linux upgrade is available.">
+    An upgrade is available for your Linux Container. You can also upgrade later from the Settings app.
+  </message>
+  <message name="IDS_CROSTINI_UPGRADE_AVAILABLE_NOTIFICATION_UPGRADE" desc="Text on the action button of the notification shown to the user when a Linux upgrade is available.">
+    Upgrade
+  </message>
   <message name="IDS_CROSTINI_UPGRADER_TITLE" desc="Title of the Crostini upgrader, a dialog for upgrading Linux.">
     Upgrade Linux (Beta)
   </message>
   <message name="IDS_CROSTINI_UPGRADER_BODY" desc="Description for the Crostini upgrader, a dialog for upgrading Linux.">
-    Backing up files is recommended as part of this upgrade to prevent data loss in case the upgrade cannot be completed. Starting the upgrade will cause Linux (Beta) to shut down. Please save open files before proceeding.
+    Backing up files is recommended in case the upgrade cannot be completed. Starting the upgrade will cause Linux (Beta) to shut down. Please save open files before proceeding.
   </message>
   <message name="IDS_CROSTINI_UPGRADER_UPGRADE_BUTTON" desc="Label for the button in the Crostini upgrader dialog to begin upgrading Linux.">
     Upgrade
@@ -4550,7 +4739,7 @@
     This window will close after cancellation is complete.
   </message>
   <message name="IDS_CROSTINI_UPGRADER_BACKUP_CHECKBOX_MESSAGE" desc="Text shown in the Crostini upgrader dialog next to the backup checkbox.">
-    Back up my apps and files to Downloads folder before upgrading Linux.
+    Back up my apps and files to My Files folder before upgrading Linux.
   </message>
   <message name="IDS_CROSTINI_UPGRADER_BACKUP_CHANGE_LOCATION" desc="Text shown in the Crostini upgrader dialog next to the backup checkbox with a link enabling the user to change the location to which files are backed up.">
     Change location
@@ -4560,6 +4749,9 @@
   </message>
   <message name="IDS_CROSTINI_UPGRADER_RESTORE_MESSAGE" desc="Title of the Crostini upgrader when the container upgrade fails and restore of a backup is in progress.">
     Linux files and apps are being restored to their backed up state.
+  </message>
+  <message name="IDS_CROSTINI_UPGRADER_NOT_NOW" desc="Text on the button to defer performing the upgrade">
+    Not now
   </message>
   <message name="IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_LABEL" desc="Label for dialog warning user of unavailable Linux container until software configurations are applied.">
     Configuring Linux
@@ -5166,6 +5358,9 @@
   <message name="IDS_PLUGIN_VM_REMOVING_NOTIFICATION_FAILED_MESSAGE" desc="Message in the notification shown when removing the 'Plugin VM' app failed.">
     Couldn't uninstall <ph name="APP_NAME">$1<ex>Plugin VM</ex></ph>
   </message>
+  <message name="IDS_PLUGIN_VM_SHUTDOWN_WINDOWS_TO_UNINSTALL_MESSAGE" desc="Message in the notification shown when uninstalling Parallels Desktop failed because the Windows VM failed to shut down.">
+    Shut down Windows to uninstall <ph name="PARALLELS_DESKTOP">$1<ex>Parallels Desktop</ex></ph>.
+  </message>
   <message name="IDS_PLUGIN_VM_DLC_INTERNAL_FAILED_MESSAGE" desc="Error message shown if Plugin VM installation fails because an internal error indicates the device needs to be updated.">
     Your device needs to be updated before you can use <ph name="APP_NAME">$1<ex>Plugin VM</ex></ph>.
   </message>
@@ -5193,7 +5388,7 @@
     Adding G Suite for Education account in Android apps is not supported.
   </message>
 
-  <!-- Strings for Account Manager welcome screen -->
+  <!-- Strings for Account Manager screens -->
   <message name="IDS_ACCOUNT_MANAGER_WELCOME_TITLE" desc="Title for the Chrome OS Account Manager Welcome screen.">
     Sign-in has changed
   </message>
@@ -5202,6 +5397,23 @@
   </message>
   <message name="IDS_ACCOUNT_MANAGER_WELCOME_BUTTON" desc="Label for the button to view accounts on the Chrome OS Account Manager Welcome screen.">
     View accounts
+  </message>
+  <message name="IDS_ACCOUNT_MANAGER_ERROR_NO_INTERNET_TITLE" desc="Title for the network error screen.">
+    No Internet
+  </message>
+  <message name="IDS_ACCOUNT_MANAGER_ERROR_NO_INTERNET_BODY" desc="Text body for the network error screen with list of suggestions for the user.">
+    Try:
+    <ph name="BEGIN_LIST">&lt;ul&gt;</ph>
+      <ph name="LIST_ITEM">&lt;li&gt;</ph>Checking the network cables, modem, and router
+      <ph name="LIST_ITEM">&lt;li&gt;</ph>Reconnecting to Wi-Fi
+      <ph name="LIST_ITEM">&lt;li&gt;</ph>Running Chrome Connectivity Diagnostics
+    <ph name="END_LIST">&lt;/ul&gt;</ph>
+  </message>
+  <message name="IDS_ACCOUNT_MANAGER_ERROR_CANNOT_ADD_ACCOUNT_TITLE" desc="Title for the error screen which tells user that account addition resulted in an error.">
+    There was an error adding an account
+  </message>
+  <message name="IDS_ACCOUNT_MANAGER_ERROR_CANNOT_ADD_ACCOUNT_BODY" desc="Text body for the error screen which tells user to try again later.">
+    Please try again later.
   </message>
 
   <!-- Strings for per-account Migration welcome screen -->
@@ -5274,6 +5486,66 @@
     Hide password
   </message>
 
+  <!-- Borealis strings -->
+  <!-- TODO(danielng): Add string descriptions and remove translateable tags
+       when strings are finalized. -->
+  <message name="IDS_BOREALIS_APP_NAME" desc="" translateable="false">
+    Borealis
+  </message>
+  <message name="IDS_BOREALIS_INSTALLER_CONFIRMATION_TITLE" desc="" translateable="false">
+    Set up <ph name="APP_NAME">$1<ex>BOREALIS</ex></ph>
+  </message>
+  <message name="IDS_BOREALIS_INSTALLER_CONFIRMATION_MESSAGE" desc="" translateable="false">
+    Set up Borealis on your device.
+  </message>
+  <message name="IDS_BOREALIS_INSTALLER_INSTALL_BUTTON" desc="" translateable="false">
+    Install
+  </message>
+  <message name="IDS_BOREALIS_INSTALLER_ENVIRONMENT_SETTING_TITLE" desc="" translateable="false">
+    Setting up <ph name="APP_NAME">$1<ex>BOREALIS</ex></ph>...
+  </message>
+  <message name="IDS_BOREALIS_INSTALLER_ERROR_TITLE" desc="" translateable="false">
+    Setup couldn't complete
+  </message>
+  <message name="IDS_BOREALIS_INSTALLER_FINISHED_TITLE" desc="" translateable="false">
+    Setup complete
+  </message>
+  <message name="IDS_BOREALIS_INSTALLER_IMPORTING_MESSAGE" desc="" translateable="false">
+    Configuring the virtual machine. This may take a few minutes.
+  </message>
+  <message name="IDS_BOREALIS_INSTALLER_IMPORTED_MESSAGE" desc="" translateable="false">
+    <ph name="APP_NAME">$1<ex>BOREALIS</ex></ph> is ready to use.
+  </message>
+  <message name="IDS_BOREALIS_INSTALLER_ERROR_MESSAGE" desc="" translateable="false">
+    Something went wrong.
+  </message>
+  <message name="IDS_BOREALIS_INSTALLER_RETRY_BUTTON" desc="" translateable="false">
+    Retry
+  </message>
+  <message name="IDS_BOREALIS_INSTALLER_LAUNCH_BUTTON" desc="" translateable="false">
+    Launch
+  </message>
+  <message name="IDS_BOREALIS_INSTALLER_NOT_ALLOWED_TITLE" desc="" translateable="false">
+    <ph name="APP_NAME">$1<ex>BOREALIS</ex></ph> needs permission to run
+  </message>
+  <message name="IDS_BOREALIS_INSTALLER_NOT_ALLOWED_MESSAGE" desc="" translateable="false">
+    <ph name="APP_NAME">$1<ex>BOREALIS</ex></ph> isn't allowed on this device. Contact your administrator. Error code: <ph name="ERROR_CODE">$2<ex>7</ex></ph>.
+  </message>
+  <message name="IDS_BOREALIS_DLC_INTERNAL_FAILED_MESSAGE" desc="" translateable="false">
+    Your device needs to be updated before you can use <ph name="APP_NAME">$1<ex>BOREALIS</ex></ph>.
+  </message>
+  <message name="IDS_BOREALIS_DLC_BUSY_FAILED_MESSAGE" desc="" translateable="false">
+    Something went wrong. Please wait a few minutes and run <ph name="APP_NAME">$1<ex>BOREALIS</ex></ph> again.
+  </message>
+  <message name="IDS_BOREALIS_DLC_NEED_REBOOT_FAILED_MESSAGE" desc="" translateable="false">
+    Please restart your device to use <ph name="APP_NAME">$1<ex>BOREALIS</ex></ph>.
+  </message>
+  <message name="IDS_BOREALIS_INSUFFICIENT_DISK_SPACE_MESSAGE" desc="" translateable="false">
+      Your device is low on storage. To increase free space, delete files from device.
+  </message>
+  <message name="IDS_BOREALIS_GENERIC_ERROR_MESSAGE" desc="" translateable="false">
+      Couldn't install <ph name="APP_NAME">$1<ex>BOREALIS</ex></ph>. Please try again later.
+  </message>
   <!--
     ==================================================================================
     If you change any IDS_EDU_LOGIN_INFO_* string, update kConsentScreenTextVersion in
@@ -5284,7 +5556,7 @@
     School account information for parents
   </message>
   <message name="IDS_EDU_LOGIN_INFO_COEXISTENCE_BODY" desc="Text on the screen explaining co-existence to a parent.">
-    Adding a school account to a profile enables easy sign-in to websites and extensions as a student while operating under parental controls. It does not give a child access to bookmarks, passwords, or other browser data synced with the school account.&lt;br&gt;&lt;br&gt;
+    Adding a school account to a profile enables easy sign-in to websites, extensions, and apps as a student while operating under parental controls. It does not give a child access to bookmarks, passwords, or other browser data synced with the school account.&lt;br&gt;&lt;br&gt;
     If your child uses a Chromebook in school and you wish to mirror the school experience at home to ensure your child has access to all necessary schoolwork, please sign out of this Family Link account and sign in to the school account from the Chrome OS accounts page (note: Family Link parental controls will not apply).&lt;br&gt;&lt;br&gt;
     If your child does not use a Chromebook in school or if you prefer to manage your child’s experience at home using Family Link, please click the Next button below to add a school account to this profile.
   </message>
@@ -5316,6 +5588,9 @@
     The next time you restart your device, your administrator will perform a one-time update that will delete your local data.
   </message>
 
+  <message name="IDS_RELEASE_NOTES_DEVICE_SPECIFIC_NOTIFICATION_TITLE" desc="Text for the notification title informing the user that the device has been updated and patch notes are available. Will specify the user's Chrome OS device.">
+    See what's new on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
+  </message>
   <message name="IDS_RELEASE_NOTES_NOTIFICATION_TITLE" desc="Text for the notification title informing the user that the device has been updated and patch notes are available.">
     See what's new on Chromebook
   </message>
@@ -5421,6 +5696,9 @@ You can manage this account’s settings by installing the Family Link app on yo
   <message name="IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_MISMATCHED" desc="Message shown below the title that tells the user they have entered two different PIN values.">
     PINs do not match
   </message>
+  <message name="IDS_SETTINGS_PEOPLE_PIN_PROMPT_INVALID_PIN" desc="Text on a pin field that tells the user the PIN is incorrect.">
+    Invalid PIN
+  </message>
   <message name="IDS_SETTINGS_ACCOUNT_MANAGER_ACCOUNT_REMOVED_MESSAGE" desc="Notification message after account removal.">
     <ph name="EMAIL">$1<ex>abcd@google.com</ex></ph> was removed from this device
   </message>
@@ -5451,8 +5729,65 @@ You can manage this account’s settings by installing the Family Link app on yo
     Restart to powerwash
   </message>
 
+  <!-- Strings for Suggestion features -->
+  <message name="IDS_SUGGESTION_LEARN_MORE" desc="This string is a link that shows up along with a personal information suggestion (in the first 10 instances) to inform the users about the feature. It takes users to the settings page to learn more.">
+    Learn about suggestions
+  </message>
+  <message name="IDS_SUGGESTION_ENTER_KEY" desc="This string is the enter key annotation to educate users how to accept a personal information suggestion.">
+    Enter
+  </message>
+   <message name="IDS_SUGGESTION_EMOJI_SUGGESTED" desc="String announced by screenreader when emoji suggestion pops up.">
+    Emoji suggested. Press up or down to navigate and enter to insert.
+  </message>
+  <message name="IDS_SUGGESTION_EMOJI_CHOSEN" desc="String announced by screenreader when users selected an emoji in the pop-up.">
+    <ph name="EMOJI_NAME">$1<ex>Party popper</ex></ph>. <ph name="EMOJI_INDEX">$2<ex>5</ex></ph> of <ph name="EMOJI_COUNT">$3<ex>5</ex></ph>.
+  </message>
+  <message name="IDS_SUGGESTION_DISMISSED" desc="String announced by screenreader when suggestion pop-up disappears.">
+    Suggestion dismissed
+  </message>
+  <message name="IDS_SUGGESTION_EMOJI_INSERTED" desc="String announced by screenreader when an emoji suggestion is inserted.">
+    Emoji inserted
+  </message>
+  <message name="IDS_SUGGESTION_INSERTED" desc="String announced by screenreader when a suggestion is inserted.">
+    Suggestion inserted
+  </message>
+
   <!-- Strings for Custom Tab UI -->
   <message name="IDS_CUSTOM_TABS_ACTION_MENU_ACCESSIBLE_NAME" desc="Accessible name for the overflow menu of the Chrome Custom Tab toolbar.">
     Action menu button
   </message>
+
+  <!-- Strings for the System-proxy authentication dialog that requests proxy credentials for network traffic at OS level (outside the Browser) -->
+  <message name="IDS_SYSTEM_PROXY_AUTH_DIALOG_TITLE" desc="Title for the dialog.">
+    Sign in
+  </message>
+  <message name="IDS_SYSTEM_PROXY_AUTH_DIALOG_OK_BUTTON" desc="Text for the OK button.">
+    Sign in
+  </message>
+  <message name="IDS_SYSTEM_PROXY_AUTH_DIALOG_TEXT" desc="Text for the dialog informing users that the remote proxy requires authentication.">
+    The proxy <ph name="PROXY_SERVER">$1<ex>http://localhost:3128</ex></ph> requires a username and password.
+  </message>
+  <message name="IDS_SYSTEM_PROXY_AUTH_DIALOG_PRIVACY_WARNING" desc="Text for the privacy disclosure section on the dialog.">
+    Your connection is not private for all network traffic
+  </message>
+  <message name="IDS_SYSTEM_PROXY_AUTH_DIALOG_USERNAME_LABEL" desc="Text for the label associated with the username input.">
+    Username
+  </message>
+  <message name="IDS_SYSTEM_PROXY_AUTH_DIALOG_PASSWORD_LABEL" desc="Text for the label associated with the password input.">
+    Password
+  </message>
+  <message name="IDS_SYSTEM_PROXY_AUTH_DIALOG_ERROR_LABEL" desc="Text for the error label that informs users that the authentication attempt failed.">
+    Unable to connect to the proxy
+  </message>
+  <!-- Strings for the System-proxy notifications informing the user that System-proxy required credentials-->
+  <message name="IDS_SYSTEM_PROXY_AUTH_REQUIRED_NOTIFICATION_TITLE" desc="Title of notification displayed when System-proxy requires user credentials to authenticate to a remote web proxy.">
+    Sign in to connect to the proxy
+  </message>
+  <message name="IDS_SYSTEM_PROXY_AUTH_REQUIRED_NOTIFICATION_BODY" desc="Body of notification informing user that they need to provide username and password for System-proxy to connect to a remote web proxy.">
+    The proxy <ph name="PROXY">$1<ex>http://localhost:3128</ex></ph> requires you to authenticate with a username and password
+  </message>
+  <message name="IDS_SYSTEM_PROXY_AUTH_REQUIRED_NOTIFICATION_ERROR_TITLE" desc="Title of notification displayed when System-proxy requires new user credentials because the previous ones were incorrect.">
+    Unable to connect to the proxy, please try again
+  </message>
+
 </grit-part>

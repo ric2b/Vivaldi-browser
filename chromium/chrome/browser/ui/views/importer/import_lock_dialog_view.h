@@ -15,12 +15,12 @@
 class ImportLockDialogView : public views::DialogDelegateView {
  public:
   static void Show(gfx::NativeWindow parent,
-                   const base::Callback<void(bool)>& callback,
+                   base::OnceCallback<void(bool)> callback,
                    base::string16 importer_locktext);
 
  private:
-  explicit ImportLockDialogView(const base::Callback<void(bool)>& callback,
-     base::string16 importer_locktext);
+  explicit ImportLockDialogView(base::OnceCallback<void(bool)> callback,
+                                base::string16 importer_locktext);
   ~ImportLockDialogView() override;
 
   // views::View:
@@ -34,7 +34,7 @@ class ImportLockDialogView : public views::DialogDelegateView {
 
  private:
   // Called with the result of the dialog.
-  base::Callback<void(bool)> callback_;
+  base::OnceCallback<void(bool)> callback_;
 
   DISALLOW_COPY_AND_ASSIGN(ImportLockDialogView);
 };

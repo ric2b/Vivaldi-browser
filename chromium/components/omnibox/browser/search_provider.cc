@@ -35,6 +35,7 @@
 #include "components/omnibox/browser/url_prefix.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/search/search.h"
+#include "components/search_engines/omnibox_focus_type.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/url_formatter.h"
 #include "components/variations/net/variations_http_headers.h"
@@ -235,7 +236,7 @@ void SearchProvider::Start(const AutocompleteInput& input,
   // Unless warming up the suggest server on focus, SearchProvider doesn't do
   // do anything useful for on-focus inputs or empty inputs.  Exit early.
   if (!base::FeatureList::IsEnabled(omnibox::kSearchProviderWarmUpOnFocus) &&
-      (input.from_omnibox_focus() ||
+      (input.focus_type() != OmniboxFocusType::DEFAULT ||
        input.type() == metrics::OmniboxInputType::EMPTY)) {
     Stop(true, false);
     return;
@@ -279,7 +280,7 @@ void SearchProvider::Start(const AutocompleteInput& input,
 
   providers_.set(default_provider_keyword, keyword_provider_keyword);
 
-  if (input.from_omnibox_focus()) {
+  if (input.focus_type() != OmniboxFocusType::DEFAULT) {
     // Don't display any suggestions for on-focus requests.
     DCHECK(done_);
     ClearAllResults();
@@ -307,7 +308,7 @@ void SearchProvider::Start(const AutocompleteInput& input,
 
   // Don't search the query history database for on-focus inputs; these inputs
   // should only be used to warm up the suggest server.
-  if (!input.from_omnibox_focus()) {
+  if (input.focus_type() == OmniboxFocusType::DEFAULT) {
     DoHistoryQuery(minimal_changes);
     // Answers needs scored history results before any suggest query has been
     // started, since the query for answer-bearing results needs additional
@@ -426,7 +427,7 @@ void SearchProvider::OnURLLoadComplete(
   // that's left to ZeroSuggestProvider and friends.  Furthermore, it's not
   // clear if the suggest server will send back sensible results to the
   // request we're constructing here for on-focus inputs.
-  if (!input_.from_omnibox_focus() && request_succeeded) {
+  if (input_.focus_type() == OmniboxFocusType::DEFAULT && request_succeeded) {
     std::unique_ptr<base::Value> data(
         SearchSuggestionParser::DeserializeJsonData(
             SearchSuggestionParser::ExtractJsonData(source,
@@ -528,7 +529,7 @@ void SearchProvider::UpdateMatches() {
   // enforce constraints about inlinability in this case.  Indeed, most of
   // these steps would be bad, as they'd add a suggestion of some form, thus
   // opening the dropdown (which we do not want to happen).
-  if (!input_.from_omnibox_focus()) {
+  if (input_.focus_type() == OmniboxFocusType::DEFAULT) {
     PersistTopSuggestions(&default_results_);
     PersistTopSuggestions(&keyword_results_);
     ConvertResultsToAutocompleteMatches();
@@ -923,7 +924,8 @@ std::unique_ptr<network::SimpleURLLoader> SearchProvider::CreateSuggestLoader(
       template_url, search_terms_data, input.current_page_classification(),
       &empty_search_term_args);
   GURL suggest_url(template_url->suggestions_url_ref().ReplaceSearchTerms(
-      input.from_omnibox_focus() ? empty_search_term_args : search_term_args,
+      input.focus_type() != OmniboxFocusType::DEFAULT ? empty_search_term_args
+                                                      : search_term_args,
       search_terms_data));
   if (!suggest_url.is_valid())
     return nullptr;
@@ -1032,7 +1034,7 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
     SearchSuggestionParser::SuggestResult verbatim(
         /*suggestion=*/trimmed_verbatim,
         AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED,
-        /*subtype_identifier=*/0, /*from_keyword=*/false, verbatim_relevance,
+        /*subtypes=*/{}, /*from_keyword=*/false, verbatim_relevance,
         relevance_from_server,
         /*input_text=*/trimmed_verbatim);
     if (has_answer)
@@ -1058,8 +1060,8 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
         SearchSuggestionParser::SuggestResult verbatim(
             /*suggestion=*/trimmed_verbatim,
             AutocompleteMatchType::SEARCH_OTHER_ENGINE,
-            /*subtype_identifier=*/0, /*from_keyword=*/true,
-            keyword_verbatim_relevance, keyword_relevance_from_server,
+            /*subtypes=*/{}, /*from_keyword=*/true, keyword_verbatim_relevance,
+            keyword_relevance_from_server,
             /*input_text=*/trimmed_verbatim);
         AddMatchToMap(verbatim, std::string(),
                       did_not_accept_keyword_suggestion, false, true, &map);
@@ -1090,12 +1092,13 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
   // always include in that set a legal default match if possible.  If Instant
   // Extended is enabled and we have server-provided (and thus hopefully more
   // accurate) scores for some suggestions, we allow more of those, until we
-  // reach AutocompleteResult::GetMaxMatches() total matches (that is, enough to
-  // fill the whole popup).
+  // reach AutocompleteResult::GetDynamicMaxMatches() total matches (that is,
+  // enough to fill the whole popup).
   //
   // We will always return any verbatim matches, no matter how we obtained their
-  // scores, unless we have already accepted AutocompleteResult::GetMaxMatches()
-  // higher-scoring matches under the conditions above.
+  // scores, unless we have already accepted
+  // AutocompleteResult::GetDynamicMaxMatches() higher-scoring matches under
+  // the conditions above.
   std::sort(matches.begin(), matches.end(), &AutocompleteMatch::MoreRelevant);
 
   // Guarantee that if there's a legal default match anywhere in the result
@@ -1117,7 +1120,7 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
   size_t num_suggestions = 0;
   for (ACMatches::const_iterator i(matches.begin());
        (i != matches.end()) &&
-       (matches_.size() < AutocompleteResult::GetMaxMatches());
+       (matches_.size() < AutocompleteResult::GetDynamicMaxMatches());
        ++i) {
     // SEARCH_OTHER_ENGINE is only used in the SearchProvider for the keyword
     // verbatim result, so this condition basically means "if this match is a
@@ -1241,8 +1244,7 @@ SearchProvider::ScoreHistoryResultsHelper(const HistoryResults& results,
     }
     SearchSuggestionParser::SuggestResult history_suggestion(
         /*suggestion=*/trimmed_suggestion,
-        AutocompleteMatchType::SEARCH_HISTORY,
-        /*subtype_identifier=*/0, is_keyword, relevance,
+        AutocompleteMatchType::SEARCH_HISTORY, {}, is_keyword, relevance,
         /*relevance_from_server=*/false, /*input_text=*/trimmed_input);
     // History results are synchronous; they are received on the last keystroke.
     history_suggestion.set_received_after_last_keystroke(false);
@@ -1493,7 +1495,7 @@ AutocompleteMatch SearchProvider::NavigationToMatch(
   AutocompleteMatch match(this, navigation.relevance(), false,
                           navigation.type());
   match.destination_url = navigation.url();
-  match.subtype_identifier = navigation.subtype_identifier();
+  match.subtypes = navigation.subtypes();
   BaseSearchProvider::SetDeletionURL(navigation.deletion_url(), &match);
   // First look for the user's input inside the formatted url as it would be
   // without trimming the scheme, so we can find matches at the beginning of the
@@ -1613,7 +1615,7 @@ void SearchProvider::PrefetchImages(SearchSuggestionParser::Results* results) {
   // are processed in descending order of relevance so the first suggestions are
   // the ones to be shown; prefetching images for the rest would be wasteful.
   std::vector<GURL> prefetch_image_urls;
-  int prefetch_limit = AutocompleteResult::GetMaxMatches();
+  int prefetch_limit = AutocompleteResult::GetDynamicMaxMatches();
   for (const auto& suggestion : results->suggest_results) {
     if (prefetch_limit <= 0)
       break;

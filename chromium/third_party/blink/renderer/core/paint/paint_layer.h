@@ -47,7 +47,6 @@
 
 #include <memory>
 #include "base/auto_reset.h"
-#include "base/macros.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/hit_testing_transform_state.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
@@ -110,10 +109,13 @@ class CORE_EXPORT DisableCompositingQueryAsserts {
 
  public:
   DisableCompositingQueryAsserts();
+  DisableCompositingQueryAsserts(const DisableCompositingQueryAsserts&) =
+      delete;
+  DisableCompositingQueryAsserts& operator=(
+      const DisableCompositingQueryAsserts&) = delete;
 
  private:
   base::AutoReset<CompositingQueryMode> disabler_;
-  DISALLOW_COPY_AND_ASSIGN(DisableCompositingQueryAsserts);
 };
 
 struct PaintLayerRareData {
@@ -121,6 +123,8 @@ struct PaintLayerRareData {
 
  public:
   PaintLayerRareData();
+  PaintLayerRareData(const PaintLayerRareData&) = delete;
+  PaintLayerRareData& operator=(const PaintLayerRareData&) = delete;
   ~PaintLayerRareData();
 
   // The offset for an in-flow relative-positioned PaintLayer. This is not
@@ -171,8 +175,6 @@ struct PaintLayerRareData {
   // The accumulated subpixel offset of a composited layer's composited bounds
   // compared to absolute coordinates.
   PhysicalOffset subpixel_accumulation;
-
-  DISALLOW_COPY_AND_ASSIGN(PaintLayerRareData);
 };
 
 // PaintLayer is an old object that handles lots of unrelated operations.
@@ -245,16 +247,17 @@ struct PaintLayerRareData {
 class CORE_EXPORT PaintLayer : public DisplayItemClient {
  public:
   PaintLayer(LayoutBoxModelObject&);
+  PaintLayer(const PaintLayer&) = delete;
+  PaintLayer& operator=(const PaintLayer&) = delete;
   ~PaintLayer() override;
 
   // DisplayItemClient methods
   String DebugName() const final;
   DOMNodeId OwnerNodeId() const final;
-  IntRect VisualRect() const final;
 
-  LayoutBoxModelObject& GetLayoutObject() const { return layout_object_; }
+  LayoutBoxModelObject& GetLayoutObject() const { return *layout_object_; }
   LayoutBox* GetLayoutBox() const {
-    return layout_object_.IsBox() ? &ToLayoutBox(layout_object_) : nullptr;
+    return layout_object_->IsBox() ? ToLayoutBox(layout_object_) : nullptr;
   }
   PaintLayer* Parent() const { return parent_; }
   PaintLayer* PreviousSibling() const { return previous_; }
@@ -320,8 +323,8 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   // Location() is not the correct paint offset. It's also incorrect in flipped
   // blocks writing mode.
   IntSize PixelSnappedSize() const {
-    LayoutPoint location = layout_object_.IsBox()
-                               ? ToLayoutBox(layout_object_).Location()
+    LayoutPoint location = layout_object_->IsBox()
+                               ? ToLayoutBox(layout_object_)->Location()
                                : LayoutPoint();
     return PixelSnappedIntSize(Size(), location);
   }
@@ -404,9 +407,13 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   // Layer::paint*() methods.
   PaintLayer* EnclosingLayerForPaintInvalidation() const;
 
+  PaintLayer* EnclosingDirectlyCompositableLayer(IncludeSelfOrNot) const;
+
   // https://crbug.com/751768, this function can return nullptr sometimes.
   // Always check the result before using it, don't just DCHECK.
   PaintLayer* EnclosingLayerForPaintInvalidationCrossingFrameBoundaries() const;
+
+  PaintLayer* EnclosingDirectlyCompositableLayerCrossingFrameBoundaries() const;
 
   bool HasAncestorWithFilterThatMovesPixels() const;
 
@@ -458,8 +465,7 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   // |ancestorLayer| may be applied to the bounding box, in particular if
   // paintsWithTransform() is true.
   enum CalculateBoundsOptions {
-    kMaybeIncludeTransformForAncestorLayer,
-    kNeverIncludeTransformForAncestorLayer,
+    kIncludeClipsAndMaybeIncludeTransformForAncestorLayer,
     kIncludeTransformsAndCompositedChildLayers,
   };
 
@@ -467,18 +473,11 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   PhysicalRect PhysicalBoundingBox(
       const PhysicalOffset& offset_from_root) const;
   PhysicalRect PhysicalBoundingBox(const PaintLayer* ancestor_layer) const;
-  PhysicalRect PhysicalBoundingBoxIncludingStackingChildren(
-      const PhysicalOffset& offset_from_root,
-      CalculateBoundsOptions = kMaybeIncludeTransformForAncestorLayer) const;
   PhysicalRect FragmentsBoundingBox(const PaintLayer* ancestor_layer) const;
 
   PhysicalRect BoundingBoxForCompositingOverlapTest() const;
   PhysicalRect BoundingBoxForCompositing() const;
 
-  // If true, this layer's children are included in its bounds for overlap
-  // testing.  We can't rely on the children's positions if this layer has a
-  // filter that could have moved the children's pixels around.
-  bool OverlapBoundsIncludeChildren() const;
 
   // Static position is set in parent's coordinate space.
   LayoutUnit StaticInlinePosition() const { return static_inline_position_; }
@@ -564,6 +563,8 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   // This returns true if our document is in a phase of its lifestyle during
   // which compositing state may legally be read.
   bool IsAllowedToQueryCompositingState() const;
+
+  bool IsAllowedToQueryCompositingInputs() const;
 
   // Don't null check this.
   // FIXME: Rename.
@@ -741,6 +742,8 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
                : CompositingReason::kNone;
   }
 
+  bool CanBeCompositedForDirectReasons() const;
+
   CompositingReasons PotentialCompositingReasonsFromStyle() const {
     return rare_data_ ? rare_data_->potential_compositing_reasons_from_style
                       : CompositingReason::kNone;
@@ -818,6 +821,16 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   // layer tree.
   void SetNeedsGraphicsLayerRebuild();
 
+  // Mark this PaintLayer as needing raster invalidation checking after the
+  // next compositing update step.
+  void SetNeedsCheckRasterInvalidation();
+  bool NeedsCheckRasterInvalidation() const {
+    return needs_check_raster_invalidation_;
+  }
+  void ClearNeedsCheckRasterInvalidation() {
+    needs_check_raster_invalidation_ = false;
+  }
+
   // This methods marks everything from this layer up to the |ancestor| argument
   // (both included).
   void SetChildNeedsCompositingInputsUpdateUpToAncestor(PaintLayer* ancestor);
@@ -843,16 +856,10 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
     return EnsureAncestorDependentCompositingInputs();
   }
 
-  // These two  do not include any applicable scroll offset of the
-  // root PaintLayer.
-  const IntRect& ClippedAbsoluteBoundingBox() const {
-    return GetAncestorDependentCompositingInputs()
-        .clipped_absolute_bounding_box;
-  }
-  const IntRect& UnclippedAbsoluteBoundingBox() const {
-    return GetAncestorDependentCompositingInputs()
-        .unclipped_absolute_bounding_box;
-  }
+  // These two do not include any applicable scroll offset of the
+  // root PaintLayer, unless CompositingOptimizationsEnabled is on.
+  const IntRect ClippedAbsoluteBoundingBox() const;
+  const IntRect UnclippedAbsoluteBoundingBox() const;
 
   const PaintLayer* OpacityAncestor() const {
     return GetAncestorDependentCompositingInputs().opacity_ancestor;
@@ -1120,7 +1127,19 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
                       : PhysicalOffset();
   }
 
+  bool NeedsPaintOffsetTranslationForCompositing() const {
+    DCHECK(!RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
+    DCHECK(IsAllowedToQueryCompositingInputs());
+    return needs_paint_offset_translation_for_compositing_;
+  }
+
+  void SetNeedsPaintOffsetTranslationForCompositing(bool b) {
+    needs_paint_offset_translation_for_compositing_ = b;
+  }
+
  private:
+  bool PaintsWithDirectReasonIntoOwnBacking(GlobalPaintFlags) const;
+
   void SetNeedsCompositingInputsUpdateInternal();
 
   void Update3DTransformedDescendantStatus();
@@ -1367,11 +1386,15 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   unsigned static_inline_edge_ : 2;
   unsigned static_block_edge_ : 2;
 
+  unsigned needs_paint_offset_translation_for_compositing_ : 1;
+
+  unsigned needs_check_raster_invalidation_ : 1;
+
 #if DCHECK_IS_ON()
   mutable unsigned layer_list_mutation_allowed_ : 1;
 #endif
 
-  LayoutBoxModelObject& layout_object_;
+  LayoutBoxModelObject* const layout_object_;
 
   PaintLayer* parent_;
   PaintLayer* previous_;
@@ -1426,8 +1449,6 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
                            DescendantDependentFlagsStopsAtThrottledFrames);
   FRIEND_TEST_ALL_PREFIXES(PaintLayerTest,
                            PaintLayerTransformUpdatedOnStyleTransformAnimation);
-
-  DISALLOW_COPY_AND_ASSIGN(PaintLayer);
 };
 
 #if DCHECK_IS_ON()

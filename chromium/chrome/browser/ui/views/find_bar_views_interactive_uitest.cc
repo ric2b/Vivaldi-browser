@@ -466,7 +466,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageTest, FocusRestoreOnTabSwitch) {
 }
 
 // FindInPage on Mac doesn't use prepopulated values. Search there is global.
-#if !defined(OS_MACOSX) && !defined(USE_AURA)
+#if !defined(OS_MAC) && !defined(USE_AURA)
 // Flaky because the test server fails to start? See: http://crbug.com/96594.
 // This tests that whenever you clear values from the Find box and close it that
 // it respects that and doesn't show you the last search, as reported in bug:
@@ -567,7 +567,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageTest, DISABLED_PasteWithoutTextChange) {
 
   base::string16 str;
   ui::Clipboard::GetForCurrentThread()->ReadText(
-      ui::ClipboardBuffer::kCopyPaste, &str);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &str);
 
   // Make sure the text is copied successfully.
   EXPECT_EQ(ASCIIToUTF16("a"), str);
@@ -581,7 +581,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageTest, DISABLED_PasteWithoutTextChange) {
 }
 
 // Slow flakiness on Linux. crbug.com/803743
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_CtrlEnter DISABLED_CtrlEnter
 #else
 #define MAYBE_CtrlEnter CtrlEnter

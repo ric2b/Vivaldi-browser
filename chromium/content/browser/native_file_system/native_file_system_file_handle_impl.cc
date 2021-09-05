@@ -36,11 +36,7 @@ NativeFileSystemFileHandleImpl::NativeFileSystemFileHandleImpl(
     const BindingContext& context,
     const storage::FileSystemURL& url,
     const SharedHandleState& handle_state)
-    : NativeFileSystemHandleBase(manager,
-                                 context,
-                                 url,
-                                 handle_state,
-                                 /*is_directory=*/false) {}
+    : NativeFileSystemHandleBase(manager, context, url, handle_state) {}
 
 NativeFileSystemFileHandleImpl::~NativeFileSystemFileHandleImpl() = default;
 
@@ -86,10 +82,9 @@ void NativeFileSystemFileHandleImpl::CreateFileWriter(
   RunWithWritePermission(
       base::BindOnce(&NativeFileSystemFileHandleImpl::CreateFileWriterImpl,
                      weak_factory_.GetWeakPtr(), keep_existing_data),
-      base::BindOnce([](CreateFileWriterCallback callback) {
-        std::move(callback).Run(native_file_system_error::FromStatus(
-                                    NativeFileSystemStatus::kPermissionDenied),
-                                mojo::NullRemote());
+      base::BindOnce([](blink::mojom::NativeFileSystemErrorPtr result,
+                        CreateFileWriterCallback callback) {
+        std::move(callback).Run(std::move(result), mojo::NullRemote());
       }),
       std::move(callback));
 }
@@ -108,7 +103,7 @@ void NativeFileSystemFileHandleImpl::IsSameEntry(
 void NativeFileSystemFileHandleImpl::IsSameEntryImpl(
     IsSameEntryCallback callback,
     NativeFileSystemTransferTokenImpl* other) {
-  if (!other || !other->GetAsFileSystemURL()) {
+  if (!other) {
     std::move(callback).Run(
         native_file_system_error::FromStatus(
             blink::mojom::NativeFileSystemStatus::kOperationFailed),
@@ -116,13 +111,13 @@ void NativeFileSystemFileHandleImpl::IsSameEntryImpl(
     return;
   }
 
-  if (other->type() != NativeFileSystemTransferTokenImpl::HandleType::kFile) {
+  if (other->type() != NativeFileSystemPermissionContext::HandleType::kFile) {
     std::move(callback).Run(native_file_system_error::Ok(), false);
     return;
   }
 
   const storage::FileSystemURL& url1 = url();
-  const storage::FileSystemURL& url2 = *other->GetAsFileSystemURL();
+  const storage::FileSystemURL& url2 = other->url();
 
   // If two URLs are of a different type they are definitely not related.
   if (url1.type() != url2.type()) {

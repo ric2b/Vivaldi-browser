@@ -25,6 +25,7 @@
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/dom_distiller/tab_utils.h"
+#include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/media/router/media_router_dialog_controller.h"  // nogncheck
 #include "chrome/browser/media/router/media_router_feature.h"
@@ -81,7 +82,6 @@
 #include "components/browsing_data/content/browsing_data_helper.h"
 #include "components/dom_distiller/core/url_utils.h"
 #include "components/favicon/content/content_favicon_driver.h"
-#include "components/feature_engagement/buildflags.h"
 #include "components/find_in_page/find_tab_helper.h"
 #include "components/find_in_page/find_types.h"
 #include "components/google/core/common/google_util.h"
@@ -105,6 +105,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
@@ -143,11 +144,6 @@
 
 #if BUILDFLAG(ENABLE_RLZ)
 #include "components/rlz/rlz_tracker.h"  // nogncheck
-#endif
-
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-#include "chrome/browser/feature_engagement/incognito_window/incognito_window_tracker.h"
-#include "chrome/browser/feature_engagement/incognito_window/incognito_window_tracker_factory.h"
 #endif
 
 #include "app/vivaldi_constants.h"
@@ -597,7 +593,7 @@ void Stop(Browser* browser) {
 
 void NewWindow(Browser* browser) {
   Profile* const profile = browser->profile();
-#if BUILDFLAG(ENABLE_EXTENSIONS) && defined(OS_MACOSX)
+#if BUILDFLAG(ENABLE_EXTENSIONS) && defined(OS_MAC)
   // Web apps should open a window to their launch page.
   if (browser->app_controller() && browser->app_controller()->HasAppId()) {
     const web_app::AppId app_id = browser->app_controller()->GetAppId();
@@ -615,7 +611,7 @@ void NewWindow(Browser* browser) {
         apps::mojom::AppLaunchSource::kSourceKeyboard);
     apps::AppServiceProxyFactory::GetForProfile(profile)
         ->BrowserAppLauncher()
-        .LaunchAppWithParams(params);
+        ->LaunchAppWithParams(params);
     return;
   }
 
@@ -636,11 +632,6 @@ void NewWindow(Browser* browser) {
 }
 
 void NewIncognitoWindow(Profile* profile) {
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-  feature_engagement::IncognitoWindowTrackerFactory::GetInstance()
-      ->GetForProfile(profile)
-      ->OnIncognitoWindowOpened();
-#endif
   NewEmptyWindow(profile->GetPrimaryOTRProfile());
 }
 
@@ -776,14 +767,7 @@ void MoveTabsToNewWindow(Browser* browser,
   Browser* new_browser =
       new Browser(Browser::CreateParams(browser->profile(), true));
 
-  base::Optional<tab_groups::TabGroupId> new_group = base::nullopt;
   if (group.has_value()) {
-    // Recreate the group in the new window with a different ID but the same
-    // title and color. Also ensure that the group is not collapsed. This is
-    // consistent with the behavior when dragging a group out of a window.
-
-    new_group = tab_groups::TabGroupId::GenerateNew();
-
     const tab_groups::TabGroupVisualData* old_visual_data =
         browser->tab_strip_model()
             ->group_model()
@@ -793,8 +777,8 @@ void MoveTabsToNewWindow(Browser* browser,
                                                    old_visual_data->color(),
                                                    false /* is_collapsed */);
 
-    new_browser->tab_strip_model()->group_model()->AddTabGroup(
-        new_group.value(), new_visual_data);
+    new_browser->tab_strip_model()->group_model()->AddTabGroup(group.value(),
+                                                               new_visual_data);
   }
 
   int indices_size = tab_indices.size();
@@ -815,7 +799,7 @@ void MoveTabsToNewWindow(Browser* browser,
 
     new_browser->tab_strip_model()->AddWebContents(std::move(contents_move), -1,
                                                    ui::PAGE_TRANSITION_TYPED,
-                                                   add_types, new_group);
+                                                   add_types, group);
   }
   new_browser->window()->Show();
 }
@@ -999,8 +983,7 @@ void BookmarkCurrentTab(Browser* browser) {
       web_contents->GetBrowserContext()->IsOffTheRecord()) {
     // If we're incognito the favicon may not have been saved. Save it now
     // so that bookmarks have an icon for the page.
-    favicon::ContentFaviconDriver::FromWebContents(web_contents)
-        ->SaveFaviconEvenIfInIncognito();
+    favicon::SaveFaviconEvenIfInIncognito(web_contents);
   }
   bool was_bookmarked_by_user = bookmarks::IsBookmarkedByUser(model, url);
   bookmarks::AddIfNotBookmarked(model, url, title);
@@ -1248,6 +1231,10 @@ void FindPrevious(Browser* browser) {
 
 void FindInPage(Browser* browser, bool find_next, bool forward_direction) {
   browser->GetFindBarController()->Show(find_next, forward_direction);
+}
+
+void ShowTabSearch(Browser* browser) {
+  browser->window()->CreateTabSearchBubble();
 }
 
 bool CanCloseFind(Browser* browser) {
@@ -1512,6 +1499,31 @@ bool CanViewSource(const Browser* browser) {
                                              ->GetActiveWebContents()
                                              ->GetController()
                                              .CanViewSource();
+}
+
+void ToggleCaretBrowsing(Browser* browser) {
+  PrefService* prefService = browser->profile()->GetPrefs();
+  bool enabled = prefService->GetBoolean(prefs::kCaretBrowsingEnabled);
+
+  if (enabled) {
+    base::RecordAction(base::UserMetricsAction(
+        "Accessibility.CaretBrowsing.DisableWithKeyboard"));
+    prefService->SetBoolean(prefs::kCaretBrowsingEnabled, false);
+    return;
+  }
+
+  // Show a confirmation dialog, unless either (1) the command-line
+  // flag was used, or (2) the user previously checked the box
+  // indicating not to ask them next time.
+  if (prefService->GetBoolean(prefs::kShowCaretBrowsingDialog) &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableCaretBrowsing)) {
+    browser->window()->ShowCaretBrowsingDialog();
+  } else {
+    base::RecordAction(base::UserMetricsAction(
+        "Accessibility.CaretBrowsing.EnableWithKeyboard"));
+    prefService->SetBoolean(prefs::kCaretBrowsingEnabled, true);
+  }
 }
 
 #if !defined(TOOLKIT_VIEWS)

@@ -16,6 +16,12 @@ namespace base {
 class FilePath;
 }
 
+namespace gfx {
+class Image;
+}
+
+class GURL;
+
 namespace weblayer {
 class CookieManager;
 class DownloadDelegate;
@@ -25,6 +31,7 @@ class DownloadDelegate;
 enum class BrowsingDataType {
   COOKIES_AND_SITE_DATA = 0,
   CACHE = 1,
+  SITE_SETTINGS = 2,
 };
 
 // Used for setting/getting profile related settings.
@@ -33,6 +40,7 @@ enum class SettingType {
   UKM_ENABLED = 1,
   EXTENDED_REPORTING_SAFE_BROWSING_ENABLED = 2,
   REAL_TIME_SAFE_BROWSING_ENABLED = 3,
+  NETWORK_PREDICTION_ENABLED = 4,
 };
 
 class Profile {
@@ -88,6 +96,14 @@ class Profile {
 
   // Get the boolean value of the given setting type.
   virtual bool GetBooleanSetting(SettingType type) = 0;
+
+  // Returns the cached favicon for the specified url. Off the record profiles
+  // do not cache favicons. If this is called on an off-the-record profile
+  // the callback is run with an empty image synchronously. The returned image
+  // matches that returned by FaviconFetcher.
+  virtual void GetCachedFaviconForPageUrl(
+      const GURL& page_url,
+      base::OnceCallback<void(gfx::Image)> callback) = 0;
 
   // For cross-origin navigations, the implementation may leverage a separate OS
   // process for stronger isolation. If an embedder knows that a cross-origin

@@ -18,6 +18,7 @@
 #include "ash/system/tray/hover_highlight_view.h"
 #include "ash/system/tray/size_range_layout.h"
 #include "ash/system/tray/tray_constants.h"
+#include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/tray/unfocusable_label.h"
 #include "ash/system/unified/unified_system_tray_view.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -28,6 +29,7 @@
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/square_ink_drop_ripple.h"
+#include "ui/views/border.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/button/toggle_button.h"
@@ -217,20 +219,13 @@ views::ImageView* TrayPopupUtils::CreateMainImageView() {
   return image;
 }
 
-views::Slider* TrayPopupUtils::CreateSlider(views::SliderListener* listener) {
-  views::Slider* slider = new views::Slider(listener);
-  slider->SetBorder(views::CreateEmptyBorder(
-      gfx::Insets(0, kTrayPopupSliderHorizontalPadding)));
-  return slider;
-}
-
 views::ToggleButton* TrayPopupUtils::CreateToggleButton(
     views::ButtonListener* listener,
     int accessible_name_id) {
   constexpr SkColor kTrackAlpha = 0x66;
   auto GetColor = [](bool is_on, SkAlpha alpha = SK_AlphaOPAQUE) {
     AshColorProvider::ContentLayerType type =
-        is_on ? AshColorProvider::ContentLayerType::kButtonIconColorProminent
+        is_on ? AshColorProvider::ContentLayerType::kIconColorProminent
               : AshColorProvider::ContentLayerType::kTextColorPrimary;
 
     return SkColorSetA(AshColorProvider::Get()->GetContentLayerColor(
@@ -281,7 +276,7 @@ void TrayPopupUtils::ConfigureContainer(TriView::Container container,
 views::LabelButton* TrayPopupUtils::CreateTrayPopupButton(
     views::ButtonListener* listener,
     const base::string16& text) {
-  auto button = views::MdTextButton::Create(listener, text);
+  auto button = std::make_unique<views::MdTextButton>(listener, text);
   button->SetProminent(true);
   return button.release();
 }
@@ -291,7 +286,7 @@ views::Separator* TrayPopupUtils::CreateVerticalSeparator() {
   separator->SetPreferredHeight(24);
   separator->SetColor(AshColorProvider::Get()->GetContentLayerColor(
       AshColorProvider::ContentLayerType::kSeparatorColor,
-      AshColorProvider::AshColorMode::kLight));
+      AshColorProvider::AshColorMode::kDark));
   return separator;
 }
 
@@ -376,6 +371,16 @@ void TrayPopupUtils::UpdateCheckMarkVisibility(HoverHighlightView* container,
   container->SetAccessibilityState(
       visible ? HoverHighlightView::AccessibilityState::CHECKED_CHECKBOX
               : HoverHighlightView::AccessibilityState::UNCHECKED_CHECKBOX);
+}
+
+void TrayPopupUtils::SetupTraySubLabel(views::Label* label) {
+  label->SetBorder(views::CreateEmptyBorder(kTraySubLabelPadding));
+  label->SetMultiLine(true);
+  label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
+
+  TrayPopupItemStyle sub_style(TrayPopupItemStyle::FontStyle::CAPTION);
+  sub_style.set_color_style(TrayPopupItemStyle::ColorStyle::INACTIVE);
+  sub_style.SetupLabel(label);
 }
 
 }  // namespace ash

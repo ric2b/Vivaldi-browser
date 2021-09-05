@@ -18,10 +18,10 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/system/sys_info.h"
+#include "base/task/current_thread.h"
 #include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_run_loop_timeout.h"
@@ -43,6 +43,10 @@ namespace {
 
 constexpr const char kArcCreateDataJobName[] = "arc_2dcreate_2ddata";
 constexpr const char kArcKeymasterJobName[] = "arc_2dkeymasterd";
+constexpr const char kArcSensorServiceJobName[] = "arc_2dsensor_2dservice";
+constexpr const char kArcVmMountMyFilesJobName[] = "arcvm_2dmount_2dmyfiles";
+constexpr const char kArcVmMountRemovableMediaJobName[] =
+    "arcvm_2dmount_2dremovable_2dmedia";
 constexpr const char kArcVmServerProxyJobName[] = "arcvm_2dserver_2dproxy";
 constexpr const char kArcVmPerBoardFeaturesJobName[] =
     "arcvm_2dper_2dboard_2dfeatures";
@@ -64,7 +68,6 @@ StartParams GetPopulatedStartParams() {
   params.play_store_auto_update =
       StartParams::PlayStoreAutoUpdate::AUTO_UPDATE_ON;
   params.arc_custom_tabs_experiment = true;
-  params.arc_print_spooler_experiment = true;
   params.num_cores_disabled = 2;
   return params;
 }
@@ -175,7 +178,7 @@ class TestArcVmBootNotificationServer
     ASSERT_EQ(HANDLE_EINTR(listen(fd_.get(), 5)), 0);
 
     controller_.reset(new base::MessagePumpForUI::FdWatchController(FROM_HERE));
-    ASSERT_TRUE(base::MessageLoopCurrentForUI::Get()->WatchFileDescriptor(
+    ASSERT_TRUE(base::CurrentUIThread::Get()->WatchFileDescriptor(
         fd_.get(), true, base::MessagePumpForUI::WATCH_READ, controller_.get(),
         this));
   }
@@ -524,6 +527,50 @@ TEST_F(ArcVmClientAdapterTest, StartMiniArc_StopArcKeymasterJobFail) {
   EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
 }
 
+// Tests that StartMiniArc() fails if Upstart fails to start arc-sensor-service.
+TEST_F(ArcVmClientAdapterTest, StartMiniArc_StartArcSensorServiceJobFail) {
+  // Inject failure to FakeUpstartClient.
+  InjectUpstartStartJobFailure(kArcSensorServiceJobName);
+
+  StartMiniArcWithParams(false, {});
+  // Confirm that no VM is started. ARCVM doesn't support mini ARC yet.
+  EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
+}
+
+// Tests that StartMiniArc() succeeds if Upstart fails to stop
+// arc-sensor-service.
+TEST_F(ArcVmClientAdapterTest, StartMiniArc_StopArcSensorServiceJobFail) {
+  // Inject failure to FakeUpstartClient.
+  InjectUpstartStopJobFailure(kArcSensorServiceJobName);
+
+  StartMiniArc();
+  // Confirm that no VM is started. ARCVM doesn't support mini ARC yet.
+  EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
+}
+
+// Tests that StartMiniArc() still succeeds even when Upstart fails to stop
+// arcvm-mount-myfiles.
+TEST_F(ArcVmClientAdapterTest, StartMiniArc_StopArcVmMountMyFilesJobFail) {
+  // Inject failure to FakeUpstartClient.
+  InjectUpstartStopJobFailure(kArcVmMountMyFilesJobName);
+
+  StartMiniArc();
+  // Confirm that no VM is started. ARCVM doesn't support mini ARC yet.
+  EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
+}
+
+// Tests that StartMiniArc() still succeeds even when Upstart fails to stop
+// arcvm-mount-removable-media.
+TEST_F(ArcVmClientAdapterTest,
+       StartMiniArc_StopArcVmMountRemovableMediaJobFail) {
+  // Inject failure to FakeUpstartClient.
+  InjectUpstartStopJobFailure(kArcVmMountRemovableMediaJobName);
+
+  StartMiniArc();
+  // Confirm that no VM is started. ARCVM doesn't support mini ARC yet.
+  EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
+}
+
 // Tests that StartMiniArc() fails when Upstart fails to start the job.
 TEST_F(ArcVmClientAdapterTest, StartMiniArc_StartArcVmPerBoardFeaturesJobFail) {
   // Inject failure to FakeUpstartClient.
@@ -664,6 +711,59 @@ TEST_F(ArcVmClientAdapterTest, UpgradeArc_StartArcCreateDataFailure) {
 
   // Inject failure to FakeUpstartClient.
   InjectUpstartStartJobFailure(kArcCreateDataJobName);
+
+  UpgradeArc(false);
+  EXPECT_TRUE(GetStartConciergeCalled());
+  EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
+  EXPECT_FALSE(arc_instance_stopped_called());
+
+  // Try to stop the VM. StopVm will fail in this case because
+  // no VM is running.
+  vm_tools::concierge::StopVmResponse response;
+  response.set_success(false);
+  GetTestConciergeClient()->set_stop_vm_response(response);
+  adapter()->StopArcInstance(/*on_shutdown=*/false,
+                             /*should_backup_log=*/false);
+  run_loop()->Run();
+  EXPECT_TRUE(GetTestConciergeClient()->stop_vm_called());
+  EXPECT_TRUE(arc_instance_stopped_called());
+}
+
+// Tests that UpgradeArc() handles arcvm-mount-myfiles startup failures
+// properly.
+TEST_F(ArcVmClientAdapterTest, UpgradeArc_StartArcVmMountMyFilesJobFail) {
+  SetValidUserInfo();
+  StartMiniArc();
+
+  // Inject failure to FakeUpstartClient.
+  InjectUpstartStartJobFailure(kArcVmMountMyFilesJobName);
+
+  UpgradeArc(false);
+  EXPECT_TRUE(GetStartConciergeCalled());
+  EXPECT_FALSE(GetTestConciergeClient()->start_arc_vm_called());
+  EXPECT_FALSE(arc_instance_stopped_called());
+
+  // Try to stop the VM. StopVm will fail in this case because
+  // no VM is running.
+  vm_tools::concierge::StopVmResponse response;
+  response.set_success(false);
+  GetTestConciergeClient()->set_stop_vm_response(response);
+  adapter()->StopArcInstance(/*on_shutdown=*/false,
+                             /*should_backup_log=*/false);
+  run_loop()->Run();
+  EXPECT_TRUE(GetTestConciergeClient()->stop_vm_called());
+  EXPECT_TRUE(arc_instance_stopped_called());
+}
+
+// Tests that UpgradeArc() handles arcvm-mount-removable-media startup failures
+// properly.
+TEST_F(ArcVmClientAdapterTest,
+       UpgradeArc_StartArcVmMountRemovableMediaJobFail) {
+  SetValidUserInfo();
+  StartMiniArc();
+
+  // Inject failure to FakeUpstartClient.
+  InjectUpstartStartJobFailure(kArcVmMountRemovableMediaJobName);
 
   UpgradeArc(false);
   EXPECT_TRUE(GetStartConciergeCalled());

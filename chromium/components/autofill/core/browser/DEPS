@@ -8,12 +8,14 @@ include_rules = [
   "+components/metrics",
   "+components/policy",
   "+components/security_state",
+  "+components/security_interstitials/core/pref_names.h",
   "+components/signin/public",
   "+components/sync",
   "+components/variations",
   "+components/version_info",
   "+components/webdata/common",
   "+components/webdata_services",
+  "+content/public/test",
   "+crypto/hkdf.h",
   "+crypto/random.h",
   "+google_apis/gaia",
@@ -51,6 +53,9 @@ specific_include_rules = {
   ],
   "autofill_driver\.h": [
     "+third_party/blink/public/mojom/webauthn/internal_authenticator.mojom.h"
+  ],
+  "test_autofill_driver\.h": [
+    "+components/autofill/content/browser/content_autofill_driver.h"
   ],
   "credit_card_save_manager_unittest\.cc": [
     "+components/ukm",

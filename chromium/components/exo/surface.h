@@ -66,6 +66,7 @@ extern const ui::ClassProperty<int32_t>* const kClientSurfaceIdKey;
 class Surface final : public ui::PropertyHandler {
  public:
   using PropertyDeallocator = void (*)(int64_t value);
+  using LeaveEnterCallback = base::RepeatingCallback<void(int64_t, int64_t)>;
 
   Surface();
   ~Surface() override;
@@ -74,6 +75,16 @@ class Surface final : public ui::PropertyHandler {
   static Surface* AsSurface(const aura::Window* window);
 
   aura::Window* window() { return window_.get(); }
+
+  void set_leave_enter_callback(LeaveEnterCallback callback) {
+    leave_enter_callback_ = callback;
+  }
+
+  // Called when the display the surface is on has changed.
+  void UpdateDisplay(int64_t old_id, int64_t new_id);
+
+  // Called when the output is added for new display.
+  void OnNewOutputAdded();
 
   // Set a buffer as the content of this surface. A buffer can only be attached
   // to one surface at a time.
@@ -164,6 +175,11 @@ class Surface final : public ui::PropertyHandler {
 
   // Request that surface should have a specific application ID string.
   void SetApplicationId(const char* application_id);
+
+  // Whether to hide the shelf when fullscreen. If true, shelf is inaccessible
+  // (plain fullscreen). If false, shelf auto-hides and can be shown with a
+  // mouse gesture (immersive fullscreen).
+  void SetUseImmersiveForFullscreen(bool value);
 
   // This sets the color space for the buffer for this surface.
   void SetColorSpace(gfx::ColorSpace color_space);
@@ -463,6 +479,8 @@ class Surface final : public ui::PropertyHandler {
   // The embedded surface is actually |embedded_surface_size_|. This is used
   // for calculating clipping and scaling.
   gfx::Size embedded_surface_size_;
+
+  LeaveEnterCallback leave_enter_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(Surface);
 };

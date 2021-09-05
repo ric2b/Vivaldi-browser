@@ -1,5 +1,5 @@
 
-if (!is_android) {
+if (vivaldi_build_tests) {
   update_target("//chrome/test:browser_tests") {
     sources -= [
       "../browser/apps/platform_apps/api/music_manager_private/music_manager_private_browsertest.cc",
@@ -8,7 +8,9 @@ if (!is_android) {
       "//vivaldi/extensions/api/webview/chrome_web_view_mediastate_apitest.cc",
     ]
   }
+}
 
+if (!is_android) {
   update_target("//chrome/common:common") {
     sources -= ["initialize_extensions_client.cc"]
     sources += ["//vivaldi/extensions/vivaldi_initialize_extensions_client.cc"]
@@ -36,7 +38,7 @@ update_template_instance("//chrome/common/extensions/api:manifest_features") {
   sources += [ "//vivaldi/extensions/api/_manifest_features.json" ]
 }
 
-update_template_instance("//extensions/browser:browser_sources") {
+update_target("//extensions/browser:browser_sources") {
   sources += [
     "//vivaldi/extensions/vivaldi_extension_prefs.cc",
     "//vivaldi/extensions/api/guest_view/vivaldi_web_view_guest.cpp",

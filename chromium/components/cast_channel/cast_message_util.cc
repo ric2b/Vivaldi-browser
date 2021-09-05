@@ -134,7 +134,7 @@ CastMessage CreateKeepAliveMessage(base::StringPiece keep_alive_type) {
 int GetVirtualConnectPlatformValue() {
 #if defined(OS_WIN)
   return 3;
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
   return 4;
 #elif defined(OS_CHROMEOS)
   return 5;
@@ -561,10 +561,19 @@ GetAppAvailabilityResult GetAppAvailabilityResultFromResponse(
       .value_or(GetAppAvailabilityResult::kUnknown);
 }
 
-LaunchSessionResponse::LaunchSessionResponse() {}
+LaunchSessionResponse::LaunchSessionResponse() = default;
 LaunchSessionResponse::LaunchSessionResponse(LaunchSessionResponse&& other) =
     default;
+LaunchSessionResponse& LaunchSessionResponse::operator=(
+    LaunchSessionResponse&& other) = default;
 LaunchSessionResponse::~LaunchSessionResponse() = default;
+
+LaunchSessionResponse GetLaunchSessionResponseError(std::string error_msg) {
+  LaunchSessionResponse response;
+  response.result = LaunchSessionResponse::Result::kError;
+  response.error_msg = std::move(error_msg);
+  return response;
+}
 
 LaunchSessionResponse GetLaunchSessionResponse(const base::Value& payload) {
   const Value* type_value = payload.FindKeyOfType("type", Value::Type::STRING);

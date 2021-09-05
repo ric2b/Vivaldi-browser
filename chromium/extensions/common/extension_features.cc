@@ -43,8 +43,18 @@ const base::Feature kAllowWithholdingExtensionPermissionsOnInstall{
     "AllowWithholdingExtensionPermissionsOnInstall",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables support for the "match_origin_as_fallback" property in content
+// scripts.
+const base::Feature kContentScriptsMatchOriginAsFallback{
+    "ContentScriptsMatchOriginAsFallback", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Reports Extensions.WebRequest.KeepaliveRequestFinished when enabled.
 const base::Feature kReportKeepaliveUkm{"ReportKeepaliveUkm",
                                         base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables callers of the GetAuthToken API to request for the unbundled consent
+// UI and populates the scopes parameter in the GetAuthToken callback function.
+const base::Feature kReturnScopesInGetAuthToken{
+    "ReturnScopesInGetAuthToken", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace extensions_features

@@ -20,40 +20,27 @@ class MockNativeFileSystemPermissionContext
                scoped_refptr<NativeFileSystemPermissionGrant>(
                    const url::Origin& origin,
                    const base::FilePath& path,
-                   bool is_directory,
-
+                   HandleType handle_type,
                    NativeFileSystemPermissionContext::UserAction user_action));
 
   MOCK_METHOD4(GetWritePermissionGrant,
                scoped_refptr<NativeFileSystemPermissionGrant>(
                    const url::Origin& origin,
                    const base::FilePath& path,
-                   bool is_directory,
-
+                   HandleType handle_type,
                    NativeFileSystemPermissionContext::UserAction user_action));
-
-  void ConfirmDirectoryReadAccess(
-      const url::Origin& origin,
-      const base::FilePath& path,
-      GlobalFrameRoutingId frame_id,
-      base::OnceCallback<void(PermissionStatus)> callback) override;
-  MOCK_METHOD4(ConfirmDirectoryReadAccess_,
-               void(const url::Origin& origin,
-                    const base::FilePath& path,
-                    GlobalFrameRoutingId frame_id,
-                    base::OnceCallback<void(PermissionStatus)>& callback));
 
   void ConfirmSensitiveDirectoryAccess(
       const url::Origin& origin,
       const std::vector<base::FilePath>& paths,
-      bool is_directory,
+      HandleType handle_type,
       GlobalFrameRoutingId frame_id,
       base::OnceCallback<void(SensitiveDirectoryResult)> callback) override;
   MOCK_METHOD5(
       ConfirmSensitiveDirectoryAccess_,
       void(const url::Origin& origin,
            const std::vector<base::FilePath>& paths,
-           bool is_directory,
+           HandleType handle_type,
            GlobalFrameRoutingId frame_id,
            base::OnceCallback<void(SensitiveDirectoryResult)>& callback));
 
@@ -66,6 +53,7 @@ class MockNativeFileSystemPermissionContext
                     GlobalFrameRoutingId frame_id,
                     base::OnceCallback<void(AfterWriteCheckResult)>& callback));
 
+  MOCK_METHOD1(CanObtainReadPermission, bool(const url::Origin& origin));
   MOCK_METHOD1(CanObtainWritePermission, bool(const url::Origin& origin));
 };
 

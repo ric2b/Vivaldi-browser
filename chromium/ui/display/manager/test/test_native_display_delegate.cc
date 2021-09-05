@@ -24,7 +24,7 @@ TestNativeDisplayDelegate::TestNativeDisplayDelegate(ActionLogger* log)
       run_async_(false),
       log_(log) {}
 
-TestNativeDisplayDelegate::~TestNativeDisplayDelegate() {}
+TestNativeDisplayDelegate::~TestNativeDisplayDelegate() = default;
 
 void TestNativeDisplayDelegate::Initialize() {
   log_->AppendAction(kInit);
@@ -55,30 +55,32 @@ void TestNativeDisplayDelegate::GetDisplays(GetDisplaysCallback callback) {
   }
 }
 
-bool TestNativeDisplayDelegate::Configure(const DisplaySnapshot& output,
-                                          const DisplayMode* mode,
-                                          const gfx::Point& origin) {
-  log_->AppendAction(GetCrtcAction(output, mode, origin));
+bool TestNativeDisplayDelegate::Configure(
+    const display::DisplayConfigurationParams& display_config_params) {
+  log_->AppendAction(GetCrtcAction(display_config_params));
 
   if (max_configurable_pixels_ == 0)
     return true;
 
-  if (!mode)
+  if (!display_config_params.mode.has_value())
     return false;
 
-  return mode->size().GetArea() <= max_configurable_pixels_;
+  return display_config_params.mode.value()->size().GetArea() <=
+         max_configurable_pixels_;
 }
 
-void TestNativeDisplayDelegate::Configure(const DisplaySnapshot& output,
-                                          const DisplayMode* mode,
-                                          const gfx::Point& origin,
-                                          ConfigureCallback callback) {
-  bool result = Configure(output, mode, origin);
+void TestNativeDisplayDelegate::Configure(
+    const std::vector<display::DisplayConfigurationParams>& config_requests,
+    ConfigureCallback callback) {
+  base::flat_map<int64_t, bool> statuses;
+  for (const auto& config : config_requests)
+    statuses.insert(std::make_pair(config.id, Configure(config)));
+
   if (run_async_) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback), result));
+        FROM_HERE, base::BindOnce(std::move(callback), statuses));
   } else {
-    std::move(callback).Run(result);
+    std::move(callback).Run(statuses);
   }
 }
 

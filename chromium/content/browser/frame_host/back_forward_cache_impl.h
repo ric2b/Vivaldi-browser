@@ -21,6 +21,7 @@
 #include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/common/content_features.h"
+#include "third_party/blink/public/mojom/page/page.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -46,6 +47,16 @@ constexpr base::Feature kRecordBackForwardCacheMetricsWithoutEnabling{
 // the current_frame_host.
 class CONTENT_EXPORT BackForwardCacheImpl : public BackForwardCache {
  public:
+  enum MessageHandlingPolicyWhenCached {
+    kMessagePolicyNone,
+    kMessagePolicyLog,
+    kMessagePolicyDump,
+    kMessagePolicyKill,
+  };
+
+  static MessageHandlingPolicyWhenCached
+  GetChannelAssociatedMessageHandlingPolicy();
+
   struct Entry {
     using RenderFrameProxyHostMap =
         std::unordered_map<int32_t /* SiteInstance ID */,
@@ -76,10 +87,9 @@ class CONTENT_EXPORT BackForwardCacheImpl : public BackForwardCache {
     // unwittingly iterating over RenderViewHostImpls that are in the cache.
     std::set<RenderViewHostImpl*> render_view_hosts;
 
-    // Timestamp of the start of the navigation restoring this entry from the
-    // back-forward cache. Set when the entry is restored from back-forward
-    // cache.
-    base::TimeTicks restore_navigation_start;
+    // Additional parameters to send with SetPageLifecycleState calls when we're
+    // restoring a page from the back-forward cache.
+    blink::mojom::PageRestoreParamsPtr page_restore_params;
 
     DISALLOW_COPY_AND_ASSIGN(Entry);
   };
@@ -87,10 +97,23 @@ class CONTENT_EXPORT BackForwardCacheImpl : public BackForwardCache {
   BackForwardCacheImpl();
   ~BackForwardCacheImpl();
 
-  // Returns whether a RenderFrameHost can be stored into the
-  // BackForwardCache. Depends on the |render_frame_host| and its children's
-  // state.
-  BackForwardCacheCanStoreDocumentResult CanStoreDocument(
+  // Returns whether a RenderFrameHost can be stored into the BackForwardCache
+  // right now. Depends on the |render_frame_host| and its children's state.
+  // Should only be called after we've navigated away from |render_frame_host|,
+  // which means nothing about the page can change (usage of blocklisted
+  // features, pending navigations, load state, etc.) anymore.
+  BackForwardCacheCanStoreDocumentResult CanStorePageNow(
+      RenderFrameHostImpl* render_frame_host);
+
+  // Whether a RenderFrameHost could be stored into the BackForwardCache at some
+  // point in the future. Different than CanStorePageNow() above, we won't check
+  // for properties of |render_frame_host| that might change in the future such
+  // as usage of certain APIs, loading state, existence of pending navigation
+  // requests, etc. This should be treated as a "best guess" on whether a page
+  // still has a chance to be stored in the back-forward cache later on, and
+  // should not be used as a final check before storing a page to the
+  // back-forward cache (for that, use CanStorePageNow() instead).
+  BackForwardCacheCanStoreDocumentResult CanPotentiallyStorePageLater(
       RenderFrameHostImpl* render_frame_host);
 
   // Moves the specified BackForwardCache entry into the BackForwardCache. It
@@ -110,11 +133,15 @@ class CONTENT_EXPORT BackForwardCacheImpl : public BackForwardCache {
   Entry* GetEntry(int navigation_entry_id);
 
   // During a history navigation, moves an entry out of the BackForwardCache
-  // knowing its |navigation_entry_id|. Here |navigation_start| refers to the
-  // start time of navigation to restored entry in cache. Returns nullptr when
-  // none is found.
-  std::unique_ptr<Entry> RestoreEntry(int navigation_entry_id,
-                                      base::TimeTicks navigation_start);
+  // knowing its |navigation_entry_id|. |page_restore_params| includes
+  // information that is needed by the entry's page after getting restored,
+  // which includes the latest history information (offset, length) and the
+  // timestamp corresponding to the start of the back-forward cached navigation,
+  // which would be communicated to the page to allow it to record the latency
+  // of this navigation.
+  std::unique_ptr<Entry> RestoreEntry(
+      int navigation_entry_id,
+      blink::mojom::PageRestoreParamsPtr page_restore_params);
 
   // Evict all entries from the BackForwardCache.
   void Flush();
@@ -177,9 +204,14 @@ class CONTENT_EXPORT BackForwardCacheImpl : public BackForwardCache {
   // Destroys all evicted frames in the BackForwardCache.
   void DestroyEvictedFrames();
 
-  // Helper for recursively checking each child.
-  void CanStoreRenderFrameHost(BackForwardCacheCanStoreDocumentResult* result,
-                               RenderFrameHostImpl* render_frame_host);
+  // Helper for recursively checking each child. See CanStorePageNow() and
+  // CanPotentiallyStorePageLater().
+  void CheckDynamicStatesOnSubtree(
+      BackForwardCacheCanStoreDocumentResult* result,
+      RenderFrameHostImpl* render_frame_host);
+  void CanStoreRenderFrameHostLater(
+      BackForwardCacheCanStoreDocumentResult* result,
+      RenderFrameHostImpl* render_frame_host);
 
   // Contains the set of stored Entries.
   // Invariant:

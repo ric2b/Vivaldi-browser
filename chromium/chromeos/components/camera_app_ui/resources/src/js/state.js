@@ -24,6 +24,7 @@ export const State = {
   GRID_GOLDEN: 'golden',
   GRID: 'grid',
   HAS_BACK_CAMERA: 'has-back-camera',
+  HAS_EXTERNAL_SCREEN: 'has-external-screen',
   HAS_FRONT_CAMERA: 'has-front-camera',
   MAX_WND: 'max-wnd',
   MIC: 'mic',
@@ -35,7 +36,7 @@ export const State = {
   PLAYING_RESULT_VIDEO: 'playing-result-video',
   PREVIEW_VERTICAL_DOCK: 'preview-vertical-dock',
   PRINT_PERFORMANCE_LOGS: 'print-performance-logs',
-  // Starts/Ends from start()/at stop() of MediaRecorder.
+  // Starts/Ends when start/stop event of MediaRecorder is triggered.
   RECORDING: 'recording',
   // Binds with paused state of MediaRecorder.
   RECORDING_PAUSED: 'recording-paused',
@@ -67,7 +68,7 @@ export const State = {
 };
 
 /**
- * @typedef {(State|Mode|ViewName|PerfEvent)}
+ * @typedef {(!State|!Mode|!ViewName|!PerfEvent)}
  */
 export let StateUnion;
 
@@ -77,26 +78,26 @@ const stateValues =
 /**
  * Asserts input string is valid state.
  * @param {string} s
- * @return {State}
+ * @return {!State}
  */
 export function assertState(s) {
   assert(stateValues.has(s), `No such state: ${s}`);
-  return /** @type {State} */ (s);
+  return /** @type {!State} */ (s);
 }
 
 /**
- * @typedef {function(boolean, PerfInformation=)}
+ * @typedef {function(boolean, !PerfInformation=)}
  */
 let StateObserver;  // eslint-disable-line no-unused-vars
 
 /**
- * @type {!Map<StateUnion, Set<!StateObserver>>}
+ * @type {!Map<!StateUnion, !Set<!StateObserver>>}
  */
 const allObservers = new Map();
 
 /**
  * Adds observer function to be called on any state change.
- * @param {StateUnion} state State to be observed.
+ * @param {!StateUnion} state State to be observed.
  * @param {!StateObserver} observer Observer function called with
  *     newly changed value.
  */
@@ -111,7 +112,7 @@ export function addObserver(state, observer) {
 
 /**
  * Removes observer function to be called on state change.
- * @param {StateUnion} state State to remove observer from.
+ * @param {!StateUnion} state State to remove observer from.
  * @param {!StateObserver} observer Observer function to be removed.
  * @return {boolean} Whether the observer is in the set and is removed
  *     successfully or not.
@@ -126,7 +127,7 @@ export function removeObserver(state, observer) {
 
 /**
  * Checks if the specified state exists.
- * @param {StateUnion} state State to be checked.
+ * @param {!StateUnion} state State to be checked.
  * @return {boolean} Whether the state exists.
  */
 export function get(state) {
@@ -136,9 +137,9 @@ export function get(state) {
 /**
  * Sets the specified state on or off. Optionally, pass the information for
  * performance measurement.
- * @param {StateUnion} state State to be set.
+ * @param {!StateUnion} state State to be set.
  * @param {boolean} val True to set the state on, false otherwise.
- * @param {PerfInformation=} perfInfo Optional information of this state
+ * @param {!PerfInformation=} perfInfo Optional information of this state
  *     for performance measurement.
  */
 export function set(state, val, perfInfo = {}) {

@@ -4,10 +4,17 @@
 
 package org.chromium.chrome.browser.feed.v2;
 
+import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewGroup.LayoutParams;
+import android.view.ViewParent;
+import android.widget.FrameLayout;
 
+import androidx.annotation.Nullable;
+
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.xsurface.FeedActionsHandler;
 import org.chromium.chrome.browser.xsurface.ListContentManager;
 import org.chromium.chrome.browser.xsurface.ListContentManagerObserver;
@@ -79,6 +86,9 @@ public class FeedListContentManager implements ListContentManager {
     public static class NativeViewContent extends FeedContent {
         private View mNativeView;
         private int mResId;
+        // An unique ID for this NativeViewContent. This is initially 0, and assigned by
+        // FeedListContentManager when needed.
+        private int mViewType;
 
         /** Holds an inflated native view. */
         public NativeViewContent(String key, View nativeView) {
@@ -97,10 +107,40 @@ public class FeedListContentManager implements ListContentManager {
          * Returns the native view if the content is supported by it. Null otherwise.
          */
         public View getNativeView(ViewGroup parent) {
+            Context context = parent.getContext();
             if (mNativeView == null) {
-                mNativeView =
-                        LayoutInflater.from(parent.getContext()).inflate(mResId, parent, false);
+                mNativeView = LayoutInflater.from(context).inflate(mResId, parent, false);
             }
+
+            // If there's already a parent, we have already enclosed this view previously.
+            // This can happen if a native view is added, removed, and added again.
+            ViewParent nativeViewParent = mNativeView.getParent();
+            if (nativeViewParent != null) {
+                assert nativeViewParent instanceof View;
+                return (View) nativeViewParent;
+            }
+
+            FrameLayout enclosingLayout = new FrameLayout(parent.getContext());
+            // Set the left and right margins.
+            FrameLayout.LayoutParams layoutParams = new FrameLayout.LayoutParams(
+                    new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+            layoutParams.leftMargin = context.getResources().getDimensionPixelSize(
+                    R.dimen.ntp_header_lateral_margins_v2);
+            layoutParams.rightMargin = layoutParams.leftMargin;
+            enclosingLayout.setLayoutParams(layoutParams);
+            enclosingLayout.addView(mNativeView);
+            return enclosingLayout;
+        }
+
+        int getViewType() {
+            return mViewType;
+        }
+
+        void setViewType(int viewType) {
+            mViewType = viewType;
+        }
+
+        public View getNestedView() {
             return mNativeView;
         }
 
@@ -113,6 +153,7 @@ public class FeedListContentManager implements ListContentManager {
     private ArrayList<FeedContent> mFeedContentList;
     private ArrayList<ListContentManagerObserver> mObservers;
     private final Map<String, Object> mHandlers;
+    private int mPreviousViewType;
 
     FeedListContentManager(
             SurfaceActionsHandler surfaceActionsHandler, FeedActionsHandler feedActionsHandler) {
@@ -242,10 +283,18 @@ public class FeedListContentManager implements ListContentManager {
     }
 
     @Override
-    public View getNativeView(int index, ViewGroup parent) {
-        assert mFeedContentList.get(index).isNativeView();
-        NativeViewContent nativeViewContent = (NativeViewContent) mFeedContentList.get(index);
-        return nativeViewContent.getNativeView(parent);
+    public int getViewType(int position) {
+        assert mFeedContentList.get(position).isNativeView();
+        NativeViewContent content = (NativeViewContent) mFeedContentList.get(position);
+        if (content.getViewType() == 0) content.setViewType(++mPreviousViewType);
+        return content.getViewType();
+    }
+
+    @Override
+    public View getNativeView(int viewType, ViewGroup parent) {
+        NativeViewContent viewContent = findNativeViewByType(viewType);
+        assert viewContent != null;
+        return viewContent.getNativeView(parent);
     }
 
     @Override
@@ -266,5 +315,18 @@ public class FeedListContentManager implements ListContentManager {
     @Override
     public void removeObserver(ListContentManagerObserver observer) {
         mObservers.remove(observer);
+    }
+
+    @Nullable
+    private NativeViewContent findNativeViewByType(int viewType) {
+        // Note: since there's relatively few native views, they're mostly at the front, a linear
+        // search isn't terrible. This function is also called infrequently.
+        for (int i = 0; i < mFeedContentList.size(); i++) {
+            FeedContent item = mFeedContentList.get(i);
+            if (!item.isNativeView()) continue;
+            NativeViewContent nativeContent = (NativeViewContent) item;
+            if (nativeContent.getViewType() == viewType) return nativeContent;
+        }
+        return null;
     }
 }

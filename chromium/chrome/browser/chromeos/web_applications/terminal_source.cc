@@ -97,12 +97,12 @@ TerminalSource::TerminalSource(Profile* profile,
   auto* webui_allowlist = WebUIAllowlist::GetOrCreate(profile);
   const url::Origin terminal_origin = url::Origin::Create(GURL(source));
   CHECK(!terminal_origin.opaque());
-  webui_allowlist->RegisterAutoGrantedPermission(
-      terminal_origin, ContentSettingsType::NOTIFICATIONS);
-  webui_allowlist->RegisterAutoGrantedPermission(
-      terminal_origin, ContentSettingsType::CLIPBOARD_READ_WRITE);
-  webui_allowlist->RegisterAutoGrantedPermission(terminal_origin,
-                                                 ContentSettingsType::COOKIES);
+  for (auto permission :
+       {ContentSettingsType::JAVASCRIPT, ContentSettingsType::NOTIFICATIONS,
+        ContentSettingsType::CLIPBOARD_READ_WRITE, ContentSettingsType::COOKIES,
+        ContentSettingsType::IMAGES, ContentSettingsType::SOUND}) {
+    webui_allowlist->RegisterAutoGrantedPermission(terminal_origin, permission);
+  }
 }
 
 TerminalSource::~TerminalSource() = default;
@@ -163,6 +163,13 @@ std::string TerminalSource::GetContentSecurityPolicy(
       return "media-src data:;";
     case network::mojom::CSPDirectiveName::StyleSrc:
       return "style-src * 'unsafe-inline'; font-src *;";
+    case network::mojom::CSPDirectiveName::RequireTrustedTypesFor:
+      FALLTHROUGH;
+    case network::mojom::CSPDirectiveName::TrustedTypes:
+      // TODO(crbug.com/1098685): Trusted Type remaining WebUI
+      // This removes require-trusted-types-for and trusted-types directives
+      // from the CSP header.
+      return std::string();
     default:
       return content::URLDataSource::GetContentSecurityPolicy(directive);
   }

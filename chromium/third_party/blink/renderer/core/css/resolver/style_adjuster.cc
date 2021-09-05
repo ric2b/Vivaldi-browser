@@ -50,11 +50,13 @@
 #include "third_party/blink/renderer/core/html/html_table_cell_element.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
+#include "third_party/blink/renderer/core/input_type_names.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_replaced.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
 #include "third_party/blink/renderer/core/layout/list_marker.h"
 #include "third_party/blink/renderer/core/mathml/mathml_fraction_element.h"
+#include "third_party/blink/renderer/core/mathml/mathml_padded_element.h"
 #include "third_party/blink/renderer/core/mathml/mathml_space_element.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
@@ -99,9 +101,19 @@ void AdjustBackgroundForForcedColorsMode(StyleResolverState& state,
           .Alpha();
   Color bg_color_rbg = StyleColor::ColorFromKeyword(
       style.InternalForcedBackgroundColorRgb(), WebColorScheme::kLight);
-  Color bg_color = Color(bg_color_rbg.Red(), bg_color_rbg.Green(),
-                         bg_color_rbg.Blue(), bg_color_alpha);
+  StyleColor bg_color(Color(bg_color_rbg.Red(), bg_color_rbg.Green(),
+                            bg_color_rbg.Blue(), bg_color_alpha));
   style.SetBackgroundColor(bg_color);
+}
+
+bool HostIsInputFile(const Element* element) {
+  if (!element || !element->IsInUserAgentShadowRoot())
+    return false;
+  if (const Element* shadow_host = element->OwnerShadowHost()) {
+    if (const auto* input = DynamicTo<HTMLInputElement>(shadow_host))
+      return input->type() == input_type_names::kFile;
+  }
+  return false;
 }
 
 }  // namespace
@@ -227,6 +239,14 @@ static void AdjustStyleForFirstLetter(ComputedStyle& style) {
   style.SetPosition(EPosition::kStatic);
 }
 
+static void AdjustStyleForFirstLine(ComputedStyle& style) {
+  if (style.StyleType() != kPseudoIdFirstLine)
+    return;
+
+  // Force inline display.
+  style.SetDisplay(EDisplay::kInline);
+}
+
 static void AdjustStyleForMarker(ComputedStyle& style,
                                  const ComputedStyle& parent_style,
                                  const Element& parent_element) {
@@ -239,8 +259,7 @@ static void AdjustStyleForMarker(ComputedStyle& style,
        !parent_style.IsInsideListElement());
 
   if (is_inside) {
-    auto margins = ListMarker::InlineMarginsForInside(
-        style, parent_style.GeneratesMarkerImage());
+    auto margins = ListMarker::InlineMarginsForInside(style, parent_style);
     style.SetMarginStart(Length::Fixed(margins.first));
     style.SetMarginEnd(Length::Fixed(margins.second));
   } else {
@@ -428,15 +447,18 @@ void StyleAdjuster::AdjustOverflow(ComputedStyle& style) {
 
 static void AdjustStyleForDisplay(ComputedStyle& style,
                                   const ComputedStyle& layout_parent_style,
+                                  const Element* element,
                                   Document* document) {
   // Blockify the children of flex, grid or LayoutCustom containers.
-  if (layout_parent_style.BlockifiesChildren()) {
+  if (layout_parent_style.BlockifiesChildren() && !HostIsInputFile(element)) {
     style.SetIsInBlockifyingDisplay();
     if (style.Display() != EDisplay::kContents) {
       style.SetDisplay(EquivalentBlockDisplay(style.Display()));
       if (!style.HasOutOfFlowPosition())
         style.SetIsFlexOrGridOrCustomItem();
     }
+    if (layout_parent_style.IsDisplayFlexibleOrGridBox())
+      style.SetIsFlexOrGridItem();
   }
 
   if (style.Display() == EDisplay::kBlock && !style.IsFloating())
@@ -503,8 +525,6 @@ static void AdjustStyleForDisplay(ComputedStyle& style,
     style.SetUserModify(EUserModify::kReadOnly);
 
   if (layout_parent_style.IsDisplayFlexibleOrGridBox()) {
-    style.SetFloating(EFloat::kNone);
-
     // We want to count vertical percentage paddings/margins on flex items
     // because our current behavior is different from the spec and we want to
     // gather compatibility data.
@@ -644,9 +664,10 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
     // We don't adjust the first letter style earlier because we may change the
     // display setting in adjustStyeForTagName() above.
     AdjustStyleForFirstLetter(style);
+    AdjustStyleForFirstLine(style);
     AdjustStyleForMarker(style, parent_style, state.GetElement());
 
-    AdjustStyleForDisplay(style, layout_parent_style,
+    AdjustStyleForDisplay(style, layout_parent_style, element,
                           element ? &element->GetDocument() : nullptr);
 
     // If this is a child of a LayoutNGCustom, we need the name of the parent
@@ -740,6 +761,14 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
     }
     if (auto* space = DynamicTo<MathMLSpaceElement>(*element)) {
       space->AddMathBaselineIfNeeded(style, state.CssToLengthConversionData());
+    } else if (auto* padded = DynamicTo<MathMLPaddedElement>(*element)) {
+      padded->AddMathBaselineIfNeeded(style, state.CssToLengthConversionData());
+      padded->AddMathPaddedDepthIfNeeded(style,
+                                         state.CssToLengthConversionData());
+      padded->AddMathPaddedLSpaceIfNeeded(style,
+                                          state.CssToLengthConversionData());
+      padded->AddMathPaddedVOffsetIfNeeded(style,
+                                           state.CssToLengthConversionData());
     } else if (auto* fraction = DynamicTo<MathMLFractionElement>(*element)) {
       fraction->AddMathFractionBarThicknessIfNeeded(
           style, state.CssToLengthConversionData());
@@ -776,9 +805,7 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
   if (is_media_control && !style.HasEffectiveAppearance()) {
     // For compatibility reasons if the element is a media control and the
     // -webkit-appearance is none then we should clear the background image.
-    if (!StyleResolver::HasAuthorBackground(state)) {
-      style.MutableBackgroundInternal().ClearImage();
-    }
+    style.MutableBackgroundInternal().ClearImage();
   }
 
   if (element && style.TextOverflow() == ETextOverflow::kEllipsis) {

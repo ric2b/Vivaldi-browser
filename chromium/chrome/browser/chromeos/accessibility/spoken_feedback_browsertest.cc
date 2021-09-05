@@ -151,7 +151,8 @@ void LoggedInSpokenFeedbackTest::EnableChromeVox() {
   sm_.Call([this]() { DisableEarcons(); });
 }
 
-IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, AddBookmark) {
+// Flaky test, crbug.com/1081563
+IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, DISABLED_AddBookmark) {
   EnableChromeVox();
 
   sm_.Call(
@@ -223,6 +224,46 @@ IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, NavigateNotificationCenter) {
   sm_.ExpectSpeech("List item");
 
   // Furthermore, navigation is generally broken using Search+Left.
+
+  sm_.Replay();
+}
+
+// Test Learn Mode by pressing a few keys in Learn Mode. Only available while
+// logged in.
+IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, LearnModeHardwareKeys) {
+  EnableChromeVox();
+  sm_.Call([this]() {
+    extensions::browsertest_util::ExecuteScriptInBackgroundPageNoWait(
+        browser()->profile(), extension_misc::kChromeVoxExtensionId,
+        "CommandHandler.onCommand('showKbExplorerPage');");
+  });
+  sm_.ExpectSpeech("ChromeVox Learn Mode");
+  sm_.ExpectSpeech(
+      "Press a qwerty key, refreshable braille key, or touch gesture to learn "
+      "its function. Press control with w or escape to exit.");
+
+  // These are the default top row keys and their descriptions which live in
+  // ChromeVox.
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F1); });
+  sm_.ExpectSpeech("back");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F2); });
+  sm_.ExpectSpeech("forward");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F3); });
+  sm_.ExpectSpeech("refresh");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F4); });
+  sm_.ExpectSpeech("toggle full screen");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F5); });
+  sm_.ExpectSpeech("window overview");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F6); });
+  sm_.ExpectSpeech("Brightness down");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F7); });
+  sm_.ExpectSpeech("Brightness up");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F8); });
+  sm_.ExpectSpeech("volume mute");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F9); });
+  sm_.ExpectSpeech("volume down");
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F10); });
+  sm_.ExpectSpeech("volume up");
 
   sm_.Replay();
 }
@@ -788,6 +829,13 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, SmartStickyMode) {
   sm_.ExpectNextSpeechIsNotPattern("Sticky mode *abled");
   sm_.ExpectSpeech("end");
 
+  sm_.Replay();
+}
+
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, HardwareKeysGetRewritten) {
+  EnableChromeVox();
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_F7); });
+  sm_.ExpectSpeech("Darken screen");
   sm_.Replay();
 }
 

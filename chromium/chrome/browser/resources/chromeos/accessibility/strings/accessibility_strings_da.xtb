@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Punkt på listen</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Stryg til højre med to fingre</translation>
+<translation id="1016393160682012902">Tryk på en qwerty-tast, en opdaterbar brailletast eller en bevægelse for at lære den tilknyttede funktion. Tryk på Ctrl+W eller Escape for at afslutte.</translation>
 <translation id="1022586497894531524">Er det første gang, du bruger oplæsning i ChromeVox? Dette hurtige selvstudie giver dig de grundlæggende oplysninger, du skal bruge for at komme godt i gang med ChromeVox.</translation>
 <translation id="1025074108959230262">Sticky-tilstand er deaktiveret</translation>
 <translation id="1031961866430398710">og derefter</translation>
@@ -338,7 +339,7 @@
 <translation id="3492609944033322585">{COUNT,plural, =1{højre kantet parentes}one{# højre kantede parenteser}other{# højre kantede parenteser}}</translation>
 <translation id="3494946239022273294">mnuitm</translation>
 <translation id="3497063866483065785">{COUNT,plural, =1{spørgsmålstegn}one{# spørgsmålstegn}other{# spørgsmålstegn}}</translation>
-<translation id="3514822174137761109">{COUNT,plural, =1{cirkumfleks}one{ # cirkumflekser}other{# cirkumflekser}}</translation>
+<translation id="3514822174137761109">{COUNT,plural, =1{tekstmarkør}one{ # tekstmarkør}other{# tekstmarkører}}</translation>
 <translation id="352577523970648069">Et justerbart tekstfelt</translation>
 <translation id="3538907380453898475">bskrvlst</translation>
 <translation id="3549141990712742152">klip <ph name="TEXT" />.</translation>
@@ -447,7 +448,7 @@
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="4402014469255336455">Dyb himmelblå</translation>
 <translation id="4432457053224379116">Murstensrød</translation>
-<translation id="4437615272777527928">Skriv for at søge i menuerne. Brug pil op og pil ned for at gennemse resultaterne. Brug venstre- og højrepilen for at justere indskudstegnet og vælge menuer.</translation>
+<translation id="4437615272777527928">Skriv for at søge i menuerne. Brug pil op og pil ned for at gennemse resultaterne. Brug venstre- og højrepilen for at justere tekstmarkøren og vælge menuer.</translation>
 <translation id="4457472090507035117">Vælg den aktuelle stemme:</translation>
 <translation id="4476183483923481720">ny linje</translation>
 <translation id="4479068155583208887">Ildfast sten</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Internt link</translation>
 <translation id="4909019435900810068">Gå ét ord tilbage</translation>
 <translation id="4911349081560453449">Der er ingen forrige afkrydsningsfelter</translation>
-<translation id="4915087353619183190">Indlæringstilstanden startes. Tryk på en qwerty-tast, en opdaterbar brailletast eller en berøring for at få indblik i den tilknyttede funktion. Tryk på Ctrl og w eller escape for at afslutte.</translation>
 <translation id="492295894462528572">Forord</translation>
 <translation id="495046168593986294">Rul op</translation>
 <translation id="495170559598752135">Handlinger</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Grøn</translation>
 <translation id="602001110135236999">Rul til venstre</translation>
 <translation id="6034000775414344507">Lysegrå</translation>
+<translation id="6036135911048686884">Tryk for at udforske</translation>
 <translation id="6037602951055904232">Panorer fremad</translation>
 <translation id="6044160928851315051">Gør skærmen mørk</translation>
 <translation id="6082768461603900813">Grundlæggende navigation</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{pund}one{# pund-tegn}other{# pund-tegn}}</translation>
 <translation id="8378855320830505539">Område</translation>
 <translation id="8382679411218029383">Autofuldførelse på linje og på liste</translation>
+<translation id="8394908167088220973">Medie: Afspil/Pause</translation>
 <translation id="8428213095426709021">Indstillinger</translation>
 <translation id="8428603554127842284">niveau <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">luk struktureret indhold, som f.eks. tabeller</translation>
 <translation id="8779057862865475116">Der er ingen forrige links</translation>
 <translation id="8796411681063377102">Næste niveau 3-overskrift</translation>
+<translation id="8823311177246872527">Side <ph name="CURRENTPAGE" /> af <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">hovd</translation>
 <translation id="8882002077197914455">Rækkeoverskrift</translation>

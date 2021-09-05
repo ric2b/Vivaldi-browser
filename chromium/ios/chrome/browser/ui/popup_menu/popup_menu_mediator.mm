@@ -21,7 +21,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_prefs.h"
-#include "ios/chrome/browser/application_context.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/find_in_page/find_tab_helper.h"
@@ -147,6 +146,9 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 // Whether the hint for the "New Incognito Tab" item should be triggered.
 @property(nonatomic, assign) BOOL triggerNewIncognitoTabTip;
 
+// The current browser policy connector.
+@property(nonatomic, assign) BrowserPolicyConnectorIOS* browserPolicyConnector;
+
 // Whether an overlay is currently presented over the web content area.
 @property(nonatomic, assign, getter=isWebContentAreaShowingOverlay)
     BOOL webContentAreaShowingOverlay;
@@ -177,7 +179,9 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 - (instancetype)initWithType:(PopupMenuType)type
                   isIncognito:(BOOL)isIncognito
              readingListModel:(ReadingListModel*)readingListModel
-    triggerNewIncognitoTabTip:(BOOL)triggerNewIncognitoTabTip {
+    triggerNewIncognitoTabTip:(BOOL)triggerNewIncognitoTabTip
+       browserPolicyConnector:
+           (BrowserPolicyConnectorIOS*)browserPolicyConnector {
   self = [super init];
   if (self) {
     _isIncognito = isIncognito;
@@ -189,6 +193,7 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
     _overlayPresenterObserver =
         std::make_unique<OverlayPresenterObserverBridge>(self);
     _triggerNewIncognitoTabTip = triggerNewIncognitoTabTip;
+    _browserPolicyConnector = browserPolicyConnector;
   }
   return self;
 }
@@ -794,13 +799,15 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
         } else if (matched_types.find(ClipboardContentType::URL) !=
                    matched_types.end()) {
           copiedContentItem = CreateTableViewItem(
-              IDS_IOS_TOOLS_MENU_VISIT_COPIED_LINK, PopupMenuActionPasteAndGo,
-              @"popup_menu_paste_and_go", kToolsMenuPasteAndGo);
+              IDS_IOS_TOOLS_MENU_VISIT_COPIED_LINK,
+              PopupMenuActionVisitCopiedLink, @"popup_menu_paste_and_go",
+              kToolsMenuPasteAndGo);
         } else if (matched_types.find(ClipboardContentType::Text) !=
                    matched_types.end()) {
           copiedContentItem = CreateTableViewItem(
-              IDS_IOS_TOOLS_MENU_SEARCH_COPIED_TEXT, PopupMenuActionPasteAndGo,
-              @"popup_menu_paste_and_go", kToolsMenuPasteAndGo);
+              IDS_IOS_TOOLS_MENU_SEARCH_COPIED_TEXT,
+              PopupMenuActionSearchCopiedText, @"popup_menu_paste_and_go",
+              kToolsMenuPasteAndGo);
         }
         if (copiedContentItem) {
           [items addObject:@[ copiedContentItem ]];
@@ -844,7 +851,7 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
   NSArray* tabActions = [@[ self.reloadStopItem ]
       arrayByAddingObjectsFromArray:[self itemsForNewTab]];
 
-  if (IsMultiwindowSupported() && IsIPadIdiom()) {
+  if (IsMultipleScenesSupported()) {
     tabActions =
         [tabActions arrayByAddingObjectsFromArray:[self itemsForNewWindow]];
   }
@@ -854,10 +861,8 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
   NSArray* collectionActions = [self collectionItems];
 
   if (base::FeatureList::IsEnabled(kEnableIOSManagedSettingsUI) &&
-      GetApplicationContext()->GetBrowserPolicyConnector() &&
-      GetApplicationContext()
-          ->GetBrowserPolicyConnector()
-          ->HasMachineLevelPolicies()) {
+      _browserPolicyConnector &&
+      _browserPolicyConnector->HasMachineLevelPolicies()) {
     // Show enterprise infomation when chrome is managed by policy and the
     // settings UI flag is enabled.
     NSArray* textActions = [self enterpriseInfoSection];
@@ -883,7 +888,7 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 }
 
 - (NSArray<TableViewItem*>*)itemsForNewWindow {
-  if (!IsMultiwindowSupported())
+  if (!IsMultipleScenesSupported())
     return @[];
 
   // Create the menu item -- hardcoded string and no accessibility ID.

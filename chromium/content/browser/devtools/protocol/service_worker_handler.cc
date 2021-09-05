@@ -36,6 +36,7 @@
 #include "url/gurl.h"
 
 namespace content {
+
 namespace protocol {
 
 namespace {
@@ -256,7 +257,7 @@ Response ServiceWorkerHandler::StartWorker(const std::string& scope_url) {
     return CreateDomainNotEnabledErrorResponse();
   if (!context_)
     return CreateContextErrorResponse();
-  context_->StartServiceWorker(GURL(scope_url), base::DoNothing());
+  context_->StartActiveServiceWorker(GURL(scope_url), base::DoNothing());
   return Response::Success();
 }
 
@@ -351,7 +352,7 @@ Response ServiceWorkerHandler::DeliverPushMessage(
   BrowserContext::DeliverPushMessage(
       browser_context_, GURL(origin), id, /* push_message_id= */ std::string(),
       std::move(payload),
-      base::BindOnce([](blink::mojom::PushDeliveryStatus status) {}));
+      base::BindOnce([](blink::mojom::PushEventStatus status) {}));
 
   return Response::Success();
 }
@@ -480,7 +481,7 @@ void ServiceWorkerHandler::OnWorkerVersionUpdated(
 void ServiceWorkerHandler::OnErrorReported(
     int64_t registration_id,
     int64_t version_id,
-    const ServiceWorkerContextCoreObserver::ErrorInfo& info) {
+    const ServiceWorkerContextObserver::ErrorInfo& info) {
   frontend_->WorkerErrorReported(
       ServiceWorker::ServiceWorkerErrorMessage::Create()
           .SetErrorMessage(base::UTF16ToUTF8(info.error_message))

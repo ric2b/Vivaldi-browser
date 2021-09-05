@@ -10,13 +10,14 @@
 #include "base/strings/string_piece_forward.h"
 #include "base/thread_annotations.h"
 #include "chrome/browser/privacy_budget/privacy_budget_prefs.h"
+#include "chrome/browser/privacy_budget/sampled_surface_tracker.h"
 #include "chrome/common/privacy_budget/privacy_budget_settings_provider.h"
 #include "components/prefs/pref_service.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
 
 namespace test_utils {
-class InspectableIdentifiabilityStudySettings;
+class InspectableIdentifiabilityStudyState;
 }  // namespace test_utils
 
 // Current state of the identifiability study.
@@ -29,6 +30,12 @@ class InspectableIdentifiabilityStudySettings;
 //   but was demoted due to some reason. Typically this happens if an active
 //   surface is blocked by a settings change. These are kept around in order to
 //   minimize the total number of surfaces that we record per client.
+//
+// * Which identifiable surfaces are "tracked". I.e. we record whether a site
+//   measured this surface. This restriction is primarily to limit the amount
+//   of data that gets sent to UKM.  Note that this is independent of what
+//   surfaces are considered "active". This set is reset periodically to ensure
+//   we get a variety of different measurements.
 //
 // * The PRNG seed that we use for various pseudo-random operations.
 //
@@ -45,18 +52,6 @@ class IdentifiabilityStudyState {
 
   ~IdentifiabilityStudyState();
 
-  // True if this client is included in the identifiability study.
-  //
-  // A client (i.e. a browser instance) participates in the study if all of the
-  // following are true:
-  //   * `kIdentifiabilityStudy` feature is enabled.
-  //   * `kIdentifiabilityStudyMaxSurfaces` is non-zero.
-  //
-  // In addition, none of this is relevant if UKM collection is disabled for the
-  // client. If that was the case, this class would not be instantiated in the
-  // first place.
-  bool IsActive() const { return settings_.IsActive(); }
-
   // Returns the active experiment generation as defined by the server-side
   // configuration.
   //
@@ -71,9 +66,18 @@ class IdentifiabilityStudyState {
   // Calling this method may alter the state of the study settings.
   bool ShouldSampleSurface(blink::IdentifiableSurface surface);
 
-  // Returns true if the `surface` is blocked by configuration. Does not take
-  // into account whether the surface is included in the study or not.
-  bool IsSurfaceBlocked(blink::IdentifiableSurface surface) const;
+  // Should be called from unit-tests if multiple IdentifiabilityStudyState
+  // instances are to be constructed.
+  static void ResetStateForTesting();
+
+  // Returns true if tracking metrics should be recorded for this
+  // source_id/surface combination.
+  bool ShouldRecordSurface(uint64_t source_id,
+                           blink::IdentifiableSurface surface);
+
+  // Clear the sampled surface state from the state tracker. Ideally this would
+  // be called each time a UKM report generated.
+  void ResetRecordedSurfaces();
 
   // A knob that we can use to split data sets from different versions of the
   // implementation where the differences could have material effects on the
@@ -85,7 +89,7 @@ class IdentifiabilityStudyState {
   static constexpr int kGeneratorVersion = 1;
 
  private:
-  friend class test_utils::InspectableIdentifiabilityStudySettings;
+  friend class test_utils::InspectableIdentifiabilityStudyState;
 
   using IdentifiableSurfaceSet =
       PrivacyBudgetSettingsProvider::IdentifiableSurfaceSet;
@@ -98,8 +102,10 @@ class IdentifiabilityStudyState {
   using TypeSelectionRateMap =
       base::flat_map<blink::IdentifiableSurface::Type, int>;
 
-  static std::string EncodedValueFromSurfaces(
-      const IdentifiableSurfaceSet& surfaces);
+  // Initializes global study settings based on FeatureLists and FieldTrial
+  // lists. This step is required for enabling the study and must be called
+  // prior to constructing an `IdentifiabilityStudyState` object.
+  static void InitializeGlobalStudySettings();
 
   // Checks that the invariants hold. When DCHECK_IS_ON() this call is
   // expensive. Noop otherwise.
@@ -212,8 +218,18 @@ class IdentifiabilityStudyState {
   //   * max_active_surfaces_ ≤ kIdentifiabilityStudyMaxSurfaces.
   const size_t max_active_surfaces_;
 
-  // Overall study state and per-surface and per-type blocking.
-  const PrivacyBudgetSettingsProvider settings_;
+  // Set of identifiable surfaces for which we record when the site makes
+  // measurement surfaces. This set is
+  // updated as we go unless it is already saturated, and resets itself
+  // periodically.
+  //
+  // Invariants:
+  //
+  //   * tracked_surfaces_ ∩ settings_.blocked_surfaces() = Ø.
+  //
+  //   * tracked_surfaces_.GetType() ∩ settings_.blocked_types() = Ø.
+  //
+  SampledSurfaceTracker tracked_surfaces_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 };

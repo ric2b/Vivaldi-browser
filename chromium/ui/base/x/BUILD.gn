@@ -2,14 +2,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/jumbo.gni")
 import("//build/config/linux/gtk/gtk.gni")
 import("//build/config/ui.gni")
 import("//ui/ozone/ozone.gni")
 
 assert(use_x11 || ozone_platform_x11)
 
-jumbo_component("x") {
+component("x") {
   output_name = "ui_base_x"
 
   sources = [
@@ -19,6 +18,8 @@ jumbo_component("x") {
     "x11_cursor.h",
     "x11_cursor_factory.cc",
     "x11_cursor_factory.h",
+    "x11_cursor_loader.cc",
+    "x11_cursor_loader.h",
     "x11_desktop_window_move_client.cc",
     "x11_desktop_window_move_client.h",
     "x11_display_manager.cc",
@@ -41,9 +42,10 @@ jumbo_component("x") {
     "x11_software_bitmap_presenter.h",
     "x11_topmost_window_finder.cc",
     "x11_topmost_window_finder.h",
+    "x11_ui_thread.cc",
+    "x11_ui_thread.h",
     "x11_util.cc",
     "x11_util.h",
-    "x11_util_internal.h",
     "x11_whole_screen_move_loop.cc",
     "x11_whole_screen_move_loop.h",
     "x11_window.cc",
@@ -73,6 +75,7 @@ jumbo_component("x") {
     "//net",
     "//skia",
     "//ui/base:data_exchange",
+    "//ui/base:features",
     "//ui/base:hit_test",
     "//ui/base:wm_role_names",
     "//ui/base/clipboard:clipboard_types",
@@ -126,9 +129,13 @@ source_set("test_support") {
 
 source_set("unittests") {
   testonly = true
-  sources = [ "x11_cursor_factory_unittest.cc" ]
+  sources = [
+    "x11_cursor_factory_unittest.cc",
+    "x11_cursor_loader_unittest.cc",
+  ]
   deps = [
     ":x",
+    "//base",
     "//skia",
     "//testing/gtest",
     "//ui/gfx/geometry",

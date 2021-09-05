@@ -7,10 +7,12 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
+#include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
-#include "components/enterprise/common/proto/connectors.pb.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
 
 namespace safe_browsing {
 
@@ -66,17 +68,17 @@ ContentAnalysisScanResult::~ContentAnalysisScanResult() = default;
 ContentAnalysisScanResult& ContentAnalysisScanResult::operator=(
     const ContentAnalysisScanResult& other) = default;
 
-void MaybeReportDeepScanningVerdict(
-    Profile* profile,
-    const GURL& url,
-    const std::string& file_name,
-    const std::string& download_digest_sha256,
-    const std::string& mime_type,
-    const std::string& trigger,
-    DeepScanAccessPoint access_point,
-    const int64_t content_size,
-    BinaryUploadService::Result result,
-    const DeepScanningClientResponse& response) {
+void MaybeReportDeepScanningVerdict(Profile* profile,
+                                    const GURL& url,
+                                    const std::string& file_name,
+                                    const std::string& download_digest_sha256,
+                                    const std::string& mime_type,
+                                    const std::string& trigger,
+                                    DeepScanAccessPoint access_point,
+                                    const int64_t content_size,
+                                    BinaryUploadService::Result result,
+                                    const DeepScanningClientResponse& response,
+                                    EventResult event_result) {
   DCHECK(std::all_of(download_digest_sha256.begin(),
                      download_digest_sha256.end(), [](const char& c) {
                        return (c >= '0' && c <= '9') ||
@@ -88,7 +90,7 @@ void MaybeReportDeepScanningVerdict(
     extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
         ->OnUnscannedFileEvent(url, file_name, download_digest_sha256,
                                mime_type, trigger, access_point,
-                               unscanned_reason, content_size);
+                               unscanned_reason, content_size, event_result);
   }
 
   if (result != BinaryUploadService::Result::SUCCESS)
@@ -98,9 +100,9 @@ void MaybeReportDeepScanningVerdict(
       response.malware_scan_verdict().verdict() ==
           MalwareDeepScanningVerdict::SCAN_FAILURE) {
     extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
-        ->OnUnscannedFileEvent(url, file_name, download_digest_sha256,
-                               mime_type, trigger, access_point,
-                               "MALWARE_SCAN_FAILED", content_size);
+        ->OnUnscannedFileEvent(
+            url, file_name, download_digest_sha256, mime_type, trigger,
+            access_point, "MALWARE_SCAN_FAILED", content_size, event_result);
   }
 
   if (response.has_dlp_scan_verdict() &&
@@ -108,7 +110,7 @@ void MaybeReportDeepScanningVerdict(
     extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
         ->OnUnscannedFileEvent(url, file_name, download_digest_sha256,
                                mime_type, trigger, access_point,
-                               "DLP_SCAN_FAILED", content_size);
+                               "DLP_SCAN_FAILED", content_size, event_result);
   }
 
   if (response.malware_scan_verdict().verdict() ==
@@ -120,7 +122,7 @@ void MaybeReportDeepScanningVerdict(
             url, file_name, download_digest_sha256, mime_type, trigger,
             access_point,
             MalwareVerdictToResult(response.malware_scan_verdict()),
-            content_size);
+            content_size, event_result);
   }
 
   if (response.dlp_scan_verdict().status() == DlpDeepScanningVerdict::SUCCESS) {
@@ -130,7 +132,7 @@ void MaybeReportDeepScanningVerdict(
               url, file_name, download_digest_sha256, mime_type, trigger,
               access_point,
               SensitiveDataVerdictToResult(response.dlp_scan_verdict()),
-              content_size);
+              content_size, event_result);
     }
   }
 }
@@ -145,7 +147,8 @@ void MaybeReportDeepScanningVerdict(
     DeepScanAccessPoint access_point,
     const int64_t content_size,
     BinaryUploadService::Result result,
-    const enterprise_connectors::ContentAnalysisResponse& response) {
+    const enterprise_connectors::ContentAnalysisResponse& response,
+    EventResult event_result) {
   DCHECK(std::all_of(download_digest_sha256.begin(),
                      download_digest_sha256.end(), [](const char& c) {
                        return (c >= '0' && c <= '9') ||
@@ -157,7 +160,7 @@ void MaybeReportDeepScanningVerdict(
     extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
         ->OnUnscannedFileEvent(url, file_name, download_digest_sha256,
                                mime_type, trigger, access_point,
-                               unscanned_reason, content_size);
+                               unscanned_reason, content_size, event_result);
   }
 
   if (result != BinaryUploadService::Result::SUCCESS)
@@ -169,13 +172,14 @@ void MaybeReportDeepScanningVerdict(
       extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
           ->OnUnscannedFileEvent(url, file_name, download_digest_sha256,
                                  mime_type, trigger, access_point,
-                                 "ANALYSIS_CONNECTOR_FAILED", content_size);
+                                 "ANALYSIS_CONNECTOR_FAILED", content_size,
+                                 event_result);
     } else if (result.triggered_rules_size() > 0) {
       extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
           ->OnAnalysisConnectorResult(url, file_name, download_digest_sha256,
                                       mime_type, trigger, access_point,
                                       ContentAnalysisResultToResult(result),
-                                      content_size);
+                                      content_size, event_result);
     }
   }
 }
@@ -224,6 +228,23 @@ void ReportAnalysisConnectorWarningBypass(
             url, file_name, download_digest_sha256, mime_type, trigger,
             access_point, result, content_size);
   }
+}
+
+std::string EventResultToString(EventResult result) {
+  switch (result) {
+    case EventResult::UNKNOWN:
+      return "EVENT_RESULT_UNKNOWN";
+    case EventResult::ALLOWED:
+      return "EVENT_RESULT_ALLOWED";
+    case EventResult::WARNED:
+      return "EVENT_RESULT_WARNED";
+    case EventResult::BLOCKED:
+      return "EVENT_RESULT_BLOCKED";
+    case EventResult::BYPASSED:
+      return "EVENT_RESULT_BYPASSED";
+  }
+  NOTREACHED();
+  return "";
 }
 
 std::string DeepScanAccessPointToString(DeepScanAccessPoint access_point) {
@@ -484,14 +505,12 @@ ContentAnalysisScanResult MalwareVerdictToResult(
     ContentAnalysisTrigger trigger;
     switch (verdict.verdict()) {
       case MalwareDeepScanningVerdict::UWS:
-        trigger.action = enterprise_connectors::ContentAnalysisResponse::
-            Result::TriggeredRule::BLOCK;
-        trigger.name = "UWS";
+        trigger.action = enterprise_connectors::TriggeredRule::BLOCK;
+        trigger.name = "uws";
         break;
       case MalwareDeepScanningVerdict::MALWARE:
-        trigger.action = enterprise_connectors::ContentAnalysisResponse::
-            Result::TriggeredRule::BLOCK;
-        trigger.name = "MALWARE";
+        trigger.action = enterprise_connectors::TriggeredRule::BLOCK;
+        trigger.name = "malware";
         break;
       default:
         NOTREACHED();
@@ -509,6 +528,22 @@ std::vector<ContentAnalysisScanResult> ContentAnalysisResponseToResults(
     results.push_back(ContentAnalysisResultToResult(result));
   }
   return results;
+}
+
+std::string GetProfileEmail(Profile* profile) {
+  return profile
+             ? GetProfileEmail(IdentityManagerFactory::GetForProfile(profile))
+             : std::string();
+}
+
+std::string GetProfileEmail(signin::IdentityManager* identity_manager) {
+  // If the profile is not signed in, GetPrimaryAccountInfo() returns an
+  // empty account info.
+  return identity_manager
+             ? identity_manager
+                   ->GetPrimaryAccountInfo(signin::ConsentLevel::kNotRequired)
+                   .email
+             : std::string();
 }
 
 }  // namespace safe_browsing

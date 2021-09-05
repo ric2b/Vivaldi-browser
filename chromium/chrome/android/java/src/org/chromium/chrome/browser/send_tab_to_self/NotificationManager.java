@@ -25,19 +25,16 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
-import org.chromium.chrome.browser.init.BrowserParts;
-import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
-import org.chromium.chrome.browser.init.EmptyBrowserParts;
-import org.chromium.chrome.browser.notifications.NotificationBuilderFactory;
 import org.chromium.chrome.browser.notifications.NotificationConstants;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
+import org.chromium.chrome.browser.notifications.NotificationWrapperBuilderFactory;
 import org.chromium.chrome.browser.notifications.channels.ChromeChannelDefinitions;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.components.browser_ui.notifications.ChromeNotification;
-import org.chromium.components.browser_ui.notifications.ChromeNotificationBuilder;
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxy;
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxyImpl;
 import org.chromium.components.browser_ui.notifications.NotificationMetadata;
+import org.chromium.components.browser_ui.notifications.NotificationWrapper;
+import org.chromium.components.browser_ui.notifications.NotificationWrapperBuilder;
 import org.chromium.components.browser_ui.notifications.PendingIntentProvider;
 
 /**
@@ -50,43 +47,6 @@ public class NotificationManager {
     private static final String NOTIFICATION_ACTION_TAP = "send_tab_to_self.tap";
     private static final String NOTIFICATION_ACTION_DISMISS = "send_tab_to_self.dismiss";
     private static final String NOTIFICATION_ACTION_TIMEOUT = "send_tab_to_self.timeout";
-
-    /** Handles changes to notifications based on user action or timeout. */
-    public static final class SendTabToSelfNotificationReceiver extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            final BrowserParts parts = new EmptyBrowserParts() {
-                @Override
-                public void finishNativeInitialization() {
-                    final String action = intent.getAction();
-                    final String guid =
-                            IntentUtils.safeGetStringExtra(intent, NOTIFICATION_GUID_EXTRA);
-                    // If this feature ever supports incognito mode, we need to modify
-                    // this method to obtain the current profile, rather than the last-used
-                    // regular profile.
-                    final Profile profile = Profile.getLastUsedRegularProfile();
-                    switch (action) {
-                        case NOTIFICATION_ACTION_TAP:
-                            openUrl(intent.getData());
-                            hideNotification(guid);
-                            SendTabToSelfAndroidBridge.deleteEntry(profile, guid);
-                            break;
-                        case NOTIFICATION_ACTION_DISMISS:
-                            hideNotification(guid);
-                            SendTabToSelfAndroidBridge.dismissEntry(profile, guid);
-                            break;
-                        case NOTIFICATION_ACTION_TIMEOUT:
-                            SendTabToSelfAndroidBridge.dismissEntry(profile, guid);
-                            break;
-                    }
-                }
-            };
-
-            // Try to load native.
-            ChromeBrowserInitializer.getInstance().handlePreNativeStartup(parts);
-            ChromeBrowserInitializer.getInstance().handlePostNativeStartup(true, parts);
-        }
-    }
 
     /**
      * Open the URL specified within Chrome.
@@ -104,6 +64,29 @@ public class NotificationManager {
                                 .putExtra(ShortcutHelper.REUSE_URL_MATCHING_TAB_ELSE_NEW_TAB, true);
         IntentHandler.addTrustedIntentExtras(intent);
         context.startActivity(intent);
+    }
+
+    public static void handleIntent(Intent intent) {
+        final String action = intent.getAction();
+        final String guid = IntentUtils.safeGetStringExtra(intent, NOTIFICATION_GUID_EXTRA);
+        // If this feature ever supports incognito mode, we need to modify
+        // this method to obtain the current profile, rather than the last-used
+        // regular profile.
+        final Profile profile = Profile.getLastUsedRegularProfile();
+        switch (action) {
+            case NOTIFICATION_ACTION_TAP:
+                openUrl(intent.getData());
+                hideNotification(guid);
+                SendTabToSelfAndroidBridge.deleteEntry(profile, guid);
+                break;
+            case NOTIFICATION_ACTION_DISMISS:
+                hideNotification(guid);
+                SendTabToSelfAndroidBridge.dismissEntry(profile, guid);
+                break;
+            case NOTIFICATION_ACTION_TIMEOUT:
+                SendTabToSelfAndroidBridge.dismissEntry(profile, guid);
+                break;
+        }
     }
 
     /**
@@ -138,7 +121,8 @@ public class NotificationManager {
      */
     @CalledByNative
     private static boolean showNotification(String guid, @NonNull String url, String title,
-            String deviceName, long timeoutAtMillis) {
+            String deviceName, long timeoutAtMillis,
+            Class<? extends BroadcastReceiver> broadcastReceiver) {
         // A notification associated with this Share entry already exists. Don't display a new one.
         if (NotificationSharedPrefManager.findActiveNotification(guid) != null) {
             return false;
@@ -151,13 +135,13 @@ public class NotificationManager {
         int nextId = NotificationSharedPrefManager.getNextNotificationId();
         Uri uri = Uri.parse(url);
         PendingIntentProvider contentIntent = PendingIntentProvider.getBroadcast(context, nextId,
-                new Intent(context, SendTabToSelfNotificationReceiver.class)
+                new Intent(context, broadcastReceiver)
                         .setData(uri)
                         .setAction(NOTIFICATION_ACTION_TAP)
                         .putExtra(NOTIFICATION_GUID_EXTRA, guid),
                 0);
         PendingIntentProvider deleteIntent = PendingIntentProvider.getBroadcast(context, nextId,
-                new Intent(context, SendTabToSelfNotificationReceiver.class)
+                new Intent(context, broadcastReceiver)
                         .setData(uri)
                         .setAction(NOTIFICATION_ACTION_DISMISS)
                         .putExtra(NOTIFICATION_GUID_EXTRA, guid),
@@ -167,9 +151,9 @@ public class NotificationManager {
         String contextText = res.getString(
                 R.string.send_tab_to_self_notification_context_text, uri.getHost(), deviceName);
         // Build the notification itself.
-        ChromeNotificationBuilder builder =
-                NotificationBuilderFactory
-                        .createChromeNotificationBuilder(true /* preferCompat */,
+        NotificationWrapperBuilder builder =
+                NotificationWrapperBuilderFactory
+                        .createNotificationWrapperBuilder(true /* preferCompat */,
                                 ChromeChannelDefinitions.ChannelId.SHARING,
                                 null /* remoteAppPackageName */,
                                 new NotificationMetadata(
@@ -185,7 +169,7 @@ public class NotificationManager {
                         .setVibrate(new long[0])
                         .setSmallIcon(R.drawable.ic_chrome)
                         .setDefaults(Notification.DEFAULT_ALL);
-        ChromeNotification notification = builder.buildChromeNotification();
+        NotificationWrapper notification = builder.buildNotificationWrapper();
 
         manager.notify(notification);
         NotificationUmaTracker.getInstance().onNotificationShown(
@@ -199,7 +183,7 @@ public class NotificationManager {
         if (timeoutAtMillis != Long.MAX_VALUE) {
             AlarmManager alarmManager =
                     (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-            Intent timeoutIntent = new Intent(context, SendTabToSelfNotificationReceiver.class)
+            Intent timeoutIntent = new Intent(context, broadcastReceiver)
                                            .setData(Uri.parse(url))
                                            .setAction(NOTIFICATION_ACTION_TIMEOUT)
                                            .putExtra(NOTIFICATION_GUID_EXTRA, guid);

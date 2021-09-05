@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/jumbo.gni")
 import("//third_party/blink/renderer/bindings/bindings.gni")
 import("//third_party/blink/renderer/core/core.gni")
 import("//third_party/inspector_protocol/inspector_protocol.gni")
@@ -92,6 +91,8 @@ blink_core_sources("inspector") {
     "inspector_resource_content_loader.h",
     "inspector_session_state.cc",
     "inspector_session_state.h",
+    "inspector_style_resolver.cc",
+    "inspector_style_resolver.h",
     "inspector_style_sheet.cc",
     "inspector_style_sheet.h",
     "inspector_task_runner.cc",
@@ -201,7 +202,7 @@ inspector_protocol_generate("protocol_sources") {
 }
 
 # Compiles the sources generated above.
-jumbo_source_set("generated") {
+source_set("generated") {
   sources = get_target_outputs(":protocol_sources")
 
   configs -= core_config_remove

@@ -31,10 +31,9 @@ class MediaRouterIntegrationOneUABrowserTest
 
     // Set up embedded test server to serve offscreen presentation with relative
     // URL "presentation_receiver.html".
-    base::FilePath base_dir;
-    CHECK(base::PathService::Get(base::DIR_MODULE, &base_dir));
-    base::FilePath resource_dir = base_dir.Append(
-        FILE_PATH_LITERAL("media_router/browser_test_resources/"));
+    base::FilePath resource_dir =
+        base::PathService::CheckedGet(base::DIR_MODULE)
+            .Append(FILE_PATH_LITERAL("media_router/browser_test_resources/"));
     embedded_test_server()->ServeFilesFromDirectory(resource_dir);
     ASSERT_TRUE(embedded_test_server()->Start());
   }
@@ -67,7 +66,7 @@ IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationOneUABrowserTest,
   RunFailToSendMessageTest();
 }
 
-#if defined(OS_LINUX) &&                                        \
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) &&              \
     (BUILDFLAG(CFI_CAST_CHECK) || BUILDFLAG(CFI_ICALL_CHECK) || \
      BUILDFLAG(CFI_ENFORCEMENT_TRAP) || BUILDFLAG(CFI_ENFORCEMENT_DIAGNOSTIC))
 // https://crbug.com/966827. Flaky on Linux CFI.

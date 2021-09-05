@@ -26,8 +26,8 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ShortcutHelper;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabThemeColorHelper;
@@ -202,7 +202,7 @@ public class CustomTabTaskDescriptionHelperTest {
     }
 
     private void waitForTitle(Tab tab, String expectedTitle) throws Exception {
-        if (tab.getTitle().equals(expectedTitle)) return;
+        if (ChromeTabUtils.getTitleOnUiThread(tab).equals(expectedTitle)) return;
 
         ChromeTabUtils.waitForTitle(tab, expectedTitle);
     }

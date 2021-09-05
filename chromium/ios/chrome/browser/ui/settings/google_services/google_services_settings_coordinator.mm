@@ -115,6 +115,9 @@ using signin_metrics::PromoAction;
       self.browser->GetBrowserState());
   viewController.modelDelegate = self.mediator;
   viewController.serviceDelegate = self.mediator;
+  viewController.dispatcher = static_cast<
+      id<ApplicationCommands, BrowserCommands, BrowsingDataCommands>>(
+      self.browser->GetCommandDispatcher());
   DCHECK(self.baseNavigationController);
   [self.baseNavigationController pushViewController:self.viewController
                                            animated:YES];
@@ -162,6 +165,11 @@ using signin_metrics::PromoAction;
       self.viewController);
 }
 
+- (BOOL)googleServicesSettingsViewIsShown {
+  return [self.viewController
+      isEqual:self.baseNavigationController.topViewController];
+}
+
 #pragma mark - GoogleServicesSettingsCommandHandler
 
 - (void)restartAuthenticationFlow {
@@ -205,7 +213,7 @@ using signin_metrics::PromoAction;
 - (void)openPassphraseDialog {
   SyncEncryptionPassphraseTableViewController* controller =
       [[SyncEncryptionPassphraseTableViewController alloc]
-          initWithBrowserState:self.browser->GetBrowserState()];
+          initWithBrowser:self.browser];
   // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
   // clean up.
   controller.dispatcher = static_cast<
@@ -216,7 +224,7 @@ using signin_metrics::PromoAction;
 
 - (void)showSignIn {
   __weak __typeof(self) weakSelf = self;
-  DCHECK(self.dispatcher);
+  DCHECK(self.handler);
   signin_metrics::RecordSigninUserActionForAccessPoint(
       AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS,
       PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO);
@@ -228,12 +236,12 @@ using signin_metrics::PromoAction;
                callback:^(BOOL success) {
                  [weakSelf signinFinishedWithSuccess:success];
                }];
-  [self.dispatcher showSignin:command
-           baseViewController:self.googleServicesSettingsViewController];
+  [self.handler showSignin:command
+        baseViewController:self.googleServicesSettingsViewController];
 }
 
 - (void)signinFinishedWithSuccess:(BOOL)success {
-  // TODO(crbug.com/971989): SigninCoordinatorResult should be received instead
+  // TODO(crbug.com/1101346): SigninCoordinatorResult should be received instead
   // of guessing if the sign-in has been interrupted.
   ChromeIdentity* primaryAccount =
       AuthenticationServiceFactory::GetForBrowserState(

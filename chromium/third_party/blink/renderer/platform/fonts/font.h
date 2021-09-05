@@ -162,7 +162,6 @@ class PLATFORM_EXPORT Font {
                                  float height,
                                  int from = 0,
                                  int to = -1) const;
-  FloatRect BoundingBox(const TextRun&, int from = 0, int to = -1) const;
   CharacterRange GetCharacterRange(const TextRun&,
                                    unsigned from,
                                    unsigned to) const;
@@ -240,6 +239,12 @@ class PLATFORM_EXPORT Font {
     if (!font_fallback_list_)
       return false;
     return EnsureFontFallbackList()->ShouldSkipDrawing();
+  }
+
+  // Returns true if any of the matched @font-face rules has set a
+  // advance-override value.
+  bool HasAdvanceOverride() const {
+    return font_fallback_list_ && font_fallback_list_->HasAdvanceOverride();
   }
 
  private:

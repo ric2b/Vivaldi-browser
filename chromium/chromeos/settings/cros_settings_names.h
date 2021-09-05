@@ -77,6 +77,9 @@ COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kStatsReportingPref[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kReleaseChannel[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
 extern const char kReleaseChannelDelegated[];
+COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kReleaseLtsTag[];
+COMPONENT_EXPORT(CHROMEOS_SETTINGS)
+extern const char kDeviceChannelDowngradeBehavior[];
 
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
 extern const char kReportDeviceVersionInfo[];
@@ -115,6 +118,7 @@ COMPONENT_EXPORT(CHROMEOS_SETTINGS)
 extern const char kReportDeviceBluetoothInfo[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kReportDeviceFanInfo[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kReportDeviceVpdInfo[];
+COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kReportDeviceSystemInfo[];
 
 COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kHeartbeatEnabled[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kHeartbeatFrequency[];
@@ -204,20 +208,20 @@ extern const char kFineGrainedTimeZoneResolveEnabled[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kDeviceOffHours[];
 
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
-extern const char kDeviceNativePrintersAccessMode[];
+extern const char kDevicePrintersAccessMode[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
-extern const char kDeviceNativePrintersBlacklist[];
+extern const char kDevicePrintersBlocklist[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
-extern const char kDeviceNativePrintersWhitelist[];
+extern const char kDevicePrintersAllowlist[];
 
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
 extern const char kTPMFirmwareUpdateSettings[];
 
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
-extern const char kMinimumChromeVersionEnforced[];
+extern const char kDeviceMinimumVersion[];
 
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
-extern const char kMinimumChromeVersionEolMessage[];
+extern const char kDeviceMinimumVersionAueMessage[];
 
 COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kCastReceiverName[];
 
@@ -270,6 +274,9 @@ extern const char kSystemProxySettingsKeySystemServicesPassword[];
 
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
 extern const char kDeviceCrostiniArcAdbSideloadingAllowed[];
+
+COMPONENT_EXPORT(CHROMEOS_SETTINGS)
+extern const char kDeviceShowLowDiskSpaceNotification[];
 }  // namespace chromeos
 
 #endif  // CHROMEOS_SETTINGS_CROS_SETTINGS_NAMES_H_

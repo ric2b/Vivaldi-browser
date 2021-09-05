@@ -6,6 +6,7 @@
 
 #include "base/notreached.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
+#include "device/fido/aoa/android_accessory_discovery.h"
 #include "device/fido/cable/fido_cable_discovery.h"
 #include "device/fido/features.h"
 #include "device/fido/fido_discovery_base.h"
@@ -21,7 +22,7 @@
 #include "device/fido/win/webauthn_api.h"
 #endif  // defined(OS_WIN)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "device/fido/mac/discovery.h"
 #endif  // defined(OSMACOSX)
 
@@ -31,19 +32,6 @@
 
 namespace device {
 
-namespace {
-
-std::unique_ptr<FidoDiscoveryBase> CreateUsbFidoDiscovery() {
-#if defined(OS_ANDROID)
-  NOTREACHED() << "USB HID not supported on Android.";
-  return nullptr;
-#else
-  return std::make_unique<FidoHidDiscovery>();
-#endif  // !defined(OS_ANDROID)
-}
-
-}  // namespace
-
 FidoDiscoveryFactory::FidoDiscoveryFactory() = default;
 FidoDiscoveryFactory::~FidoDiscoveryFactory() = default;
 
@@ -51,7 +39,7 @@ std::unique_ptr<FidoDiscoveryBase> FidoDiscoveryFactory::Create(
     FidoTransportProtocol transport) {
   switch (transport) {
     case FidoTransportProtocol::kUsbHumanInterfaceDevice:
-      return CreateUsbFidoDiscovery();
+      return std::make_unique<FidoHidDiscovery>(hid_ignore_list_);
     case FidoTransportProtocol::kBluetoothLowEnergy:
       return nullptr;
     case FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy:
@@ -59,21 +47,31 @@ std::unique_ptr<FidoDiscoveryBase> FidoDiscoveryFactory::Create(
           (cable_data_.has_value() || qr_generator_key_.has_value())) {
         return std::make_unique<FidoCableDiscovery>(
             cable_data_.value_or(std::vector<CableDiscoveryData>()),
-            qr_generator_key_, cable_pairing_callback_);
+            qr_generator_key_, cable_pairing_callback_, network_context_);
       }
       return nullptr;
     case FidoTransportProtocol::kNearFieldCommunication:
       // TODO(https://crbug.com/825949): Add NFC support.
       return nullptr;
     case FidoTransportProtocol::kInternal:
-#if defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#if defined(OS_MAC) || defined(OS_CHROMEOS)
       return MaybeCreatePlatformDiscovery();
 #else
       return nullptr;
 #endif
+    case FidoTransportProtocol::kAndroidAccessory:
+      if (usb_device_manager_) {
+        return std::make_unique<AndroidAccessoryDiscovery>(
+            std::move(usb_device_manager_.value()));
+      }
+      return nullptr;
   }
   NOTREACHED() << "Unhandled transport type";
   return nullptr;
+}
+
+bool FidoDiscoveryFactory::IsTestOverride() {
+  return false;
 }
 
 void FidoDiscoveryFactory::set_cable_data(
@@ -83,10 +81,25 @@ void FidoDiscoveryFactory::set_cable_data(
   qr_generator_key_ = std::move(qr_generator_key);
 }
 
+void FidoDiscoveryFactory::set_usb_device_manager(
+    mojo::Remote<device::mojom::UsbDeviceManager> usb_device_manager) {
+  usb_device_manager_.emplace(std::move(usb_device_manager));
+}
+
+void FidoDiscoveryFactory::set_network_context(
+    network::mojom::NetworkContext* network_context) {
+  network_context_ = network_context;
+}
+
 void FidoDiscoveryFactory::set_cable_pairing_callback(
     base::RepeatingCallback<void(std::unique_ptr<CableDiscoveryData>)>
         pairing_callback) {
   cable_pairing_callback_.emplace(std::move(pairing_callback));
+}
+
+void FidoDiscoveryFactory::set_hid_ignore_list(
+    base::flat_set<VidPid> hid_ignore_list) {
+  hid_ignore_list_ = std::move(hid_ignore_list);
 }
 
 #if defined(OS_WIN)
@@ -112,7 +125,7 @@ FidoDiscoveryFactory::MaybeCreateWinWebAuthnApiDiscovery() {
 }
 #endif  // defined(OS_WIN)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 std::unique_ptr<FidoDiscoveryBase>
 FidoDiscoveryFactory::MaybeCreatePlatformDiscovery() const {
   return mac_touch_id_config_

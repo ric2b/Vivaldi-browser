@@ -17,6 +17,7 @@
 #include "chrome/browser/chromeos/login/screens/recommend_apps/recommend_apps_fetcher.h"
 #include "chrome/browser/chromeos/login/screens/recommend_apps/recommend_apps_fetcher_delegate.h"
 #include "chrome/browser/chromeos/login/screens/recommend_apps/scoped_test_recommend_apps_fetcher_factory.h"
+#include "chrome/browser/chromeos/login/screens/sync_consent_screen.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
 #include "chrome/browser/chromeos/login/test/local_policy_test_server_mixin.h"
 #include "chrome/browser/chromeos/login/test/login_manager_mixin.h"
@@ -141,8 +142,8 @@ class RecommendAppsScreenTest : public OobeBaseTest {
   }
 
   void ShowRecommendAppsScreen() {
-    login_manager_.LoginAsNewReguarUser();
-    OobeScreenExitWaiter(GaiaView::kScreenId).Wait();
+    login_manager_.LoginAsNewRegularUser();
+    OobeScreenExitWaiter(GetFirstSigninScreen()).Wait();
     LoginDisplayHost::default_host()->StartWizard(
         RecommendAppsScreenView::kScreenId);
   }
@@ -558,11 +559,15 @@ class RecommendAppsScreenManagedTest : public RecommendAppsScreenTest {
 };
 
 IN_PROC_BROWSER_TEST_F(RecommendAppsScreenManagedTest, SkipDueToManagedUser) {
+  // Force the sync screen to be shown so that OOBE isn't destroyed
+  // right after login due to all screens being skipped.
+  auto autoreset = SyncConsentScreen::ForceBrandedBuildForTesting(true);
+
   // Mark user as managed.
   user_policy_mixin_.RequestPolicyUpdate();
 
   login_manager_.LoginWithDefaultContext(test_user_);
-  OobeScreenExitWaiter(GaiaView::kScreenId).Wait();
+  OobeScreenExitWaiter(GetFirstSigninScreen()).Wait();
   if (!screen_result_.has_value()) {
     // Skip screens to the tested one.
     LoginDisplayHost::default_host()->StartWizard(

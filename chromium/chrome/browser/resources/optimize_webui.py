@@ -72,6 +72,9 @@ for excluded_file in [
   'resources/css/text_defaults.css',
   'resources/css/text_defaults_md.css',
   'resources/mojo/mojo/public/js/mojo_bindings_lite.html',
+  'resources/mojo/mojo/public/mojom/base/time.mojom.html',
+  'resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom.html',
+  'resources/mojo/services/network/public/mojom/ip_address.mojom.html',
 
   # Excludes applying only to Polymer 3.
   'resources/polymer/v3_0/polymer/polymer_bundled.min.js',
@@ -105,7 +108,7 @@ for (redirect_url, file_path) in [
 
 
 _VULCANIZE_REDIRECT_ARGS = list(itertools.chain.from_iterable(map(
-    lambda m: ['--redirect', '"%s|%s"' % (m[0], m[1])], _URL_MAPPINGS)))
+    lambda m: ['--redirect', '%s|%s' % (m[0], m[1])], _URL_MAPPINGS)))
 
 
 def _undo_mapping(mappings, url):
@@ -272,7 +275,7 @@ def _bundle_v2(tmp_out_dir, in_path, out_path, manifest_out_path, args,
       [
        '--manifest-out', manifest_out_path,
        '--root', in_path,
-       '--redirect', '"chrome://%s/|%s"' % (args.host, in_path + '/'),
+       '--redirect', 'chrome://%s/|%s' % (args.host, in_path + '/'),
        '--out-dir', os.path.relpath(tmp_out_dir, _CWD).replace('\\', '/'),
        '--shell', args.html_in_files[0],
       ] + in_html_args)
@@ -350,7 +353,7 @@ def _optimize(in_folder, args):
     for index, js_out_file in enumerate(args.js_out_files):
       node.RunNode([node_modules.PathToUglify(),
                     os.path.join(tmp_out_dir, js_out_file),
-                    '--comments', '"/Copyright|license|LICENSE|\<\/?if/"',
+                    '--comments', '/Copyright|license|LICENSE|\<\/?if/',
                     '--output', os.path.join(out_path, js_out_file)])
   finally:
     shutil.rmtree(tmp_out_dir)

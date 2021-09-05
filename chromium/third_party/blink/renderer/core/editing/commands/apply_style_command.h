@@ -26,6 +26,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_EDITING_COMMANDS_APPLY_STYLE_COMMAND_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_EDITING_COMMANDS_APPLY_STYLE_COMMAND_H_
 
+#include "mojo/public/mojom/base/text_direction.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/editing/commands/composite_edit_command.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 
@@ -36,8 +37,6 @@ class HTMLSpanElement;
 class StyleChange;
 
 enum ShouldIncludeTypingStyle { kIncludeTypingStyle, kIgnoreTypingStyle };
-
-enum class WritingDirection;
 
 class CORE_EXPORT ApplyStyleCommand final : public CompositeEditCommand {
  public:
@@ -160,7 +159,7 @@ class CORE_EXPORT ApplyStyleCommand final : public CompositeEditCommand {
   HTMLElement* SplitAncestorsWithUnicodeBidi(
       Node*,
       bool before,
-      WritingDirection allowed_direction);
+      mojo_base::mojom::blink::TextDirection allowed_direction);
   void RemoveEmbeddingUpToEnclosingBlock(Node*,
                                          HTMLElement* unsplit_ancestor,
                                          EditingState*);

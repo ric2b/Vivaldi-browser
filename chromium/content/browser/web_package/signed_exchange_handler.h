@@ -16,6 +16,7 @@
 #include "content/browser/web_package/signed_exchange_prologue.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/system/data_pipe.h"
+#include "net/base/io_buffer.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/log/net_log_with_source.h"
@@ -31,7 +32,6 @@ class WebPackageRequestMatcher;
 namespace net {
 class CertVerifyResult;
 class DrainableIOBuffer;
-struct SHA256HashValue;
 class SourceStream;
 struct OCSPVerifyResult;
 }  // namespace net
@@ -44,6 +44,7 @@ class NetworkContext;
 
 namespace content {
 
+class PrefetchedSignedExchangeCacheEntry;
 class SignedExchangeCertFetcher;
 class SignedExchangeCertFetcherFactory;
 class SignedExchangeCertificateChain;
@@ -102,15 +103,15 @@ class CONTENT_EXPORT SignedExchangeHandler {
 
   int64_t GetExchangeHeaderLength() const { return exchange_header_length_; }
 
-  // Returns the header integrity value of the loaded signed exchange if
-  // available. This is available after |headers_callback| is called.
-  // Otherwise returns nullopt.
-  virtual base::Optional<net::SHA256HashValue> ComputeHeaderIntegrity() const;
-
-  // Returns the signature expire time of the loaded signed exchange if
-  // available. This is available after |headers_callback| is called.
-  // Otherwise returns a null Time.
-  virtual base::Time GetSignatureExpireTime() const;
+  // Called to get the following information about the loaded signed exchange:
+  //   - Header integrity value
+  //   - Signature expire time
+  //   - Cert URL
+  //   - Cert server IP address
+  // If failed to parse the signed exchange, this method fails and returns
+  // false. Otherwise, returns true.
+  virtual bool GetSignedExchangeInfoForPrefetchCache(
+      PrefetchedSignedExchangeCacheEntry& entry) const;
 
  protected:
   SignedExchangeHandler();
@@ -136,7 +137,8 @@ class CONTENT_EXPORT SignedExchangeHandler {
 
   void OnCertReceived(
       SignedExchangeLoadResult result,
-      std::unique_ptr<SignedExchangeCertificateChain> cert_chain);
+      std::unique_ptr<SignedExchangeCertificateChain> cert_chain,
+      net::IPAddress cert_server_ip_address);
   SignedExchangeLoadResult CheckCertRequirements(
       const net::X509Certificate* verified_cert);
   bool CheckOCSPStatus(const net::OCSPVerifyResult& ocsp_result);
@@ -180,6 +182,7 @@ class CONTENT_EXPORT SignedExchangeHandler {
   const int frame_tree_node_id_;
 
   base::TimeTicks cert_fetch_start_time_;
+  net::IPAddress cert_server_ip_address_;
 
   base::WeakPtrFactory<SignedExchangeHandler> weak_factory_{this};
 

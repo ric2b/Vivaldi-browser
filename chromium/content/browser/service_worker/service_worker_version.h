@@ -29,6 +29,7 @@
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "components/services/storage/public/mojom/service_worker_storage_control.mojom.h"
 #include "content/browser/frame_host/back_forward_cache_metrics.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
@@ -47,6 +48,7 @@
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/cross_origin_embedder_policy.h"
 #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
@@ -192,11 +194,14 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   // The constructor should be called only from ServiceWorkerRegistry other than
   // tests.
-  ServiceWorkerVersion(ServiceWorkerRegistration* registration,
-                       const GURL& script_url,
-                       blink::mojom::ScriptType script_type,
-                       int64_t version_id,
-                       base::WeakPtr<ServiceWorkerContextCore> context);
+  ServiceWorkerVersion(
+      ServiceWorkerRegistration* registration,
+      const GURL& script_url,
+      blink::mojom::ScriptType script_type,
+      int64_t version_id,
+      mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>
+          remote_reference,
+      base::WeakPtr<ServiceWorkerContextCore> context);
 
   int64_t version_id() const { return version_id_; }
   int64_t registration_id() const { return registration_id_; }
@@ -209,6 +214,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   }
   ServiceWorkerVersionInfo GetInfo();
   Status status() const { return status_; }
+  ukm::SourceId ukm_source_id() const { return ukm_source_id_; }
 
   // This status is set to EXISTS or DOES_NOT_EXIST when the install event has
   // been executed in a new version or when an installed version is loaded from
@@ -1023,13 +1029,13 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // the subresource loader factories are updated.
   bool initialize_global_scope_after_main_script_loaded_ = false;
 
-  // Populated via net::HttpResponseInfo of the main script.
+  // Populated via network::mojom::URLResponseHead of the main script.
   std::unique_ptr<MainScriptResponse> main_script_response_;
 
   // DevTools requires each service worker's script receive time, even for
   // the ones that haven't started. However, a ServiceWorkerVersion's field
   // |main_script_http_info_| is not set until starting up. Rather than
-  // reading HttpResponseInfo for all service workers from disk cache and
+  // reading URLResponseHead for all service workers from disk cache and
   // populating |main_script_http_info_| just in order to expose that timestamp,
   // we provide that timestamp here.
   base::Time script_response_time_for_devtools_;
@@ -1085,6 +1091,15 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   mojo::PendingReceiver<blink::mojom::ReportingObserver>
       reporting_observer_receiver_;
+
+  // Lives while the ServiceWorkerVersion is alive.
+  // See comments at the definition of storage::mojom::ServiceWorkerVersionRef
+  // for more details.
+  mojo::Remote<storage::mojom::ServiceWorkerLiveVersionRef> remote_reference_;
+
+  // Identifier for UKM recording in the service worker thread. Stored here so
+  // it can be associated with clients' source IDs.
+  const ukm::SourceId ukm_source_id_;
 
   base::WeakPtrFactory<ServiceWorkerVersion> weak_factory_{this};
 

@@ -34,11 +34,6 @@ void SearchResultContainerView::SetResults(
   Update();
 }
 
-int SearchResultContainerView::GetYSize() {
-  NOTREACHED();
-  return 0;
-}
-
 void SearchResultContainerView::Update() {
   update_factory_.InvalidateWeakPtrs();
   num_results_ = DoUpdate();
@@ -86,7 +81,7 @@ void SearchResultContainerView::ListItemsChanged(size_t /*start*/,
 }
 
 SearchResultBaseView* SearchResultContainerView::GetFirstResultView() {
-  return nullptr;
+  return num_results_ <= 0 ? nullptr : GetResultViewAt(0);
 }
 
 void SearchResultContainerView::SetShown(bool shown) {

@@ -18,7 +18,6 @@
 #include "base/files/file_util.h"
 #include "base/i18n/break_iterator.h"
 #include "base/i18n/case_conversion.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -90,6 +89,10 @@ class UpdateRecentVisitsFromHistoryDBTask : public history::HistoryDBTask {
   explicit UpdateRecentVisitsFromHistoryDBTask(
       URLIndexPrivateData* private_data,
       history::URLID url_id);
+  UpdateRecentVisitsFromHistoryDBTask(
+      const UpdateRecentVisitsFromHistoryDBTask&) = delete;
+  UpdateRecentVisitsFromHistoryDBTask& operator=(
+      const UpdateRecentVisitsFromHistoryDBTask&) = delete;
 
   bool RunOnDBThread(history::HistoryBackend* backend,
                      history::HistoryDatabase* db) override;
@@ -108,8 +111,6 @@ class UpdateRecentVisitsFromHistoryDBTask : public history::HistoryDBTask {
   // The awaited data that's shown to private_data_ for it to copy and
   // store.
   history::VisitVector recent_visits_;
-
-  DISALLOW_COPY_AND_ASSIGN(UpdateRecentVisitsFromHistoryDBTask);
 };
 
 UpdateRecentVisitsFromHistoryDBTask::UpdateRecentVisitsFromHistoryDBTask(
@@ -220,10 +221,26 @@ ScoredHistoryMatches URLIndexPrivateData::HistoryItemsForTerms(
   }
   // Select and sort only the top |max_matches| results.
   if (scored_items.size() > max_matches) {
-    std::partial_sort(scored_items.begin(), scored_items.begin() + max_matches,
-                      scored_items.end(),
-                      ScoredHistoryMatch::MatchScoreGreater);
-    scored_items.resize(max_matches);
+    // Sort the top |max_matches| * 2 matches which is cheaper than sorting all
+    // matches yet likely sufficient to contain |max_matches| unique matches
+    // most of the time.
+    auto first_pass_size = std::min(scored_items.size(), max_matches * 2);
+    std::partial_sort(
+        scored_items.begin(), scored_items.begin() + first_pass_size,
+        scored_items.end(), ScoredHistoryMatch::MatchScoreGreater);
+    scored_items.resize(first_pass_size);
+
+    // Filter unique matches to maximize the use of the |max_matches| capacity.
+    std::set<HistoryID> seen_history_ids;
+    base::EraseIf(scored_items, [&](const auto& scored_item) {
+      HistoryID scored_item_id = scored_item.url_info.id();
+      bool duplicate = seen_history_ids.count(scored_item_id);
+      seen_history_ids.insert(scored_item_id);
+      return duplicate;
+    });
+    if (scored_items.size() > max_matches)
+      scored_items.resize(max_matches);
+
   } else {
     std::sort(scored_items.begin(), scored_items.end(),
               ScoredHistoryMatch::MatchScoreGreater);
@@ -366,7 +383,6 @@ bool URLIndexPrivateData::DeleteURL(const GURL& url) {
 // static
 scoped_refptr<URLIndexPrivateData> URLIndexPrivateData::RestoreFromFile(
     const base::FilePath& file_path) {
-  base::TimeTicks beginning_time = base::TimeTicks::Now();
   if (!base::PathExists(file_path))
     return nullptr;
   std::string data;
@@ -393,15 +409,8 @@ scoped_refptr<URLIndexPrivateData> URLIndexPrivateData::RestoreFromFile(
   if (!restored_data->RestorePrivateData(index_cache))
     return nullptr;
 
-  UMA_HISTOGRAM_TIMES("History.InMemoryURLIndexRestoreCacheTime",
-                      base::TimeTicks::Now() - beginning_time);
   UMA_HISTOGRAM_COUNTS_1M("History.InMemoryURLHistoryItems",
                           restored_data->history_id_word_map_.size());
-  UMA_HISTOGRAM_COUNTS_1M("History.InMemoryURLCacheSize", data.size());
-  UMA_HISTOGRAM_COUNTS_10000("History.InMemoryURLWords",
-                             restored_data->word_map_.size());
-  UMA_HISTOGRAM_COUNTS_10000("History.InMemoryURLChars",
-                             restored_data->char_word_map_.size());
   if (restored_data->Empty())
     return nullptr;  // 'No data' is the same as a failed reload.
   return restored_data;
@@ -444,10 +453,6 @@ scoped_refptr<URLIndexPrivateData> URLIndexPrivateData::RebuildFromHistory(
                       base::TimeTicks::Now() - beginning_time);
   UMA_HISTOGRAM_COUNTS_1M("History.InMemoryURLHistoryItems",
                           rebuilt_data->history_id_word_map_.size());
-  UMA_HISTOGRAM_COUNTS_10000("History.InMemoryURLWords",
-                             rebuilt_data->word_map_.size());
-  UMA_HISTOGRAM_COUNTS_10000("History.InMemoryURLChars",
-                             rebuilt_data->char_word_map_.size());
   return rebuilt_data;
 }
 
@@ -515,8 +520,6 @@ URLIndexPrivateData::~URLIndexPrivateData() = default;
 
 HistoryIDVector URLIndexPrivateData::HistoryIDsFromWords(
     const String16Vector& unsorted_words) {
-  // This histogram name reflects the historic name of this function.
-  SCOPED_UMA_HISTOGRAM_TIMER("Omnibox.HistoryQuickHistoryIDSetFromWords");
   // Break the terms down into individual terms (words), get the candidate
   // set for each term, and intersect each to get a final candidate list.
   // Note that a single 'term' from the user's perspective might be
@@ -930,7 +933,6 @@ void URLIndexPrivateData::ResetSearchTermCache() {
 }
 
 bool URLIndexPrivateData::SaveToFile(const base::FilePath& file_path) {
-  base::TimeTicks beginning_time = base::TimeTicks::Now();
   InMemoryURLIndexCacheItem index_cache;
   SavePrivateData(&index_cache);
   std::string data;
@@ -944,8 +946,6 @@ bool URLIndexPrivateData::SaveToFile(const base::FilePath& file_path) {
     LOG(WARNING) << "Failed to write " << file_path.value();
     return false;
   }
-  UMA_HISTOGRAM_TIMES("History.InMemoryURLIndexSaveCacheTime",
-                      base::TimeTicks::Now() - beginning_time);
   return true;
 }
 

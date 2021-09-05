@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Artikull liste</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Rrëshqit shpejt dy gishta djathtas</translation>
+<translation id="1016393160682012902">Shtyp një tast qwerty, tast të rifreskueshëm brail ose gjest me prekje për të mësuar funksionin e tij. Shtyp "Control" me w ose "Escape" për të dalë.</translation>
 <translation id="1022586497894531524">Po i përdor për herë të parë komentet me zë të ChromeVox? Ky udhëzues i shpejtë shpjegon bazat për të filluar me ChromeVox.</translation>
 <translation id="1025074108959230262">Modaliteti "i ngjitur" është çaktivizuar</translation>
 <translation id="1031961866430398710">më pas</translation>
@@ -504,7 +505,6 @@ Për të hapur menynë e shfletuesit Chrome, shtyp Alt+F.</translation>
 <translation id="489907760999452556">Lidhje e brendshme</translation>
 <translation id="4909019435900810068">Lëviz prapa një fjalë</translation>
 <translation id="4911349081560453449">Nuk ka një kuti kontrolli të mëparshme</translation>
-<translation id="4915087353619183190">Po nis "Modalitetin e të mësuarit". Shtyp një tast qwerty, tast të rifreskueshëm braille ose gjest me prekje për të mësuar funksionin e tij. Shtyp "Control" me w ose "Escape" për të dalë.</translation>
 <translation id="492295894462528572">Parathënie</translation>
 <translation id="495046168593986294">Lëviz lart</translation>
 <translation id="495170559598752135">Veprimet</translation>
@@ -647,6 +647,7 @@ Për të hapur menynë e shfletuesit Chrome, shtyp Alt+F.</translation>
 <translation id="6017514345406065928">E gjelbër</translation>
 <translation id="602001110135236999">Lëviz majtas</translation>
 <translation id="6034000775414344507">Gri e çelur</translation>
+<translation id="6036135911048686884">Prek "Eksploro"</translation>
 <translation id="6037602951055904232">Lëviz para</translation>
 <translation id="6044160928851315051">Errëso ekranin</translation>
 <translation id="6082768461603900813">Bazat e lundrimit</translation>
@@ -923,6 +924,7 @@ Për të hapur menynë e shfletuesit Chrome, shtyp Alt+F.</translation>
 <translation id="8345569862449483843">{COUNT,plural, =1{thurje}other{# shenja thurjeje}}</translation>
 <translation id="8378855320830505539">Rajoni</translation>
 <translation id="8382679411218029383">Plotësimi automatik brenda linjës dhe lista</translation>
+<translation id="8394908167088220973">Luaj/pauzo median</translation>
 <translation id="8428213095426709021">Cilësimet</translation>
 <translation id="8428603554127842284">niveli <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@ Për të hapur menynë e shfletuesit Chrome, shtyp Alt+F.</translation>
 <translation id="8770473310765924354">dil nga përmbajtja e strukturuar, siç janë tabelat</translation>
 <translation id="8779057862865475116">Nuk ka lidhje të mëparshme</translation>
 <translation id="8796411681063377102">Titulli tjetër i nivelit 3</translation>
+<translation id="8823311177246872527">Faqja <ph name="CURRENTPAGE" /> nga <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">kryesor</translation>
 <translation id="8882002077197914455">Titulli e rreshtit</translation>

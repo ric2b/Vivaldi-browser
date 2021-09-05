@@ -385,10 +385,6 @@ void EasyUnlockServiceSignin::OnFocusedUserChanged(
   if (account_id_ == account_id)
     return;
 
-  // Setting or clearing the account_id may changed |IsAllowed| value, so in
-  // these cases update the app state. Otherwise, it's enough to notify the app
-  // the user data has been updated.
-  const bool should_update_app_state = (account_id_ != account_id);
   account_id_ = account_id;
   pref_manager_->SetActiveUser(account_id);
   user_pod_last_focused_timestamp_ = base::TimeTicks::Now();
@@ -410,10 +406,7 @@ void EasyUnlockServiceSignin::OnFocusedUserChanged(
     return;
   }
 
-  if (should_update_app_state) {
-    UpdateAppState();
-  }
-
+  UpdateAppState();
   LoadCurrentUserDataIfNeeded();
 
   // Start loading TPM system token.
@@ -515,7 +508,8 @@ void EasyUnlockServiceSignin::OnUserDataLoaded(
         account_id.GetUserEmail(), std::string() /* instance_id */,
         std::string() /* name */, std::string() /* pii_free_name */,
         decoded_public_key, decoded_psk /* persistent_symmetric_key */,
-        0L /* last_update_time_millis */, software_features, beacon_seeds);
+        0L /* last_update_time_millis */, software_features, beacon_seeds,
+        std::string() /* bluetooth_public_address */);
 
     remote_devices.push_back(remote_device);
     PA_LOG(VERBOSE) << "Loaded Remote Device:\n"

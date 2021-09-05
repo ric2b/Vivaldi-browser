@@ -20,6 +20,7 @@ class GURL;
 
 namespace autofill {
 class AutofillProfile;
+class InternalAuthenticator;
 }  // namespace autofill
 
 namespace content {
@@ -51,11 +52,20 @@ class PaymentAppFactory {
     virtual content::RenderFrameHost* GetInitiatorRenderFrameHost() const = 0;
     virtual const std::vector<mojom::PaymentMethodDataPtr>& GetMethodData()
         const = 0;
+    virtual std::unique_ptr<autofill::InternalAuthenticator>
+    CreateInternalAuthenticator() const = 0;
     virtual scoped_refptr<PaymentManifestWebDataService>
     GetPaymentManifestWebDataService() const = 0;
     virtual bool MayCrawlForInstallablePaymentApps() = 0;
     virtual bool IsOffTheRecord() const = 0;
+
+    // Returns the merchant provided information, or null if the payment is
+    // being aborted.
     virtual PaymentRequestSpec* GetSpec() const = 0;
+
+    // Returns the Android package name of the Trusted Web Activity that invoked
+    // this browser, if any. Otherwise, an empty string.
+    virtual std::string GetTwaPackageName() const = 0;
 
     // Tells the UI to show the processing spinner. Only desktop UI needs this
     // notification.
@@ -84,6 +94,14 @@ class PaymentAppFactory {
 
     // Called when all apps of this factory have been created.
     virtual void OnDoneCreatingPaymentApps() = 0;
+
+    // Make both canMakePayment() and hasEnrolledInstrument() return true,
+    // regardless of presence of payment apps. This is used by secure payment
+    // confirmation method, which returns true for canMakePayment() and
+    // hasEnrolledInstrument() regardless of presence of credentials in user
+    // profile or the authenticator device, as long as a user-verifying platform
+    // authenticator device is available.
+    virtual void SetCanMakePaymentEvenWithoutApps() = 0;
   };
 
   explicit PaymentAppFactory(PaymentApp::Type type);

@@ -70,9 +70,21 @@ Variables
 
   check_targets [optional]
       A list of labels and label patterns that should be checked when running
-      "gn check" or "gn gen --check". If unspecified, all targets will be
-      checked. If it is the empty list, no targets will be checked. To
-      bypass this list, request an explicit check of targets, like "//*".
+      "gn check" or "gn gen --check". If neither check_targets or
+      no_check_targets (see below) is specified, all targets will be checked.
+      It is an error to specify both check_targets and no_check_targets. If it
+      is the empty list, no targets will be checked. To bypass this list,
+      request an explicit check of targets, like "//*".
+
+      The format of this list is identical to that of "visibility" so see "gn
+      help visibility" for examples.
+
+  no_check_targets [optional]
+      A list of labels and label patterns that should *not* be checked when
+      running "gn check" or "gn gen --check". All other targets will be checked.
+      If neither check_targets (see above) or no_check_targets is specified, all
+      targets will be checked. It is an error to specify both check_targets and
+      no_check_targets.
 
       The format of this list is identical to that of "visibility" so see "gn
       help visibility" for examples.
@@ -458,6 +470,9 @@ bool Setup::RunPostMessageLoop(const base::CommandLine& cmdline) {
     if (check_patterns()) {
       commands::FilterTargetsByPatterns(all_targets, *check_patterns(),
                                         &to_check);
+    } else if (no_check_patterns()) {
+      commands::FilterOutTargetsByPatterns(all_targets, *no_check_patterns(),
+                                           &to_check);
     } else {
       to_check = all_targets;
     }
@@ -874,9 +889,30 @@ bool Setup::FillOtherConfig(const base::CommandLine& cmdline, Err* err) {
   const Value* check_targets_value =
       dotfile_scope_.GetValue("check_targets", true);
   if (check_targets_value) {
-    check_patterns_.reset(new std::vector<LabelPattern>);
+    check_patterns_ = std::make_unique<std::vector<LabelPattern>>();
     ExtractListOfLabelPatterns(&build_settings_, *check_targets_value,
                                current_dir, check_patterns_.get(), err);
+    if (err->has_error()) {
+      return false;
+    }
+  }
+
+  // Targets not to check.
+  const Value* no_check_targets_value =
+      dotfile_scope_.GetValue("no_check_targets", true);
+  if (no_check_targets_value) {
+    if (check_targets_value) {
+      Err(Location(), "Conflicting check settings.",
+          "Your .gn file (\"" + FilePathToUTF8(dotfile_name_) +
+              "\")\n"
+              "specified both check_targets and no_check_targets and at most "
+              "one is allowed.")
+          .PrintToStdout();
+      return false;
+    }
+    no_check_patterns_ = std::make_unique<std::vector<LabelPattern>>();
+    ExtractListOfLabelPatterns(&build_settings_, *no_check_targets_value,
+                               current_dir, no_check_patterns_.get(), err);
     if (err->has_error()) {
       return false;
     }

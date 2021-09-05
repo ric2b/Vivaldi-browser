@@ -24,6 +24,7 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.share.ShareDelegateImpl;
@@ -35,7 +36,6 @@ import org.chromium.chrome.browser.util.ChromeFileProvider;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModelSelector;
-import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.base.WindowAndroid;
 
@@ -137,11 +137,6 @@ public class ShareIntentTest {
         @Override
         public ActivityTabProvider getActivityTabProvider() {
             return mActivity.getActivityTabProvider();
-        }
-
-        @Override
-        public BottomSheetController getBottomSheetController() {
-            return mActivity.getBottomSheetController();
         }
 
         @Override

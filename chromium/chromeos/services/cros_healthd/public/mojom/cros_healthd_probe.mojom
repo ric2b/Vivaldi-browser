@@ -10,6 +10,8 @@
 
 module chromeos.cros_healthd.mojom;
 
+import "chromeos/services/network_health/public/mojom/network_health.mojom";
+
 // An enumeration of CPU architectures.
 [Extensible]
 enum CpuArchitectureEnum {
@@ -24,7 +26,6 @@ enum CpuArchitectureEnum {
 enum ProbeCategoryEnum {
   kBattery,
   kNonRemovableBlockDevices,
-  kCachedVpdData,
   kCpu,
   kTimezone,
   kMemory,
@@ -32,6 +33,8 @@ enum ProbeCategoryEnum {
   kFan,
   kStatefulPartition,
   kBluetooth,
+  kSystem,
+  kNetwork,
 };
 
 // An enumeration of the different categories of errors that can occur when
@@ -44,6 +47,8 @@ enum ErrorType {
   kParseError,
   // An error using a system utility.
   kSystemUtilityError,
+  // The external service used to probe the information is not available.
+  kServiceUnavailable,
 };
 
 // Structure that contains error information for a telemetry probe.
@@ -60,6 +65,56 @@ struct ProbeError {
 struct UInt64Value {
   // The value of the uint64.
   uint64 value;
+};
+
+// An enumeration of states a process can be in.
+[Extensible]
+enum ProcessState {
+  // The process is running.
+  kRunning,
+  // The process is sleeping in an interruptible wait.
+  kSleeping,
+  // The process is waiting in an uninterruptible disk sleep.
+  kWaiting,
+  // The process is a zombie.
+  kZombie,
+  // The process is stopped on a signal.
+  kStopped,
+  // The process is stopped by tracing.
+  kTracingStop,
+  // The process is dead.
+  kDead,
+};
+
+// Process probe result. Can either be populated with the ProcessInfo or an
+// error retrieving the information.
+union ProcessResult {
+  // Valid ProcessInfo.
+  ProcessInfo process_info;
+  // The error that occurred attempting to retrieve the ProcessInfo.
+  ProbeError error;
+};
+
+// Information related to a particular process.
+struct ProcessInfo {
+  // Command which started the process.
+  string command;
+  // User the process is running as.
+  uint32 user_id;
+  // If the process is running a real-time scheduling policy, this field is the
+  // negated scheduling priority, minus one. Real-time priorities range from 1
+  // to 99, so this will range from -2 to -100. If the process is not running a
+  // real-time scheduling priority, this field will be the raw nice value, where
+  // 0 corresponds to the user-visible high priority nice value of -20, and 39
+  // corresponds to the user-visible low priority nice value of 19.
+  int8 priority;
+  // User-visible nice value of the process, from a low priority of 19 to a high
+  // priority of -20.
+  int8 nice;
+  // Uptime of the process, in clock ticks.
+  uint64 uptime_ticks;
+  // State of the process.
+  ProcessState state;
 };
 
 // Battery probe result. Can either be populated with the BatteryInfo or an
@@ -117,21 +172,49 @@ union NonRemovableBlockDeviceResult {
   ProbeError error;
 };
 
+// Unions for device-specific data fields. |other| is provided by the default
+// data adapter and filled with a default value for the unknown device type.
+
+// The manufacturer of the block device.
+union BlockDeviceVendor {
+  uint32 nvme_subsystem_vendor;
+  uint16 emmc_oemid;
+  uint16 other;
+};
+
+// The manufacturer-specific product identifier.
+union BlockDeviceProduct {
+  uint32 nvme_subsystem_device;
+  uint64 emmc_pnm;
+  uint16 other;
+};
+
+// The revision of the device's hardware.
+union BlockDeviceRevision {
+  uint8 nvme_pcie_rev;
+  uint8 emmc_prv;
+  uint16 other;
+};
+
+// The revision of the device's firmware.
+union BlockDeviceFirmware {
+  uint64 nvme_firmware_rev;
+  uint64 emmc_fwrev;
+  uint16 other;
+};
+
+// Purpose of the storage device.
+[Extensible]
+enum StorageDevicePurpose {
+  kUnknown,
+  kBootDevice,
+  kSwapDevice,
+};
+
 // Information related to a specific non-removable block device.
 struct NonRemovableBlockDeviceInfo {
-  // The path of this storage on the system. It is useful if caller needs to
-  // correlate with other information.
-  string path;
-  // Exact size of this storage, reported in bytes
-  uint64 size;
-  // Storage type, could be MMC / NVMe / ATA, based on udev subsystem.
-  string type;
-  // Manufacturer ID, 8 bits.
-  uint8 manufacturer_id;
-  // PNM: Product name, ASCII characters for 6 bytes.
-  string name;
-  // PSN: Product serial number, 32 bits
-  uint32 serial;
+  // IO statistics
+
   // Bytes read since last boot.
   uint64 bytes_read_since_last_boot;
   // Bytes written since last boot.
@@ -147,21 +230,35 @@ struct NonRemovableBlockDeviceInfo {
   // Time spent discarding since last boot. Discarding is writing to clear
   // blocks which are no longer in use. Supported on kernels 4.18+.
   UInt64Value? discard_time_seconds_since_last_boot;
-};
 
-// Cached VPD probe result. Can either be populated with the CachedVpdInfo or an
-// error retrieving the information.
-union CachedVpdResult {
-  // Valid CachedVpdInfo.
-  CachedVpdInfo vpd_info;
-  // The error that occurred attempting to retrieve the CachedVpdInfo.
-  ProbeError error;
-};
+  // Device identification.
 
-// Cached VPD read from sysfs.
-struct CachedVpdInfo {
-  // Contents of /sys/firmware/vpd/ro/sku_number, if the device supports it.
-  string? sku_number;
+  // Device vendor identification.
+  BlockDeviceVendor vendor_id;
+  // Device product identification.
+  BlockDeviceProduct product_id;
+  // Device revision.
+  BlockDeviceRevision revision;
+  // Device model.
+  string name;
+  // Device size in bytes.
+  uint64 size;
+  // Firmware version.
+  BlockDeviceFirmware firmware_version;
+  // Storage type, could be MMC / NVMe / ATA, based on udev subsystem.
+  string type;
+  // Purpose of the device e.g. "boot", "swap".
+  StorageDevicePurpose purpose;
+
+  // Additional identification.
+
+  // The path of this storage on the system. It is useful if caller needs to
+  // correlate with other information.
+  string path;
+  // Manufacturer ID, 8 bits.
+  uint8 manufacturer_id;
+  // PSN: Product serial number, 32 bits
+  uint32 serial;
 };
 
 // CPU probe result. Can either be populated with the CpuInfo or an error
@@ -326,6 +423,50 @@ struct BluetoothAdapterInfo {
   uint32 num_connected_devices;
 };
 
+// System probe result. Can either be populated with the SystemInfo or an error
+// retrieving the information.
+union SystemResult {
+  // Valid SystemInfo.
+  SystemInfo system_info;
+  // The error that occurred attempting to retrieve SystemInfo.
+  ProbeError error;
+};
+
+// System Information.
+struct SystemInfo {
+  // The date the device was first activated.
+  // Format: YYYY-WW.
+  string? first_power_date;
+  // The date the device was manufactured (finalized in factory).
+  // Format: YYYY-MM-DD.
+  string? manufacture_date;
+  // The product SKU number.
+  string? product_sku_number;
+  // Contents of CrosConfig in /arc/build-properties/marketing-name.
+  string marketing_name;
+  // The BIOS version.
+  string? bios_version;
+  // The product name of the motherboard.
+  string? board_name;
+  // The version of the motherboard.
+  string? board_version;
+  // The chassis type of the device. The values reported by chassis type are
+  // mapped in
+  // www.dmtf.org/sites/default/files/standards/documents/DSP0134_3.0.0.pdf.
+  UInt64Value? chassis_type;
+  // The product name (model) of the system.
+  string? product_name;
+};
+
+// Network probe result. Can either be populated with the NetworkHealthSnapshot
+// or an error retrieving the information.
+union NetworkResult {
+  // Valid NetworkHealthSnapshot.
+  chromeos.network_health.mojom.NetworkHealthState network_health;
+  // The error that occurred attempting to retrieve the NetworkHealthSnapshot.
+  ProbeError error;
+};
+
 // A collection of all the device's telemetry information that cros_healthd is
 // capable of reporting. Note that every field in TelemetryInfo is nullable, and
 // the response for a particular ProbeTelemetryInfo request will only contain
@@ -341,9 +482,6 @@ struct TelemetryInfo {
   // present when kNonRemovableBlockDevices was included in the categories input
   // to ProbeTelemetryInfo.
   NonRemovableBlockDeviceResult? block_device_result;
-  // Only present when kCachedVpdData was included in the categories input to
-  // ProbeTelemetryInfo.
-  CachedVpdResult? vpd_result;
   // Information about each of the device's CPUs. Only present when kCpu was
   // included in the categories input to ProbeTelemetryInfo.
   CpuResult? cpu_result;
@@ -366,4 +504,11 @@ struct TelemetryInfo {
   // Information about the device's Bluetooth adapters and devices. Only present
   // when kBluetooth was included in the categories input to ProbeTelemetryInfo.
   BluetoothResult? bluetooth_result;
+  // Information about the system from various sources. Only present when
+  // kSystem was included in the categories input to ProbeTelemetryInfo.
+  SystemResult? system_result;
+  // Information about the networking devices and associated networks of the
+  // system. Only present when kNetwork was included in the categories input to
+  // ProbeTelemetryInfo.
+  NetworkResult? network_result;
 };

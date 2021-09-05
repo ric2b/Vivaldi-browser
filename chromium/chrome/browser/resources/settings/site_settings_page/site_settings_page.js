@@ -115,11 +115,7 @@ function getCategoryItemMap() {
       disabledLabel: 'siteSettingsBlocked',
     },
     {
-      route: (function() {
-        return loadTimeData.getBoolean('privacySettingsRedesignEnabled') ?
-            routes.COOKIES :
-            routes.SITE_SETTINGS_COOKIES;
-      })(),
+      route: routes.COOKIES,
       id: Id.COOKIES,
       label: 'siteSettingsCookies',
       icon: 'settings:cookie',
@@ -142,8 +138,6 @@ function getCategoryItemMap() {
       icon: 'settings:hid-device',
       enabledLabel: 'siteSettingsHidDevicesAsk',
       disabledLabel: 'siteSettingsHidDevicesBlock',
-      shouldShow: () =>
-          loadTimeData.getBoolean('enableExperimentalWebPlatformFeatures'),
     },
     {
       route: routes.SITE_SETTINGS_IMAGES,
@@ -187,14 +181,24 @@ function getCategoryItemMap() {
           loadTimeData.getBoolean('enableInsecureContentContentSetting'),
     },
     {
-      route: routes.SITE_SETTINGS_NATIVE_FILE_SYSTEM_WRITE,
-      id: Id.NATIVE_FILE_SYSTEM_WRITE,
-      label: 'siteSettingsNativeFileSystemWrite',
+      route: routes.SITE_SETTINGS_FILE_SYSTEM_WRITE,
+      id: Id.FILE_SYSTEM_WRITE,
+      label: 'siteSettingsFileSystemWrite',
       icon: 'settings:save-original',
-      enabledLabel: 'siteSettingsNativeFileSystemWriteAsk',
-      disabledLabel: 'siteSettingsNativeFileSystemWriteBlock',
+      enabledLabel: 'siteSettingsFileSystemWriteAsk',
+      disabledLabel: 'siteSettingsFileSystemWriteBlock',
       shouldShow: () =>
-          loadTimeData.getBoolean('enableNativeFileSystemWriteContentSetting'),
+          loadTimeData.getBoolean('enableFileSystemWriteContentSetting'),
+    },
+    {
+      route: routes.SITE_SETTINGS_FONT_ACCESS,
+      id: Id.FONT_ACCESS,
+      label: 'fonts',
+      icon: 'settings:font-access',
+      enabledLabel: 'siteSettingsFontAccessAsk',
+      disabledLabel: 'siteSettingsFontAccessBlock',
+      shouldShow: () =>
+          loadTimeData.getBoolean('enableFontAccessContentSetting'),
     },
     {
       route: routes.SITE_SETTINGS_NOTIFICATIONS,
@@ -355,45 +359,6 @@ Polymer({
     lists_: {
       type: Object,
       value: function() {
-        if (!loadTimeData.getBoolean('privacySettingsRedesignEnabled')) {
-          return {
-            all: buildItemListFromIds([
-              Id.COOKIES,
-              Id.GEOLOCATION,
-              Id.CAMERA,
-              Id.MIC,
-              Id.SENSORS,
-              Id.NOTIFICATIONS,
-              Id.JAVASCRIPT,
-              Id.PLUGINS,
-              Id.IMAGES,
-              Id.POPUPS,
-              Id.ADS,
-              Id.BACKGROUND_SYNC,
-              Id.SOUND,
-              Id.AUTOMATIC_DOWNLOADS,
-              Id.UNSANDBOXED_PLUGINS,
-              Id.PROTOCOL_HANDLERS,
-              Id.MIDI_DEVICES,
-              Id.ZOOM_LEVELS,
-              Id.USB_DEVICES,
-              Id.SERIAL_PORTS,
-              Id.BLUETOOTH_DEVICES,
-              Id.NATIVE_FILE_SYSTEM_WRITE,
-              Id.HID_DEVICES,
-              'pdfDocuments',
-              Id.PROTECTED_CONTENT,
-              Id.CLIPBOARD,
-              Id.PAYMENT_HANDLER,
-              Id.MIXEDSCRIPT,
-              Id.BLUETOOTH_SCANNING,
-              Id.AR,
-              Id.VR,
-              Id.WINDOW_PLACEMENT,
-            ]),
-          };
-        }
-
         return {
           permissionsBasic: buildItemListFromIds([
             Id.GEOLOCATION,
@@ -411,7 +376,7 @@ Polymer({
             Id.USB_DEVICES,
             Id.SERIAL_PORTS,
             Id.BLUETOOTH_DEVICES,
-            Id.NATIVE_FILE_SYSTEM_WRITE,
+            Id.FILE_SYSTEM_WRITE,
             Id.HID_DEVICES,
             Id.CLIPBOARD,
             Id.PAYMENT_HANDLER,
@@ -419,6 +384,7 @@ Polymer({
             Id.AR,
             Id.VR,
             Id.WINDOW_PLACEMENT,
+            Id.FONT_ACCESS,
           ]),
           contentBasic: buildItemListFromIds([
             Id.COOKIES,
@@ -443,14 +409,6 @@ Polymer({
     focusConfig: {
       type: Object,
       observer: 'focusConfigChanged_',
-    },
-
-    /** @private */
-    privacySettingsRedesignEnabled_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('privacySettingsRedesignEnabled');
-      },
     },
 
     /** @private */
@@ -487,9 +445,6 @@ Polymer({
    * @private
    */
   getClassForSiteSettingsAllLink_() {
-    return (this.privacySettingsRedesignEnabled_ &&
-            !this.noRecentSitePermissions_) ?
-        'hr' :
-        '';
+    return this.noRecentSitePermissions_ ? '' : 'hr';
   },
 });

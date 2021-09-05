@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">ûnbekende namme</translation>
 <translation id="1089439967362294234">Wachtwurd feroarje</translation>
 <translation id="1110994991967754504">Foech selektearje foar <ph name="PERMISSION_NAME" /></translation>
-<translation id="1152921474424827756">In eksimplaar yn it <ph name="BEGIN_LINK" />lytsûnthâld<ph name="END_LINK" /> fan <ph name="URL" /> iepenje</translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> hat de ferbining ûnferwachts ferbrutsen.</translation>
 <translation id="1161325031994447685">Meitsje op 'e nei ferbining mei Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Printsje...</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">Dizze webstee befettet skealike programma's</translation>
 <translation id="1916770123977586577">Ferfarskje dizze webstee opnij foar it tapassen fan de oanpaste ynstellings op dizze webstee</translation>
 <translation id="1919345977826869612">Advertinsjes</translation>
-<translation id="194030505837763158">Gean nei <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Avansearre</translation>
-<translation id="2030481566774242610">Bedoele jo <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrolearje de proksy en de brânmuorre<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Lûd</translation>
 <translation id="2119505898009119320">Ferlient oan: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -42,6 +39,7 @@
 <translation id="2359808026110333948">Trochgean</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Netwurk diagnoaze útfiere<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Notifikaasjes</translation>
+<translation id="2501278716633472235">Tebek</translation>
 <translation id="2539524384386349900">Detektearje</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> stjoerde in ûnjildige reaksje.</translation>
 <translation id="2586657967955657006">Klamboerd</translation>
@@ -69,6 +67,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Druk de ferfarsk knop om de gegevens dy nedich binne om de side te laden op 'e nij te ferstjoeren.</translation>
 <translation id="3227137524299004712">Mikrofoan</translation>
 <translation id="3234666976984236645">Altyd wichtige ynhâld op dizze webstee detektearje</translation>
+<translation id="3308738399950580893">advertinsjes</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> is op it stuit net berikber.</translation>
 <translation id="3427092606871434483">Tastean (standert)</translation>
 <translation id="3447661539832366887">De eigner fan dit apparaat hat it spultsje dinosaurus útskeakele.</translation>
@@ -84,6 +83,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3681007416295224113">Sertifikaat ynformaasje</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Kontrolearje de proksy, brânmourre, en DNS ynstellings<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">As jo in proksy tsjinner brûke...</translation>
+<translation id="3894751534882749287">As jo de side dochs besjen wolle, kinne jo it beskerming nivo feroarje yn de pop-up fan it folger filter of troch te klikken op Tastean</translation>
 <translation id="3950820424414687140">Ynlogge</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> is tsjinkeard</translation>
 <translation id="3987940399970879459">Minder dan 1 MB</translation>
@@ -110,6 +110,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /><ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Jo ferbining wie ûnderbrutsen</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows netwurk diagnoaze útfiere<ph name="END_LINK" /></translation>
+<translation id="4736016046474602958">Folger filter</translation>
 <translation id="4744603770635761495">Utfierber paad</translation>
 <translation id="4750917950439032686">Jo ynformaasje (lykas wachtwurden, of kredytkaart nûmers) binne privee as se ferstjoerd wurde nei dizze webstee.</translation>
 <translation id="4764776831041365478">De webstee op <ph name="URL" /> is mooglik tydlik út de loft of permanint ferpleatst nei in oar webadres.</translation>
@@ -123,7 +124,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="5287240709317226393">Koekjes sjen litte</translation>
 <translation id="5355557959165512791">Jo kinne <ph name="SITE" /> op it stuit net besykje omdat it sertifikaat weromlútsen is. Netwurk flaters en oanfollen binne meastentiids tydlik, dus dizze side wurket letter wierskynlik wer goed.</translation>
 <translation id="5386426401304769735">De sertifikaat keten foar dizze webstee befettet in sertifikaat ûndertekene mei SHA-1.</translation>
-<translation id="5431657950005405462">Jo triem is net fûn</translation>
 <translation id="5452270690849572955">Dizze <ph name="HOST_NAME" /> side koe net fûn wurde</translation>
 <translation id="5457113250005438886">Unjildich</translation>
 <translation id="5492298309214877701">Dizze webstee op it yntranet dan it bedriuw, de organisaasje of skoalle hat itselde URL-adres as in eksterne webstee.
@@ -169,13 +169,14 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="6897140037006041989">Brûkers agint</translation>
 <translation id="7053983685419859001">Tsjinkeare</translation>
 <translation id="7079718277001814089">Dizze webstee befettet malware</translation>
-<translation id="7090678807593890770">Sykje yn Google om <ph name="LINK" /></translation>
 <translation id="7108819624672055576">Tastean troch in tafoeging</translation>
 <translation id="7111012039238467737">(Jildich)</translation>
+<translation id="7113310725918019676"><ph name="BLOCKED_TYPE" /> tastean op <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> foldocht net oan de feiligens standerts.</translation>
 <translation id="7219179957768738017">De ferbining makket brûkme fan <ph name="SSL_VERSION" />.</translation>
 <translation id="7260504762447901703">Tagong ynlûke</translation>
 <translation id="7353601530677266744">Opdracht rigel</translation>
+<translation id="7364115444476960850">De side dy't jo besykje wolle is tsjinkeard troch Vivaldi's <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profyl paad</translation>
 <translation id="7445762425076701745">De identiteit fan de tsjinner wêrmei jo ferbining meitsje, kin net folslein ferifiearre wurde. Jo ha ferbining makke mei in tsjinner dy't in namme brûkt dy't allinne jildich is yn jo netwurk. Wêr in eksterne sertifikaasje ynstânsje nea it eigendom ferifiearje kin. Sjoen dat guon sertifikaasje ynstânsjes dochs dizze namme útskriuwe, kinne jo nea witte of jo ferbining ha mei de webstee of mei in oanfaller.</translation>
 <translation id="7455133967321480974">Algemiene standert ynstelling brûke (Tsjinkeare)</translation>
@@ -191,7 +192,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="7716424297397655342">Dizze webstee koe net laden wurde út it lytsûnthâld</translation>
 <translation id="7758069387465995638">Software fan de brânmoarre of antyfirus software hat mooglik de ferbining tsjinkeard.</translation>
 <translation id="7800304661137206267">De ferbining is fersifere mei <ph name="CIPHER" />, mei <ph name="MAC" /> foar berjocht ferifikaasje en <ph name="KX" /> as it meganisme foar kaai útwikseling.</translation>
-<translation id="7802523362929240268">Webstee is legitime</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> brûkt gewoanlik fersifiering om jo gegevens te berskermjen. Doe Vivaldi dizze kear besocht ferbining te krijen mei <ph name="SITE" />, stjoerde de webstee frjemde en net goede ynlochgegevens.Dit kin barre as in oanfolle him foardocht as <ph name="SITE" />, of in Wi-Fi ynloch skerm de ferbining ferbrutsen hat. Jo ynformaasje is noch steeds feilich omdat Vivaldi de ferbining ferbrutsen hat foardat der ynformaasje útwiksele wurde koe.</translation>
 <translation id="7878562273885520351">Jo wachtwurd is mooglik hackt</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
@@ -199,6 +199,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="8037357227543935929">Freegje (standert)</translation>
 <translation id="8041940743680923270">Algemiene standert ynstelling brûke (Freegje)</translation>
 <translation id="808894953321890993">Wachtwurd feroarje</translation>
+<translation id="8119307142152921512">folgers en advertinsjes</translation>
 <translation id="8142868475871995937">Gean nei &lt;strong&gt;vivaldi://policy&lt;/strong&gt; om de list fan URL-adressen op de swarte list te sjen en oare betingsten dy't twongen wurde troch de systeembehearder.</translation>
 <translation id="8149426793427495338">Jo kompjûter is gien sliepen.</translation>
 <translation id="8150722005171944719">De triem op <ph name="URL" /> is net te berikken. It is miskien wol wiske, ferpleatst, of de triem foech beheind de tagong.</translation>
@@ -216,6 +217,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="8703575177326907206">Jo ferbining mei <ph name="DOMAIN" /> is net fersifere.</translation>
 <translation id="8740359287975076522">It &lt;abbr id="dnsDefinition"&gt;DNS adres&lt;/abbr&gt; fan <ph name="HOST_NAME" /> koe net fûn wurde. De swierigens wurdt ûndersocht.</translation>
 <translation id="8820817407110198400">Blêdwizers</translation>
+<translation id="8940028675168378100">Tsjinkeard op <ph name="BLOCKER_NAME" /></translation>
 <translation id="9001074447101275817">De proksy <ph name="DOMAIN" /> fereasket in brûkersnamme en wachtwurd.</translation>
 <translation id="9008201768610948239">Negearje</translation>
 <translation id="9011424611726486705">Webstee ynstellings iepenje</translation>
@@ -223,6 +225,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="9039213469156557790">Ek befettet dizze webstee boarnen dy net befeilige binne. Dizze boarnen kinne ûnder ferstjoeren troch oaren besjoen wurde en kinne troch in oanfaller oanpast wurde om it gedrach fan de webstee te feroarjen.</translation>
 <translation id="9069693763241529744">Tsjinkeard troch in tafoeging</translation>
 <translation id="9169664750068251925">Altyd tsjinkeare op dizze webstee</translation>
+<translation id="9180553614777056266">Advertinsje tsjinkearder</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> brûkt in net stipe protokol.</translation>
 <translation id="9219103736887031265">Ofbyldingen</translation>
 <translation id="936602727769022409">Jo kinne de tagong ta jo Google akkount ferlieze. Chromium ried oan om jo wachtwurd te feroarjen. Der sil frege wurde om op jo akkount yn te loggen.</translation>

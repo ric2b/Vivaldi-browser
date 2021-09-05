@@ -109,10 +109,7 @@
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "net/test/test_data_directory.h"
-#include "net/test/url_request/url_request_mock_http_job.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
-#include "net/url_request/url_request_filter.h"
-#include "net/url_request/url_request_interceptor.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
@@ -197,7 +194,7 @@ class NavigateTabMessageHandler : public content::NotificationObserver {
 
         content::WebContents* contents = nullptr;
         ExtensionTabUtil::GetTabById(
-            tab_id, profile, profile->HasOffTheRecordProfile(), &contents);
+            tab_id, profile, profile->HasPrimaryOTRProfile(), &contents);
         ASSERT_NE(contents, nullptr)
             << "Could not find tab with id: " << tab_id;
         content::NavigationController::LoadURLParams params(url);
@@ -508,7 +505,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
 // Test that the webRequest events are dispatched with the expected details when
 // a frame or tab is immediately removed after starting a request.
 // Flaky on Linux/Mac. See crbug.com/780369 for detail.
-#if defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_MAC) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_WebRequestUnloadImmediately DISABLED_WebRequestUnloadImmediately
 #else
 #define MAYBE_WebRequestUnloadImmediately WebRequestUnloadImmediately
@@ -631,18 +628,14 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
       << message_;
 }
 
-enum class ExtraHeadersRequirementMode {
-  kEnabled,
-  kDisabled,
-  kEnabledWithCorsLegacyModeEnabledPolicy,
-  kEnabledWithCorsMitigationListPolicy,
-  kEnabledWithHiddenCorsLegacyModeEnabledPolicy,
-  kEnabledWithHiddenCorsMitigationListPolicy,
+enum class CorsMode {
+  kOutOfBlinkCors,
+  kBlinkCors,
 };
 
 class ExtensionWebRequestApiPolicyTest
     : public ExtensionWebRequestApiTest,
-      public ::testing::WithParamInterface<ExtraHeadersRequirementMode> {
+      public ::testing::WithParamInterface<CorsMode> {
  public:
   const std::string& test_name() { return test_name_; }
 
@@ -653,57 +646,20 @@ class ExtensionWebRequestApiPolicyTest
     policy::BrowserPolicyConnector::SetPolicyProviderForTesting(&provider_);
 
     switch (GetParam()) {
-      case ExtraHeadersRequirementMode::kEnabled:
+      case CorsMode::kOutOfBlinkCors:
         feature_list_.InitAndEnableFeature(network::features::kOutOfBlinkCors);
         test_name_ += "?cors_mode=network_service";
         break;
-      case ExtraHeadersRequirementMode::kDisabled:
+      case CorsMode::kBlinkCors:
         feature_list_.InitAndDisableFeature(network::features::kOutOfBlinkCors);
         test_name_ += "?cors_mode=blink";
-        break;
-      case ExtraHeadersRequirementMode::kEnabledWithCorsLegacyModeEnabledPolicy:
-        feature_list_.InitWithFeatures(
-            {network::features::kOutOfBlinkCors},
-            {features::kHideCorsLegacyModeEnabledPolicySupport});
-        UpdatePolicy(policy::key::kCorsLegacyModeEnabled,
-                     std::make_unique<base::Value>(true));
-        test_name_ += "?cors_mode=blink";
-        break;
-      case ExtraHeadersRequirementMode::kEnabledWithCorsMitigationListPolicy:
-        feature_list_.InitWithFeatures(
-            {network::features::kOutOfBlinkCors},
-            {features::kHideCorsMitigationListPolicySupport});
-        UpdatePolicy(policy::key::kCorsMitigationList,
-                     std::make_unique<base::ListValue>());
-        test_name_ += "?cors_mode=network_service&with_force_extra_headers";
-        break;
-      case ExtraHeadersRequirementMode::
-          kEnabledWithHiddenCorsLegacyModeEnabledPolicy:
-        feature_list_.InitWithFeatures(
-            {features::kHideCorsLegacyModeEnabledPolicySupport,
-             network::features::kOutOfBlinkCors},
-            {});
-        UpdatePolicy(policy::key::kCorsLegacyModeEnabled,
-                     std::make_unique<base::Value>(true));
-        test_name_ += "?cors_mode=network_service";
-        break;
-      case ExtraHeadersRequirementMode::
-          kEnabledWithHiddenCorsMitigationListPolicy:
-        feature_list_.InitWithFeatures(
-            {features::kHideCorsMitigationListPolicySupport,
-             network::features::kOutOfBlinkCors},
-            {});
-        UpdatePolicy(policy::key::kCorsMitigationList,
-                     std::make_unique<base::ListValue>());
-        test_name_ += "?cors_mode=network_service";
         break;
     }
 
     ExtensionWebRequestApiTest::SetUpInProcessBrowserTestFixture();
   }
 
-  void UpdatePolicy(const std::string& policy,
-                    std::unique_ptr<base::Value> value) {
+  void UpdatePolicy(const std::string& policy, base::Value value) {
     policy::PolicyMap policy_map;
     policy_map.Set(policy, policy::POLICY_LEVEL_MANDATORY,
                    policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
@@ -723,39 +679,13 @@ IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiPolicyTest,
   ASSERT_TRUE(RunExtensionSubtest("webrequest", test_name())) << message_;
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    Enabled,
-    ExtensionWebRequestApiPolicyTest,
-    testing::Values(ExtraHeadersRequirementMode::kEnabled));
+INSTANTIATE_TEST_SUITE_P(Enabled,
+                         ExtensionWebRequestApiPolicyTest,
+                         testing::Values(CorsMode::kOutOfBlinkCors));
 
-INSTANTIATE_TEST_SUITE_P(
-    Disabled,
-    ExtensionWebRequestApiPolicyTest,
-    testing::Values(ExtraHeadersRequirementMode::kDisabled));
-
-INSTANTIATE_TEST_SUITE_P(
-    EnabledWithCorsLegacyModeEnabledPolicy,
-    ExtensionWebRequestApiPolicyTest,
-    testing::Values(
-        ExtraHeadersRequirementMode::kEnabledWithCorsLegacyModeEnabledPolicy));
-
-INSTANTIATE_TEST_SUITE_P(
-    EnabledWithCorsMitigationListPolicy,
-    ExtensionWebRequestApiPolicyTest,
-    testing::Values(
-        ExtraHeadersRequirementMode::kEnabledWithCorsMitigationListPolicy));
-
-INSTANTIATE_TEST_SUITE_P(
-    EnabledWithHiddenCorsLegacyModeEnabledPolicy,
-    ExtensionWebRequestApiPolicyTest,
-    testing::Values(ExtraHeadersRequirementMode::
-                        kEnabledWithHiddenCorsLegacyModeEnabledPolicy));
-
-INSTANTIATE_TEST_SUITE_P(
-    EnabledWithHiddenCorsMitigationListPolicy,
-    ExtensionWebRequestApiPolicyTest,
-    testing::Values(ExtraHeadersRequirementMode::
-                        kEnabledWithHiddenCorsMitigationListPolicy));
+INSTANTIATE_TEST_SUITE_P(Disabled,
+                         ExtensionWebRequestApiPolicyTest,
+                         testing::Values(CorsMode::kBlinkCors));
 
 IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestRedirects) {
   ASSERT_TRUE(StartEmbeddedTestServer());
@@ -818,7 +748,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestNewTab) {
       << message_;
 
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  content::WaitForLoadStop(tab);
+  EXPECT_TRUE(content::WaitForLoadStop(tab));
 
   ResultCatcher catcher;
 
@@ -877,7 +807,7 @@ void ExtensionWebRequestApiTest::RunPermissionTest(
   catcher.RestrictToBrowserContext(browser()->profile());
   ResultCatcher catcher_incognito;
   catcher_incognito.RestrictToBrowserContext(
-      browser()->profile()->GetOffTheRecordProfile());
+      browser()->profile()->GetPrimaryOTRProfile());
 
   ExtensionTestMessageListener listener("done", false);
   ExtensionTestMessageListener listener_incognito("done_incognito", false);
@@ -3026,7 +2956,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, Initiator_SplitIncognito) {
                 profile(), extension->id(), kScript));
   EXPECT_EQ(base::StringPrintf("[\"%s\"]", origin_incognito.c_str()),
             browsertest_util::ExecuteScriptInBackgroundPage(
-                profile()->GetOffTheRecordProfile(), extension->id(), kScript));
+                profile()->GetPrimaryOTRProfile(), extension->id(), kScript));
 }
 
 // A request handler that sets the Access-Control-Allow-Origin header.

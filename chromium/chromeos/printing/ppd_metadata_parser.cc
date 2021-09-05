@@ -11,6 +11,7 @@
 #include "base/json/json_reader.h"
 #include "base/notreached.h"
 #include "base/optional.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/values.h"
 
@@ -58,7 +59,131 @@ base::Optional<base::Value> ParseJsonAndUnnestKey(
   return unnested;
 }
 
+// Returns a well-formed Restrictions struct from a dictionary |value|.
+// A well-formed Restrictions struct has at least one member that
+// for which calling base::Version::IsValid() will evaluate true.
+base::Optional<PpdProvider::Restrictions> ParseRestrictionsFromValue(
+    const base::Value& value) {
+  auto min_as_double = value.FindDoubleKey("minMilestone");
+  auto max_as_double = value.FindDoubleKey("maxMilestone");
+  if (!min_as_double.has_value() && !max_as_double.has_value()) {
+    return base::nullopt;
+  }
+
+  // While we don't want to deliberately store trivial base::Version
+  // members into the Restrictions struct, take heed that a
+  // calling IsValid() on a default-constructed base::Version returns
+  // false.
+  PpdProvider::Restrictions restrictions;
+  bool restrictions_is_nontrivial = false;
+  if (min_as_double.has_value()) {
+    base::Version min_milestone =
+        base::Version(base::NumberToString(int{min_as_double.value()}));
+    if (min_milestone.IsValid()) {
+      restrictions.min_milestone = min_milestone;
+      restrictions_is_nontrivial = true;
+    }
+  }
+  if (max_as_double.has_value()) {
+    base::Version max_milestone =
+        base::Version(base::NumberToString(int{max_as_double.value()}));
+    if (max_milestone.IsValid()) {
+      restrictions.max_milestone = max_milestone;
+      restrictions_is_nontrivial = true;
+    }
+  }
+
+  if (restrictions_is_nontrivial) {
+    return restrictions;
+  }
+  return base::nullopt;
+}
+
+// Returns a ParsedPrinter from a leaf |value| from Printers metadata.
+base::Optional<ParsedPrinter> ParsePrinterFromValue(const base::Value& value) {
+  const std::string* const effective_make_and_model =
+      value.FindStringKey("emm");
+  const std::string* const name = value.FindStringKey("name");
+  if (!effective_make_and_model || effective_make_and_model->empty() || !name ||
+      name->empty()) {
+    return base::nullopt;
+  }
+  ParsedPrinter printer;
+  printer.effective_make_and_model = *effective_make_and_model;
+  printer.user_visible_printer_name = *name;
+
+  const base::Value* const restrictions_value =
+      value.FindDictKey("restriction");
+  if (restrictions_value) {
+    printer.restrictions = ParseRestrictionsFromValue(*restrictions_value);
+  }
+  return printer;
+}
+
+// Returns a ParsedIndexLeaf from |value|.
+base::Optional<ParsedIndexLeaf> ParsedIndexLeafFrom(const base::Value& value) {
+  if (!value.is_dict()) {
+    return base::nullopt;
+  }
+
+  ParsedIndexLeaf leaf;
+
+  const std::string* const ppd_basename = value.FindStringKey("name");
+  if (!ppd_basename) {
+    return base::nullopt;
+  }
+  leaf.ppd_basename = *ppd_basename;
+
+  const base::Value* const restrictions_value =
+      value.FindDictKey("restriction");
+  if (restrictions_value) {
+    leaf.restrictions = ParseRestrictionsFromValue(*restrictions_value);
+  }
+  return leaf;
+}
+
+// Returns a ParsedIndexValues from a |value| extracted from a forward
+// index.
+base::Optional<ParsedIndexValues> UnnestPpdMetadata(const base::Value& value) {
+  if (!value.is_dict()) {
+    return base::nullopt;
+  }
+  const base::Value* const ppd_metadata_list = value.FindListKey("ppdMetadata");
+  if (!ppd_metadata_list || ppd_metadata_list->GetList().size() == 0) {
+    return base::nullopt;
+  }
+
+  ParsedIndexValues parsed_index_values;
+  for (const base::Value& v : ppd_metadata_list->GetList()) {
+    base::Optional<ParsedIndexLeaf> parsed_index_leaf = ParsedIndexLeafFrom(v);
+    if (parsed_index_leaf.has_value()) {
+      parsed_index_values.values.push_back(parsed_index_leaf.value());
+    }
+  }
+
+  if (parsed_index_values.values.empty()) {
+    return base::nullopt;
+  }
+  return parsed_index_values;
+}
+
 }  // namespace
+
+ParsedPrinter::ParsedPrinter() = default;
+ParsedPrinter::~ParsedPrinter() = default;
+ParsedPrinter::ParsedPrinter(const ParsedPrinter&) = default;
+ParsedPrinter& ParsedPrinter::operator=(const ParsedPrinter&) = default;
+
+ParsedIndexLeaf::ParsedIndexLeaf() = default;
+ParsedIndexLeaf::~ParsedIndexLeaf() = default;
+ParsedIndexLeaf::ParsedIndexLeaf(const ParsedIndexLeaf&) = default;
+ParsedIndexLeaf& ParsedIndexLeaf::operator=(const ParsedIndexLeaf&) = default;
+
+ParsedIndexValues::ParsedIndexValues() = default;
+ParsedIndexValues::~ParsedIndexValues() = default;
+ParsedIndexValues::ParsedIndexValues(const ParsedIndexValues&) = default;
+ParsedIndexValues& ParsedIndexValues::operator=(const ParsedIndexValues&) =
+    default;
 
 base::Optional<std::vector<std::string>> ParseLocales(
     base::StringPiece locales_json) {
@@ -104,21 +229,78 @@ base::Optional<ParsedManufacturers> ParseManufacturers(
   return manufacturers;
 }
 
-base::Optional<ParsedPrinters> ParsePrinters(base::StringPiece printers_json) {
-  const auto as_value = ParseJsonAndUnnestKey(printers_json, "modelToEmm",
-                                              base::Value::Type::DICTIONARY);
+base::Optional<ParsedIndex> ParseForwardIndex(
+    base::StringPiece forward_index_json) {
+  // Firstly, we unnest the dictionary keyed by "ppdIndex."
+  base::Optional<base::Value> ppd_index = ParseJsonAndUnnestKey(
+      forward_index_json, "ppdIndex", base::Value::Type::DICTIONARY);
+  if (!ppd_index || ppd_index->DictSize() == 0) {
+    return base::nullopt;
+  }
 
+  ParsedIndex parsed_index;
+
+  // Secondly, we iterate on the key-value pairs of the ppdIndex.
+  // This yields a list of leaf values (dictionaries).
+  for (const auto& kv : ppd_index->DictItems()) {
+    base::Optional<ParsedIndexValues> values = UnnestPpdMetadata(kv.second);
+    if (values.has_value()) {
+      parsed_index.insert_or_assign(kv.first, values.value());
+    }
+  }
+
+  if (parsed_index.empty()) {
+    return base::nullopt;
+  }
+  return parsed_index;
+}
+
+base::Optional<ParsedUsbIndex> ParseUsbIndex(base::StringPiece usb_index_json) {
+  base::Optional<base::Value> usb_index = ParseJsonAndUnnestKey(
+      usb_index_json, "usbIndex", base::Value::Type::DICTIONARY);
+  if (!usb_index || usb_index->DictSize() == 0) {
+    return base::nullopt;
+  }
+
+  ParsedUsbIndex parsed_usb_index;
+  for (const auto& kv : usb_index->DictItems()) {
+    int product_id;
+    if (!base::StringToInt(kv.first, &product_id)) {
+      continue;
+    }
+
+    const std::string* effective_make_and_model =
+        kv.second.FindStringKey("effectiveMakeAndModel");
+    if (!effective_make_and_model || effective_make_and_model->empty()) {
+      continue;
+    }
+
+    parsed_usb_index.insert_or_assign(product_id, *effective_make_and_model);
+  }
+  if (parsed_usb_index.empty()) {
+    return base::nullopt;
+  }
+  return parsed_usb_index;
+}
+
+base::Optional<ParsedPrinters> ParsePrinters(base::StringPiece printers_json) {
+  const auto as_value =
+      ParseJsonAndUnnestKey(printers_json, "printers", base::Value::Type::LIST);
   if (!as_value.has_value()) {
     return base::nullopt;
   }
+
   ParsedPrinters printers;
-  for (const auto& iter : as_value.value().DictItems()) {
-    std::string printer_effective_make_and_model;
-    if (!iter.second.GetAsString(&printer_effective_make_and_model)) {
+  for (const auto& printer_value : as_value->GetList()) {
+    if (!printer_value.is_dict()) {
       continue;
     }
-    printers.push_back(
-        ParsedPrinter{iter.first, printer_effective_make_and_model});
+    base::Optional<ParsedPrinter> printer =
+        ParsePrinterFromValue(printer_value);
+    if (!printer.has_value()) {
+      continue;
+    }
+    printers.push_back(printer.value());
   }
   if (printers.empty()) {
     return base::nullopt;

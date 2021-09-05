@@ -2,11 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 
-jumbo_component("aura") {
+component("aura") {
   public = [
     "client/aura_constants.h",
     "client/capture_client.h",
@@ -136,6 +135,7 @@ jumbo_component("aura") {
 
   public_deps = [
     "//ui/base/cursor:cursor_base",
+    "//ui/base/dragdrop/mojom:mojom_headers",
     "//ui/base/ime",
     "//ui/compositor",
   ]
@@ -174,7 +174,7 @@ jumbo_component("aura") {
   configs += [ "//build/config/compiler:noshadowing" ]
 }
 
-jumbo_static_library("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "test/aura_test_base.cc",
@@ -247,9 +247,14 @@ jumbo_static_library("test_support") {
     sources += [ "test/ui_controls_factory_aurawin.cc" ]
   }
 
+  if (is_linux) {
+    sources += [ "test/ui_controls_factory_aura_linux.cc" ]
+  }
+
   if (use_x11) {
     sources += [
-      "test/ui_controls_factory_aurax11.cc",
+      "test/ui_controls_aurax11.cc",
+      "test/ui_controls_aurax11.h",
       "test/x11_event_sender.cc",
       "test/x11_event_sender.h",
     ]
@@ -264,10 +269,13 @@ jumbo_static_library("test_support") {
     if (is_fuchsia) {
       deps += [ "//ui/ozone" ]
     }
-    sources += [ "test/ui_controls_factory_ozone.cc" ]
+    sources += [
+      "test/ui_controls_ozone.cc",
+      "test/ui_controls_ozone.h",
+    ]
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     deps += [ "//ui/platform_window/common" ]
   }
 }
@@ -306,6 +314,10 @@ executable("aura_demo") {
 }
 
 test("aura_unittests") {
+  if ((is_linux && !is_chromeos) || chromeos_is_browser_only) {
+    use_xvfb = true
+  }
+
   sources = [
     "../compositor_extra/shadow_unittest.cc",
     "gestures/gesture_recognizer_unittest.cc",

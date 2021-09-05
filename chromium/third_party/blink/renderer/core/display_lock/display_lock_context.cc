@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/editing/selection_template.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/html_element_type_helpers.h"
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
@@ -108,6 +109,7 @@ void DisplayLockContext::SetRequestedState(EContentVisibility state) {
       break;
     case EContentVisibility::kAuto:
       UseCounter::Count(document_, WebFeature::kContentVisibilityAuto);
+      had_any_viewport_intersection_notifications_ = false;
       RequestLock(static_cast<uint16_t>(DisplayLockActivationReason::kAny));
       break;
     case EContentVisibility::kHidden:
@@ -438,6 +440,7 @@ void DisplayLockContext::SetKeepUnlockedUntilLifecycleCount(int count) {
 }
 
 void DisplayLockContext::NotifyIsIntersectingViewport() {
+  had_any_viewport_intersection_notifications_ = true;
   // If we are now intersecting, then we are definitely not nested in a locked
   // subtree and we don't need to lock as a result.
   needs_deferred_not_intersecting_signal_ = false;
@@ -450,6 +453,8 @@ void DisplayLockContext::NotifyIsIntersectingViewport() {
 }
 
 void DisplayLockContext::NotifyIsNotIntersectingViewport() {
+  had_any_viewport_intersection_notifications_ = true;
+
   if (IsLocked()) {
     DCHECK(!needs_deferred_not_intersecting_signal_);
     return;

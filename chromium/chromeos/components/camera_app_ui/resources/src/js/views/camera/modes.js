@@ -11,8 +11,8 @@ import {
   PhotoConstraintsPreferrer,  // eslint-disable-line no-unused-vars
   VideoConstraintsPreferrer,  // eslint-disable-line no-unused-vars
 } from '../../device/constraints_preferrer.js';
-import {Filenamer} from '../../models/filenamer.js';
-import * as filesystem from '../../models/filesystem.js';
+import {Filenamer} from '../../models/file_namer.js';
+import * as filesystem from '../../models/file_system.js';
 // eslint-disable-next-line no-unused-vars
 import {VideoSaver} from '../../models/video_saver.js';
 import {DeviceOperator, parseMetadata} from '../../mojo/device_operator.js';
@@ -35,10 +35,10 @@ import {RecordTime} from './recordtime.js';
 /**
  * Contains video recording result.
  * @typedef {{
- *     resolution: {width: number, height: number},
- *     duration: number,
- *     videoSaver: !VideoSaver,
- *     everPaused: boolean,
+ *   resolution: !Resolution,
+ *   duration: number,
+ *   videoSaver: !VideoSaver,
+ *   everPaused: boolean,
  * }}
  */
 export let VideoResult;
@@ -46,9 +46,9 @@ export let VideoResult;
 /**
  * Contains photo taking result.
  * @typedef {{
- *     resolution: {width: number, height: number},
- *     blob: !Blob,
- *     isVideoSnapshot: (boolean|undefined),
+ *   resolution: !Resolution,
+ *   blob: !Blob,
+ *   isVideoSnapshot: (boolean|undefined),
  * }}
  */
 export let PhotoResult;
@@ -65,7 +65,7 @@ export let DoSwitchMode;
  * param {!PhotoResult} Captured photo result.
  * param {string} Name of the photo result to be saved as.
  * return {!Promise}
- * @typedef {function(PhotoResult, string): !Promise}
+ * @typedef {function(!PhotoResult, string): !Promise}
  */
 export let DoSavePhoto;
 
@@ -218,7 +218,7 @@ export class Modes {
      *     constraints-candidates.
      */
     const getV1Constraints = function(videoMode, deviceId) {
-      return [
+      const /** !Array<!MediaTrackConstraints> */ baseConstraints = [
         {
           aspectRatio: {ideal: videoMode ? 1.7777777778 : 1.3333333333},
           width: {min: 1280},
@@ -228,7 +228,8 @@ export class Modes {
           width: {min: 640},
           frameRate: {min: 20, ideal: 30},
         },
-      ].map((/** !MediaTrackConstraints */ constraint) => {
+      ];
+      return baseConstraints.map((constraint) => {
         if (deviceId) {
           constraint.deviceId = {exact: deviceId};
         } else {
@@ -321,7 +322,7 @@ export class Modes {
     });
 
     [state.State.EXPERT, state.State.SAVE_METADATA].forEach(
-        (/** state.State */ s) => {
+        (/** !state.State */ s) => {
           state.addObserver(s, this.updateSaveMetadata_.bind(this));
         });
 
@@ -330,7 +331,7 @@ export class Modes {
   }
 
   /**
-   * @return {!Array<Mode>}
+   * @return {!Array<!Mode>}
    * @private
    */
   get allModeNames_() {
@@ -369,7 +370,7 @@ export class Modes {
    */
   getModeCandidates() {
     const tried = {};
-    const /** !Array<Mode> */ results = [];
+    const /** !Array<!Mode> */ results = [];
     let mode = this.allModeNames_.find(state.get);
     assert(mode !== undefined);
     while (!tried[mode]) {
@@ -385,12 +386,11 @@ export class Modes {
    * constraints for the given mode.
    * @param {!Mode} mode
    * @param {string} deviceId
-   * @param {!ResolutionList} previewResolutions
    * @return {!Array<!CaptureCandidate>}
    */
-  getResolutionCandidates(mode, deviceId, previewResolutions) {
+  getResolutionCandidates(mode, deviceId) {
     return this.allModes_[mode].constraintsPreferrer.getSortedCandidates(
-        deviceId, previewResolutions);
+        deviceId);
   }
 
   /**
@@ -408,7 +408,7 @@ export class Modes {
   /**
    * Gets capture intent for the given mode.
    * @param {!Mode} mode
-   * @return {cros.mojom.CaptureIntent} Capture intent for the given mode.
+   * @return {!cros.mojom.CaptureIntent} Capture intent for the given mode.
    */
   getCaptureIntent(mode) {
     return this.allModes_[mode].captureIntent;
@@ -421,7 +421,7 @@ export class Modes {
    *     the video device.
    */
   async getSupportedModes(deviceId) {
-    const /** !Array<Mode> */ supportedModes = [];
+    const /** !Array<!Mode> */ supportedModes = [];
     for (const mode of this.allModeNames_) {
       const obj = this.allModes_[mode];
       if (await obj.isSupported(deviceId)) {
@@ -707,7 +707,11 @@ export class Video extends ModeBase {
       const {width, height} = await util.blobToImage(blob);
       const imageName = (new Filenamer()).newImageName();
       await this.doSaveSnapshot_(
-          {resolution: {width, height}, blob, isVideoSnapshot: true},
+          {
+            resolution: new Resolution(width, height),
+            blob,
+            isVideoSnapshot: true,
+          },
           imageName);
     };
     this.snapshots_.push(doSnapshot);
@@ -863,10 +867,14 @@ export class Video extends ModeBase {
           resolve(saver);
         }
       };
+      const onstart = () => {
+        state.set(state.State.RECORDING, true);
+        this.mediaRecorder_.removeEventListener('start', onstart);
+      };
       this.mediaRecorder_.addEventListener('dataavailable', ondataavailable);
       this.mediaRecorder_.addEventListener('stop', onstop);
+      this.mediaRecorder_.addEventListener('start', onstart);
       this.mediaRecorder_.start(100);
-      state.set(state.State.RECORDING, true);
       state.set(state.State.RECORDING_PAUSED, false);
       state.set(state.State.RECORDING_UI_PAUSED, false);
     });
@@ -1188,7 +1196,10 @@ class Portrait extends Photo {
         throw e;
       }
       const {width, height} = await util.blobToImage(blob);
-      await this.doSavePhoto_({resolution: {width, height}, blob}, imageName);
+      await this.doSavePhoto_(
+          {resolution: new Resolution(width, height), blob},
+          imageName,
+      );
     };
 
     const refSave = saveResult(reference, refImageName);

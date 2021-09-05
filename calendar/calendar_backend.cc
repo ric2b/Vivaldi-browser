@@ -230,8 +230,8 @@ void CalendarBackend::CreateCalendarEvents(
 
   size_t count = events.size();
 
-  std::shared_ptr<CreateEventResult> event_result =
-      std::shared_ptr<CreateEventResult>(new CreateEventResult());
+  std::shared_ptr<EventResultCB> event_result =
+      std::shared_ptr<EventResultCB>(new EventResultCB());
 
   for (size_t i = 0; i < count; i++) {
     EventRow ev = events[i];
@@ -253,7 +253,7 @@ void CalendarBackend::CreateCalendarEvents(
 
 void CalendarBackend::CreateCalendarEvent(
     EventRow ev,
-    std::shared_ptr<CreateEventResult> result) {
+    std::shared_ptr<EventResultCB> result) {
   if (!db_->DoesCalendarIdExist(ev.calendar_id())) {
     result->success = false;
     result->message = "Calendar does not exist.";
@@ -269,12 +269,20 @@ void CalendarBackend::CreateCalendarEvent(
         EventID exception_event_id = 0;
         if (!exception.cancelled) {
           EventRow exception_event;
-          exception_event.set_title(exception.title);
+          exception_event = *exception.event;
           exception_event.set_calendar_id(ev.calendar_id());
-          exception_event.set_description(exception.description);
-          exception_event.set_start(exception.start);
-          exception_event.set_end(exception.end);
           exception_event_id = db_->CreateCalendarEvent(exception_event);
+
+          if (exception_event.invites_to_create().size() > 0) {
+            for (const auto& invite : exception_event.invites_to_create()) {
+              InviteRow invite_row;
+              invite_row.event_id = exception_event_id;
+              invite_row.name = invite.name;
+              invite_row.partstat = invite.partstat;
+              invite_row.address = invite.address;
+              db_->CreateInvite(invite_row);
+            }
+          }
         }
 
         RecurrenceExceptionRow row;
@@ -333,7 +341,7 @@ EventResult CalendarBackend::FillEvent(EventID id) {
 
 void CalendarBackend::CreateRecurrenceException(
     RecurrenceExceptionRow row,
-    std::shared_ptr<CreateRecurrenceExceptionResult> result) {
+    std::shared_ptr<EventResultCB> result) {
   if (!db_->DoesEventIdExist(row.parent_event_id)) {
     result->success = false;
     result->message = "Event does not exist.";
@@ -354,7 +362,7 @@ void CalendarBackend::CreateRecurrenceException(
       NotifyEventModified(event_row);
     }
     result->success = true;
-    result->createdRow = row;
+    result->createdEvent = event_row;
   } else {
     result->success = false;
   }

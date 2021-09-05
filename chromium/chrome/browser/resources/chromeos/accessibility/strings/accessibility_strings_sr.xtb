@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Ставка листе</translation>
 <translation id="1013742170491673792">претрага</translation>
 <translation id="1014370462248694370">Превлачите надесно помоћу два прста</translation>
+<translation id="1016393160682012902">Притисните тастер на qwerty тастатури, тастер на тастатури са Брајевом азбуком који може да се освежи или обавите покрет додира да бисте сазнали његову функцију. Притисните control и w или escape да бисте изашли из њега.</translation>
 <translation id="1022586497894531524">Да ли први пут користите ChromeVox говорне повратне информације? Овај кратки водич објашњава основне ствари потребне за почетне кораке са услугом ChromeVox.</translation>
 <translation id="1025074108959230262">Лепљиви режим је онемогућен</translation>
 <translation id="1031961866430398710">и</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Интерни линк</translation>
 <translation id="4909019435900810068">Помери уназад за једну реч</translation>
 <translation id="4911349081560453449">Нема претходног поља за потврду</translation>
-<translation id="4915087353619183190">Покрећемо режим за учење. Притисните тастер на qwerty тастатури, тастер на Брајевој тастатури који може да се освежи или обавите покрет додира да бисте сазнали његову функцију. Притисните control и w или escape да бисте изашли из њега.</translation>
 <translation id="492295894462528572">Предговор</translation>
 <translation id="495046168593986294">Помери нагоре</translation>
 <translation id="495170559598752135">Радње</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Зелена</translation>
 <translation id="602001110135236999">Помери налево</translation>
 <translation id="6034000775414344507">Светлосива</translation>
+<translation id="6036135911048686884">Истражите додиром</translation>
 <translation id="6037602951055904232">Померање унапред</translation>
 <translation id="6044160928851315051">Затамни екран</translation>
 <translation id="6082768461603900813">Основно кретање</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{знак „тараба“}one{# знак „тараба“}few{# знака „тараба“}other{# знакова „тараба“}}</translation>
 <translation id="8378855320830505539">Област</translation>
 <translation id="8382679411218029383">Аутоматско довршавање уметнутог текста и листе</translation>
+<translation id="8394908167088220973">Пуштање/паузирање медија</translation>
 <translation id="8428213095426709021">Подешавања</translation>
 <translation id="8428603554127842284"><ph name="DEPTH" />. ниво</translation>
 <translation id="8430049249787218991">трака менија</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">изађите из структурираног садржаја, попут табела</translation>
 <translation id="8779057862865475116">Нема претходног линка</translation>
 <translation id="8796411681063377102">Следеће заглавље 3. нивоа</translation>
+<translation id="8823311177246872527"><ph name="CURRENTPAGE" />. страница од <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">банер</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8882002077197914455">Заглавље реда</translation>

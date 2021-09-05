@@ -22,6 +22,7 @@
 #include "third_party/skia/src/gpu/GrSemaphore.h"
 #include "ui/gfx/swap_result.h"
 
+class GrContext;
 class SkSurface;
 
 namespace base {
@@ -76,6 +77,7 @@ class SkiaOutputDevice {
       base::RepeatingCallback<void(gpu::SwapBuffersCompleteParams,
                                    const gfx::Size& pixel_size)>;
   SkiaOutputDevice(
+      GrContext* gr_context,
       gpu::MemoryTracker* memory_tracker,
       DidSwapBufferCompleteCallback did_swap_buffer_complete_callback);
   virtual ~SkiaOutputDevice();
@@ -86,6 +88,10 @@ class SkiaOutputDevice {
                        const gfx::ColorSpace& color_space,
                        gfx::BufferFormat format,
                        gfx::OverlayTransform transform) = 0;
+
+  // Call before GrContext::submit() for the current frame. The implementation
+  // can use this opportunity to insert some work into the GrContext.
+  virtual void PreGrContextSubmit();
 
   // Presents the back buffer.
   virtual void SwapBuffers(BufferPresentedCallback feedback,
@@ -99,24 +105,25 @@ class SkiaOutputDevice {
   // Set the rectangle that will be drawn into on the surface.
   virtual bool SetDrawRectangle(const gfx::Rect& draw_rectangle);
 
+  // Enable or disable DC layers. Must be called before DC layers are scheduled.
+  virtual void SetEnableDCLayers(bool enabled);
+
   virtual void SetGpuVSyncEnabled(bool enabled);
 
   // Whether the output device's primary plane is an overlay. This returns true
   // is the SchedulePrimaryPlane function is implemented.
   virtual bool IsPrimaryPlaneOverlay() const;
+
   // Schedule the output device's back buffer as an overlay plane. The scheduled
   // primary plane will be on screen when SwapBuffers() or PostSubBuffer() is
   // called.
   virtual void SchedulePrimaryPlane(
-      const OverlayProcessorInterface::OutputSurfaceOverlayPlane& plane);
+      const base::Optional<
+          OverlayProcessorInterface::OutputSurfaceOverlayPlane>& plane);
 
   // Schedule overlays which will be on screen when SwapBuffers() or
   // PostSubBuffer() is called.
   virtual void ScheduleOverlays(SkiaOutputSurface::OverlayList overlays);
-
-#if defined(OS_WIN)
-  virtual void SetEnableDCLayers(bool enabled);
-#endif
 
   const OutputSurface::Capabilities& capabilities() const {
     return capabilities_;
@@ -130,11 +137,16 @@ class SkiaOutputDevice {
 
   bool is_emulated_rgbx() const { return is_emulated_rgbx_; }
 
+  void SetDrawTimings(base::TimeTicks submitted, base::TimeTicks started);
+
  protected:
   // Only valid between StartSwapBuffers and FinishSwapBuffers.
   class SwapInfo {
    public:
-    SwapInfo(uint64_t swap_id, BufferPresentedCallback feedback);
+    SwapInfo(uint64_t swap_id,
+             BufferPresentedCallback feedback,
+             base::TimeTicks viz_scheduled_draw,
+             base::TimeTicks gpu_started_draw);
     SwapInfo(SwapInfo&& other);
     ~SwapInfo();
     const gpu::SwapBuffersCompleteParams& Complete(
@@ -172,6 +184,8 @@ class SkiaOutputDevice {
   DidSwapBufferCompleteCallback did_swap_buffer_complete_callback_;
 
   base::queue<SwapInfo> pending_swaps_;
+  base::TimeTicks viz_scheduled_draw_;
+  base::TimeTicks gpu_started_draw_;
 
   // RGBX format is emulated with RGBA.
   bool is_emulated_rgbx_ = false;

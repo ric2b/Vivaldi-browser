@@ -6,11 +6,9 @@
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
-#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/plugin_vm/plugin_vm_metrics_util.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_pref_names.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_test_helper.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
@@ -26,6 +24,7 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon/fake_debug_daemon_client.h"
 #include "chromeos/dbus/fake_concierge_client.h"
+#include "chromeos/dbus/fake_vm_plugin_dispatcher_client.h"
 #include "chromeos/tpm/stub_install_attributes.h"
 #include "components/account_id/account_id.h"
 #include "components/download/public/background_service/download_metadata.h"
@@ -66,8 +65,9 @@ class PluginVmInstallerViewBrowserTest : public DialogBrowserTest {
     fake_concierge_client_ = static_cast<chromeos::FakeConciergeClient*>(
         chromeos::DBusThreadManager::Get()->GetConciergeClient());
     fake_concierge_client_->set_disk_image_progress_signal_connected(true);
-
-    histogram_tester_ = std::make_unique<base::HistogramTester>();
+    fake_vm_plugin_dispatcher_client_ =
+        static_cast<chromeos::FakeVmPluginDispatcherClient*>(
+            chromeos::DBusThreadManager::Get()->GetVmPluginDispatcherClient());
 
     network_connection_tracker_ =
         network::TestNetworkConnectionTracker::CreateInstance();
@@ -123,7 +123,7 @@ class PluginVmInstallerViewBrowserTest : public DialogBrowserTest {
     EXPECT_TRUE(HasCancelButton());
     EXPECT_EQ(view_->GetDialogButtonLabel(ui::DIALOG_BUTTON_OK),
               l10n_util::GetStringUTF16(IDS_PLUGIN_VM_INSTALLER_RETRY_BUTTON));
-    EXPECT_EQ(view_->GetBigMessage(),
+    EXPECT_EQ(view_->GetTitle(),
               l10n_util::GetStringUTF16(IDS_PLUGIN_VM_INSTALLER_ERROR_TITLE));
   }
 
@@ -134,9 +134,8 @@ class PluginVmInstallerViewBrowserTest : public DialogBrowserTest {
               l10n_util::GetStringUTF16(IDS_APP_CLOSE));
     EXPECT_EQ(view_->GetDialogButtonLabel(ui::DIALOG_BUTTON_OK),
               l10n_util::GetStringUTF16(IDS_PLUGIN_VM_INSTALLER_LAUNCH_BUTTON));
-    EXPECT_EQ(
-        view_->GetBigMessage(),
-        l10n_util::GetStringUTF16(IDS_PLUGIN_VM_INSTALLER_FINISHED_TITLE));
+    EXPECT_EQ(view_->GetTitle(), l10n_util::GetStringUTF16(
+                                     IDS_PLUGIN_VM_INSTALLER_FINISHED_TITLE));
   }
 
   chromeos::ScopedTestingCrosSettings scoped_testing_cros_settings_;
@@ -146,8 +145,8 @@ class PluginVmInstallerViewBrowserTest : public DialogBrowserTest {
       network_connection_tracker_;
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
   PluginVmInstallerView* view_;
-  std::unique_ptr<base::HistogramTester> histogram_tester_;
   chromeos::FakeConciergeClient* fake_concierge_client_;
+  chromeos::FakeVmPluginDispatcherClient* fake_vm_plugin_dispatcher_client_;
 
  private:
   void EnterpriseEnrollDevice() {
@@ -214,10 +213,6 @@ IN_PROC_BROWSER_TEST_F(PluginVmInstallerViewBrowserTestWithFeatureEnabled,
   WaitForSetupToFinish();
 
   CheckSetupIsFinishedSuccessfully();
-
-  histogram_tester_->ExpectUniqueSample(
-      plugin_vm::kPluginVmSetupResultHistogram,
-      plugin_vm::PluginVmSetupResult::kSuccess, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(PluginVmInstallerViewBrowserTestWithFeatureEnabled,
@@ -234,10 +229,6 @@ IN_PROC_BROWSER_TEST_F(PluginVmInstallerViewBrowserTestWithFeatureEnabled,
   WaitForSetupToFinish();
 
   CheckSetupFailed();
-
-  histogram_tester_->ExpectUniqueSample(
-      plugin_vm::kPluginVmSetupResultHistogram,
-      plugin_vm::PluginVmSetupResult::kError, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(PluginVmInstallerViewBrowserTestWithFeatureEnabled,
@@ -253,10 +244,6 @@ IN_PROC_BROWSER_TEST_F(PluginVmInstallerViewBrowserTestWithFeatureEnabled,
   WaitForSetupToFinish();
 
   CheckSetupFailed();
-
-  histogram_tester_->ExpectUniqueSample(
-      plugin_vm::kPluginVmSetupResultHistogram,
-      plugin_vm::PluginVmSetupResult::kError, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(PluginVmInstallerViewBrowserTestWithFeatureEnabled,
@@ -284,13 +271,6 @@ IN_PROC_BROWSER_TEST_F(PluginVmInstallerViewBrowserTestWithFeatureEnabled,
   WaitForSetupToFinish();
 
   CheckSetupIsFinishedSuccessfully();
-
-  histogram_tester_->ExpectBucketCount(plugin_vm::kPluginVmSetupResultHistogram,
-                                       plugin_vm::PluginVmSetupResult::kError,
-                                       1);
-  histogram_tester_->ExpectBucketCount(plugin_vm::kPluginVmSetupResultHistogram,
-                                       plugin_vm::PluginVmSetupResult::kSuccess,
-                                       1);
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -304,7 +284,7 @@ IN_PROC_BROWSER_TEST_F(
   base::string16 app_name = l10n_util::GetStringUTF16(IDS_PLUGIN_VM_APP_NAME);
   EXPECT_FALSE(HasAcceptButton());
   EXPECT_TRUE(HasCancelButton());
-  EXPECT_EQ(view_->GetBigMessage(),
+  EXPECT_EQ(view_->GetTitle(),
             l10n_util::GetStringFUTF16(
                 IDS_PLUGIN_VM_INSTALLER_NOT_ALLOWED_TITLE, app_name));
   EXPECT_EQ(
@@ -315,8 +295,24 @@ IN_PROC_BROWSER_TEST_F(
               static_cast<std::underlying_type_t<
                   plugin_vm::PluginVmInstaller::FailureReason>>(
                   plugin_vm::PluginVmInstaller::FailureReason::NOT_ALLOWED))));
+}
 
-  histogram_tester_->ExpectUniqueSample(
-      plugin_vm::kPluginVmSetupResultHistogram,
-      plugin_vm::PluginVmSetupResult::kError, 1);
+IN_PROC_BROWSER_TEST_F(PluginVmInstallerViewBrowserTestWithFeatureEnabled,
+                       SetupShouldLaunchIfImageAlreadyImported) {
+  AllowPluginVm();
+
+  // Setup dispatcher client for VM already imported.
+  vm_tools::plugin_dispatcher::ListVmResponse list_vms_response;
+  list_vms_response.add_vm_info()->set_state(
+      vm_tools::plugin_dispatcher::VmState::VM_STATE_STOPPED);
+  fake_vm_plugin_dispatcher_client_->set_list_vms_response(list_vms_response);
+
+  ShowUi("default");
+  EXPECT_NE(nullptr, view_);
+
+  view_->AcceptDialog();
+  WaitForSetupToFinish();
+
+  // Installer should be closed.
+  EXPECT_EQ(nullptr, PluginVmInstallerView::GetActiveViewForTesting());
 }

@@ -31,6 +31,8 @@ class FakeTileService : public TileService {
                           BackgroundTaskFinishedCallback callback) override;
   void CancelTask() override;
   void PurgeDb() override;
+  void SetServerUrl(const std::string& url) override;
+  Logger* GetLogger() override;
 
   std::vector<std::unique_ptr<Tile>> tiles_;
   base::WeakPtrFactory<FakeTileService> weak_ptr_factory_{this};

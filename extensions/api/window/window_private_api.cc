@@ -117,7 +117,7 @@ void VivaldiWindowsAPI::OnBrowserAdded(Browser* browser) {
   browser->tab_strip_model()->AddObserver(utils);
 
   browser->tab_strip_model()->AddObserver(
-      TabsPrivateAPI::GetTabStripModelObserver(browser_context_));
+      TabsPrivateAPI::FromBrowserContext(browser_context_));
 
   if (browser->is_vivaldi()) {
     ZoomAPI::AddZoomObserver(browser);
@@ -140,7 +140,7 @@ void VivaldiWindowsAPI::OnBrowserRemoved(Browser* browser) {
   browser->tab_strip_model()->RemoveObserver(utils);
 
   browser->tab_strip_model()->RemoveObserver(
-      TabsPrivateAPI::GetTabStripModelObserver(browser_context_));
+      TabsPrivateAPI::FromBrowserContext(browser_context_));
 
   if (browser->is_vivaldi()) {
     ZoomAPI::RemoveZoomObserver(browser);

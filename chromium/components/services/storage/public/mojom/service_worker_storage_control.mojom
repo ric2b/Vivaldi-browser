@@ -9,13 +9,8 @@ import "components/services/storage/public/mojom/service_worker_database.mojom";
 import "mojo/public/mojom/base/big_buffer.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "services/network/public/mojom/url_response_head.mojom";
+import "url/mojom/origin.mojom";
 import "url/mojom/url.mojom";
-
-// This struct represents a serialized service worker registration.
-struct SerializedServiceWorkerRegistration {
-  ServiceWorkerRegistrationData registration_data;
-  array<ServiceWorkerResourceRecord> resources;
-};
 
 // An interface that is used to keep track of which service worker versions are
 // being used by clients of the storage service. This is an empty interface that
@@ -29,20 +24,15 @@ struct SerializedServiceWorkerRegistration {
 // owned by the C++ ServiceWorkerVersion instance.
 interface ServiceWorkerLiveVersionRef {};
 
-// Conveys a result of finding a registration. If a registration is found,
-// |status| will be kOk. |version_reference|, |registration| and |resources| are
-// null or empty if there is no matching registration.
-//
+// Conveys a result of finding a registration.
 // The Storage Service (components/services/storage) supplies this
 // information and the //content consumes the information.
 struct ServiceWorkerFindRegistrationResult {
-  // The result of a find operation.
-  ServiceWorkerDatabaseStatus status;
   // A reference to a service worker version associated with
   // |registration->version_id|.
-  pending_remote<ServiceWorkerLiveVersionRef>? version_reference;
+  pending_remote<ServiceWorkerLiveVersionRef> version_reference;
   // Stored registration.
-  ServiceWorkerRegistrationData? registration;
+  ServiceWorkerRegistrationData registration;
   // Resources associated with |registration|.
   array<ServiceWorkerResourceRecord> resources;
 };
@@ -56,6 +46,14 @@ enum ServiceWorkerStorageOriginState {
   kDelete,
 };
 
+// A notifier interface for ServiceWorkerResourceReader::ReadData().
+interface ServiceWorkerDataPipeStateNotifier {
+  // Called when ReadData() completes. On success, |status| is the number of
+  // bytes written. On failure, |status| is a //net error, which is a negative
+  // number.
+  OnComplete(int32 status);
+};
+
 // An interface that reads a service worker script (resource) to storage.
 interface ServiceWorkerResourceReader {
   // Reads the response head of the resource associated with this reader.
@@ -63,10 +61,12 @@ interface ServiceWorkerResourceReader {
   // Also returns metadata associated with the resource if it exists.
   ReadResponseHead() =>
       (int32 status,
-       network.mojom.URLResponseHead response_head,
+       network.mojom.URLResponseHead? response_head,
        mojo_base.mojom.BigBuffer? metadata);
   // Reads the content of the resource associated with this reader.
-  ReadData(int64 size) => (handle<data_pipe_consumer> pipe);
+  ReadData(int64 size,
+           pending_remote<ServiceWorkerDataPipeStateNotifier> notifier) =>
+      (handle<data_pipe_consumer> pipe);
 };
 
 // An interface that writes a service worker script (resource) to storage.
@@ -93,6 +93,7 @@ interface ServiceWorkerResourceMetadataWriter {
 // lifetime of user data is tied up with the registration.
 // It will be deleted when the corresponding registration is deleted.
 struct ServiceWorkerUserData {
+  int64 registration_id;
   string key;
   string value;
 };
@@ -102,35 +103,66 @@ struct ServiceWorkerUserData {
 //
 // Currently this is consumed and implemented in the browser process, but the
 // implementation will eventually live in the Storage Service.
-//
-// TODO(crbug.com/1055677): Add more methods to cover all ServiceWorkerStorage
-// public methods.
 interface ServiceWorkerStorageControl {
+  // Disables the storage.
+  Disable();
+
+  // Deletes the whole storage.
+  Delete() => (ServiceWorkerDatabaseStatus status);
+
+  // Returns all origins which have service worker registrations.
+  GetRegisteredOrigins() => (array<url.mojom.Origin> origins);
+
   // Reads a stored registration for |client_id|.
   FindRegistrationForClientUrl(url.mojom.Url client_url) =>
-      (ServiceWorkerFindRegistrationResult result);
+      (ServiceWorkerDatabaseStatus status,
+       ServiceWorkerFindRegistrationResult? result);
   // Reads a stored registration for |scope|.
   FindRegistrationForScope(url.mojom.Url scope) =>
-      (ServiceWorkerFindRegistrationResult result);
-  // Reads a stored registration for |registration_id|.
-  FindRegistrationForId(int64 registration_id, url.mojom.Url origin) =>
-      (ServiceWorkerFindRegistrationResult result);
+      (ServiceWorkerDatabaseStatus status,
+       ServiceWorkerFindRegistrationResult? result);
+  // Reads a stored registration for |registration_id|. |origin| is to
+  // be used as a hint to look up the registration faster.
+  FindRegistrationForId(int64 registration_id, url.mojom.Url? origin) =>
+      (ServiceWorkerDatabaseStatus status,
+       ServiceWorkerFindRegistrationResult? result);
 
   // Returns all stored registrations for a given origin.
-  GetRegistrationsForOrigin(url.mojom.Url origin) =>
+  GetRegistrationsForOrigin(url.mojom.Origin origin) =>
       (ServiceWorkerDatabaseStatus status,
-       array<SerializedServiceWorkerRegistration> registrations);
+       array<ServiceWorkerFindRegistrationResult> registrations);
 
-  // Stores |registration_data| and |resources| on persistent storage.
+  // Returns the total resource size for a given origin.
+  GetUsageForOrigin(url.mojom.Origin origin) =>
+      (ServiceWorkerDatabaseStatus status, int64 usage);
+
+  // Returns all stored registrations.
+  // NOTE: Don't use this method for new code. Reading all registrations
+  // from storage doesn't scale. See https://crbug.com/807440 for details.
+  GetAllRegistrationsDeprecated() =>
+      (ServiceWorkerDatabaseStatus status,
+       array<ServiceWorkerRegistrationData> registrations);
+
+  // Stores |registration_data| and |resources|.
+  // TODO(crbug.com/1055677): Stop returning |deleted_version_id| and
+  // |newly_purgeable_resources|. These are used to schedule resource purging
+  // in the browser process, but it should be done in the Storage Service.
   StoreRegistration(ServiceWorkerRegistrationData registration,
                     array<ServiceWorkerResourceRecord> resources) =>
-      (ServiceWorkerDatabaseStatus status);
+      (ServiceWorkerDatabaseStatus status,
+       int64 deleted_version_id,
+       array<int64> newly_purgeable_resources);
 
   // Deletes the registration specified by |registration_id|. |origin_state| is
   // kDelete if there is no registration for |origin| after deletion.
+  // TODO(crbug.com/1055677): Stop returning |deleted_version_id| and
+  // |newly_purgeable_resources|. These are used to schedule resource purging
+  // in the browser process, but it should be done in the Storage Service.
   DeleteRegistration(int64 registration_id, url.mojom.Url origin) =>
       (ServiceWorkerDatabaseStatus status,
-       ServiceWorkerStorageOriginState origin_state);
+       ServiceWorkerStorageOriginState origin_state,
+       int64 deleted_version_id,
+       array<int64> newly_purgeable_resources);
 
   // Updates the state of the registration's stored version to active.
   UpdateToActiveState(int64 registration_id, url.mojom.Url origin) =>
@@ -220,18 +252,21 @@ interface ServiceWorkerStorageControl {
       (ServiceWorkerDatabaseStatus status);
 
   // Gets the user data from all registrations that have user data for |key|.
-  // Returns a map from registration IDs to their values.
   GetUserDataForAllRegistrations(string key) =>
-      (ServiceWorkerDatabaseStatus status, map<int64, string> values);
+      (ServiceWorkerDatabaseStatus status,
+       array<ServiceWorkerUserData> values);
   // Gets the user data from all registrations that have user data for
-  // |key_prefix| where |key_prefix| is a prefix of keys. Returns a map from
-  // registration IDs to their values.
+  // |key_prefix| where |key_prefix| is a prefix of keys.
   GetUserDataForAllRegistrationsByKeyPrefix(string key_prefix) =>
-      (ServiceWorkerDatabaseStatus status, map<int64, string> values);
+      (ServiceWorkerDatabaseStatus status,
+       array<ServiceWorkerUserData> values);
   // Clears the user data from all registrations using |key_prefix| as a prefix
   // of keys.
   ClearUserDataForAllRegistrationsByKeyPrefix(string key_prefix) =>
       (ServiceWorkerDatabaseStatus status);
+
+  // Removes traces of deleted data on disk.
+  PerformStorageCleanup() => ();
 
   // Applies changes to data retention policy which are relevant at shutdown.
   // This is analogous to LocalStorageControl::ApplyPolicyUpdates.

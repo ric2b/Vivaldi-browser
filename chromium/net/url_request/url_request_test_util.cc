@@ -247,6 +247,11 @@ void TestDelegate::RunUntilAuthRequired() {
   run_loop.Run();
 }
 
+int TestDelegate::OnConnected(URLRequest* request, const TransportInfo& info) {
+  transports_.push_back(info);
+  return on_connected_result_;
+}
+
 void TestDelegate::OnReceivedRedirect(URLRequest* request,
                                       const RedirectInfo& redirect_info,
                                       bool* defer_redirect) {

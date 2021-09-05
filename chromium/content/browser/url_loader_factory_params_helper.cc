@@ -6,13 +6,12 @@
 
 #include "base/command_line.h"
 #include "base/optional.h"
-#include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
-#include "content/browser/site_instance_impl.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
@@ -34,14 +33,10 @@ namespace {
 // network::ResourceRequest::request_initiator, except when
 // |is_for_isolated_world|.  See also the doc comment for
 // extensions::URLLoaderFactoryManager::CreateFactory.
-//
-// TODO(kinuko, lukasza): https://crbug.com/891872: Make
-// |request_initiator_site_lock| non-optional, once
-// URLLoaderFactoryParamsHelper::CreateForRendererProcess is removed.
 network::mojom::URLLoaderFactoryParamsPtr CreateParams(
     RenderProcessHost* process,
     const url::Origin& origin,
-    const base::Optional<url::Origin>& request_initiator_site_lock,
+    const url::Origin& request_initiator_origin_lock,
     bool is_trusted,
     const base::Optional<base::UnguessableToken>& top_frame_token,
     const net::IsolationInfo& isolation_info,
@@ -56,14 +51,13 @@ network::mojom::URLLoaderFactoryParamsPtr CreateParams(
 
   // "chrome-guest://..." is never used as a main or isolated world origin.
   DCHECK_NE(kGuestScheme, origin.scheme());
-  DCHECK(!request_initiator_site_lock.has_value() ||
-         request_initiator_site_lock->scheme() != kGuestScheme);
+  DCHECK_NE(kGuestScheme, request_initiator_origin_lock.scheme());
 
   network::mojom::URLLoaderFactoryParamsPtr params =
       network::mojom::URLLoaderFactoryParams::New();
 
   params->process_id = process->GetID();
-  params->request_initiator_site_lock = request_initiator_site_lock;
+  params->request_initiator_origin_lock = request_initiator_origin_lock;
 
   params->is_trusted = is_trusted;
   params->top_frame_id = top_frame_token;
@@ -114,12 +108,12 @@ URLLoaderFactoryParamsHelper::CreateForFrame(
   return CreateParams(
       process,
       frame_origin,  // origin
-      frame_origin,  // request_initiator_site_lock
-      false,  // is_trusted
+      frame_origin,  // request_initiator_origin_lock
+      false,         // is_trusted
       frame->GetTopFrameToken(), frame->GetIsolationInfoForSubresources(),
       std::move(client_security_state), std::move(coep_reporter),
-      frame->GetRenderViewHost()
-          ->GetWebkitPreferences()
+      WebContents::FromRenderFrameHost(frame)
+          ->GetOrCreateWebPreferences()
           .allow_universal_access_from_file_urls,
       false,  // is_for_isolated_world
       frame->CreateCookieAccessObserver(), trust_token_redemption_policy);
@@ -136,13 +130,13 @@ URLLoaderFactoryParamsHelper::CreateForIsolatedWorld(
   return CreateParams(
       frame->GetProcess(),
       isolated_world_origin,  // origin
-      main_world_origin,      // request_initiator_site_lock
+      main_world_origin,      // request_initiator_origin_lock
       false,                  // is_trusted
       frame->GetTopFrameToken(), frame->GetIsolationInfoForSubresources(),
       std::move(client_security_state),
       mojo::NullRemote(),  // coep_reporter
-      frame->GetRenderViewHost()
-          ->GetWebkitPreferences()
+      WebContents::FromRenderFrameHost(frame)
+          ->GetOrCreateWebPreferences()
           .allow_universal_access_from_file_urls,
       true,  // is_for_isolated_world
       frame->CreateCookieAccessObserver(), trust_token_redemption_policy);
@@ -158,14 +152,14 @@ URLLoaderFactoryParamsHelper::CreateForPrefetch(
   const url::Origin& frame_origin = frame->GetLastCommittedOrigin();
   return CreateParams(frame->GetProcess(),
                       frame_origin,  // origin
-                      frame_origin,  // request_initiator_site_lock
-                      true,  // is_trusted
+                      frame_origin,  // request_initiator_origin_lock
+                      true,          // is_trusted
                       frame->GetTopFrameToken(),
                       net::IsolationInfo(),  // isolation_info
                       std::move(client_security_state),
                       mojo::NullRemote(),  // coep_reporter
-                      frame->GetRenderViewHost()
-                          ->GetWebkitPreferences()
+                      WebContents::FromRenderFrameHost(frame)
+                          ->GetOrCreateWebPreferences()
                           .allow_universal_access_from_file_urls,
                       false,  // is_for_isolated_world
                       frame->CreateCookieAccessObserver(),
@@ -183,7 +177,7 @@ URLLoaderFactoryParamsHelper::CreateForWorker(
   return CreateParams(
       process,
       request_initiator,  // origin
-      request_initiator,  // request_initiator_site_lock
+      request_initiator,  // request_initiator_origin_lock
       false,              // is_trusted
       base::nullopt,      // top_frame_token
       isolation_info,
@@ -204,16 +198,13 @@ URLLoaderFactoryParamsHelper::CreateForWorker(
 network::mojom::URLLoaderFactoryParamsPtr
 URLLoaderFactoryParamsHelper::CreateForRendererProcess(
     RenderProcessHost* process) {
-  // Attempt to use the process lock as |request_initiator_site_lock|.
-  base::Optional<url::Origin> request_initiator_site_lock;
-  auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
-  GURL process_lock = policy->GetOriginLock(process->GetID());
-  if (process_lock.is_valid()) {
-    request_initiator_site_lock =
-        SiteInstanceImpl::GetRequestInitiatorSiteLock(process_lock);
-  }
+  // Lock the |request_initiator| to an opaque origin - before something commits
+  // in a frame, requests initiated by such frame should use an opaque
+  // |request_initiator|.  See also https://crbug.com/1105794 and
+  // https://crbug.com/1098938.
+  url::Origin request_initiator_origin_lock = url::Origin();
 
-  // Since this function is about to get deprecated (crbug.com/891872), it
+  // Since this function is about to get deprecated (crbug.com/1114822), it
   // should be fine to not add support for isolation info thus using an empty
   // NetworkIsolationKey.
   //
@@ -224,9 +215,9 @@ URLLoaderFactoryParamsHelper::CreateForRendererProcess(
 
   return CreateParams(
       process,
-      url::Origin(),                // origin
-      request_initiator_site_lock,  // request_initiator_site_lock
-      false,                        // is_trusted
+      url::Origin(),                  // origin
+      request_initiator_origin_lock,  // request_initiator_origin_lock
+      false,                          // is_trusted
       top_frame_token, isolation_info,
       nullptr,             // client_security_state
       mojo::NullRemote(),  // coep_reporter

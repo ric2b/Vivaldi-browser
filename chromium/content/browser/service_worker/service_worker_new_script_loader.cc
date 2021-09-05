@@ -14,7 +14,6 @@
 #include "content/browser/service_worker/service_worker_cache_writer.h"
 #include "content/browser/service_worker/service_worker_consts.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
-#include "content/browser/service_worker/service_worker_disk_cache.h"
 #include "content/browser/service_worker/service_worker_loader_helpers.h"
 #include "content/browser/service_worker/service_worker_storage.h"
 #include "content/browser/service_worker/service_worker_version.h"
@@ -119,9 +118,15 @@ ServiceWorkerNewScriptLoader::ServiceWorkerNewScriptLoader(
     resource_request.load_flags |= net::LOAD_VALIDATE_CACHE;
   }
 
-  ServiceWorkerStorage* storage = version_->context()->storage();
+  mojo::Remote<storage::mojom::ServiceWorkerResourceWriter> writer;
+  version_->context()
+      ->registry()
+      ->GetRemoteStorageControl()
+      ->CreateResourceWriter(cache_resource_id,
+                             writer.BindNewPipeAndPassReceiver());
+
   cache_writer_ = ServiceWorkerCacheWriter::CreateForWriteBack(
-      storage->CreateResponseWriter(cache_resource_id));
+      std::move(writer), cache_resource_id);
 
   version_->script_cache_map()->NotifyStartedCaching(request_url_,
                                                      cache_resource_id);

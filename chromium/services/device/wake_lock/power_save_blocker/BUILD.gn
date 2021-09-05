@@ -40,18 +40,21 @@ source_set("power_save_blocker") {
       "//chromeos/dbus/power",
       "//chromeos/dbus/power:power_manager_proto",
     ]
-  } else if (is_linux && use_dbus) {
+  } else if ((is_linux || is_chromeos) && use_dbus) {
     sources += [ "power_save_blocker_linux.cc" ]
     deps += [
       "//dbus",
       "//ui/gfx",
     ]
     if (use_x11) {
-      deps += [ "//ui/gfx/x" ]
+      deps += [
+        "//ui/base:features",
+        "//ui/gfx/x",
+      ]
     }
   } else if (is_mac) {
     sources += [ "power_save_blocker_mac.cc" ]
-    libs = [
+    frameworks = [
       "CoreFoundation.framework",
       "IOKit.framework",
     ]

@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_box_fragment_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_relative_utils.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_view.h"
 
@@ -19,33 +20,32 @@ namespace blink {
 
 namespace {
 
-NGLineHeightMetrics ComputeEmphasisMarkOutsets(const ComputedStyle& style) {
+FontHeight ComputeEmphasisMarkOutsets(const ComputedStyle& style) {
   if (style.GetTextEmphasisMark() == TextEmphasisMark::kNone)
-    return NGLineHeightMetrics();
+    return FontHeight::Empty();
 
   const Font& font = style.GetFont();
   LayoutUnit emphasis_mark_height =
       LayoutUnit(font.EmphasisMarkHeight(style.TextEmphasisMarkString()));
   DCHECK_GT(emphasis_mark_height, LayoutUnit());
   return style.GetTextEmphasisLineLogicalSide() == LineLogicalSide::kOver
-             ? NGLineHeightMetrics(emphasis_mark_height, LayoutUnit())
-             : NGLineHeightMetrics(LayoutUnit(), emphasis_mark_height);
+             ? FontHeight(emphasis_mark_height, LayoutUnit())
+             : FontHeight(LayoutUnit(), emphasis_mark_height);
 }
 
 }  // namespace
 
 void NGInlineBoxState::ComputeTextMetrics(const ComputedStyle& style,
                                           FontBaseline baseline_type) {
-  text_metrics = NGLineHeightMetrics(style, baseline_type);
+  text_metrics = style.GetFontHeight(baseline_type);
   text_top = -text_metrics.ascent;
   text_height = text_metrics.LineHeight();
 
-  NGLineHeightMetrics emphasis_marks_outsets =
-      ComputeEmphasisMarkOutsets(style);
+  FontHeight emphasis_marks_outsets = ComputeEmphasisMarkOutsets(style);
   if (emphasis_marks_outsets.IsEmpty()) {
     text_metrics.AddLeading(style.ComputedLineHeightAsFixed());
   } else {
-    NGLineHeightMetrics emphasis_marks_metrics = text_metrics;
+    FontHeight emphasis_marks_metrics = text_metrics;
     emphasis_marks_metrics += emphasis_marks_outsets;
     text_metrics.AddLeading(style.ComputedLineHeightAsFixed());
     text_metrics.Unite(emphasis_marks_metrics);
@@ -59,7 +59,7 @@ void NGInlineBoxState::ComputeTextMetrics(const ComputedStyle& style,
 }
 
 void NGInlineBoxState::ResetTextMetrics() {
-  metrics = text_metrics = NGLineHeightMetrics();
+  metrics = text_metrics = FontHeight::Empty();
   text_top = text_height = LayoutUnit();
 }
 
@@ -74,8 +74,8 @@ void NGInlineBoxState::AccumulateUsedFonts(const ShapeResultView* shape_result,
   HashSet<const SimpleFontData*> fallback_fonts;
   shape_result->FallbackFonts(&fallback_fonts);
   for (const SimpleFontData* const fallback_font : fallback_fonts) {
-    NGLineHeightMetrics fallback_metrics(fallback_font->GetFontMetrics(),
-                                         baseline_type);
+    FontHeight fallback_metrics =
+        fallback_font->GetFontMetrics().GetFontHeight(baseline_type);
     fallback_metrics.AddLeading(
         fallback_font->GetFontMetrics().FixedLineSpacing());
     metrics.Unite(fallback_metrics);
@@ -186,13 +186,14 @@ NGInlineBoxState* NGInlineLayoutStateStack::OnOpenTag(
 }
 
 NGInlineBoxState* NGInlineLayoutStateStack::OnCloseTag(
+    const NGConstraintSpace& space,
     NGLogicalLineItems* line_box,
     NGInlineBoxState* box,
     FontBaseline baseline_type,
     bool has_end_edge) {
   DCHECK_EQ(box, &stack_.back());
   box->has_end_edge = has_end_edge;
-  EndBoxState(box, line_box, baseline_type);
+  EndBoxState(space, box, line_box, baseline_type);
   // TODO(kojii): When the algorithm restarts from a break token, the stack may
   // underflow. We need either synthesize a missing box state, or push all
   // parents on initialize.
@@ -200,14 +201,15 @@ NGInlineBoxState* NGInlineLayoutStateStack::OnCloseTag(
   return &stack_.back();
 }
 
-void NGInlineLayoutStateStack::OnEndPlaceItems(NGLogicalLineItems* line_box,
+void NGInlineLayoutStateStack::OnEndPlaceItems(const NGConstraintSpace& space,
+                                               NGLogicalLineItems* line_box,
                                                FontBaseline baseline_type) {
   for (auto it = stack_.rbegin(); it != stack_.rend(); ++it) {
     NGInlineBoxState* box = &(*it);
     if (!box->has_end_edge && box->needs_box_fragment &&
         box->style->BoxDecorationBreak() == EBoxDecorationBreak::kClone)
       box->has_end_edge = true;
-    EndBoxState(box, line_box, baseline_type);
+    EndBoxState(space, box, line_box, baseline_type);
   }
 
   // Up to this point, the offset of inline boxes are stored in placeholder so
@@ -220,11 +222,12 @@ void NGInlineLayoutStateStack::OnEndPlaceItems(NGLogicalLineItems* line_box,
   }
 }
 
-void NGInlineLayoutStateStack::EndBoxState(NGInlineBoxState* box,
+void NGInlineLayoutStateStack::EndBoxState(const NGConstraintSpace& space,
+                                           NGInlineBoxState* box,
                                            NGLogicalLineItems* line_box,
                                            FontBaseline baseline_type) {
   if (box->needs_box_fragment)
-    AddBoxData(box, line_box);
+    AddBoxData(space, box, line_box);
 
   PositionPending position_pending =
       ApplyBaselineShift(box, line_box, baseline_type);
@@ -259,7 +262,7 @@ void NGInlineLayoutStateStack::AddBoxFragmentPlaceholder(
     // The inline box should have the height of the font metrics without the
     // line-height property. Compute from style because |box->metrics| includes
     // the line-height property.
-    NGLineHeightMetrics metrics(style, baseline_type);
+    FontHeight metrics = style.GetFontHeight(baseline_type);
 
     // Extend the block direction of the box by borders and paddings. Inline
     // direction is already included into positions in NGLineBreaker.
@@ -273,7 +276,8 @@ void NGInlineLayoutStateStack::AddBoxFragmentPlaceholder(
 }
 
 // Add a |BoxData|, for each close-tag that needs a box fragment.
-void NGInlineLayoutStateStack::AddBoxData(NGInlineBoxState* box,
+void NGInlineLayoutStateStack::AddBoxData(const NGConstraintSpace& space,
+                                          NGInlineBoxState* box,
                                           NGLogicalLineItems* line_box) {
   DCHECK(box->needs_box_fragment);
   DCHECK(box->style);
@@ -315,6 +319,8 @@ void NGInlineLayoutStateStack::AddBoxData(NGInlineBoxState* box,
   // An empty box fragment is still flat that we do not have to defer.
   // Also, placeholders cannot be reordred if empty.
   placeholder.rect.offset.inline_offset += box_data.margin_line_left;
+  placeholder.rect.offset +=
+      ComputeRelativeOffsetForInline(space, *box_data.item->Style());
   LayoutUnit advance = box_data.margin_border_padding_line_left +
                        box_data.margin_border_padding_line_right;
   box_data.rect.size.inline_size =
@@ -566,6 +572,37 @@ LayoutUnit NGInlineLayoutStateStack::ComputeInlinePositions(
   return position;
 }
 
+void NGInlineLayoutStateStack::ApplyRelativePositioning(
+    const NGConstraintSpace& space,
+    NGLogicalLineItems* line_box) {
+  if (box_data_list_.IsEmpty())
+    return;
+
+  // The final position of any inline boxes, (<span>, etc) are stored on
+  // |BoxData::rect|. As we don't have a mapping from |NGLogicalLineItem| to
+  // |BoxData| we store the accumulated relative offsets, and then apply the
+  // final adjustment at the end of this function.
+  Vector<LogicalOffset, 32> accumulated_offsets(line_box->size());
+
+  for (BoxData& box_data : box_data_list_) {
+    unsigned start = box_data.fragment_start;
+    unsigned end = box_data.fragment_end;
+    const LogicalOffset relative_offset =
+        ComputeRelativeOffsetForInline(space, *box_data.item->Style());
+
+    // Move all children for this box.
+    for (unsigned index = start; index < end; index++) {
+      auto& child = (*line_box)[index];
+      child.rect.offset += relative_offset;
+      accumulated_offsets[index] += relative_offset;
+    }
+  }
+
+  // Apply the final accumulated relative position offset for each box.
+  for (BoxData& box_data : box_data_list_)
+    box_data.rect.offset += accumulated_offsets[box_data.fragment_start];
+}
+
 void NGInlineLayoutStateStack::CreateBoxFragments(
     NGLogicalLineItems* line_box) {
   DCHECK(!box_data_list_.IsEmpty());
@@ -619,7 +656,7 @@ NGInlineLayoutStateStack::BoxData::CreateBoxFragment(
   // Inline boxes have block start/end borders, even when its containing block
   // was fragmented. Fragmenting a line box in block direction is not
   // supported today.
-  box.SetBorderEdges({true, has_line_right_edge, true, has_line_left_edge});
+  box.SetSidesToInclude({true, has_line_right_edge, true, has_line_left_edge});
 
   for (unsigned i = fragment_start; i < fragment_end; i++) {
     NGLogicalLineItem& child = (*line_box)[i];
@@ -688,7 +725,7 @@ NGInlineLayoutStateStack::ApplyBaselineShift(NGInlineBoxState* box,
     for (NGPendingPositions& child : box->pending_descendants) {
       // In quirks mode, metrics is empty if no content.
       if (child.metrics.IsEmpty())
-        child.metrics = NGLineHeightMetrics::Zero();
+        child.metrics = FontHeight();
       switch (child.vertical_align) {
         case EVerticalAlign::kTextTop:
           baseline_shift = child.metrics.ascent + box->TextTop(baseline_type);
@@ -720,7 +757,7 @@ NGInlineLayoutStateStack::ApplyBaselineShift(NGInlineBoxState* box,
     // because they align to the maximum metrics, but the maximum metrics may
     // depend on other pending descendants for this box.
     if (has_top_or_bottom) {
-      NGLineHeightMetrics max = MetricsForTopAndBottomAlign(*box, *line_box);
+      FontHeight max = MetricsForTopAndBottomAlign(*box, *line_box);
       for (NGPendingPositions& child : box->pending_descendants) {
         switch (child.vertical_align) {
           case EVerticalAlign::kTop:
@@ -820,7 +857,7 @@ NGInlineLayoutStateStack::ApplyBaselineShift(NGInlineBoxState* box,
   return kPositionNotPending;
 }
 
-NGLineHeightMetrics NGInlineLayoutStateStack::MetricsForTopAndBottomAlign(
+FontHeight NGInlineLayoutStateStack::MetricsForTopAndBottomAlign(
     const NGInlineBoxState& box,
     const NGLogicalLineItems& line_box) const {
   DCHECK(!box.pending_descendants.IsEmpty());
@@ -828,7 +865,7 @@ NGLineHeightMetrics NGInlineLayoutStateStack::MetricsForTopAndBottomAlign(
   // |metrics| is the bounds of "aligned subtree", that is, bounds of
   // descendants that are not 'vertical-align: top' nor 'bottom'.
   // https://drafts.csswg.org/css2/visudet.html#propdef-vertical-align
-  NGLineHeightMetrics metrics = box.metrics;
+  FontHeight metrics = box.metrics;
 
   // BoxData contains inline boxes to be created later. Take them into account.
   for (const BoxData& box_data : box_data_list_) {
@@ -844,8 +881,8 @@ NGLineHeightMetrics NGInlineLayoutStateStack::MetricsForTopAndBottomAlign(
     const NGLogicalLineItem& placeholder = line_box[box_data.fragment_start];
     DCHECK(placeholder.IsPlaceholder());
     LayoutUnit box_ascent = -placeholder.rect.offset.block_offset;
-    NGLineHeightMetrics box_metrics(box_ascent,
-                                    box_data.rect.size.block_size - box_ascent);
+    FontHeight box_metrics(box_ascent,
+                           box_data.rect.size.block_size - box_ascent);
     // The top/bottom of inline boxes should not include their paddings.
     box_metrics.ascent -= box_data.padding.line_over;
     box_metrics.descent -= box_data.padding.line_under;
@@ -857,22 +894,22 @@ NGLineHeightMetrics NGInlineLayoutStateStack::MetricsForTopAndBottomAlign(
 
   // In quirks mode, metrics is empty if no content.
   if (metrics.IsEmpty())
-    metrics = NGLineHeightMetrics::Zero();
+    metrics = FontHeight();
 
   // If the height of a box that has 'vertical-align: top' or 'bottom' exceeds
   // the height of the "aligned subtree", align the edge to the "aligned
   // subtree" and extend the other edge.
-  NGLineHeightMetrics max = metrics;
+  FontHeight max = metrics;
   for (const NGPendingPositions& child : box.pending_descendants) {
     if ((child.vertical_align == EVerticalAlign::kTop ||
          child.vertical_align == EVerticalAlign::kBottom) &&
         child.metrics.LineHeight() > max.LineHeight()) {
       if (child.vertical_align == EVerticalAlign::kTop) {
-        max = NGLineHeightMetrics(metrics.ascent,
-                                  child.metrics.LineHeight() - metrics.ascent);
+        max = FontHeight(metrics.ascent,
+                         child.metrics.LineHeight() - metrics.ascent);
       } else if (child.vertical_align == EVerticalAlign::kBottom) {
-        max = NGLineHeightMetrics(child.metrics.LineHeight() - metrics.descent,
-                                  metrics.descent);
+        max = FontHeight(child.metrics.LineHeight() - metrics.descent,
+                         metrics.descent);
       }
     }
   }

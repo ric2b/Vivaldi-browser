@@ -117,7 +117,7 @@ class MimeHandlerViewTest : public ExtensionApiTest {
 };
 
 // Test is flaky on Linux.  https://crbug.com/877627
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_Fullscreen DISABLED_Fullscreen
 #else
 #define MAYBE_Fullscreen Fullscreen
@@ -129,7 +129,7 @@ IN_PROC_BROWSER_TEST_F(MimeHandlerViewTest, MAYBE_Fullscreen) {
 namespace {
 
 void WaitForFullscreenAnimation() {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   const int delay_in_ms = 1500;
 #else
   const int delay_in_ms = 100;

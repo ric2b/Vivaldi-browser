@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">neznano ime</translation>
 <translation id="1089439967362294234">Spremeni geslo</translation>
 <translation id="1110994991967754504">Izberi dovoljenje za: <ph name="PERMISSION_NAME" /></translation>
-<translation id="1152921474424827756">Odprite <ph name="BEGIN_LINK" />predpomnjeno kopijo<ph name="END_LINK" /> strani na naslovu <ph name="URL" /></translation>
 <translation id="1158211211994409885">Spletno mesto <ph name="HOST_NAME" /> je nepričakovano prekinilo povezavo.</translation>
 <translation id="1161325031994447685">znova vzpostavite povezavo z omrežjem Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Natisni...</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">Na tem spletnem mestu so škodljivi programi</translation>
 <translation id="1916770123977586577">Če želite uporabiti posodobljene nastavitve za to spletno mesto, znova naložite to stran</translation>
 <translation id="1919345977826869612">Oglasi</translation>
-<translation id="194030505837763158">Pojdite na <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Napredno</translation>
-<translation id="2030481566774242610">Ali ste mislili <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />preverite strežnik proxy in požarni zid<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Zvok</translation>
 <translation id="2119505898009119320">Izdano za: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -101,6 +98,7 @@
 <translation id="4235360514405112390">Veljavno</translation>
 <translation id="4250431568374086873">Povezava s tem mestom ni povsem varna</translation>
 <translation id="4265872034478892965">Dovolil skrbnik</translation>
+<translation id="4305666528087210886">Do vaše datoteke ni mogoče dostopati</translation>
 <translation id="4312866146174492540">Blokiraj (privzeto)</translation>
 <translation id="4356973930735388585">Napadalci na tem spletnem mestu lahko poskusijo v vašem računalniku namestiti nevarne programe, ki kradejo ali brišejo podatke (na primer fotografije, gesla, sporočila in podatke kreditnih kartic).</translation>
 <translation id="4408413947728134509">Piškotki <ph name="NUM_COOKIES" /></translation>
@@ -128,7 +126,6 @@
 <translation id="5287240709317226393">Pokaži piškotke</translation>
 <translation id="5355557959165512791">Spletnega mesta <ph name="SITE" /> trenutno ni mogoče obiskati, saj je ta certifikat preklican. Napake omrežja in napadi na omrežje so običajno začasni, zato bo ta stran verjetno delovala pozneje.</translation>
 <translation id="5386426401304769735">Veriga potrdil za to spletno mesto vsebuje potrdilo, podpisano z algoritmom SHA-1.</translation>
-<translation id="5431657950005405462">Datoteke ni bilo mogoče najti</translation>
 <translation id="5452270690849572955">Te strani spletnega mesta <ph name="HOST_NAME" /> ni mogoče najti</translation>
 <translation id="5457113250005438886">Neveljavno</translation>
 <translation id="5492298309214877701">To spletno mesto v intranetu podjetja, organizacije ali šole ima enak URL kot zunanje spletno mesto.
@@ -174,7 +171,6 @@
 <translation id="6897140037006041989">Uporabnikov posrednik</translation>
 <translation id="7053983685419859001">Blokiraj</translation>
 <translation id="7079718277001814089">To spletno mesto vsebuje zlonamerno programsko opremo</translation>
-<translation id="7090678807593890770">Iščite v Googlu s poizvedbo <ph name="LINK" /></translation>
 <translation id="7108819624672055576">Dovoljeno z razširitvijo</translation>
 <translation id="7111012039238467737">(Veljavno)</translation>
 <translation id="7113310725918019676">Dovoli <ph name="BLOCKED_TYPE" /> od <ph name="DOMAIN" /></translation>
@@ -198,7 +194,6 @@
 <translation id="7716424297397655342">Tega spletnega mesta ni mogoče naložiti iz predpomnilnika</translation>
 <translation id="7758069387465995638">Povezavo je morda blokiral požarni zid ali protivirusni program.</translation>
 <translation id="7800304661137206267">Povezava je šifrirana s <ph name="CIPHER" /> in uporablja <ph name="MAC" /> za preverjanje pristnosti sporočil ter <ph name="KX" /> kot mehanizem za izmenjavo ključev.</translation>
-<translation id="7802523362929240268">Spletno mesto je legitimno</translation>
 <translation id="7834399512844817676">Spletno mesto <ph name="SITE" /> za zaščito vaših podatkov običajno uporablja šifriranje. Ko se je Vivaldi tokrat poskusil povezati s spletnim mestom <ph name="SITE" />, je to vrnilo nenavadne in nepravilne poverilnice. Do tega lahko pride, če se napadalec lažno predstavlja za spletno mesto <ph name="SITE" /> ali če je povezavo prekinil zaslon za prijavo v omrežje Wi-Fi. Vaši podatki so še vedno varni, saj je Vivaldi pred izmenjavo podatkov prekinil povezavo.</translation>
 <translation id="7878562273885520351">Vaše geslo je morda ogroženo</translation>
 <translation id="7951415247503192394">(32-bitno)</translation>
@@ -230,6 +225,7 @@
 <translation id="9011424611726486705">Odpri nastavitve spletnega mesta</translation>
 <translation id="9025348182339809926">(Neveljavno)</translation>
 <translation id="9039213469156557790">Poleg tega so na tej strani druga sredstva, ki niso varna. Ta sredstva lahko med prenosom pregledujejo drugi, morebitni napadalec pa jih lahko spremeni, tako da se spremeni način delovanja strani.</translation>
+<translation id="9062620674789239642">Morda je premaknjena, urejana ali izbrisana.</translation>
 <translation id="9069693763241529744">Blokirano z razširitvijo</translation>
 <translation id="9169664750068251925">Vedno blokiraj na tem spletnem mestu</translation>
 <translation id="9180553614777056266">Blokator oglasov</translation>

@@ -28,9 +28,11 @@ class MostVisitedSites;
 }
 
 @protocol ContentSuggestionsCommands;
+@protocol ContentSuggestionsConsumer;
 @protocol ContentSuggestionsGestureCommands;
 @protocol ContentSuggestionsHeaderProvider;
 @class ContentSuggestionIdentifier;
+@protocol DiscoverFeedDelegate;
 class GURL;
 class LargeIconCache;
 class NotificationPromoWhatsNew;
@@ -45,15 +47,16 @@ class ReadingListModel;
 
 // Initialize the mediator with the |contentService| to mediate.
 - (instancetype)
-    initWithContentService:
-        (ntp_snippets::ContentSuggestionsService*)contentService
-          largeIconService:(favicon::LargeIconService*)largeIconService
-            largeIconCache:(LargeIconCache*)largeIconCache
-           mostVisitedSite:
-               (std::unique_ptr<ntp_tiles::MostVisitedSites>)mostVisitedSites
-          readingListModel:(ReadingListModel*)readingListModel
-               prefService:(PrefService*)prefService
-              discoverFeed:(UIViewController*)discoverFeed
+           initWithContentService:
+               (ntp_snippets::ContentSuggestionsService*)contentService
+                 largeIconService:(favicon::LargeIconService*)largeIconService
+                   largeIconCache:(LargeIconCache*)largeIconCache
+                  mostVisitedSite:(std::unique_ptr<ntp_tiles::MostVisitedSites>)
+                                      mostVisitedSites
+                 readingListModel:(ReadingListModel*)readingListModel
+                      prefService:(PrefService*)prefService
+                     discoverFeed:(UIViewController*)discoverFeed
+    isGoogleDefaultSearchProvider:(BOOL)isGoogleDefaultSearchProvider
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
@@ -73,7 +76,19 @@ class ReadingListModel;
 @property(nonatomic, assign) BOOL readingListNeedsReload;
 
 // ViewController created by the Discover provider containing the Discover feed.
-@property(nonatomic, strong) UIViewController* discoverFeed;
+@property(nonatomic, weak) UIViewController* discoverFeed;
+
+// Delegate used to communicate to communicate events to the DiscoverFeed.
+@property(nonatomic, weak) id<DiscoverFeedDelegate> discoverFeedDelegate;
+
+// The consumer for this mediator.
+@property(nonatomic, weak) id<ContentSuggestionsConsumer> consumer;
+
+// Disconnects the mediator.
+- (void)disconnect;
+
+// Reloads content suggestions.
+- (void)reloadAllData;
 
 // The notification promo owned by this mediator.
 - (NotificationPromoWhatsNew*)notificationPromo;

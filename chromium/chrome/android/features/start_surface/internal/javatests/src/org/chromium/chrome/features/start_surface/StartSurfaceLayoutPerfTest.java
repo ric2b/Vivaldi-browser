@@ -20,10 +20,10 @@ import androidx.test.espresso.action.ViewActions;
 import androidx.test.espresso.contrib.RecyclerViewActions;
 import androidx.test.espresso.matcher.ViewMatchers;
 
+import org.hamcrest.Matchers;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.Log;
@@ -81,9 +81,6 @@ public class StartSurfaceLayoutPerfTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
-    @Rule
-    public TestRule mProcessor = new Features.InstrumentationProcessor();
-
     @SuppressWarnings("FieldCanBeLocal")
     private EmbeddedTestServer mTestServer;
     private StartSurfaceLayout mStartSurfaceLayout;
@@ -113,11 +110,8 @@ public class StartSurfaceLayoutPerfTest {
         }
         assertTrue(TabUiFeatureUtilities.isTabToGtsAnimationEnabled());
 
-        CriteriaHelper.pollUiThread(Criteria.equals(true,
-                mActivityTestRule.getActivity()
-                        .getTabModelSelector()
-                        .getTabModelFilterProvider()
-                        .getCurrentTabModelFilter()::isTabModelRestored));
+        CriteriaHelper.pollUiThread(
+                mActivityTestRule.getActivity().getTabModelSelector()::isTabStateInitialized);
     }
 
     @Test
@@ -251,11 +245,12 @@ public class StartSurfaceLayoutPerfTest {
         assertEquals(
                 numTabs, mActivityTestRule.getActivity().getTabModelSelector().getTotalTabCount());
 
-        // clang-format off
-        CriteriaHelper.pollUiThread(Criteria.equals(0, () ->
-            mActivityTestRule.getActivity().getTabContentManager().getPendingReadbacksForTesting()
-        ));
-        // clang-format on
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(mActivityTestRule.getActivity()
+                                       .getTabContentManager()
+                                       .getPendingReadbacksForTesting(),
+                    Matchers.is(0));
+        });
     }
 
     private void reportTabToGridPerf(String fromUrl, String description)

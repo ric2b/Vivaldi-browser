@@ -23,7 +23,6 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/test/scoped_command_line.h"
 #include "base/test/scoped_path_override.h"
@@ -144,7 +143,7 @@ TEST_F(ServiceUtilCleanerRunningServiceTest, QuarantineFolderPermission) {
   // Get the ownership and ACL of the quarantine folder and check the values.
   ASSERT_EQ(static_cast<DWORD>(ERROR_SUCCESS),
             ::GetNamedSecurityInfo(
-                quarantine_path.AsUTF16Unsafe().c_str(), SE_FILE_OBJECT,
+                quarantine_path.value().c_str(), SE_FILE_OBJECT,
                 OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
                 &owner_sid, /*psidGroup=*/nullptr, &dacl,
                 /*pSacl=*/nullptr, &security_descriptor));

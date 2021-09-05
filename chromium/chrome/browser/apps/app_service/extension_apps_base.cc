@@ -51,6 +51,7 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/services/app_service/public/cpp/intent_filter_util.h"
+#include "content/public/browser/clear_site_data_utils.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/ui_util.h"
@@ -93,6 +94,19 @@ std::string GetSourceFromAppListSource(ash::ShelfLaunchSource source) {
   }
 }
 
+extensions::UninstallReason GetUninstallReason(
+    apps::mojom::UninstallSource uninstall_source) {
+  switch (uninstall_source) {
+    case apps::mojom::UninstallSource::kUnknown:
+      NOTREACHED();
+      FALLTHROUGH;
+    case apps::mojom::UninstallSource::kUser:
+      return extensions::UNINSTALL_REASON_USER_INITIATED;
+    case apps::mojom::UninstallSource::kMigration:
+      return extensions::UNINSTALL_REASON_MIGRATED;
+  }
+}
+
 ash::ShelfLaunchSource ConvertLaunchSource(
     apps::mojom::LaunchSource launch_source) {
   switch (launch_source) {
@@ -118,6 +132,8 @@ ash::ShelfLaunchSource ConvertLaunchSource(
     case apps::mojom::LaunchSource::kFromInstalledNotification:
     case apps::mojom::LaunchSource::kFromTest:
     case apps::mojom::LaunchSource::kFromArc:
+    case apps::mojom::LaunchSource::kFromSharesheet:
+    case apps::mojom::LaunchSource::kFromReleaseNotesNotification:
       return ash::LAUNCH_FROM_UNKNOWN;
   }
 }
@@ -390,6 +406,7 @@ content::WebContents* ExtensionAppsBase::LaunchAppWithIntentImpl(
       extensions::GetLaunchContainer(extensions::ExtensionPrefs::Get(profile_),
                                      extension),
       intent);
+  params.launch_source = launch_source;
   return LaunchImpl(params);
 }
 
@@ -463,12 +480,12 @@ void ExtensionAppsBase::Connect(
 
 void ExtensionAppsBase::LoadIcon(const std::string& app_id,
                                  apps::mojom::IconKeyPtr icon_key,
-                                 apps::mojom::IconCompression icon_compression,
+                                 apps::mojom::IconType icon_type,
                                  int32_t size_hint_in_dip,
                                  bool allow_placeholder_icon,
                                  LoadIconCallback callback) {
   if (icon_key) {
-    LoadIconFromExtension(icon_compression, size_hint_in_dip, profile_, app_id,
+    LoadIconFromExtension(icon_type, size_hint_in_dip, profile_, app_id,
                           static_cast<IconEffects>(icon_key->icon_effects),
                           std::move(callback));
     return;
@@ -514,6 +531,8 @@ void ExtensionAppsBase::Launch(const std::string& app_id,
     case apps::mojom::LaunchSource::kFromInstalledNotification:
     case apps::mojom::LaunchSource::kFromTest:
     case apps::mojom::LaunchSource::kFromArc:
+    case apps::mojom::LaunchSource::kFromSharesheet:
+    case apps::mojom::LaunchSource::kFromReleaseNotesNotification:
       break;
   }
 
@@ -521,6 +540,7 @@ void ExtensionAppsBase::Launch(const std::string& app_id,
   AppLaunchParams params = CreateAppLaunchParamsWithEventFlags(
       profile_, extension, event_flags, GetAppLaunchSource(launch_source),
       display_id);
+  params.launch_source = launch_source;
   ash::ShelfLaunchSource source = ConvertLaunchSource(launch_source);
   if ((source == ash::LAUNCH_FROM_APP_LIST ||
        source == ash::LAUNCH_FROM_APP_LIST_SEARCH) &&
@@ -546,6 +566,7 @@ void ExtensionAppsBase::LaunchAppWithFiles(
   AppLaunchParams params(
       app_id, container, ui::DispositionFromEventFlags(event_flags),
       GetAppLaunchSource(launch_source), display::kDefaultDisplayId);
+  params.launch_source = launch_source;
   for (const auto& file_path : file_paths->file_paths) {
     params.launch_files.push_back(file_path);
   }
@@ -601,6 +622,83 @@ void ExtensionAppsBase::SetPermission(const std::string& app_id,
   host_content_settings_map->SetContentSettingDefaultScope(
       url, url, permission_type, std::string() /* resource identifier */,
       permission_value);
+}
+void ExtensionAppsBase::Uninstall(const std::string& app_id,
+                                  apps::mojom::UninstallSource uninstall_source,
+                                  bool clear_site_data,
+                                  bool report_abuse) {
+  // TODO(crbug.com/1009248): We need to add the error code, which could be used
+  // by ExtensionFunction, ManagementUninstallFunctionBase on the callback
+  // OnExtensionUninstallDialogClosed
+  scoped_refptr<const extensions::Extension> extension =
+      extensions::ExtensionRegistry::Get(profile())->GetInstalledExtension(
+          app_id);
+  if (!extension.get()) {
+    return;
+  }
+
+  base::string16 error;
+  extensions::ExtensionSystem::Get(profile())
+      ->extension_service()
+      ->UninstallExtension(app_id, GetUninstallReason(uninstall_source),
+                           &error);
+
+  if (extension->from_bookmark()) {
+    if (!clear_site_data) {
+      UMA_HISTOGRAM_ENUMERATION(
+          "Webapp.UninstallDialogAction",
+          extensions::ExtensionUninstallDialog::CLOSE_ACTION_UNINSTALL,
+          extensions::ExtensionUninstallDialog::CLOSE_ACTION_LAST);
+      return;
+    }
+
+    UMA_HISTOGRAM_ENUMERATION(
+        "Webapp.UninstallDialogAction",
+        extensions::ExtensionUninstallDialog::
+            CLOSE_ACTION_UNINSTALL_AND_CHECKBOX_CHECKED,
+        extensions::ExtensionUninstallDialog::CLOSE_ACTION_LAST);
+
+    constexpr bool kClearCookies = true;
+    constexpr bool kClearStorage = true;
+    constexpr bool kClearCache = true;
+    constexpr bool kAvoidClosingConnections = false;
+    content::ClearSiteData(
+        base::BindRepeating(
+            [](content::BrowserContext* browser_context) {
+              return browser_context;
+            },
+            base::Unretained(profile())),
+        url::Origin::Create(
+            extensions::AppLaunchInfo::GetFullLaunchURL(extension.get())),
+        kClearCookies, kClearStorage, kClearCache, kAvoidClosingConnections,
+        base::DoNothing());
+  } else {
+    if (!report_abuse) {
+      UMA_HISTOGRAM_ENUMERATION(
+          "Extensions.UninstallDialogAction",
+          extensions::ExtensionUninstallDialog::CLOSE_ACTION_UNINSTALL,
+          extensions::ExtensionUninstallDialog::CLOSE_ACTION_LAST);
+      return;
+    }
+
+    UMA_HISTOGRAM_ENUMERATION(
+        "Extensions.UninstallDialogAction",
+        extensions::ExtensionUninstallDialog::
+            CLOSE_ACTION_UNINSTALL_AND_CHECKBOX_CHECKED,
+        extensions::ExtensionUninstallDialog::CLOSE_ACTION_LAST);
+
+    // If the extension specifies a custom uninstall page via
+    // chrome.runtime.setUninstallURL, then at uninstallation its uninstall
+    // page opens. To ensure that the CWS Report Abuse page is the active
+    // tab at uninstallation, navigates to the url to report abuse.
+    constexpr char kReferrerId[] = "chrome-remove-extension-dialog";
+    NavigateParams params(
+        profile(),
+        extension_urls::GetWebstoreReportAbuseUrl(app_id, kReferrerId),
+        ui::PAGE_TRANSITION_LINK);
+    params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+    Navigate(&params);
+  }
 }
 
 void ExtensionAppsBase::OpenNativeSettings(const std::string& app_id) {

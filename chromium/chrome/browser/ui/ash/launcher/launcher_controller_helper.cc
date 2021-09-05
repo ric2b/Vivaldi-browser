@@ -163,14 +163,12 @@ base::string16 LauncherControllerHelper::GetAppTitle(
 
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile);
-  if (proxy) {
-    std::string name;
-    proxy->AppRegistryCache().ForOneApp(
-        app_id,
-        [&name](const apps::AppUpdate& update) { name = update.Name(); });
-    if (!name.empty())
-      return base::UTF8ToUTF16(name);
-  }
+
+  std::string name;
+  proxy->AppRegistryCache().ForOneApp(
+      app_id, [&name](const apps::AppUpdate& update) { name = update.Name(); });
+  if (!name.empty())
+    return base::UTF8ToUTF16(name);
 
   // Get the title for the extension which is not managed by AppService.
   extensions::ExtensionRegistry* registry =
@@ -182,6 +180,9 @@ base::string16 LauncherControllerHelper::GetAppTitle(
       app_id, extensions::ExtensionRegistry::EVERYTHING);
   if (extension && extension->is_extension())
     return base::UTF8ToUTF16(extension->name());
+
+  if (crostini::IsUnmatchedCrostiniShelfAppId(app_id))
+    return crostini::GetCrostiniShelfTitle(app_id);
 
   return base::string16();
 }
@@ -227,7 +228,7 @@ void LauncherControllerHelper::LaunchApp(const ash::ShelfID& id,
   const std::string& app_id = id.app_id;
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile_);
-  DCHECK(proxy);
+
   // Launch apps with AppServiceProxy.Launch.
   if (proxy->AppRegistryCache().GetAppType(app_id) !=
       apps::mojom::AppType::kUnknown) {
@@ -271,7 +272,7 @@ void LauncherControllerHelper::LaunchApp(const ash::ShelfID& id,
   }
   params.launch_id = id.launch_id;
 
-  proxy->BrowserAppLauncher().LaunchAppWithParams(params);
+  proxy->BrowserAppLauncher()->LaunchAppWithParams(params);
 }
 
 ArcAppListPrefs* LauncherControllerHelper::GetArcAppListPrefs() const {
@@ -324,8 +325,6 @@ bool LauncherControllerHelper::IsValidIDFromAppService(
 
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile_);
-  if (!proxy)
-    return false;
 
   bool is_valid = false;
   proxy->AppRegistryCache().ForOneApp(

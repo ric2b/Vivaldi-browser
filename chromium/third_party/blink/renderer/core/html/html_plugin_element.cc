@@ -564,7 +564,7 @@ LayoutEmbeddedObject* HTMLPlugInElement::GetLayoutEmbeddedObject() const {
 bool HTMLPlugInElement::AllowedToLoadFrameURL(const String& url) {
   KURL complete_url = GetDocument().CompleteURL(url);
   return !(ContentFrame() && complete_url.ProtocolIsJavaScript() &&
-           !GetDocument().GetSecurityOrigin()->CanAccess(
+           !GetExecutionContext()->GetSecurityOrigin()->CanAccess(
                ContentFrame()->GetSecurityContext()->GetSecurityOrigin()));
 }
 
@@ -710,9 +710,9 @@ bool HTMLPlugInElement::AllowedToLoadObject(const KURL& url,
     return false;
 
   AtomicString declared_mime_type = FastGetAttribute(html_names::kTypeAttr);
-  if (!GetDocument().GetContentSecurityPolicy()->AllowObjectFromSource(url) ||
-      !GetDocument().GetContentSecurityPolicy()->AllowPluginTypeForDocument(
-          GetDocument(), mime_type, declared_mime_type, url)) {
+  auto* csp = GetExecutionContext()->GetContentSecurityPolicy();
+  if (!csp->AllowObjectFromSource(url) ||
+      !csp->AllowPluginType(mime_type, declared_mime_type, url)) {
     if (auto* layout_object = GetLayoutEmbeddedObject()) {
       plugin_is_available_ = false;
       layout_object->SetPluginAvailability(
@@ -726,20 +726,22 @@ bool HTMLPlugInElement::AllowedToLoadObject(const KURL& url,
          !MixedContentChecker::ShouldBlockFetch(
              frame, mojom::RequestContextType::OBJECT, url,
              ResourceRequest::RedirectStatus::kNoRedirect, url,
-             /* devtools_id= */ base::nullopt);
+             /* devtools_id= */ base::nullopt, ReportingDisposition::kReport,
+             GetDocument().Loader()->GetContentSecurityNotifier());
 }
 
 bool HTMLPlugInElement::AllowedToLoadPlugin(const KURL& url,
                                             const String& mime_type) {
-  if (GetDocument().IsSandboxed(
+  if (GetExecutionContext()->IsSandboxed(
           network::mojom::blink::WebSandboxFlags::kPlugins)) {
-    GetDocument().AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-        mojom::ConsoleMessageSource::kSecurity,
-        mojom::ConsoleMessageLevel::kError,
-        "Failed to load '" + url.ElidedString() +
-            "' as a plugin, because the "
-            "frame into which the plugin "
-            "is loading is sandboxed."));
+    GetExecutionContext()->AddConsoleMessage(
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::blink::ConsoleMessageSource::kSecurity,
+            mojom::blink::ConsoleMessageLevel::kError,
+            "Failed to load '" + url.ElidedString() +
+                "' as a plugin, because the "
+                "frame into which the plugin "
+                "is loading is sandboxed."));
     return false;
   }
   return true;

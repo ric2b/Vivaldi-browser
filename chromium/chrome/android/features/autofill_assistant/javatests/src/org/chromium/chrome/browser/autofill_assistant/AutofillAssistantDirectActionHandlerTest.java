@@ -31,7 +31,7 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.chrome.autofill_assistant.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.directactions.DirectActionHandler;
 import org.chromium.chrome.browser.directactions.DirectActionReporter;
 import org.chromium.chrome.browser.directactions.DirectActionReporter.Type;
@@ -70,8 +70,8 @@ public class AutofillAssistantDirectActionHandlerTest {
         mModuleEntryProvider.setCannotInstall();
 
         mHandler = new AutofillAssistantDirectActionHandler(mActivity, mBottomSheetController,
-                mActivity.getFullscreenManager(), mActivity.getCompositorViewHolder(),
-                mActivity.getActivityTabProvider(), mActivity.getScrim(), mModuleEntryProvider);
+                mActivity.getBrowserControlsManager(), mActivity.getCompositorViewHolder(),
+                mActivity.getActivityTabProvider(), mModuleEntryProvider);
 
         mSharedPreferencesManager.removeKey(
                 ChromePreferenceKeys.AUTOFILL_ASSISTANT_ONBOARDING_ACCEPTED);

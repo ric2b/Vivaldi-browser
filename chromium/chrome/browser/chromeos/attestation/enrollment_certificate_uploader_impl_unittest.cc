@@ -128,24 +128,5 @@ TEST_F(EnrollmentCertificateUploaderTest, NewCertificate) {
   Run(true /* expected_status */);
 }
 
-TEST_F(EnrollmentCertificateUploaderTest, DBusFailureRetry) {
-  SetupMocks();
-  // Simulate a DBus failure.
-  cryptohome_client_.SetServiceIsAvailable(false);
-
-  // Emulate delayed service initialization.
-  // Run() instantiates an Observer, which synchronously calls
-  // TpmAttestationDoesKeyExist() and fails. During this call, we make the
-  // service available in the next run, so on retry, it will successfully
-  // return the result.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(
-                     [](FakeCryptohomeClient* cryptohome_client) {
-                       cryptohome_client->SetServiceIsAvailable(true);
-                     },
-                     base::Unretained(&cryptohome_client_)));
-  Run(true /* expected_status */);
-}
-
 }  // namespace attestation
 }  // namespace chromeos

@@ -119,13 +119,16 @@ void TextInput::SetCompositionText(const ui::CompositionText& composition) {
   delegate_->SetCompositionText(composition);
 }
 
-void TextInput::ConfirmCompositionText(bool keep_selection) {
+uint32_t TextInput::ConfirmCompositionText(bool keep_selection) {
   // TODO(b/134473433) Modify this function so that when keep_selection is
   // true, the selection is not changed when text committed
   if (keep_selection) {
     NOTIMPLEMENTED_LOG_ONCE();
   }
+  const uint32_t composition_text_length =
+      static_cast<uint32_t>(composition_.text.length());
   delegate_->Commit(composition_.text);
+  return composition_text_length;
 }
 
 void TextInput::ClearCompositionText() {
@@ -324,11 +327,28 @@ bool TextInput::SetCompositionFromExistingText(
   return false;
 }
 
+gfx::Range TextInput::GetAutocorrectRange() const {
+  // TODO(https://crbug.com/952757): Implement this method.
+  NOTIMPLEMENTED_LOG_ONCE();
+  return gfx::Range();
+}
+
+gfx::Rect TextInput::GetAutocorrectCharacterBounds() const {
+  // TODO(https://crbug.com/952757): Implement this method.
+  NOTIMPLEMENTED_LOG_ONCE();
+  return gfx::Rect();
+}
+
 // TODO(crbug.com/1091088) Implement setAutocorrectRange
 bool TextInput::SetAutocorrectRange(const base::string16& autocorrect_text,
                                     const gfx::Range& range) {
   NOTIMPLEMENTED_LOG_ONCE();
   return false;
+}
+
+// TODO(crbug.com/1091088) Implement ClearAutocorrectRange
+void TextInput::ClearAutocorrectRange() {
+  NOTIMPLEMENTED_LOG_ONCE();
 }
 
 void TextInput::OnKeyboardVisibilityChanged(bool is_visible) {

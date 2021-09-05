@@ -22,6 +22,7 @@
 #include "base/util/type_safety/strong_alias.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/websockets/websocket_event_interface.h"
 #include "services/network/network_service.h"
 #include "services/network/public/mojom/network_context.mojom.h"
@@ -64,11 +65,13 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) WebSocket : public mojom::WebSocket {
       int32_t render_frame_id,
       const url::Origin& origin,
       uint32_t options,
+      net::NetworkTrafficAnnotationTag traffic_annotation,
       HasRawHeadersAccess has_raw_cookie_access,
       mojo::PendingRemote<mojom::WebSocketHandshakeClient> handshake_client,
       mojo::PendingRemote<mojom::AuthenticationHandler> auth_handler,
       mojo::PendingRemote<mojom::TrustedHeaderClient> header_client,
-      WebSocketThrottler::PendingConnection pending_connection_tracker,
+      base::Optional<WebSocketThrottler::PendingConnection>
+          pending_connection_tracker,
       DataPipeUseTracker,
       base::TimeDelta delay);
   ~WebSocket() override;
@@ -78,8 +81,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) WebSocket : public mojom::WebSocket {
                    uint64_t data_length) override;
   void StartReceiving() override;
   void StartClosingHandshake(uint16_t code, const std::string& reason) override;
-
-  bool handshake_succeeded() const { return handshake_succeeded_; }
 
   // Whether to allow sending/setting cookies during WebSocket handshakes for
   // |url|. This decision is based on the |options_| and |origin_| this
@@ -183,7 +184,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) WebSocket : public mojom::WebSocket {
   mojo::Remote<mojom::AuthenticationHandler> auth_handler_;
   mojo::Remote<mojom::TrustedHeaderClient> header_client_;
 
-  WebSocketThrottler::PendingConnection pending_connection_tracker_;
+  base::Optional<WebSocketThrottler::PendingConnection>
+      pending_connection_tracker_;
 
   // The channel we use to send events to the network.
   std::unique_ptr<net::WebSocketChannel> channel_;
@@ -192,6 +194,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) WebSocket : public mojom::WebSocket {
   const base::TimeDelta delay_;
 
   const uint32_t options_;
+
+  const net::NetworkTrafficAnnotationTag traffic_annotation_;
 
   const int32_t child_id_;
   const int32_t frame_id_;
@@ -202,8 +206,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) WebSocket : public mojom::WebSocket {
   // For 3rd-party cookie permission checking.
   net::SiteForCookies site_for_cookies_;
 
-  // handshake_succeeded_ is used by WebSocketManager to manage counters for
-  // per-renderer WebSocket throttling.
   bool handshake_succeeded_ = false;
   const HasRawHeadersAccess has_raw_headers_access_;
 

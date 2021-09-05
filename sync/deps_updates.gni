@@ -19,7 +19,7 @@ if (is_android) {
   }
 }
 
-if (!is_android) {
+if (vivaldi_build_tests) {
   update_target("//chrome/test:sync_integration_test_support") {
     public_deps += [
       "//vivaldi/sync/test:fake_server",
@@ -33,7 +33,6 @@ if (!is_android) {
   update_target("//components/sync/test/fake_server:fake_server") {
     public_deps += [
       "//vivaldi/sync/test:fake_server",
-      "//vivaldi/sync/test:unit_tests",
     ]
     allow_circular_includes_from = [
       "//vivaldi/sync/test:fake_server",
@@ -44,6 +43,9 @@ if (!is_android) {
       "//vivaldi/sync/notes:sync_notes",
     ]
   }
+}
+
+if (!is_android) {
   update_target("//components/browser_sync:browser_sync") {
     deps += [
       "//vivaldi/sync/notes:sync_notes",

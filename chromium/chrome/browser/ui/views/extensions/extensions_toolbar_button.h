@@ -7,6 +7,7 @@
 
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "ui/views/controls/button/menu_button_controller.h"
+#include "ui/views/widget/widget_observer.h"
 
 class Browser;
 class ExtensionsToolbarContainer;
@@ -22,14 +23,12 @@ class ExtensionsToolbarButton : public ToolbarButton,
                           ExtensionsToolbarContainer* extensions_container);
   ~ExtensionsToolbarButton() override;
 
-  void UpdateIcon();
-
- private:
   // ToolbarButton:
   gfx::Size CalculatePreferredSize() const override;
   gfx::Size GetMinimumSize() const override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   const char* GetClassName() const override;
+  void UpdateIcon() override;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
@@ -37,6 +36,7 @@ class ExtensionsToolbarButton : public ToolbarButton,
   // views::WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
 
+ private:
   int GetIconSize() const;
 
   // A lock to keep the button pressed when a popup is visible.

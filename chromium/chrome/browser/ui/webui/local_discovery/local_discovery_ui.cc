@@ -6,8 +6,10 @@
 
 #include <memory>
 
+#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/local_discovery/local_discovery_ui_handler.h"
 #include "chrome/browser/ui/webui/metrics_handler.h"
 #include "chrome/browser/ui/webui/webui_util.h"
@@ -15,14 +17,41 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/cloud_devices/common/cloud_devices_urls.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "printing/buildflags/buildflags.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 
 namespace {
+
+content::WebUIDataSource* CreateLocalDiscoveryWarningHTMLSource() {
+  content::WebUIDataSource* source =
+      content::WebUIDataSource::Create(chrome::kChromeUIDevicesHost);
+
+  source->SetDefaultResource(IDR_LOCAL_DISCOVERY_WARNING_HTML);
+  source->AddLocalizedString("devicesTitle",
+                             IDS_LOCAL_DISCOVERY_DEVICES_PAGE_TITLE);
+
+  if (webui::IsEnterpriseManaged()) {
+    source->AddLocalizedString(
+        "cloudPrintDeprecationWarning",
+        IDS_CLOUD_PRINTING_NOT_SUPPORTED_WARNING_ENTERPRISE);
+  } else {
+    source->AddString(
+        "cloudPrintDeprecationWarning",
+        l10n_util::GetStringFUTF16(
+            IDS_CLOUD_PRINTING_NOT_SUPPORTED_WARNING,
+            base::ASCIIToUTF16(cloud_devices::kCloudPrintDeprecationHelpURL)));
+  }
+
+  source->DisableDenyXFrameOptions();
+
+  return source;
+}
 
 content::WebUIDataSource* CreateLocalDiscoveryHTMLSource() {
   content::WebUIDataSource* source =
@@ -93,9 +122,18 @@ content::WebUIDataSource* CreateLocalDiscoveryHTMLSource() {
 
 LocalDiscoveryUI::LocalDiscoveryUI(content::WebUI* web_ui)
     : WebUIController(web_ui) {
+  const bool use_legacy_page =
+      base::FeatureList::IsEnabled(features::kForceEnableDevicesPage);
   // Set up the chrome://devices/ source.
-  content::WebUIDataSource* source = CreateLocalDiscoveryHTMLSource();
+  content::WebUIDataSource* source =
+      use_legacy_page ? CreateLocalDiscoveryHTMLSource()
+                      : CreateLocalDiscoveryWarningHTMLSource();
+
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), source);
+
+  if (!use_legacy_page) {
+    return;
+  }
 
   // TODO(gene): Use LocalDiscoveryUIHandler to send updated to the devices
   // page. For example

@@ -72,7 +72,7 @@ WizardController* FakeLoginDisplayHost::GetWizardController() {
   return wizard_controller_.get();
 }
 
-AppLaunchController* FakeLoginDisplayHost::GetAppLaunchController() {
+KioskLaunchController* FakeLoginDisplayHost::GetKioskLaunchController() {
   return nullptr;
 }
 
@@ -106,7 +106,7 @@ void FakeLoginDisplayHost::LoadWallpaper(const AccountId& account_id) {}
 
 void FakeLoginDisplayHost::LoadSigninWallpaper() {}
 
-bool FakeLoginDisplayHost::IsUserWhitelisted(const AccountId& account_id) {
+bool FakeLoginDisplayHost::IsUserAllowlisted(const AccountId& account_id) {
   return false;
 }
 
@@ -122,9 +122,10 @@ void FakeLoginDisplayHost::MigrateUserData(const std::string& old_password) {}
 
 void FakeLoginDisplayHost::ResyncUserData() {}
 
-void FakeLoginDisplayHost::ShowFeedback() {}
-
-void FakeLoginDisplayHost::ShowResetScreen() {}
+bool FakeLoginDisplayHost::HandleAccelerator(
+    ash::LoginAcceleratorAction action) {
+  return false;
+}
 
 void FakeLoginDisplayHost::HandleDisplayCaptivePortal() {}
 

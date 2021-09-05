@@ -7,9 +7,8 @@
 
 #include "third_party/blink/renderer/core/layout/geometry/logical_rect.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_line_box_fragment_builder.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_line_height_metrics.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
-#include "third_party/blink/renderer/platform/fonts/font_baseline.h"
+#include "third_party/blink/renderer/platform/fonts/font_height.h"
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -25,7 +24,7 @@ struct NGInlineItemResult;
 struct NGPendingPositions {
   unsigned fragment_start;
   unsigned fragment_end;
-  NGLineHeightMetrics metrics;
+  FontHeight metrics;
   EVerticalAlign vertical_align;
 };
 
@@ -44,11 +43,11 @@ struct NGInlineBoxState {
   // The united metrics for the current box. This includes all objects in this
   // box, including descendants, and adjusted by placement properties such as
   // 'vertical-align'.
-  NGLineHeightMetrics metrics;
+  FontHeight metrics = FontHeight::Empty();
 
   // The metrics of the font for this box. This includes leadings as specified
   // by the 'line-height' property.
-  NGLineHeightMetrics text_metrics;
+  FontHeight text_metrics = FontHeight::Empty();
 
   // The distance between the text-top and the baseline for this box. The
   // text-top does not include leadings.
@@ -132,13 +131,16 @@ class CORE_EXPORT NGInlineLayoutStateStack {
                               NGLogicalLineItems* line_box);
 
   // Pop a box state stack.
-  NGInlineBoxState* OnCloseTag(NGLogicalLineItems*,
+  NGInlineBoxState* OnCloseTag(const NGConstraintSpace& space,
+                               NGLogicalLineItems*,
                                NGInlineBoxState*,
                                FontBaseline,
                                bool has_end_edge = true);
 
   // Compute all the pending positioning at the end of a line.
-  void OnEndPlaceItems(NGLogicalLineItems*, FontBaseline);
+  void OnEndPlaceItems(const NGConstraintSpace& space,
+                       NGLogicalLineItems*,
+                       FontBaseline);
 
   bool HasBoxFragments() const { return !box_data_list_.IsEmpty(); }
 
@@ -169,6 +171,8 @@ class CORE_EXPORT NGInlineLayoutStateStack {
   // Compute inline positions of fragments and boxes.
   LayoutUnit ComputeInlinePositions(NGLogicalLineItems*, LayoutUnit position);
 
+  void ApplyRelativePositioning(const NGConstraintSpace&, NGLogicalLineItems*);
+
   // Create box fragments. This function turns a flat list of children into
   // a box tree.
   void CreateBoxFragments(NGLogicalLineItems*);
@@ -180,12 +184,17 @@ class CORE_EXPORT NGInlineLayoutStateStack {
  private:
   // End of a box state, either explicitly by close tag, or implicitly at the
   // end of a line.
-  void EndBoxState(NGInlineBoxState*, NGLogicalLineItems*, FontBaseline);
+  void EndBoxState(const NGConstraintSpace&,
+                   NGInlineBoxState*,
+                   NGLogicalLineItems*,
+                   FontBaseline);
 
   void AddBoxFragmentPlaceholder(NGInlineBoxState*,
                                  NGLogicalLineItems*,
                                  FontBaseline);
-  void AddBoxData(NGInlineBoxState*, NGLogicalLineItems*);
+  void AddBoxData(const NGConstraintSpace&,
+                  NGInlineBoxState*,
+                  NGLogicalLineItems*);
 
   enum PositionPending { kPositionNotPending, kPositionPending };
 
@@ -201,9 +210,8 @@ class CORE_EXPORT NGInlineLayoutStateStack {
 
   // Compute the metrics for when 'vertical-align' is 'top' and 'bottom' from
   // |pending_descendants|.
-  NGLineHeightMetrics MetricsForTopAndBottomAlign(
-      const NGInlineBoxState&,
-      const NGLogicalLineItems&) const;
+  FontHeight MetricsForTopAndBottomAlign(const NGInlineBoxState&,
+                                         const NGLogicalLineItems&) const;
 
   // Data for a box fragment. See AddBoxFragmentPlaceholder().
   // This is a transient object only while building a line box.

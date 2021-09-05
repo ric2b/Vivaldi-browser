@@ -9,7 +9,7 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
-#include "components/content_settings/browser/tab_specific_content_settings.h"
+#include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -158,9 +158,12 @@ ContentSetting SoundContentSettingObserver::GetCurrentContentSetting() {
 void SoundContentSettingObserver::CheckSoundBlocked(bool is_audible) {
   if (is_audible && GetCurrentContentSetting() == CONTENT_SETTING_BLOCK) {
     // The tab has tried to play sound, but was muted.
-    content_settings::TabSpecificContentSettings* settings =
-        content_settings::TabSpecificContentSettings::FromWebContents(
-            web_contents());
+    // This is a page level event so it is OK to get the main frame here.
+    // TODO(https://crbug.com/1103176): We should figure a way of not having to
+    // use GetMainFrame here. (pass the source frame somehow)
+    content_settings::PageSpecificContentSettings* settings =
+        content_settings::PageSpecificContentSettings::GetForFrame(
+            web_contents()->GetMainFrame());
     if (settings)
       settings->OnAudioBlocked();
 
@@ -199,7 +202,7 @@ SoundContentSettingObserver::GetSiteMutedReason() {
 #if !defined(OS_ANDROID)
 void SoundContentSettingObserver::UpdateAutoplayPolicy() {
   // Force a WebkitPreferences update to update the autoplay policy.
-  web_contents()->GetRenderViewHost()->OnWebkitPreferencesChanged();
+  web_contents()->OnWebPreferencesChanged();
 }
 #endif
 

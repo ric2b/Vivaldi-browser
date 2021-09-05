@@ -34,7 +34,6 @@
 #include "chrome/browser/accessibility/accessibility_labels_service.h"
 #include "chrome/browser/accessibility/accessibility_labels_service_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "chrome/browser/bookmarks/startup_task_runner_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/account_manager/child_account_type_changed_user_data.h"
@@ -59,6 +58,7 @@
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_destroyer.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
+#include "chrome/browser/profiles/profile_key.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/profiles/profiles_state.h"
@@ -79,7 +79,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/account_id/account_id.h"
 #include "components/bookmarks/browser/bookmark_model.h"
-#include "components/bookmarks/browser/startup_task_runner_service.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/password_manager/core/browser/password_store.h"
@@ -100,10 +99,6 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/buildflags/buildflags.h"
-#include "net/http/http_transaction_factory.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
-#include "net/url_request/url_request_job.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -285,8 +280,8 @@ void NukeProfileFromDisk(const base::FilePath& profile_path) {
   // Delete both the profile directory and its corresponding cache.
   base::FilePath cache_path;
   chrome::GetUserCacheDirectory(profile_path, &cache_path);
-  base::DeleteFileRecursively(profile_path);
-  base::DeleteFileRecursively(cache_path);
+  base::DeletePathRecursively(profile_path);
+  base::DeletePathRecursively(cache_path);
 }
 
 // Called after a deleted profile was checked and cleaned up.
@@ -763,6 +758,22 @@ Profile* ProfileManager::GetProfileByPath(const base::FilePath& path) const {
 }
 
 // static
+Profile* ProfileManager::GetProfileFromProfileKey(ProfileKey* profile_key) {
+  Profile* profile = g_browser_process->profile_manager()->GetProfileByPath(
+      profile_key->GetPath());
+  if (profile->GetProfileKey() == profile_key)
+    return profile;
+
+  for (Profile* otr : profile->GetAllOffTheRecordProfiles()) {
+    if (otr->GetProfileKey() == profile_key)
+      return otr;
+  }
+
+  NOTREACHED() << "An invalid profile key is passed.";
+  return nullptr;
+}
+
+// static
 base::FilePath ProfileManager::CreateMultiProfileAsync(
     const base::string16& name,
     const std::string& icon_url,
@@ -1103,17 +1114,12 @@ void ProfileManager::InitProfileUserPrefs(Profile* profile) {
 }
 
 void ProfileManager::RegisterTestingProfile(std::unique_ptr<Profile> profile,
-                                            bool add_to_storage,
-                                            bool start_deferred_task_runners) {
+                                            bool add_to_storage) {
   Profile* profile_ptr = profile.get();
   RegisterProfile(std::move(profile), true);
   if (add_to_storage) {
     InitProfileUserPrefs(profile_ptr);
     AddProfileToStorage(profile_ptr);
-  }
-  if (start_deferred_task_runners) {
-    StartupTaskRunnerServiceFactory::GetForProfile(profile_ptr)
-        ->StartDeferredTaskRunners();
   }
 }
 
@@ -1232,6 +1238,14 @@ void ProfileManager::DoFinalInit(ProfileInfo* profile_info,
   // flag attached to the profile.
   signin_util::EnsureUserSignoutAllowedIsInitializedForProfile(profile);
   signin_util::EnsurePrimaryAccountAllowedForProfile(profile);
+
+#if !defined(OS_ANDROID)
+  // The caret browsing command-line switch toggles caret browsing on
+  // initially, but the user can still toggle it from there.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableCaretBrowsing))
+    profile->GetPrefs()->SetBoolean(prefs::kCaretBrowsingEnabled, true);
+#endif
 }
 
 void ProfileManager::DoFinalInitForServices(Profile* profile,
@@ -1280,10 +1294,6 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
   // DoFinalInitForServices.
   profiles::UpdateIsProfileLockEnabledIfNeeded(profile);
 #endif
-
-  // Start the deferred task runners once the profile is loaded.
-  StartupTaskRunnerServiceFactory::GetForProfile(profile)->
-      StartDeferredTaskRunners();
 
   // Activate data reduction proxy. This creates a request context and makes a
   // URL request to check if the data reduction proxy server is reachable.

@@ -3,11 +3,13 @@
 // found in the LICENSE file.
 
 #include "base/macros.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/app_service_test.h"
 #include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/browser/ui/browser.h"
@@ -44,15 +46,22 @@ class WebAppIconManagerBrowserTest : public InProcessBrowserTest {
  protected:
   net::EmbeddedTestServer* https_server() { return &https_server_; }
 
+  void SetUpOnMainThread() override {
+    app_service_test_.SetUp(browser()->profile());
+  }
+
   // InProcessBrowserTest:
   void SetUp() override {
     https_server_.AddDefaultHandlers(GetChromeTestDataDir());
     InProcessBrowserTest::SetUp();
   }
 
+  apps::AppServiceTest& app_service_test() { return app_service_test_; }
+
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
   net::EmbeddedTestServer https_server_;
+  apps::AppServiceTest app_service_test_;
 
   DISALLOW_COPY_AND_ASSIGN(WebAppIconManagerBrowserTest);
 };
@@ -68,13 +77,15 @@ IN_PROC_BROWSER_TEST_F(WebAppIconManagerBrowserTest, SingleIcon) {
         std::make_unique<WebApplicationInfo>();
     web_application_info->app_url = app_url;
     web_application_info->scope = app_url.GetWithoutFilename();
+    web_application_info->title = base::ASCIIToUTF16("App Name");
     web_application_info->open_as_window = true;
 
     {
       SkBitmap bitmap;
       bitmap.allocN32Pixels(icon_size::k32, icon_size::k32, true);
       bitmap.eraseColor(SK_ColorBLUE);
-      web_application_info->icon_bitmaps[icon_size::k32] = std::move(bitmap);
+      web_application_info->icon_bitmaps_any[icon_size::k32] =
+          std::move(bitmap);
     }
 
     InstallManager& install_manager =
@@ -96,6 +107,15 @@ IN_PROC_BROWSER_TEST_F(WebAppIconManagerBrowserTest, SingleIcon) {
     run_loop.Run();
   }
 
+#if defined(OS_CHROMEOS)
+  gfx::ImageSkia image_skia;
+  if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
+    app_service_test().FlushMojoCalls();
+    image_skia = app_service_test().LoadAppIconBlocking(
+        apps::mojom::AppType::kWeb, app_id, web_app::kWebAppIconSmall);
+  }
+#endif
+
   WebAppBrowserController* controller;
   {
     apps::AppLaunchParams params(
@@ -105,13 +125,27 @@ IN_PROC_BROWSER_TEST_F(WebAppIconManagerBrowserTest, SingleIcon) {
     content::WebContents* contents =
         apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
             ->BrowserAppLauncher()
-            .LaunchAppWithParams(params);
+            ->LaunchAppWithParams(params);
     controller = chrome::FindBrowserWithWebContents(contents)
                      ->app_controller()
                      ->AsWebAppBrowserController();
   }
 
   base::RunLoop run_loop;
+
+#if defined(OS_CHROMEOS)
+  if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
+    controller->SetReadIconCallbackForTesting(base::BindLambdaForTesting(
+        [controller, &image_skia, &run_loop, this]() {
+          EXPECT_TRUE(app_service_test().AreIconImageEqual(
+              image_skia, controller->GetWindowAppIcon()));
+          run_loop.Quit();
+        }));
+    run_loop.Run();
+    return;
+  }
+#endif
+
   controller->SetReadIconCallbackForTesting(
       base::BindLambdaForTesting([controller, &run_loop]() {
         const SkBitmap* bitmap = controller->GetWindowAppIcon().bitmap();

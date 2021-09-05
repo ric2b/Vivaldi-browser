@@ -10,6 +10,7 @@
 
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/lacros_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -61,7 +62,7 @@ void SessionStartupPref::RegisterProfilePrefs(
 
 // static
 SessionStartupPref::Type SessionStartupPref::GetDefaultStartupType() {
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   return SessionStartupPref::LAST;
 #else
   if (vivaldi::IsVivaldiRunning()) {
@@ -103,7 +104,7 @@ void SessionStartupPref::SetStartupPref(PrefService* prefs,
 }
 
 // static
-SessionStartupPref SessionStartupPref::GetStartupPref(Profile* profile) {
+SessionStartupPref SessionStartupPref::GetStartupPref(const Profile* profile) {
   DCHECK(profile);
 
   // Guest sessions should not store any state, therefore they should never
@@ -114,7 +115,8 @@ SessionStartupPref SessionStartupPref::GetStartupPref(Profile* profile) {
 }
 
 // static
-SessionStartupPref SessionStartupPref::GetStartupPref(PrefService* prefs) {
+SessionStartupPref SessionStartupPref::GetStartupPref(
+    const PrefService* prefs) {
   DCHECK(prefs);
 
   SessionStartupPref pref(
@@ -157,7 +159,7 @@ bool SessionStartupPref::TypeHasRecommendedValue(PrefService* prefs) {
 }
 
 // static
-bool SessionStartupPref::TypeIsDefault(PrefService* prefs) {
+bool SessionStartupPref::TypeIsDefault(const PrefService* prefs) {
   DCHECK(prefs);
   const PrefService::Preference* pref_restore =
       prefs->FindPreference(prefs::kRestoreOnStartup);

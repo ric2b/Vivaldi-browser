@@ -36,39 +36,6 @@ namespace views {
 class WebView;
 }
 
-namespace vivaldi {
-class VivaldiQuitConfirmationDialog;
-}
-
-// Make sure we answer correctly for ClientView::CanClose to make sure the exit
-// sequence is started when closing a BrowserWindow. See comment in
-// fast_unload_controller.h.
-class VivaldiAppWindowClientView : public views::ClientView {
- public:
-  VivaldiAppWindowClientView(views::Widget* widget,
-                             views::View* contents_view,
-                             VivaldiBrowserWindow* window)
-      : views::ClientView(widget, contents_view),
-        window_(window) {}
-
-  // views::ClientView:
-  bool CanClose() override;
-
- protected:
-  // VivaldiQuitConfirmationDialog::CloseCallback
-  void ContinueQuit(bool close);
-  void ContinueClose(bool close);
-  void ContinueCloseInternal(bool close);
-
- private:
-  VivaldiBrowserWindow* window_;
-  bool quit_dialog_shown_ = false;
-  bool close_dialog_shown_ = false;
-  vivaldi::VivaldiQuitConfirmationDialog* dialog_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiAppWindowClientView);
-};
-
 // This is a merge of NativeAppWindowViews and ChromeNativeAppWindowViews.
 class VivaldiNativeAppWindowViews : public views::WidgetDelegateView,
                                     public views::WidgetObserver {
@@ -189,7 +156,6 @@ class VivaldiNativeAppWindowViews : public views::WidgetDelegateView,
   gfx::Size GetMinimumSize() const override;
   gfx::Size GetMaximumSize() const override;
   void OnFocus() override;
-  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
 
  private:
   class ModalDialogHost : public web_modal::WebContentsModalDialogHost {
@@ -212,7 +178,7 @@ class VivaldiNativeAppWindowViews : public views::WidgetDelegateView,
   friend class ModalDialogHost;
   friend class VivaldiBrowserWindow;
 
-  void OnImagesLoaded(gfx::ImageFamily image_family);
+  void SetIconFamily(gfx::ImageFamily image_family);
 
   VivaldiBrowserWindow* window_;  // Not owned.
   views::WebView* web_view_;
@@ -226,8 +192,6 @@ class VivaldiNativeAppWindowViews : public views::WidgetDelegateView,
 
   // The icon family for the task bar and elsewhere.
   gfx::ImageFamily icon_family_;
-
-  base::WeakPtrFactory<VivaldiNativeAppWindowViews> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiNativeAppWindowViews);
 };

@@ -82,8 +82,8 @@ SkBitmap CreateSquareBitmapWithColor(int size, SkColor color) {
 }
 
 void SetAppIcon(WebApplicationInfo* web_app, int size, SkColor color) {
-  web_app->icon_bitmaps.clear();
-  web_app->icon_bitmaps[size] = CreateSquareBitmapWithColor(size, color);
+  web_app->icon_bitmaps_any.clear();
+  web_app->icon_bitmaps_any[size] = CreateSquareBitmapWithColor(size, color);
 }
 
 // Use only real BookmarkAppInstallFinalizer::FinalizeInstall and mock any other
@@ -95,7 +95,6 @@ class BookmarkAppInstallFinalizerInstallOnly
   ~BookmarkAppInstallFinalizerInstallOnly() override = default;
 
   // InstallFinalizer:
-  void AddAppToQuickLaunchBar(const web_app::AppId& app_id) override {}
   void ReparentTab(const web_app::AppId& app_id,
                    bool shortcut_created,
                    content::WebContents* web_contents) override {}
@@ -335,11 +334,11 @@ TEST_F(InstallManagerBookmarkAppTest, CreateBookmarkApp) {
   EXPECT_FALSE(IconsInfo::GetIconResource(extension, kIconSizeSmall,
                                           ExtensionIconSet::MATCH_EXACTLY)
                    .empty());
-  EXPECT_FALSE(
+  base::Optional<base::Time> added_time =
       AppBannerSettingsHelper::GetSingleBannerEvent(
           web_contents(), AppUrl(), AppUrl().spec(),
-          AppBannerSettingsHelper::APP_BANNER_EVENT_DID_ADD_TO_HOMESCREEN)
-          .is_null());
+          AppBannerSettingsHelper::APP_BANNER_EVENT_DID_ADD_TO_HOMESCREEN);
+  EXPECT_FALSE(added_time && added_time->is_null());
 }
 
 TEST_F(InstallManagerBookmarkAppTest, CreateBookmarkAppDefaultApp) {
@@ -404,11 +403,11 @@ TEST_P(InstallManagerBookmarkAppInstallableSiteTest,
   EXPECT_EQ(kAppTitle, extension->name());
   EXPECT_EQ(AppUrl(), AppLaunchInfo::GetLaunchWebURL(extension));
   EXPECT_EQ(SK_ColorBLUE, AppThemeColorInfo::GetThemeColor(extension).value());
-  EXPECT_FALSE(
+  base::Optional<base::Time> added_time =
       AppBannerSettingsHelper::GetSingleBannerEvent(
           web_contents(), AppUrl(), AppUrl().spec(),
-          AppBannerSettingsHelper::APP_BANNER_EVENT_DID_ADD_TO_HOMESCREEN)
-          .is_null());
+          AppBannerSettingsHelper::APP_BANNER_EVENT_DID_ADD_TO_HOMESCREEN);
+  EXPECT_FALSE(added_time && added_time->is_null());
   EXPECT_EQ(GURL(AppScope()), GetScopeURLFromBookmarkApp(extension));
 }
 
@@ -574,6 +573,8 @@ TEST_F(InstallManagerBookmarkAppTest, CreateBookmarkAppWithoutManifest) {
 TEST_F(InstallManagerBookmarkAppTest, CreateWebAppFromInfo) {
   AddEmptyDataRetriever();
 
+  web_app::InstallManager::InstallParams params;
+
   auto web_app_info = std::make_unique<WebApplicationInfo>();
   web_app_info->app_url = AppUrl();
   web_app_info->title = base::UTF8ToUTF16(kAppTitle);
@@ -587,7 +588,7 @@ TEST_F(InstallManagerBookmarkAppTest, CreateWebAppFromInfo) {
   auto* provider = web_app::WebAppProviderBase::GetProviderBase(profile());
 
   provider->install_manager().InstallWebAppFromInfo(
-      std::move(web_app_info), web_app::ForInstallableSite::kYes,
+      std::move(web_app_info), web_app::ForInstallableSite::kYes, params,
       WebappInstallSource::ARC,
       base::BindLambdaForTesting([&](const web_app::AppId& installed_app_id,
                                      web_app::InstallResultCode code) {

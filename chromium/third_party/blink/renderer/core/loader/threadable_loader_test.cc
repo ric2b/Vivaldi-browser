@@ -55,8 +55,6 @@ constexpr char kFileName[] = "fox-null-terminated.html";
 class MockThreadableLoaderClient final
     : public GarbageCollected<MockThreadableLoaderClient>,
       public ThreadableLoaderClient {
-  USING_GARBAGE_COLLECTED_MIXIN(MockThreadableLoaderClient);
-
  public:
   MockThreadableLoaderClient() = default;
   MOCK_METHOD2(DidSendData, void(uint64_t, uint64_t));
@@ -165,7 +163,7 @@ class ThreadableLoaderTestHelper final {
   }
 
   void CreateLoader(ThreadableLoaderClient* client) {
-    ResourceLoaderOptions resource_loader_options;
+    ResourceLoaderOptions resource_loader_options(nullptr /* world */);
     loader_ = MakeGarbageCollected<ThreadableLoader>(
         *dummy_page_holder_->GetFrame().DomWindow(), client,
         resource_loader_options);

@@ -20,6 +20,7 @@
 #include "ash/login/ui/login_tooltip_view.h"
 #include "ash/login/ui/non_accessible_view.h"
 #include "ash/public/cpp/keyboard/keyboard_controller_observer.h"
+#include "ash/public/cpp/login_accelerators.h"
 #include "ash/public/cpp/login_types.h"
 #include "ash/public/cpp/system_tray_focus_observer.h"
 #include "base/callback_forward.h"
@@ -74,7 +75,14 @@ class ASH_EXPORT LockContentsView
  public:
   METADATA_HEADER(LockContentsView);
   class AuthErrorBubble;
+  class ManagementPopUp;
   class UserState;
+
+  enum class BottomIndicatorState {
+    kNone,
+    kManagedDevice,
+    kAdbSideLoadingEnabled,
+  };
 
   // TestApi is used for tests to get internal implementation details.
   class ASH_EXPORT TestApi {
@@ -89,12 +97,14 @@ class ASH_EXPORT LockContentsView
     LockScreenMediaControlsView* media_controls_view() const;
     views::View* note_action() const;
     LoginTooltipView* tooltip_bubble() const;
+    LoginTooltipView* management_bubble() const;
     LoginErrorBubble* auth_error_bubble() const;
     LoginErrorBubble* detachable_base_error_bubble() const;
     LoginErrorBubble* warning_banner_bubble() const;
     LoginErrorBubble* supervised_user_deprecation_bubble() const;
     views::View* system_info() const;
     views::View* bottom_status_indicator() const;
+    BottomIndicatorState bottom_status_indicator_status() const;
     LoginExpandedPublicAccountView* expanded_view() const;
     views::View* main_view() const;
     const std::vector<LockContentsView::UserState>& users() const;
@@ -116,12 +126,6 @@ class ASH_EXPORT LockContentsView
     // Display only the public account expanded view, other views in
     // LockContentsView are hidden.
     kExclusivePublicAccountExpandedView,
-  };
-
-  enum class AcceleratorAction {
-    kToggleSystemInfo,
-    kShowFeedback,
-    kShowResetScreen,
   };
 
   // Number of login attempts before a login dialog is shown. For example, if
@@ -247,6 +251,7 @@ class ASH_EXPORT LockContentsView
     bool force_online_sign_in = false;
     bool disable_auth = false;
     bool show_pin_pad_for_password = false;
+    size_t autosubmit_pin_length = 0;
     base::Optional<EasyUnlockIconOptions> easy_unlock_state;
     FingerprintState fingerprint_state;
 
@@ -395,7 +400,7 @@ class ASH_EXPORT LockContentsView
   void RegisterAccelerators();
 
   // Performs the specified accelerator action.
-  void PerformAction(AcceleratorAction action);
+  void PerformAction(LoginAcceleratorAction action);
 
   // Check whether the view should display the system information based on all
   // factors including policy settings, channel and Alt-V accelerator.
@@ -404,6 +409,11 @@ class ASH_EXPORT LockContentsView
   // Toggles the visibility of the |bottom_status_indicator_| based on its
   // content type and whether the extension UI window is opened.
   void UpdateBottomStatusIndicatorVisibility();
+
+  // Shows a pop-up including more details about device management. It is
+  // triggered when the bottom status indicator is clicked while displaying a
+  // "device is managed" type message.
+  void OnBottomStatusIndicatorTapped();
 
   const LockScreen::ScreenType screen_type_;
 
@@ -450,6 +460,8 @@ class ASH_EXPORT LockContentsView
   LoginErrorBubble* detachable_base_error_bubble_;
   // Bubble for displaying easy-unlock tooltips.
   LoginTooltipView* tooltip_bubble_;
+  // Bubble for displaying management details.
+  ManagementPopUp* management_bubble_;
   // Bubble for displaying warning banner message.
   LoginErrorBubble* warning_banner_bubble_;
   // Bubble for displaying supervised user deprecation message.
@@ -490,12 +502,15 @@ class ASH_EXPORT LockContentsView
   bool keyboard_shown_ = false;
 
   // Accelerators handled by login screen.
-  std::map<ui::Accelerator, AcceleratorAction> accel_map_;
+  std::map<ui::Accelerator, LoginAcceleratorAction> accel_map_;
 
   // Notifies Chrome when user activity is detected on the login screen so that
   // the auto-login timer can be reset.
   std::unique_ptr<AutoLoginUserActivityHandler>
       auto_login_user_activity_handler_;
+
+  BottomIndicatorState bottom_status_indicator_status_ =
+      BottomIndicatorState::kNone;
 
   base::WeakPtrFactory<LockContentsView> weak_ptr_factory_{this};
 

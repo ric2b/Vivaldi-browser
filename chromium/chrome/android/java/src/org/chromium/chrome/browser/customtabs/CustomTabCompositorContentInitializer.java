@@ -4,8 +4,10 @@
 
 package org.chromium.chrome.browser.customtabs;
 
+import android.view.ViewGroup;
+
 import org.chromium.base.Callback;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
@@ -57,10 +59,11 @@ public class CustomTabCompositorContentInitializer implements NativeInitObserver
 
     @Override
     public void onFinishNativeInitialization() {
-        LayoutManager layoutDriver = new LayoutManager(mCompositorViewHolder.get());
+        ViewGroup contentContainer = mActivity.findViewById(android.R.id.content);
+        LayoutManager layoutDriver =
+                new LayoutManager(mCompositorViewHolder.get(), contentContainer);
         mActivity.initializeCompositorContent(layoutDriver,
-                mActivity.findViewById(org.chromium.chrome.R.id.url_bar),
-                mActivity.findViewById(android.R.id.content),
+                mActivity.findViewById(org.chromium.chrome.R.id.url_bar), contentContainer,
                 mActivity.findViewById(org.chromium.chrome.R.id.control_container));
 
         for (Callback<LayoutManager> listener : mListeners) {

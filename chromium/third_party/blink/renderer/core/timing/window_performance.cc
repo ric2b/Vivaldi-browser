@@ -31,9 +31,11 @@
 
 #include "third_party/blink/renderer/core/timing/window_performance.h"
 
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/qualified_name.h"
@@ -45,6 +47,7 @@
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/timing/largest_contentful_paint.h"
 #include "third_party/blink/renderer/core/timing/layout_shift.h"
+#include "third_party/blink/renderer/core/timing/measure_memory/measure_memory_delegate.h"
 #include "third_party/blink/renderer/core/timing/performance_element_timing.h"
 #include "third_party/blink/renderer/core/timing/performance_event_timing.h"
 #include "third_party/blink/renderer/core/timing/performance_observer.h"
@@ -63,14 +66,11 @@ namespace blink {
 
 namespace {
 
-String GetFrameAttribute(HTMLFrameOwnerElement* frame_owner,
-                         const QualifiedName& attr_name,
-                         bool truncate) {
-  String attr_value;
+AtomicString GetFrameAttribute(HTMLFrameOwnerElement* frame_owner,
+                               const QualifiedName& attr_name) {
+  AtomicString attr_value;
   if (frame_owner->hasAttribute(attr_name)) {
     attr_value = frame_owner->getAttribute(attr_name);
-    if (truncate && attr_value.length() > 100)
-      attr_value = attr_value.Substring(0, 100);  // Truncate to 100 chars
   }
   return attr_value;
 }
@@ -94,12 +94,12 @@ AtomicString GetFrameOwnerType(HTMLFrameOwnerElement* frame_owner) {
   return "";
 }
 
-String GetFrameSrc(HTMLFrameOwnerElement* frame_owner) {
+AtomicString GetFrameSrc(HTMLFrameOwnerElement* frame_owner) {
   switch (frame_owner->OwnerType()) {
     case mojom::blink::FrameOwnerElementType::kObject:
-      return GetFrameAttribute(frame_owner, html_names::kDataAttr, false);
+      return GetFrameAttribute(frame_owner, html_names::kDataAttr);
     default:
-      return GetFrameAttribute(frame_owner, html_names::kSrcAttr, false);
+      return GetFrameAttribute(frame_owner, html_names::kSrcAttr);
   }
 }
 
@@ -148,11 +148,21 @@ static base::TimeTicks ToTimeOrigin(LocalDOMWindow* window) {
 WindowPerformance::WindowPerformance(LocalDOMWindow* window)
     : Performance(ToTimeOrigin(window),
                   window->GetTaskRunner(TaskType::kPerformanceTimeline)),
-      ExecutionContextClient(window) {
+      ExecutionContextClient(window),
+      measure_memory_experiment_timer_(
+          task_runner_,
+          this,
+          &WindowPerformance::MeasureMemoryExperimentTimerFired) {
   DCHECK(GetFrame());
   DCHECK(GetFrame()->GetPerformanceMonitor());
   GetFrame()->GetPerformanceMonitor()->Subscribe(
       PerformanceMonitor::kLongTask, kLongTaskObserverThreshold, this);
+  if (MeasureMemoryDelegate::IsMeasureMemoryAvailable(window) &&
+      base::FeatureList::IsEnabled(blink::features::kMeasureMemoryExperiment)) {
+    int delay_in_ms = base::RandInt(0, kMaxMeasureMemoryExperimentDelayInMs);
+    measure_memory_experiment_timer_.StartOneShot(
+        base::TimeDelta::FromMilliseconds(delay_in_ms), FROM_HERE);
+  }
 }
 
 WindowPerformance::~WindowPerformance() = default;
@@ -312,11 +322,10 @@ void WindowPerformance::ReportLongTask(base::TimeTicks start_time,
   } else {
     HTMLFrameOwnerElement* frame_owner =
         culprit_dom_window->GetFrame()->DeprecatedLocalOwner();
-    AddLongTaskTiming(
-        start_time, end_time, attribution.first, GetFrameOwnerType(frame_owner),
-        GetFrameSrc(frame_owner),
-        GetFrameAttribute(frame_owner, html_names::kIdAttr, false),
-        GetFrameAttribute(frame_owner, html_names::kNameAttr, true));
+    AddLongTaskTiming(start_time, end_time, attribution.first,
+                      GetFrameOwnerType(frame_owner), GetFrameSrc(frame_owner),
+                      GetFrameAttribute(frame_owner, html_names::kIdAttr),
+                      GetFrameAttribute(frame_owner, html_names::kNameAttr));
   }
 }
 
@@ -373,8 +382,11 @@ void WindowPerformance::ReportEventTimings(uint64_t frame_index,
   --pending_swap_promise_count_;
   // |event_timings_| and |event_frames_| should always have the same size.
   DCHECK(event_timings_.size() == event_frames_.size());
+  if (event_timings_.IsEmpty())
+    return;
   bool event_timing_enabled =
       RuntimeEnabledFeatures::EventTimingEnabled(GetExecutionContext());
+  DOMHighResTimeStamp end_time = MonotonicTimeToDOMHighResTimeStamp(timestamp);
   while (!event_timings_.IsEmpty()) {
     PerformanceEventTiming* entry = event_timings_.front();
     uint64_t entry_frame_index = event_frames_.front();
@@ -386,8 +398,6 @@ void WindowPerformance::ReportEventTimings(uint64_t frame_index,
 
     event_timings_.pop_front();
     event_frames_.pop_front();
-    DOMHighResTimeStamp end_time =
-        MonotonicTimeToDOMHighResTimeStamp(timestamp);
 
     int duration_in_ms = std::round((end_time - entry->startTime()) / 8) * 8;
     entry->SetDuration(duration_in_ms);
@@ -492,6 +502,22 @@ void WindowPerformance::OnLargestContentfulPaintUpdated(
 
 void WindowPerformance::OnPaintFinished() {
   ++frame_index_;
+}
+
+void WindowPerformance::MeasureMemoryExperimentTimerFired(TimerBase*) {
+  if (!GetFrame() || !GetExecutionContext())
+    return;
+  v8::Isolate* isolate = GetExecutionContext()->GetIsolate();
+  v8::HandleScope handle_scope(isolate);
+  v8::Local<v8::Context> context =
+      ToV8Context(GetFrame(), DOMWrapperWorld::MainWorld());
+  if (context.IsEmpty()) {
+    // The frame has been detached in the meantime.
+    return;
+  }
+  isolate->MeasureMemory(
+      std::make_unique<MeasureMemoryDelegate>(isolate, context),
+      v8::MeasureMemoryExecution::kDefault);
 }
 
 }  // namespace blink

@@ -156,6 +156,7 @@ content::WebContents* WebAppsBase::LaunchAppWithIntentImpl(
       web_app::ConvertDisplayModeToAppLaunchContainer(
           GetRegistrar()->GetAppEffectiveDisplayMode(app_id)),
       intent);
+  params.launch_source = launch_source;
   return web_app_launch_manager_->OpenApplication(params);
 }
 
@@ -198,14 +199,14 @@ void WebAppsBase::Connect(
 
 void WebAppsBase::LoadIcon(const std::string& app_id,
                            apps::mojom::IconKeyPtr icon_key,
-                           apps::mojom::IconCompression icon_compression,
+                           apps::mojom::IconType icon_type,
                            int32_t size_hint_in_dip,
                            bool allow_placeholder_icon,
                            LoadIconCallback callback) {
   DCHECK(provider_);
 
   if (icon_key) {
-    LoadIconFromWebApp(profile_, icon_compression, size_hint_in_dip, app_id,
+    LoadIconFromWebApp(profile_, icon_type, size_hint_in_dip, app_id,
                        static_cast<IconEffects>(icon_key->icon_effects),
                        std::move(callback));
     return;
@@ -256,6 +257,8 @@ void WebAppsBase::Launch(const std::string& app_id,
     case apps::mojom::LaunchSource::kFromInstalledNotification:
     case apps::mojom::LaunchSource::kFromTest:
     case apps::mojom::LaunchSource::kFromArc:
+    case apps::mojom::LaunchSource::kFromSharesheet:
+    case apps::mojom::LaunchSource::kFromReleaseNotesNotification:
       break;
   }
 
@@ -267,7 +270,10 @@ void WebAppsBase::Launch(const std::string& app_id,
       display_id,
       /*fallback_container=*/
       web_app::ConvertDisplayModeToAppLaunchContainer(display_mode));
-
+  // This is used only in the case that a SystemWebApp is being opened. We
+  // avoided recording the metrics above, in app_service_proxy.cc, and will
+  // record the launch metrics as part of the call to LaunchSystemWebApp.
+  params.launch_source = launch_source;
   // The app will be created for the currently active profile.
   web_app_launch_manager_->OpenApplication(params);
 }
@@ -280,6 +286,7 @@ void WebAppsBase::LaunchAppWithFiles(const std::string& app_id,
   apps::AppLaunchParams params(
       app_id, container, ui::DispositionFromEventFlags(event_flags),
       GetAppLaunchSource(launch_source), display::kDefaultDisplayId);
+  params.launch_source = launch_source;
   for (const auto& file_path : file_paths->file_paths) {
     params.launch_files.push_back(file_path);
   }

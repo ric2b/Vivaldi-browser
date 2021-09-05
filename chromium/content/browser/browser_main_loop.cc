@@ -21,7 +21,6 @@
 #include "base/logging.h"
 #include "base/memory/memory_pressure_monitor.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -39,6 +38,7 @@
 #include "base/strings/string_split.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/system/system_monitor.h"
+#include "base/task/current_thread.h"
 #include "base/task/thread_pool/initialization_util.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
@@ -142,7 +142,7 @@
 #include "ui/gfx/font_render_params.h"
 #include "ui/gfx/switches.h"
 
-#if defined(USE_AURA) || defined(OS_MACOSX)
+#if defined(USE_AURA) || defined(OS_MAC)
 #include "content/browser/compositor/image_transport_factory.h"
 #endif
 
@@ -167,7 +167,7 @@
 #include "ui/gl/gl_surface.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "content/browser/renderer_host/browser_compositor_view_mac.h"
 #include "content/browser/theme_helper_mac.h"
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
@@ -180,7 +180,7 @@
 
 #include "content/browser/renderer_host/dwrite_font_lookup_table_builder_win.h"
 #include "net/base/winsock_init.h"
-#include "services/service_manager/sandbox/win/sandbox_win.h"
+#include "sandbox/policy/win/sandbox_win.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -196,9 +196,9 @@
 #if defined(OS_WIN)
 #include "media/device_monitors/system_message_window_win.h"
 #include "sandbox/win/src/process_mitigations.h"
-#elif defined(OS_LINUX) && defined(USE_UDEV)
+#elif (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(USE_UDEV)
 #include "media/device_monitors/device_monitor_udev.h"
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 #include "media/device_monitors/device_monitor_mac.h"
 #endif
 
@@ -209,7 +209,7 @@
 #include "base/fuchsia/fuchsia_logging.h"
 #endif  // defined(OS_FUCHSIA)
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX)
+#if defined(OS_POSIX) && !defined(OS_MAC)
 #include "content/browser/sandbox_host_linux.h"
 #endif
 
@@ -224,7 +224,7 @@
 #if defined(USE_X11)
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "ui/base/ui_base_features.h"
-#include "ui/base/x/x11_util_internal.h"  // nogncheck
+#include "ui/base/x/x11_util.h"           // nogncheck
 #include "ui/gfx/x/x11_types.h"           // nogncheck
 #endif
 
@@ -232,7 +232,7 @@
 #include "crypto/nss_util.h"
 #endif
 
-#if defined(ENABLE_IPC_FUZZER) && defined(OS_MACOSX)
+#if defined(ENABLE_IPC_FUZZER) && defined(OS_MAC)
 #include "base/mac/foundation_util.h"
 #endif
 
@@ -324,7 +324,7 @@ bool GetBuildDirectory(base::FilePath* result) {
   if (!base::PathService::Get(base::DIR_EXE, result))
     return false;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (base::mac::AmIBundled()) {
     // The bundled app executables (Chromium, TestShell, etc) live three
     // levels down from the build directory, eg:
@@ -365,7 +365,7 @@ std::unique_ptr<base::MemoryPressureMonitor> CreateMemoryPressureMonitor(
 #if defined(OS_CHROMEOS)
   if (chromeos::switches::MemoryPressureHandlingEnabled())
     monitor = std::make_unique<util::MultiSourceMemoryPressureMonitor>();
-#elif defined(OS_MACOSX) || defined(OS_WIN) || defined(OS_FUCHSIA)
+#elif defined(OS_MAC) || defined(OS_WIN) || defined(OS_FUCHSIA)
   monitor = std::make_unique<util::MultiSourceMemoryPressureMonitor>();
 #endif
   // No memory monitor on other platforms...
@@ -524,6 +524,15 @@ BrowserMainLoop::BrowserMainLoop(
       << "ThreadPool must be halted before kicking off content.";
   g_current_browser_main_loop = this;
 
+  // Register the UI thread for hang watching before it starts running and set
+  // up a closure to automatically unregister when |this| is destroyed. This
+  // works since the UI thread running the message loop is the main thread and
+  // that makes it the same as the current one.
+  if (base::HangWatcher::IsUIThreadHangWatchingEnabled()) {
+    unregister_thread_closure_ =
+        base::HangWatcher::GetInstance()->RegisterThread();
+  }
+
   if (GetContentClient()->browser()->ShouldCreateThreadPool()) {
     DCHECK(base::ThreadPoolInstance::Get());
   }
@@ -600,7 +609,7 @@ int BrowserMainLoop::EarlyInitialization() {
 
   // Up the priority of the UI thread unless it was already high (since Mac
   // and recent versions of Android (O+) do this automatically).
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   if (base::FeatureList::IsEnabled(
           features::kBrowserUseDisplayThreadPriority) &&
       base::PlatformThread::GetCurrentThreadPriority() <
@@ -608,9 +617,9 @@ int BrowserMainLoop::EarlyInitialization() {
     base::PlatformThread::SetCurrentThreadPriority(
         base::ThreadPriority::DISPLAY);
   }
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_MAC)
 
-#if defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
+#if defined(OS_MAC) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
     defined(OS_ANDROID)
   // We use quite a few file descriptors for our IPC as well as disk the disk
   // cache,and the default limit on the Mac is low (256), so bump it up.
@@ -620,7 +629,7 @@ int BrowserMainLoop::EarlyInitialization() {
   // users can easily hit this limit with many open tabs. Bump up the limit to
   // an arbitrarily high number. See https://crbug.com/539567
   base::IncreaseFdLimitTo(8192);
-#endif  // defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_CHROMEOS) ||
+#endif  // defined(OS_MAC) || defined(OS_LINUX) || defined(OS_CHROMEOS) ||
         // defined(OS_ANDROID)
 
 #if defined(OS_WIN)
@@ -673,7 +682,7 @@ void BrowserMainLoop::MainMessageLoopStart() {
   // PostMainMessageLoopStart() below.
 
   TRACE_EVENT0("startup", "BrowserMainLoop::MainMessageLoopStart");
-  DCHECK(base::MessageLoopCurrentForUI::IsSet());
+  DCHECK(base::CurrentUIThread::IsSet());
   InitializeMainThread();
 }
 
@@ -800,7 +809,7 @@ int BrowserMainLoop::PreCreateThreads() {
   CdmRegistry::GetInstance()->Init();
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // The WindowResizeHelper allows the UI thread to wait on specific renderer
   // and GPU messages from the IO thread. Initializing it before the IO thread
   // starts ensures the affected IO thread messages always have somewhere to go.
@@ -889,7 +898,7 @@ void BrowserMainLoop::CreateStartupTasks() {
 
 scoped_refptr<base::SingleThreadTaskRunner>
 BrowserMainLoop::GetResizeTaskRunner() {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
       ui::WindowResizeHelperMac::Get()->task_runner();
   // In tests, WindowResizeHelperMac task runner might not be initialized.
@@ -1055,11 +1064,11 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
 
   ShutDownNetworkService();
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   BrowserCompositorMac::DisableRecyclingForShutdown();
 #endif
 
-#if defined(USE_AURA) || defined(OS_MACOSX)
+#if defined(USE_AURA) || defined(OS_MAC)
   {
     TRACE_EVENT0("shutdown",
                  "BrowserMainLoop::Subsystem:ImageTransportFactory");
@@ -1079,7 +1088,7 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
 // goes away.
 #if defined(OS_WIN)
   system_message_window_.reset();
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   device_monitor_mac_.reset();
 #endif
 
@@ -1168,7 +1177,7 @@ void BrowserMainLoop::InitializeMainThread() {
 
   // Register the main thread. The main thread's task runner should already have
   // been initialized in MainMessageLoopStart() (or before if
-  // MessageLoopCurrent::Get() was externally provided).
+  // CurrentThread::Get() was externally provided).
   DCHECK(base::ThreadTaskRunnerHandle::IsSet());
   main_thread_.reset(new BrowserThreadImpl(
       BrowserThread::UI, base::ThreadTaskRunnerHandle::Get()));
@@ -1271,9 +1280,9 @@ int BrowserMainLoop::BrowserThreadsStarted() {
 
 #if defined(OS_WIN)
   system_message_window_.reset(new media::SystemMessageWindowWin);
-#elif defined(OS_LINUX) && defined(USE_UDEV)
+#elif (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(USE_UDEV)
   device_monitor_linux_ = std::make_unique<media::DeviceMonitorLinux>();
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   // On Mac, the audio task runner must belong to the main thread.
   // See audio_thread_impl.cc and https://crbug.com/158170.
   DCHECK(!audio_manager_ ||
@@ -1298,7 +1307,7 @@ int BrowserMainLoop::BrowserThreadsStarted() {
     scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner =
         audio_manager_ ? audio_manager_->GetTaskRunner() : nullptr;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     // On Mac, the audio task runner must belong to the main thread.
     // See audio_thread_impl.cc and https://crbug.com/158170.
     if (audio_task_runner) {
@@ -1364,9 +1373,9 @@ int BrowserMainLoop::BrowserThreadsStarted() {
         std::make_unique<MediaKeysListenerManagerImpl>();
   }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   ThemeHelperMac::GetInstance();
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
 #if defined(OS_ANDROID)
   media::SetMediaDrmBridgeClient(GetContentClient()->GetMediaDrmBridgeClient());

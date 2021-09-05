@@ -38,6 +38,8 @@
 #include "components/omnibox/browser/history_url_provider.h"
 #include "components/omnibox/browser/keyword_provider.h"
 #include "components/omnibox/browser/local_history_zero_suggest_provider.h"
+#include "components/omnibox/browser/omnibox_field_trial.h"
+#include "components/omnibox/browser/omnibox_pedal_provider.h"
 #include "components/omnibox/browser/on_device_head_provider.h"
 #include "components/omnibox/browser/query_tile_provider.h"
 #include "components/omnibox/browser/search_provider.h"
@@ -46,6 +48,7 @@
 #include "components/omnibox/browser/zero_suggest_verbatim_match_provider.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/open_from_clipboard/clipboard_recent_content.h"
+#include "components/search_engines/omnibox_focus_type.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/strings/grit/components_strings.h"
@@ -61,17 +64,16 @@ namespace {
 // Converts the given match to a type (and possibly subtype) based on the AQS
 // specification. For more details, see
 // http://goto.google.com/binary-clients-logging.
-void AutocompleteMatchToAssistedQuery(const AutocompleteMatch& match,
-                                      size_t* type,
-                                      size_t* subtype) {
+// Note: the |subtypes| parameter passed over to this function may be filled
+// with subtypes reported by the suggest server. This call will update this set
+// with Chrome-specific subtypes.
+// TODO(https://crbug.com/1103056): relocate subtype updates to appropriate
+// sites that construct these matches.
+void GetMatchTypeAndExtendSubtypes(const AutocompleteMatch& match,
+                                   size_t* type,
+                                   base::flat_set<int>* subtypes) {
   // This type indicates a native chrome suggestion.
   *type = 69;
-  // Default value, indicating no subtype.
-  *subtype = base::string16::npos;
-
-  // If set, start with the AutocompletMatch::subtype_identifier field.
-  if (match.subtype_identifier != 0)
-    *subtype = match.subtype_identifier;
 
   // If provider is TYPE_ZERO_SUGGEST or TYPE_ON_DEVICE_HEAD, set the subtype
   // accordingly. Type will be set in the switch statement below where we'll
@@ -80,15 +82,21 @@ void AutocompleteMatchToAssistedQuery(const AutocompleteMatch& match,
     if (match.provider->type() == AutocompleteProvider::TYPE_ZERO_SUGGEST &&
         (match.type == AutocompleteMatchType::SEARCH_SUGGEST ||
          match.type == AutocompleteMatchType::NAVSUGGEST)) {
+      if (match.type == AutocompleteMatchType::NAVSUGGEST) {
+        subtypes->emplace(/*SUBTYPE_ZERO_PREFIX_LOCAL_FREQUENT_URLS=*/451);
+      }
       // We abuse this subtype and use it to for zero-suggest suggestions that
       // aren't personalized by the server. That is, it indicates either
       // client-side most-likely URL suggestions or server-side suggestions
       // that depend only on the URL as context.
-      *subtype = 66;
+      subtypes->emplace(/*SUBTYPE_URL_BASED=*/66);
     } else if (match.provider->type() ==
                AutocompleteProvider::TYPE_ON_DEVICE_HEAD) {
       // This subtype indicates a match from an on-device head provider.
-      *subtype = 271;
+      subtypes->emplace(/*SUBTYPE_SUGGEST_2G_LITE=*/271);
+    } else if (match.provider->type() ==
+               AutocompleteProvider::TYPE_ZERO_SUGGEST_LOCAL_HISTORY) {
+      subtypes->emplace(/*SUBTYPE_ZERO_PREFIX_LOCAL_HISTORY=*/450);
     }
   }
 
@@ -108,7 +116,7 @@ void AutocompleteMatchToAssistedQuery(const AutocompleteMatch& match,
     }
     case AutocompleteMatchType::SEARCH_SUGGEST_PERSONALIZED: {
       *type = 35;
-      *subtype = 39;
+      subtypes->emplace(/*SUBTYPE_PERSONAL=*/39);
       return;
     }
     case AutocompleteMatchType::SEARCH_SUGGEST_PROFILE: {
@@ -121,40 +129,40 @@ void AutocompleteMatchToAssistedQuery(const AutocompleteMatch& match,
       return;
     }
     case AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED: {
-      *subtype = 57;
+      subtypes->emplace(/*SUBTYPE_OMNIBOX_ECHO_SEARCH=*/57);
       return;
     }
     case AutocompleteMatchType::URL_WHAT_YOU_TYPED: {
-      *subtype = 58;
+      subtypes->emplace(/*SUBTYPE_OMNIBOX_ECHO_URL=*/58);
       return;
     }
     case AutocompleteMatchType::SEARCH_HISTORY: {
-      *subtype = 59;
+      subtypes->emplace(/*SUBTYPE_OMNIBOX_HISTORY_SEARCH=*/59);
       return;
     }
     case AutocompleteMatchType::HISTORY_URL: {
-      *subtype = 60;
+      subtypes->emplace(/*SUBTYPE_OMNIBOX_HISTORY_URL=*/60);
       return;
     }
     case AutocompleteMatchType::HISTORY_TITLE: {
-      *subtype = 61;
+      subtypes->emplace(/*SUBTYPE_OMNIBOX_HISTORY_TITLE=*/61);
       return;
     }
     case AutocompleteMatchType::HISTORY_BODY: {
-      *subtype = 62;
+      subtypes->emplace(/*SUBTYPE_OMNIBOX_HISTORY_BODY=*/62);
       return;
     }
     case AutocompleteMatchType::HISTORY_KEYWORD: {
-      *subtype = 63;
+      subtypes->emplace(/*SUBTYPE_OMNIBOX_HISTORY_KEYWORD=*/63);
       return;
     }
     case AutocompleteMatchType::BOOKMARK_TITLE: {
-      *subtype = 65;
+      subtypes->emplace(/*SUBTYPE_OMNIBOX_BOOKMARK_TITLE=*/65);
       return;
     }
     case AutocompleteMatchType::NAVSUGGEST_PERSONALIZED: {
       *type = 5;
-      *subtype = 39;
+      subtypes->emplace(/*SUBTYPE_PERSONAL=*/39);
       return;
     }
     case AutocompleteMatchType::CALCULATOR: {
@@ -162,21 +170,25 @@ void AutocompleteMatchToAssistedQuery(const AutocompleteMatch& match,
       return;
     }
     case AutocompleteMatchType::CLIPBOARD_URL: {
-      *subtype = 177;
+      subtypes->emplace(/*SUBTYPE_CLIPBOARD_URL=*/177);
       return;
     }
     case AutocompleteMatchType::CLIPBOARD_TEXT: {
-      *subtype = 176;
+      subtypes->emplace(/*SUBTYPE_CLIPBOARD_TEXT=*/176);
       return;
     }
     case AutocompleteMatchType::CLIPBOARD_IMAGE: {
-      *subtype = 327;
+      subtypes->emplace(/*SUBTYPE_CLIPBOARD_IMAGE=*/327);
+      return;
+    }
+    case AutocompleteMatchType::TILE_SUGGESTION: {
+      *type = 171;
       return;
     }
     default: {
       // This value indicates a native chrome suggestion with no named subtype
       // (yet).
-      *subtype = 64;
+      subtypes->emplace(/*SUBTYPE_OMNIBOX_OTHER=*/64);
     }
   }
 }
@@ -185,15 +197,24 @@ void AutocompleteMatchToAssistedQuery(const AutocompleteMatch& match,
 // the existing available autocompletions string, encoding according to the
 // spec.
 void AppendAvailableAutocompletion(size_t type,
-                                   size_t subtype,
+                                   const base::flat_set<int>& subtypes,
                                    int count,
                                    std::string* autocompletions) {
   if (!autocompletions->empty())
     autocompletions->append("j");
   base::StringAppendF(autocompletions, "%" PRIuS, type);
-  // Subtype is optional - base::string16::npos indicates no subtype.
-  if (subtype != base::string16::npos)
-    base::StringAppendF(autocompletions, "i%" PRIuS, subtype);
+
+  std::ostringstream subtype_str;
+  for (auto subtype : subtypes) {
+    if (subtype_str.tellp() > 0)
+      subtype_str << 'i';
+    subtype_str << subtype;
+  }
+
+  // Subtype is optional. Append only if we have subtypes to report.
+  if (subtype_str.tellp() > 0)
+    base::StringAppendF(autocompletions, "i%s", subtype_str.str().c_str());
+
   if (count > 1)
     base::StringAppendF(autocompletions, "l%d", count);
 }
@@ -314,9 +335,10 @@ AutocompleteController::AutocompleteController(
     // ClipboardRecentContent can be null in iOS tests.  For non-iOS, we
     // create a ClipboardRecentContent as above (for both Chrome and tests).
     if (ClipboardRecentContent::GetInstance()) {
-      providers_.push_back(new ClipboardProvider(
+      clipboard_provider_ = new ClipboardProvider(
           provider_client_.get(), this, history_url_provider_,
-          ClipboardRecentContent::GetInstance()));
+          ClipboardRecentContent::GetInstance());
+      providers_.push_back(clipboard_provider_);
     }
   }
 
@@ -359,7 +381,7 @@ void AutocompleteController::Start(const AutocompleteInput& input) {
   const base::string16 old_input_text(input_.text());
   const bool old_allow_exact_keyword_match = input_.allow_exact_keyword_match();
   const bool old_want_asynchronous_matches = input_.want_asynchronous_matches();
-  const bool old_from_omnibox_focus = input_.from_omnibox_focus();
+  const OmniboxFocusType old_focus_type = input_.focus_type();
   input_ = input;
 
   // See if we can avoid rerunning autocomplete when the query hasn't changed
@@ -375,7 +397,7 @@ void AutocompleteController::Start(const AutocompleteInput& input) {
       (input_.text() == old_input_text) &&
       (input_.allow_exact_keyword_match() == old_allow_exact_keyword_match) &&
       (input_.want_asynchronous_matches() == old_want_asynchronous_matches) &&
-      (input.from_omnibox_focus() == old_from_omnibox_focus);
+      (input_.focus_type() == old_focus_type);
 
   expire_timer_.Stop();
   stop_timer_.Stop();
@@ -532,14 +554,28 @@ void AutocompleteController::AddProvidersInfo(
     // This is also a good place to put code to add info that you want to
     // add for every provider.
   }
+
+  if (OmniboxFieldTrial::IsPedalSuggestionsEnabled()) {
+    // OmniboxPedalProvider is not a "true" AutocompleteProvider and isn't
+    // included in the list of providers, though needs to report information for
+    // its field trial.  Manually call AddProviderInfo for pedals.
+    provider_client_->GetPedalProvider()->AddProviderInfo(provider_info);
+  }
 }
 
 void AutocompleteController::ResetSession() {
   search_service_worker_signal_sent_ = false;
 
   for (Providers::const_iterator i(providers_.begin()); i != providers_.end();
-       ++i)
+       ++i) {
     (*i)->ResetSession();
+  }
+
+  if (OmniboxFieldTrial::IsPedalSuggestionsEnabled()) {
+    // OmniboxPedalProvider is not included in the list of providers as it's not
+    // a "true" AutocompleteProvider.  Manually call ResetSession() for pedals.
+    provider_client_->GetPedalProvider()->ResetSession();
+  }
 }
 
 void AutocompleteController::UpdateMatchDestinationURLWithQueryFormulationTime(
@@ -646,11 +682,7 @@ void AutocompleteController::UpdateResult(
     result_.ConvertOpenTabMatches(provider_client_.get(), &input_);
 
   if (OmniboxFieldTrial::IsPedalSuggestionsEnabled()) {
-    if (OmniboxFieldTrial::IsSuggestionButtonRowEnabled()) {
-      result_.ConvertInSuggestionPedalMatches(provider_client_.get());
-    } else {
-      result_.AppendDedicatedPedalMatches(provider_client_.get(), input_);
-    }
+    result_.ConvertInSuggestionPedalMatches(provider_client_.get());
   }
 
   // Sort the matches and trim to a small number of "best" matches.
@@ -779,8 +811,10 @@ void AutocompleteController::UpdateHeaders(AutocompleteResult* result) {
   // show headers in the UI. For now, this is hacky, but intended.
   //
   // TODO(tommycli): Stop special casing ZeroSuggestProvider here.
-  if (zero_suggest_provider_)
+  if (zero_suggest_provider_) {
     result->set_headers_map(zero_suggest_provider_->headers_map());
+    result->set_hidden_group_ids(zero_suggest_provider_->hidden_group_ids());
+  }
 
   for (AutocompleteMatch& match : *result) {
     if (match.suggestion_group_id.has_value()) {
@@ -856,25 +890,35 @@ void AutocompleteController::UpdateAssistedQueryStats(
   // Build the impressions string (the AQS part after ".").
   std::string autocompletions;
   int count = 0;
+  int num_zero_prefix_shown = 0;
   size_t last_type = base::string16::npos;
-  size_t last_subtype = base::string16::npos;
-  for (auto match(result->begin()); match != result->end(); ++match) {
+  base::flat_set<int> last_subtypes = {};
+  for (const auto& match : *result) {
+    auto subtypes = match.subtypes;
     size_t type = base::string16::npos;
-    size_t subtype = base::string16::npos;
-    AutocompleteMatchToAssistedQuery(*match, &type, &subtype);
+    GetMatchTypeAndExtendSubtypes(match, &type, &subtypes);
+
+    // Count any suggestions that constitute zero-prefix suggestions.
+    if (match.subtypes.contains(/*SUBTYPE_ZERO_PREFIX_LOCAL_HISTORY=*/450) ||
+        match.subtypes.contains(
+            /*SUBTYPE_ZERO_PREFIX_LOCAL_FREQUENT_URLS=*/451) ||
+        match.subtypes.contains(/*SUBTYPE_ZERO_PREFIX=*/362)) {
+      ++num_zero_prefix_shown;
+    }
+
     if (last_type != base::string16::npos &&
-        (type != last_type || subtype != last_subtype)) {
-      AppendAvailableAutocompletion(
-          last_type, last_subtype, count, &autocompletions);
+        (type != last_type || subtypes != last_subtypes)) {
+      AppendAvailableAutocompletion(last_type, last_subtypes, count,
+                                    &autocompletions);
       count = 1;
     } else {
       count++;
     }
     last_type = type;
-    last_subtype = subtype;
+    last_subtypes = subtypes;
   }
-  AppendAvailableAutocompletion(
-      last_type, last_subtype, count, &autocompletions);
+  AppendAvailableAutocompletion(last_type, last_subtypes, count,
+                                &autocompletions);
   // Go over all matches and set AQS if the match supports it.
   for (size_t index = 0; index < result->size(); ++index) {
     AutocompleteMatch* match = result->match_at(index);
@@ -890,6 +934,14 @@ void AutocompleteController::UpdateAssistedQueryStats(
         base::StringPrintf("chrome.%s.%s",
                            selected_index.c_str(),
                            autocompletions.c_str());
+
+    if (num_zero_prefix_shown > 0) {
+      // Note: 1st skipped parameter: EXPERIMENT_STATS.
+      // Note: 2nd skipped parameter: SINGLE_SEARCHBOX_CONTENT.
+      match->search_terms_args->assisted_query_stats +=
+          base::StringPrintf("...%d", num_zero_prefix_shown);
+    }
+
     match->destination_url = GURL(template_url->url_ref().ReplaceSearchTerms(
         *match->search_terms_args, template_url_service_->search_terms_data()));
   }

@@ -140,7 +140,17 @@
     "dependencies": ["permission:crashReportPrivate"],
     "contexts": ["blessed_extension"],
     "default_parent": true
-  },{
+  },
+  {
+    "channel": "stable",
+    "contexts": [
+      "webui"
+    ],
+    "matches": [
+      "chrome://media-app/*"
+    ]
+  },
+  {
     "channel": "stable",
     "contexts": ["webui_untrusted"],
     "matches": [
@@ -171,10 +181,6 @@
   },
   "dns": {
     "dependencies": ["permission:dns"],
-    "contexts": ["blessed_extension"]
-  },
-  "documentScan": {
-    "dependencies": ["permission:documentScan"],
     "contexts": ["blessed_extension"]
   },
   // This is not a real API, only here for documentation purposes.
@@ -312,8 +318,10 @@
       "chrome://os-settings/*",
       "chrome://settings/*",
       "chrome://sync-confirmation/*",
+      "chrome://tab-search/*",
       "chrome://tab-strip/*",
-      "chrome://welcome/*"
+      "chrome://welcome/*",
+      "chrome://profile-picker/*"
     ]
   }, {
     "channel": "stable",
@@ -361,7 +369,7 @@
     "dependencies": ["manifest:mime_types_handler"],
     "contexts": ["blessed_extension"]
   },
-  "mojoPrivate": {
+  "mojoPrivate": [{
     "contexts": ["blessed_extension"],
     "channel": "stable",
     "extension_types": ["platform_app", "extension"],
@@ -371,7 +379,13 @@
       "B41E7F08E1179CC03CBD1F49E57CF353A40ADE07",   // Chrome Camera App Dev
       "A3E3DE9E9F16B41D4A2FAD106BD6CA76B94A0C94"    // Chrome Camera App Stable
     ]
-  },
+  }, {
+    "contexts": ["blessed_extension"],
+    "dependencies": ["behavior:imprivata_in_session_extension"],
+    "extension_types": ["extension"],
+    "location": "policy",
+    "platforms": ["chromeos"]
+  }],
   "networking.config": {
     "dependencies": ["permission:networking.config"],
     "contexts": ["blessed_extension"]

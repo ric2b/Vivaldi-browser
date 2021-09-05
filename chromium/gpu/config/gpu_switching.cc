@@ -4,7 +4,7 @@
 
 #include "gpu/config/gpu_switching.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include <OpenGL/OpenGL.h>
 #endif
 
@@ -22,11 +22,11 @@ namespace gpu {
 
 namespace {
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 typedef CGLPixelFormatObj PlatformPixelFormatObj;
 #else
 typedef void* PlatformPixelFormatObj;
-#endif  // OS_MACOSX
+#endif  // OS_MAC
 
 PlatformPixelFormatObj g_discrete_pixel_format_obj = nullptr;
 
@@ -39,20 +39,20 @@ bool ContainsWorkaround(const std::vector<int32_t>& workarounds,
 void ForceDiscreteGPU() {
   if (g_discrete_pixel_format_obj)
     return;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   CGLPixelFormatAttribute attribs[1];
   attribs[0] = static_cast<CGLPixelFormatAttribute>(0);
   GLint num_pixel_formats = 0;
   CGLChoosePixelFormat(attribs, &g_discrete_pixel_format_obj,
                        &num_pixel_formats);
-#endif  // OS_MACOSX
+#endif  // OS_MAC
 }
 
 }  // namespace anonymous
 
 bool SwitchableGPUsSupported(const GPUInfo& gpu_info,
                              const base::CommandLine& command_line) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (command_line.HasSwitch(switches::kUseGL) &&
       (command_line.GetSwitchValueASCII(switches::kUseGL) !=
            gl::kGLImplementationDesktopName &&
@@ -75,7 +75,7 @@ bool SwitchableGPUsSupported(const GPUInfo& gpu_info,
            gpu_info.secondary_gpus[0].vendor_id == kVendorIntel));
 #else
   return false;
-#endif  // OS_MACOSX
+#endif  // OS_MAC
 }
 
 void InitializeSwitchableGPUs(
@@ -90,12 +90,12 @@ void InitializeSwitchableGPUs(
 }
 
 void StopForceDiscreteGPU() {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (g_discrete_pixel_format_obj) {
     CGLReleasePixelFormat(g_discrete_pixel_format_obj);
     g_discrete_pixel_format_obj = nullptr;
   }
-#endif  // OS_MACOSX
+#endif  // OS_MAC
 }
 
 }  // namespace gpu

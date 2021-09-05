@@ -9,12 +9,14 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "components/zoom/zoom_controller.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/common/extensions/command.h"
 #include "extensions/api/bookmarks/bookmarks_private_api.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/common/manifest_constants.h"
+#include "prefs/vivaldi_pref_names.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/blink/blink_event_util.h"
@@ -229,7 +231,7 @@ gfx::PointF ToUICoordinates(content::WebContents* web_contents, const gfx::Point
   return gfx::PointF(p.x() / zoom_factor, p.y() / zoom_factor);
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 
 base::string16 KeyCodeToName(ui::KeyboardCode key_code) {
   int string_id = 0;
@@ -375,7 +377,7 @@ std::string ShortcutText(int windows_key_code, int modifiers, int dom_code) {
   } else if (windows_key_code == ui::VKEY_ESCAPE) {
     shortcutText += "Esc";
   } else {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // This is equivalent to js event.code and deals with a few
   // MacOS keyboard shortcuts like cmd+alt+n that fall through
   // in some languages, i.e. AcceleratorToString returns a blank.
@@ -396,17 +398,81 @@ std::string ShortcutText(int windows_key_code, int modifiers, int dom_code) {
   }
 #else
     shortcutText += base::UTF16ToUTF8(accelerator.GetShortcutText());
-#endif // OS_MACOSX
+#endif // OS_MAC
   }
   return shortcutText;
 }
 
+/*
+Structure is as follows:
 
+"profile_image_path": {
+  { "profile_path": "<path 1>", "image_path": "<image path>" },
+  { "profile_path": "<path 2>", "image_path": "<image path>" },
+  ...
+}
+*/
 
+const char kProfilePathKey[] = "profile_path";
+const char kImagePathKey[] = "image_path";
 
+std::string GetImagePathFromProfilePath(const std::string& preferences_path,
+                                        const std::string& profile_path) {
+  std::string path;
+  PrefService* prefs = g_browser_process->local_state();
+  const base::Value* list = prefs->Get(preferences_path);
 
+  if (list && list->is_list()) {
+    for (auto& item : list->GetList()) {
+      if (item.is_dict()) {
+        const std::string* value = item.FindStringKey(kProfilePathKey);
+        if (value && *value == profile_path) {
+          const std::string* image_path = item.FindStringKey(kImagePathKey);
+          if (image_path) {
+            return *image_path;
+          }
+        }
+      }
+    }
+  }
+  return path;
+}
 
+void SetImagePathForProfilePath(const std::string& preferences_path,
+                                const std::string& avatar_path,
+                                const std::string& profile_path) {
+  std::string path;
+  bool updated = false;
+  PrefService* prefs = g_browser_process->local_state();
+  ListPrefUpdate update(prefs, preferences_path);
+  base::ListValue* update_pref_data = update.Get();
 
+  if (update_pref_data && update_pref_data->is_list()) {
+    std::string image_path;
+    for (auto& item : update_pref_data->GetList()) {
+      if (item.is_dict()) {
+        const std::string* value = item.FindStringKey(kProfilePathKey);
 
+        // If it exists already, update it
+        if (value && *value == profile_path) {
+          if (avatar_path.size()) {
+            item.SetStringKey(kImagePathKey, avatar_path);
+          } else {
+            // empty path means remove the dictionary.
+            item.RemoveKey(kImagePathKey);
+          }
+          updated = true;
+          break;
+        }
+      }
+    }
+  }
+  if (!updated) {
+    base::Value dict(base::Value::Type::DICTIONARY);
+    dict.SetKey(kProfilePathKey, base::Value(profile_path));
+    dict.SetKey(kImagePathKey, base::Value(avatar_path));
+    update_pref_data->Append(std::move(dict));
+  }
+}
 
 }  // namespace vivaldi

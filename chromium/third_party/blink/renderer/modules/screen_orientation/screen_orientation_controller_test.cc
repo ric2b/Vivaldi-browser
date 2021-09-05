@@ -80,7 +80,7 @@ class ScreenOrientationControllerTest : public PageTestBase {
   }
 
   void LockOrientation(
-      blink::WebScreenOrientationLockType orientation,
+      device::mojom::ScreenOrientationLockType orientation,
       std::unique_ptr<blink::WebLockOrientationCallback> callback) {
     Controller()->lock(orientation, std::move(callback));
   }
@@ -100,7 +100,7 @@ TEST_F(ScreenOrientationControllerTest, CancelPending_Unlocking) {
   MockLockOrientationCallback::LockOrientationResultHolder callback_results;
 
   LockOrientation(
-      blink::kWebScreenOrientationLockPortraitPrimary,
+      device::mojom::ScreenOrientationLockType::PORTRAIT_PRIMARY,
       std::make_unique<MockLockOrientationCallback>(&callback_results));
   UnlockOrientation();
 
@@ -116,11 +116,11 @@ TEST_F(ScreenOrientationControllerTest, CancelPending_DoubleLock) {
   MockLockOrientationCallback::LockOrientationResultHolder callback_results2;
 
   LockOrientation(
-      blink::kWebScreenOrientationLockPortraitPrimary,
+      device::mojom::ScreenOrientationLockType::PORTRAIT_PRIMARY,
       std::make_unique<MockLockOrientationCallback>(&callback_results));
 
   LockOrientation(
-      blink::kWebScreenOrientationLockPortraitPrimary,
+      device::mojom::ScreenOrientationLockType::PORTRAIT_PRIMARY,
       std::make_unique<MockLockOrientationCallback>(&callback_results2));
 
   EXPECT_FALSE(callback_results.succeeded_);
@@ -144,7 +144,7 @@ TEST_F(ScreenOrientationControllerTest, LockRequest_Error) {
   for (auto it = errors.begin(); it != errors.end(); ++it) {
     MockLockOrientationCallback::LockOrientationResultHolder callback_results;
     LockOrientation(
-        blink::kWebScreenOrientationLockPortraitPrimary,
+        device::mojom::ScreenOrientationLockType::PORTRAIT_PRIMARY,
         std::make_unique<MockLockOrientationCallback>(&callback_results));
     RunLockResultCallback(GetRequestId(), it->key);
     EXPECT_FALSE(callback_results.succeeded_);
@@ -158,7 +158,7 @@ TEST_F(ScreenOrientationControllerTest, LockRequest_Error) {
 TEST_F(ScreenOrientationControllerTest, LockRequest_Success) {
   MockLockOrientationCallback::LockOrientationResultHolder callback_results;
   LockOrientation(
-      blink::kWebScreenOrientationLockPortraitPrimary,
+      device::mojom::ScreenOrientationLockType::PORTRAIT_PRIMARY,
       std::make_unique<MockLockOrientationCallback>(&callback_results));
 
   RunLockResultCallback(GetRequestId(),
@@ -179,12 +179,12 @@ TEST_F(ScreenOrientationControllerTest, RaceScenario) {
   MockLockOrientationCallback::LockOrientationResultHolder callback_results2;
 
   LockOrientation(
-      blink::kWebScreenOrientationLockPortraitPrimary,
+      device::mojom::ScreenOrientationLockType::PORTRAIT_PRIMARY,
       std::make_unique<MockLockOrientationCallback>(&callback_results1));
   int request_id1 = GetRequestId();
 
   LockOrientation(
-      blink::kWebScreenOrientationLockLandscapePrimary,
+      device::mojom::ScreenOrientationLockType::LANDSCAPE_PRIMARY,
       std::make_unique<MockLockOrientationCallback>(&callback_results2));
 
   // callback_results1 must be rejected, tested in CancelPending_DoubleLock.
@@ -209,12 +209,12 @@ class ScreenInfoWebWidgetClient
   ~ScreenInfoWebWidgetClient() override = default;
 
   // frame_test_helpers::TestWebWidgetClient:
-  WebScreenInfo GetScreenInfo() override { return screen_info_; }
+  ScreenInfo GetInitialScreenInfo() override { return screen_info_; }
 
   void SetAngle(uint16_t angle) { screen_info_.orientation_angle = angle; }
 
  private:
-  WebScreenInfo screen_info_;
+  ScreenInfo screen_info_;
 };
 
 TEST_F(ScreenOrientationControllerTest, PageVisibilityCrash) {
@@ -229,6 +229,7 @@ TEST_F(ScreenOrientationControllerTest, PageVisibilityCrash) {
 
   frame_test_helpers::WebViewHelper web_view_helper;
   ScreenInfoWebWidgetClient client;
+  client.SetAngle(1234);
   web_view_helper.InitializeAndLoad(base_url + test_url, nullptr, nullptr,
                                     &client);
 
@@ -242,7 +243,6 @@ TEST_F(ScreenOrientationControllerTest, PageVisibilityCrash) {
   // referenced before this.
   ScreenOrientation::Create(frame->DomWindow());
   page->SetVisibilityState(mojom::blink::PageVisibilityState::kHidden, false);
-  client.SetAngle(1234);
   web_view_helper.GetWebView()
       ->MainFrame()
       ->ToWebLocalFrame()

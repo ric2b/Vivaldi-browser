@@ -10,12 +10,12 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_types.h"
-#include "chrome/browser/chromeos/login/app_launch_controller.h"
-#include "chrome/browser/chromeos/login/arc_kiosk_controller.h"
+#include "chrome/browser/chromeos/login/app_mode/kiosk_launch_controller.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_app_launcher.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
+#include "chrome/browser/chromeos/login/screens/gaia_screen.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
-#include "chrome/browser/chromeos/login/web_kiosk_controller.h"
+#include "chrome/browser/chromeos/login/ui/webui_accelerator_mapping.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -24,6 +24,8 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/webui/chromeos/internet_detail_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/user_creation_screen_handler.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/common/features/feature_session_type.h"
@@ -87,8 +89,8 @@ void LoginDisplayHostCommon::FinalizeImmediately() {
   delete this;
 }
 
-AppLaunchController* LoginDisplayHostCommon::GetAppLaunchController() {
-  return app_launch_controller_.get();
+KioskLaunchController* LoginDisplayHostCommon::GetKioskLaunchController() {
+  return kiosk_launch_controller_.get();
 }
 
 void LoginDisplayHostCommon::StartUserAdding(
@@ -117,11 +119,6 @@ void LoginDisplayHostCommon::StartSignInScreen() {
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
   connector->ScheduleServiceInitialization(
       kPolicyServiceInitializationDelayMilliseconds);
-
-  // Inform wizard controller that login screen has started.
-  // TODO(crbug.com/1064271): Move this to OnStartSignInScreen().
-  if (WizardController::default_controller())
-    WizardController::default_controller()->LoginScreenStarted();
 
   // Run UI-specific logic.
   OnStartSignInScreen();
@@ -192,24 +189,9 @@ void LoginDisplayHostCommon::StartKiosk(const KioskAppId& kiosk_app_id,
           ? extensions::FeatureSessionType::AUTOLAUNCHED_KIOSK
           : extensions::FeatureSessionType::KIOSK);
 
-  switch (kiosk_app_id.type) {
-    case KioskAppType::ARC_APP:
-      arc_kiosk_controller_ =
-          std::make_unique<ArcKioskController>(this, GetOobeUI());
-      arc_kiosk_controller_->StartArcKiosk(*kiosk_app_id.account_id);
-      break;
-    case KioskAppType::CHROME_APP:
-      app_launch_controller_ = std::make_unique<AppLaunchController>(
-          *kiosk_app_id.app_id, this, GetOobeUI());
-      app_launch_controller_->StartAppLaunch(is_auto_launch &&
-                                             auto_launch_delay == 0);
-      break;
-    case KioskAppType::WEB_APP:
-      web_kiosk_controller_ =
-          std::make_unique<WebKioskController>(this, GetOobeUI());
-      web_kiosk_controller_->StartWebKiosk(*kiosk_app_id.account_id);
-      break;
-  }
+  kiosk_launch_controller_ =
+      std::make_unique<KioskLaunchController>(GetOobeUI());
+  kiosk_launch_controller_->Start(kiosk_app_id, is_auto_launch);
 }
 
 void LoginDisplayHostCommon::CompleteLogin(const UserContext& user_context) {
@@ -247,10 +229,10 @@ void LoginDisplayHostCommon::LoadSigninWallpaper() {
   WallpaperControllerClient::Get()->ShowSigninWallpaper();
 }
 
-bool LoginDisplayHostCommon::IsUserWhitelisted(const AccountId& account_id) {
+bool LoginDisplayHostCommon::IsUserAllowlisted(const AccountId& account_id) {
   if (!GetExistingUserController())
     return true;
-  return GetExistingUserController()->IsUserWhitelisted(account_id);
+  return GetExistingUserController()->IsUserAllowlisted(account_id);
 }
 
 void LoginDisplayHostCommon::CancelPasswordChangedFlow() {
@@ -268,6 +250,20 @@ void LoginDisplayHostCommon::MigrateUserData(const std::string& old_password) {
 void LoginDisplayHostCommon::ResyncUserData() {
   if (GetExistingUserController())
     GetExistingUserController()->ResyncUserData();
+}
+
+bool LoginDisplayHostCommon::HandleAccelerator(
+    ash::LoginAcceleratorAction action) {
+  DCHECK(GetOobeUI());
+  if (WizardController::default_controller() &&
+      WizardController::default_controller()->is_initialized()) {
+    if (WizardController::default_controller()->HandleAccelerator(action))
+      return true;
+  }
+  // TODO(crbug.com/1102393): Remove once all accelerators handling is migrated
+  // to browser side.
+  GetOobeUI()->ForwardAccelerator(MapToWebUIAccelerator(action));
+  return true;
 }
 
 void LoginDisplayHostCommon::OnBrowserAdded(Browser* browser) {
@@ -312,23 +308,28 @@ void LoginDisplayHostCommon::OnStartSignInScreenCommon() {
 
 void LoginDisplayHostCommon::ShowGaiaDialogCommon(
     const AccountId& prefilled_account) {
-  DCHECK(GetOobeUI());
-
   if (prefilled_account.is_valid()) {
-    // Make sure gaia displays |account| if requested.
-    if (!GetLoginDisplay()->delegate()->IsSigninInProgress()) {
-      GetOobeUI()->GetView<GaiaScreenHandler>()->ShowGaiaAsync(
-          prefilled_account);
-    }
     LoadWallpaper(prefilled_account);
-  } else {
-    if (GetOobeUI()->current_screen() != GaiaView::kScreenId) {
-      GetOobeUI()->GetView<GaiaScreenHandler>()->ShowGaiaAsync(
-          EmptyAccountId());
+    if (GetLoginDisplay()->delegate()->IsSigninInProgress()) {
+      return;
     }
+  } else {
     LoadSigninWallpaper();
   }
+
+  DCHECK(GetWizardController());
+  GaiaScreen* gaia_screen =
+      GaiaScreen::Get(GetWizardController()->screen_manager());
+  gaia_screen->LoadOnline(prefilled_account);
+
+  if (chromeos::features::IsChildSpecificSigninEnabled() &&
+      !prefilled_account.is_valid()) {
+    StartWizard(UserCreationView::kScreenId);
+  } else {
+    StartWizard(GaiaView::kScreenId);
+  }
 }
+
 void LoginDisplayHostCommon::Cleanup() {
   ProfileHelper::Get()->ClearSigninProfile(base::DoNothing());
   registrar_.RemoveAll();

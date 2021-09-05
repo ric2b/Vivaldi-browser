@@ -7,7 +7,7 @@
 
 #include "base/macros.h"
 #include "third_party/blink/public/common/common_export.h"
-#include "third_party/blink/public/mojom/feature_policy/policy_value.mojom-forward.h"
+#include "third_party/blink/public/mojom/feature_policy/policy_value.mojom-shared.h"
 
 namespace blink {
 
@@ -48,13 +48,15 @@ class BLINK_COMMON_EXPORT PolicyValue {
 
   // Operater overrides
   PolicyValue& operator=(const PolicyValue& rhs);
-  // Combine a new PolicyValue to self, by taking the stricter value of the two.
-  void Combine(const PolicyValue& value);
-  // Combine two PolicyValue_s together by taking the stricter value of the two.
-  static PolicyValue Combine(const PolicyValue& lhs, const PolicyValue& rhs);
 
   void SetToMax();
   void SetToMin();
+
+  // Test whether this policy value is compatible with required policy value.
+  // Note: a.IsCompatibleWith(b) == true does not necessary indicate
+  // b.IsCompatibleWith(a) == false, because not all policy value types support
+  // strictness comparison, e.g. enum.
+  bool IsCompatibleWith(const PolicyValue& required) const;
 
  private:
   mojom::PolicyValueType type_;
@@ -65,14 +67,6 @@ class BLINK_COMMON_EXPORT PolicyValue {
 bool BLINK_COMMON_EXPORT operator==(const PolicyValue& lhs,
                                     const PolicyValue& rhs);
 bool BLINK_COMMON_EXPORT operator!=(const PolicyValue& lhs,
-                                    const PolicyValue& rhs);
-bool BLINK_COMMON_EXPORT operator>(const PolicyValue& lhs,
-                                   const PolicyValue& rhs);
-bool BLINK_COMMON_EXPORT operator>=(const PolicyValue& lhs,
-                                    const PolicyValue& rhs);
-bool BLINK_COMMON_EXPORT operator<(const PolicyValue& lhs,
-                                   const PolicyValue& rhs);
-bool BLINK_COMMON_EXPORT operator<=(const PolicyValue& lhs,
                                     const PolicyValue& rhs);
 }  // namespace blink
 

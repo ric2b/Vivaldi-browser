@@ -7,6 +7,7 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/ui/scoped_ui_blocker/ui_blocker_target.h"
 #import "ios/chrome/browser/window_activities/window_activity_helpers.h"
 
 @class AppState;
@@ -29,6 +30,17 @@ typedef NS_ENUM(NSUInteger, SceneActivationLevel) {
   // The scene is connected, has a window, and receives user events.
   SceneActivationLevelForegroundActive
 };
+
+// Scene agents are objects owned by a scene state and providing some
+// scene-scoped function. They can be driven by SceneStateObserver events.
+@protocol SceneAgent <NSObject>
+
+@required
+// Sets the associated scene state. Called once and only once. Consider using
+// this method to add the agent as an observer.
+- (void)setSceneState:(SceneState*)scene;
+
+@end
 
 @protocol SceneStateObserver <NSObject>
 
@@ -55,7 +67,7 @@ typedef NS_ENUM(NSUInteger, SceneActivationLevel) {
 
 // An object containing the state of a UIWindowScene. One state object
 // corresponds to one scene.
-@interface SceneState : NSObject
+@interface SceneState : NSObject <UIBlockerTarget>
 
 - (instancetype)initWithAppState:(AppState*)appState NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
@@ -69,10 +81,6 @@ typedef NS_ENUM(NSUInteger, SceneActivationLevel) {
 // The current origin of the scene.  After window creation this will be
 // WindowActivityRestoredOrigin.
 @property(nonatomic, assign) WindowActivityOrigin currentOrigin;
-
-// Window ID, used for restoration.
-// TODO(crbug.com/1069762): remove this.
-@property(nonatomic, assign, readonly) NSUInteger windowID;
 
 // Window for the associated scene, if any.
 @property(nonatomic, strong) UIWindow* window;
@@ -113,6 +121,9 @@ typedef NS_ENUM(NSUInteger, SceneActivationLevel) {
 // Removes the observer. It's safe to call this at any time, including from
 // SceneStateObserver callbacks.
 - (void)removeObserver:(id<SceneStateObserver>)observer;
+
+// Adds a new agent. Agents are owned by the scene state.
+- (void)addAgent:(id<SceneAgent>)agent;
 
 @end
 

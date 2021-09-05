@@ -18,23 +18,12 @@
 
 namespace blink {
 
-sk_sp<PaintRecord> DummyRectClient::MakeRecord(const IntRect& rect,
-                                               Color color) {
-  rect_ = rect;
-  PaintRecorder recorder;
-  cc::PaintCanvas* canvas = recorder.beginRecording(rect);
-  PaintFlags flags;
-  flags.setColor(color.Rgb());
-  canvas->drawRect(rect, flags);
-  return recorder.finishRecordingAsPicture();
-}
-
 TestPaintArtifact::TestPaintArtifact() : display_item_list_(0) {}
 
 TestPaintArtifact::~TestPaintArtifact() = default;
 
-static DummyRectClient& StaticDummyClient() {
-  DEFINE_STATIC_LOCAL(DummyRectClient, client, ());
+static DisplayItemClient& StaticDummyClient() {
+  DEFINE_STATIC_LOCAL(FakeDisplayItemClient, client, ());
   client.Validate();
   return client;
 }
@@ -51,7 +40,7 @@ TestPaintArtifact& TestPaintArtifact::Chunk(int id) {
   return *this;
 }
 
-TestPaintArtifact& TestPaintArtifact::Chunk(DummyRectClient& client,
+TestPaintArtifact& TestPaintArtifact::Chunk(DisplayItemClient& client,
                                             DisplayItem::Type type) {
   paint_chunks_.push_back(
       PaintChunk(display_item_list_.size(), display_item_list_.size(),
@@ -62,7 +51,7 @@ TestPaintArtifact& TestPaintArtifact::Chunk(DummyRectClient& client,
 }
 
 TestPaintArtifact& TestPaintArtifact::Properties(
-    const PropertyTreeState& properties) {
+    const PropertyTreeStateOrAlias& properties) {
   paint_chunks_.back().properties = properties;
   return *this;
 }
@@ -79,7 +68,7 @@ TestPaintArtifact& TestPaintArtifact::ScrollHitTest(
 
 TestPaintArtifact& TestPaintArtifact::ForeignLayer(
     scoped_refptr<cc::Layer> layer,
-    const FloatPoint& offset) {
+    const IntPoint& offset) {
   DEFINE_STATIC_LOCAL(LiteralDebugNameClient, client, ("ForeignLayer"));
   display_item_list_.AllocateAndConstruct<ForeignLayerDisplayItem>(
       client, DisplayItem::kForeignLayerFirst, std::move(layer), offset);
@@ -87,25 +76,34 @@ TestPaintArtifact& TestPaintArtifact::ForeignLayer(
   return *this;
 }
 
-TestPaintArtifact& TestPaintArtifact::RectDrawing(DummyRectClient& client,
+TestPaintArtifact& TestPaintArtifact::RectDrawing(DisplayItemClient& client,
                                                   const IntRect& bounds,
                                                   Color color) {
+  PaintRecorder recorder;
+  cc::PaintCanvas* canvas = recorder.beginRecording(bounds);
+  if (!bounds.IsEmpty()) {
+    PaintFlags flags;
+    flags.setColor(color.Rgb());
+    canvas->drawRect(bounds, flags);
+  }
   display_item_list_.AllocateAndConstruct<DrawingDisplayItem>(
-      client, DisplayItem::kDrawingFirst, client.MakeRecord(bounds, color));
+      client, DisplayItem::kDrawingFirst, bounds,
+      recorder.finishRecordingAsPicture());
   DidAddDisplayItem();
   return *this;
 }
 
 TestPaintArtifact& TestPaintArtifact::ScrollHitTest(
-    DummyRectClient& client,
+    DisplayItemClient& client,
     const TransformPaintPropertyNode* scroll_translation) {
   paint_chunks_.back().EnsureHitTestData().scroll_translation =
       scroll_translation;
   return *this;
 }
 
-TestPaintArtifact& TestPaintArtifact::OutsetForRasterEffects(float outset) {
-  paint_chunks_.back().outset_for_raster_effects = outset;
+TestPaintArtifact& TestPaintArtifact::SetRasterEffectOutset(
+    RasterEffectOutset outset) {
+  paint_chunks_.back().raster_effect_outset = outset;
   return *this;
 }
 
@@ -137,13 +135,13 @@ scoped_refptr<PaintArtifact> TestPaintArtifact::Build() {
                                std::move(paint_chunks_));
 }
 
-DummyRectClient& TestPaintArtifact::NewClient() {
-  dummy_clients_.push_back(std::make_unique<DummyRectClient>());
-  return *dummy_clients_.back();
+FakeDisplayItemClient& TestPaintArtifact::NewClient() {
+  clients_.push_back(std::make_unique<FakeDisplayItemClient>());
+  return *clients_.back();
 }
 
-DummyRectClient& TestPaintArtifact::Client(wtf_size_t i) const {
-  return *dummy_clients_[i];
+FakeDisplayItemClient& TestPaintArtifact::Client(wtf_size_t i) const {
+  return *clients_[i];
 }
 
 void TestPaintArtifact::DidAddDisplayItem() {

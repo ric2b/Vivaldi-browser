@@ -36,6 +36,8 @@ const char kVivaldiReservedApiError[] =
 
 const char kVivaldiUIScheme[] = "vivaldi";
 
+const char kVivaldiGameHost[] = "game";
+
 const char kVivaldiNativeScheme[] = "vivaldi-native";
 
 const char kVivaldiUIDataHost[] = VIVALDI_DATA_URL_HOST;

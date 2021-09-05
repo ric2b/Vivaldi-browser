@@ -19,8 +19,9 @@ VivaldiBrowserMainExtraPartsWin::VivaldiBrowserMainExtraPartsWin() {}
 
 VivaldiBrowserMainExtraPartsWin::~VivaldiBrowserMainExtraPartsWin() {}
 
-VivaldiBrowserMainExtraParts* VivaldiBrowserMainExtraParts::Create() {
-  return new VivaldiBrowserMainExtraPartsWin();
+std::unique_ptr<VivaldiBrowserMainExtraParts>
+VivaldiBrowserMainExtraParts::Create() {
+  return std::make_unique<VivaldiBrowserMainExtraPartsWin>();
 }
 
 // Overridden from ChromeBrowserMainExtraParts:

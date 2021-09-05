@@ -31,12 +31,14 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
 
   // Constructs a non-client view for an BrowserFrame.
   GlassBrowserFrameView(BrowserFrame* frame, BrowserView* browser_view);
+  GlassBrowserFrameView(const GlassBrowserFrameView&) = delete;
+  GlassBrowserFrameView& operator=(const GlassBrowserFrameView&) = delete;
   ~GlassBrowserFrameView() override;
 
   // BrowserNonClientFrameView:
   bool CaptionButtonsOnLeadingEdge() const override;
   gfx::Rect GetBoundsForTabStripRegion(
-      const views::View* tabstrip) const override;
+      const gfx::Size& tabstrip_minimum_size) const override;
   int GetTopInset(bool restored) const override;
   int GetThemeBackgroundXInset() const override;
   bool HasVisibleBackgroundTabShapes(
@@ -45,7 +47,6 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
   SkColor GetCaptionColor(BrowserFrameActiveState active_state) const override;
   void UpdateThrobber(bool running) override;
   gfx::Size GetMinimumSize() const override;
-  CaptionButtonContainer* GetCaptionButtonContainer() const override;
 
   // views::NonClientFrameView:
   gfx::Rect GetBoundsForClientView() const override;
@@ -66,6 +67,7 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
   gfx::ImageSkia GetFaviconForTabIconView() override;
 
   bool IsMaximized() const;
+  bool IsWebUITabStrip() const;
 
   // Visual height of the titlebar when the window is maximized (i.e. excluding
   // the area above the top of the screen).
@@ -73,7 +75,7 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
 
   SkColor GetTitlebarColor() const;
 
-  views::Label* window_title_for_testing() { return window_title_; }
+  const views::Label* window_title_for_testing() const { return window_title_; }
 
  protected:
   // views::View:
@@ -83,6 +85,17 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
 
  private:
   friend class GlassBrowserCaptionButtonContainer;
+
+  // Describes the type of titlebar that a window might have; used to query
+  // whether specific elements may be present.
+  enum class TitlebarType {
+    // A custom drawn titlebar, with window title and/or icon.
+    kCustom,
+    // The system titlebar, drawn by Windows.
+    kSystem,
+    // Any visible titlebar.
+    kAny
+  };
 
   // Returns the thickness of the window border for the left, right, and bottom
   // edges of the frame. On Windows 10 this is a mostly-transparent handle that
@@ -116,19 +129,13 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
   // edge of the caption buttons.
   int MinimizeButtonX() const;
 
-  // Returns whether the toolbar is currently visible.
-  bool IsToolbarVisible() const;
+  // Returns whether or not the window should display an icon of the specified
+  // |type|.
+  bool ShouldShowWindowIcon(TitlebarType type) const;
 
-  bool ShowCustomIcon() const;
-  bool ShowCustomTitle() const;
-  bool ShowSystemIcon() const;
-  bool IsWebUITabStrip() const;
-
-  // Returns true if caption buttons are present on the frame (as opposed to
-  // somewhere else, or not present at all). In some modes, the frame can "lend"
-  // the caption buttons to another view which needs to display them - e.g. in
-  // tablet mode on Windows.
-  bool OwnsCaptionButtons() const;
+  // Returns whether or not the window should display a title of the specified
+  // |type|.
+  bool ShouldShowWindowTitle(TitlebarType type) const;
 
   // Paint various sub-components of this view.
   void PaintTitlebar(gfx::Canvas* canvas) const;
@@ -159,24 +166,19 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
   base::win::ScopedHICON big_window_icon_;
 
   // Icon and title. Only used when custom-drawing the titlebar for popups.
-  TabIconView* window_icon_;
-  views::Label* window_title_;
+  TabIconView* window_icon_ = nullptr;
+  views::Label* window_title_ = nullptr;
 
   // The container holding the caption buttons (minimize, maximize, close, etc.)
-  //
-  // This is normally parented to the frame view, but in some modes (e.g. tablet
-  // mode on Windows) it is handed off to the browser view to be displayed in
-  // the client area.
-  //
   // May be null if the caption button container is destroyed before the frame
   // view. Always check for validity before using!
   GlassBrowserCaptionButtonContainer* caption_button_container_;
 
   // Whether or not the window throbber is currently animating.
-  bool throbber_running_;
+  bool throbber_running_ = false;
 
   // The index of the current frame of the throbber animation.
-  int throbber_frame_;
+  int throbber_frame_ = 0;
 
   // How much extra space to reserve in non-maximized windows for a drag handle.
   int drag_handle_padding_;
@@ -184,8 +186,6 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
   static const int kThrobberIconCount = 24;
   static HICON throbber_icons_[kThrobberIconCount];
   static void InitThrobberIcons();
-
-  DISALLOW_COPY_AND_ASSIGN(GlassBrowserFrameView);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_GLASS_BROWSER_FRAME_VIEW_H_

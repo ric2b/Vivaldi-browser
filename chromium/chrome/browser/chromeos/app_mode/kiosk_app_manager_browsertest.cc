@@ -649,17 +649,69 @@ IN_PROC_BROWSER_TEST_F(KioskAppManagerTest, UpdateAppDataFromCrx) {
   CheckAppData(kAppId, kAppName, "1234");
 }
 
-IN_PROC_BROWSER_TEST_F(KioskAppManagerTest, DISABLED_BadApp) {
+IN_PROC_BROWSER_TEST_F(KioskAppManagerTest, FailedToLoadFromCrx) {
+  const char kAppId[] = "iiigpodgfihagabpagjehoocpakbnclp";
+  const char kAppName[] = "Test Kiosk App";
+
+  SetExistingApp(kAppId, kAppName, "red16x16.png", "");
+  fake_cws()->SetNoUpdate(kAppId);
+  AppDataLoadWaiter waiter(manager(), 1);
+  waiter.Wait();
+  EXPECT_EQ(waiter.data_change_count(), 1);
+  EXPECT_EQ(waiter.data_load_failure_count(), 0);
+  EXPECT_TRUE(waiter.loaded());
+
+  CheckAppData(kAppId, kAppName, "");
+
+  // Fake app data load failure so that the manager will attempt to
+  // load it from crx.
+  KioskAppData* app_data = GetAppDataMutable(kAppId);
+  app_data->SetStatusForTest(KioskAppData::STATUS_ERROR);
+
+  // Copy test crx file to temp dir because the cache moves the file.
+  base::FilePath test_dir;
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_dir));
+  base::FilePath data_dir =
+      test_dir.AppendASCII("chromeos/app_mode/webstore/downloads/");
+  base::FilePath crx_file = data_dir.AppendASCII(
+      "pegeblegnlhnpgghhjblhchdllfijodp-2.0.0."
+      "crx");
+  crx_file = CopyFileToTempDir(crx_file);
+
+  ExternalCachePutWaiter put_waiter;
+  manager()->PutValidatedExternalExtension(
+      kAppId, crx_file, "2.0.0",
+      base::BindOnce(&ExternalCachePutWaiter::OnPutExtension,
+                     base::Unretained(&put_waiter)));
+  put_waiter.Wait();
+  ASSERT_TRUE(put_waiter.success());
+
+  // Wait for 3 data loaded events at the most. One for crx putting into cache,
+  // one for update check and one for crx unpack to fail which resets the app
+  // data status into INIT stage.
+  const size_t kMaxDataChange = 3;
+  for (size_t i = 0;
+       i < kMaxDataChange && app_data->status() != KioskAppData::STATUS_INIT;
+       ++i) {
+    waiter.Reset();
+    waiter.Wait();
+    EXPECT_EQ(waiter.data_change_count(), 1);
+    EXPECT_EQ(waiter.data_load_failure_count(), 0);
+  }
+  ASSERT_EQ(KioskAppData::STATUS_INIT, app_data->status());
+  CheckAppData(kAppId, kAppName, "");
+}
+
+IN_PROC_BROWSER_TEST_F(KioskAppManagerTest, BadApp) {
   AppDataLoadWaiter waiter(manager(), 2);
   manager()->AddApp("unknown_app", owner_settings_service_.get());
   waiter.Wait();
-  EXPECT_EQ(waiter.data_change_count(), 2);
-  EXPECT_EQ(waiter.data_load_failure_count(), 0);
+  EXPECT_EQ(waiter.data_change_count(), 1);
+  EXPECT_EQ(waiter.data_load_failure_count(), 1);
   EXPECT_FALSE(waiter.loaded());
   EXPECT_EQ("", GetAppIds());
 }
 
-// Disabled: https://crbug.com/1044417
 IN_PROC_BROWSER_TEST_F(KioskAppManagerTest, GoodApp) {
   // Webstore data json is in
   //   chrome/test/data/chromeos/app_mode/webstore/inlineinstall/detail/app_1
@@ -675,7 +727,6 @@ IN_PROC_BROWSER_TEST_F(KioskAppManagerTest, GoodApp) {
   CheckAppDataAndCache(kAppId, "Name of App 1", "");
 }
 
-// Disabled: https://crbug.com/1044417
 IN_PROC_BROWSER_TEST_F(KioskAppManagerTest, AppWithRequiredPlatformVersion) {
   // Webstore data json is in
   //   chrome/test/data/chromeos/app_mode/webstore/inlineinstall/detail/
@@ -708,13 +759,12 @@ IN_PROC_BROWSER_TEST_F(KioskAppManagerTest, AppWithBadRequiredPlatformVersion) {
   EXPECT_EQ("", GetAppIds());
 }
 
-// Disabled: https://crbug.com/1044417
 IN_PROC_BROWSER_TEST_F(KioskAppManagerTest, DownloadNewApp) {
   RunAddNewAppTest(kTestLocalFsKioskApp, "1.0.0", kTestLocalFsKioskAppName, "");
 }
 
-// Flaky https://crbug.com/1090937 (previous bug: https://crbug.com/1044417)
-IN_PROC_BROWSER_TEST_F(KioskAppManagerTest, DISABLED_RemoveApp) {
+// Flaky https://crbug.com/1090937
+IN_PROC_BROWSER_TEST_F(KioskAppManagerTest, RemoveApp) {
   // Add a new app.
   RunAddNewAppTest(kTestLocalFsKioskApp, "1.0.0", kTestLocalFsKioskAppName, "");
   KioskAppManager::AppList apps;
@@ -791,7 +841,6 @@ IN_PROC_BROWSER_TEST_F(KioskAppManagerTest, UpdateApp) {
   EXPECT_TRUE(base::ContentsEqual(v2_file_path, new_crx_path));
 }
 
-// Test is flaky: https://crbug.com/1044417
 IN_PROC_BROWSER_TEST_F(KioskAppManagerTest, UpdateAndRemoveApp) {
   // Add a version 1 app first.
   RunAddNewAppTest(kTestLocalFsKioskApp, "1.0.0", kTestLocalFsKioskAppName, "");

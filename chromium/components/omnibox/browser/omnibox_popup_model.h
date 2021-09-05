@@ -8,7 +8,6 @@
 #include <stddef.h>
 #include <map>
 
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
@@ -44,10 +43,6 @@ class OmniboxPopupModel {
     // otherwise step by line. Usually used for the Tab and Shift+Tab keys.
     kStateOrLine,
 
-    // Step by a state if another one is available on the current line;
-    // otherwise do not step. Usually used for the Left and Right arrow keys.
-    kStateOrNothing,
-
     // Step across all lines to the first or last line. Usually used for the
     // PgUp and PgDn keys.
     kAllLines
@@ -61,28 +56,36 @@ class OmniboxPopupModel {
   enum LineState {
     // This means the Header above this row is highlighted, and the
     // header collapse/expand button is focused.
-    HEADER_BUTTON_FOCUSED = 0,
+    FOCUSED_BUTTON_HEADER = 0,
 
     // NORMAL means the row is focused, and Enter key navigates to the match.
     NORMAL = 1,
 
-    // KEYWORD state means actually in keyword mode, as distinct from the
+    // FOCUSED_BUTTON_KEYWORD is used when the keyword button is in focus, not
+    // actually in Keyword Mode. This is currently only used if deciated button
+    // row is enabled
+    FOCUSED_BUTTON_KEYWORD = 2,
+
+    // KEYWORD_MODE state means actually in keyword mode, as distinct from the
     // FOCUSED_BUTTON_KEYWORD state, which is only for button focus.
-    KEYWORD = 2,
+    KEYWORD_MODE = 3,
 
-    // The single (ambiguous) button focus state is not used when button row
-    // is enabled. Instead, the specific FOCUSED_* states below apply.
-    //
-    // TODO(tommycli): The BUTTON_FOCUSED state is a holdover from when we only
-    // had one button type. At this point, it's too ambiguous, and we should
-    // gradually deprecate this state in favor of the FOCUSED_* states below.
-    // Also see Selection::IsButtonFocused().
-    BUTTON_FOCUSED = 3,
+    // FOCUSED_BUTTON_TAB_SWITCH state means the Switch Tab button is focused.
+    // Pressing enter will switch to the tab match.
+    FOCUSED_BUTTON_TAB_SWITCH = 4,
 
-    // Button row focus states:
-    FOCUSED_BUTTON_KEYWORD = 4,
-    FOCUSED_BUTTON_TAB_SWITCH = 5,
-    FOCUSED_BUTTON_PEDAL = 6,
+    // FOCUSED_BUTTON_PEDAL state means a Pedal button is in focus. This is
+    // currently only used when dedicated button row and pedals are enabled.
+    FOCUSED_BUTTON_PEDAL = 5,
+
+    // FOCUSED_BUTTON_REMOVE_SUGGESTION state means the Remove Suggestion (X)
+    // button is focused. Pressing enter will attempt to remove this suggestion.
+    FOCUSED_BUTTON_REMOVE_SUGGESTION = 6,
+
+    // Whenever new line state is added, accessibility label for current
+    // selection should be revisited
+    // (OmniboxPopupModel::GetAccessibilityLabelForCurrentSelection).
+    LINE_STATE_MAX_VALUE
   };
 
   struct Selection {
@@ -93,8 +96,8 @@ class OmniboxPopupModel {
     // If the selected line has both a normal match and a keyword match, this
     // determines whether the normal match (if NORMAL) or the keyword match
     // (if KEYWORD) is selected. Likewise, if the selected line has a normal
-    // match and a tab switch match, this determines whether the tab switch
-    // match (if BUTTON_FOCUSED) is selected.
+    // match and a secondary button match, this determines whether the button
+    // match (if FOCUSED_BUTTON_*) is selected.
     LineState state;
 
     explicit Selection(size_t line, LineState state = NORMAL)
@@ -118,6 +121,8 @@ class OmniboxPopupModel {
                     OmniboxEditModel* edit_model,
                     PrefService* pref_service);
   ~OmniboxPopupModel();
+  OmniboxPopupModel(const OmniboxPopupModel&) = delete;
+  OmniboxPopupModel& operator=(const OmniboxPopupModel&) = delete;
 
   // Computes the maximum width, in pixels, that can be allocated for the two
   // parts of an autocomplete result, i.e. the contents and the description.
@@ -213,10 +218,6 @@ class OmniboxPopupModel {
                           SkColor vector_icon_color);
 #endif
 
-  // Helper function to see if current selection is a tab switch suggestion
-  // dedicated row.
-  bool SelectedLineIsTabSwitchSuggestion();
-
   OmniboxEditModel* edit_model() { return edit_model_; }
 
   // Gets all the available selections, filtered by |direction| and |step|, as
@@ -253,6 +254,7 @@ class OmniboxPopupModel {
   // Never call this when the current selection is kNoMatch.
   base::string16 GetAccessibilityLabelForCurrentSelection(
       const base::string16& match_text,
+      bool include_positional_info,
       int* label_prefix_length = nullptr);
 
  private:
@@ -278,8 +280,6 @@ class OmniboxPopupModel {
   base::ObserverList<OmniboxPopupModelObserver>::Unchecked observers_;
 
   base::WeakPtrFactory<OmniboxPopupModel> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(OmniboxPopupModel);
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_OMNIBOX_POPUP_MODEL_H_

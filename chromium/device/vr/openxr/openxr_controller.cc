@@ -138,12 +138,12 @@ XrResult OpenXrController::SuggestBindings(
   for (auto interaction_profile : kOpenXrControllerInteractionProfiles) {
     XrPath interaction_profile_path =
         path_helper_->GetInteractionProfileXrPath(interaction_profile.type);
-    RETURN_IF_XR_FAILED(SuggestActionBinding(bindings, interaction_profile_path,
-                                             grip_pose_action_,
-                                             binding_prefix + "/input/grip"));
-    RETURN_IF_XR_FAILED(SuggestActionBinding(bindings, interaction_profile_path,
-                                             pointer_pose_action_,
-                                             binding_prefix + "/input/aim"));
+    RETURN_IF_XR_FAILED(SuggestActionBinding(
+        bindings, interaction_profile_path, grip_pose_action_,
+        binding_prefix + "/input/grip/pose"));
+    RETURN_IF_XR_FAILED(SuggestActionBinding(
+        bindings, interaction_profile_path, pointer_pose_action_,
+        binding_prefix + "/input/aim/pose"));
 
     const OpenXrButtonPathMap* button_maps;
     size_t button_map_size;
@@ -236,10 +236,8 @@ mojom::XRInputSourceDescriptionPtr OpenXrController::GetDescription(
         path_helper_->GetInputProfiles(interaction_profile_);
   }
 
-  if (!description_->input_from_pointer) {
-    description_->input_from_pointer =
-        GetPointerFromGripTransform(predicted_display_time);
-  }
+  description_->input_from_pointer =
+      GetPointerFromGripTransform(predicted_display_time);
 
   return description_.Clone();
 }

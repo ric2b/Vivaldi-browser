@@ -2,17 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/jumbo.gni")
 import("//build/config/nacl/config.gni")
 
-jumbo_component("shared_impl") {
+component("shared_impl") {
   output_name = "ppapi_shared"
-
-  if (is_nacl) {
-    # The nacl toolchain has template related bugs that are triggered
-    # in jumbo builds. https://crbug.com/912152
-    never_build_jumbo = true
-  }
 
   sources = [
     "array_var.cc",
@@ -203,7 +196,7 @@ jumbo_component("shared_impl") {
   }
 
   if (is_mac) {
-    libs = [ "QuartzCore.framework" ]
+    frameworks = [ "QuartzCore.framework" ]
   }
 }
 

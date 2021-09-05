@@ -20,23 +20,29 @@
 #include "base/memory/shared_memory_mapping.h"
 #include "base/memory/writable_shared_memory_region.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/test/multiprocess_test.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
+#include "build/lacros_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/multiprocess_func_list.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #include <sys/mman.h>
+#endif
+
+#if defined(OS_LINUX) || defined(OS_ANDROID)
+#include "base/process/internal_linux.h"
 #endif
 
 namespace base {
 namespace debug {
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN) || \
-    defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS) || \
+    defined(OS_WIN) || defined(OS_ANDROID)
 namespace {
 
 void BusyWork(std::vector<std::string>* vec) {
@@ -48,8 +54,8 @@ void BusyWork(std::vector<std::string>* vec) {
 }
 
 }  // namespace
-#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN) ||
-        // defined(OS_ANDROID)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS) ||
+        // defined(OS_WIN) || defined(OS_ANDROID)
 
 // Tests for SystemMetrics.
 // Exists as a class so it can be a friend of SystemMetrics.
@@ -192,7 +198,7 @@ TEST_F(SystemMetricsTest, ParseMeminfo) {
   EXPECT_EQ(meminfo.swap_free, 3672368);
   EXPECT_EQ(meminfo.dirty, 184);
   EXPECT_EQ(meminfo.reclaimable, 30936);
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   EXPECT_EQ(meminfo.shmem, 140204);
   EXPECT_EQ(meminfo.slab, 54212);
 #endif
@@ -325,7 +331,8 @@ TEST_F(SystemMetricsTest, ParseVmstat) {
 }
 #endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS) || \
+    defined(OS_WIN)
 
 // Test that ProcessMetrics::GetPlatformIndependentCPUUsage() doesn't return
 // negative values when the number of threads running on the process decreases
@@ -378,9 +385,10 @@ TEST_F(SystemMetricsTest, TestNoNegativeCpuUsage) {
   EXPECT_GE(metrics->GetPlatformIndependentCPUUsage(), 0.0);
 }
 
-#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS) ||
+        // defined(OS_WIN)
 
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
 TEST_F(SystemMetricsTest, ParseZramMmStat) {
   SwapInfo swapinfo;
 
@@ -415,9 +423,9 @@ TEST_F(SystemMetricsTest, ParseZramStat) {
   EXPECT_EQ(299ULL, swapinfo.num_reads);
   EXPECT_EQ(1ULL, swapinfo.num_writes);
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
+#if defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) || \
     defined(OS_ANDROID)
 TEST(SystemMetrics2Test, GetSystemMemoryInfo) {
   SystemMemoryInfoKB info;
@@ -451,11 +459,11 @@ TEST(SystemMetrics2Test, GetSystemMemoryInfo) {
   EXPECT_LT(info.inactive_file, info.total);
 #endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
-#if defined(OS_MACOSX) || defined(OS_IOS)
+#if defined(OS_APPLE)
   EXPECT_GT(info.file_backed, 0);
 #endif
 
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   // Chrome OS exposes shmem.
   EXPECT_GT(info.shmem, 0);
   EXPECT_LT(info.shmem, info.total);
@@ -463,7 +471,7 @@ TEST(SystemMetrics2Test, GetSystemMemoryInfo) {
   // and gem_size cannot be tested here.
 #endif
 }
-#endif  // defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) ||
+#endif  // defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) ||
         // defined(OS_ANDROID)
 
 #if defined(OS_LINUX) || defined(OS_ANDROID)
@@ -497,6 +505,82 @@ TEST(ProcessMetricsTest, ParseProcStatCPU) {
       "140735857770737 140735857774557 0";
   EXPECT_EQ(5186 + 11, ParseProcStatCPU(kWeirdNameStat));
 }
+
+TEST(ProcessMetricsTest, ParseProcTimeInState) {
+  ProcessHandle handle = GetCurrentProcessHandle();
+  std::unique_ptr<ProcessMetrics> metrics(
+      ProcessMetrics::CreateProcessMetrics(handle));
+  ProcessMetrics::TimeInStatePerThread time_in_state;
+
+  const char kStatThread123[] =
+      "cpu0\n"
+      "100000 4\n"
+      "200000 5\n"
+      "300000 0\n"
+      "cpu4\n"
+      "400000 3\n"
+      "500000 2\n";
+  EXPECT_TRUE(
+      metrics->ParseProcTimeInState(kStatThread123, 123, time_in_state));
+
+  // Zero-valued entry should not exist.
+  ASSERT_EQ(time_in_state.size(), 4u);
+
+  EXPECT_EQ(time_in_state[0].thread_id, 123);
+  EXPECT_EQ(time_in_state[0].cluster_core_index, 0u);
+  EXPECT_EQ(time_in_state[0].core_frequency_khz, 100000u);
+  EXPECT_EQ(time_in_state[0].cumulative_cpu_time,
+            base::TimeDelta::FromMilliseconds(40));
+  EXPECT_EQ(time_in_state[1].thread_id, 123);
+  EXPECT_EQ(time_in_state[1].cluster_core_index, 0u);
+  EXPECT_EQ(time_in_state[1].core_frequency_khz, 200000u);
+  EXPECT_EQ(time_in_state[1].cumulative_cpu_time,
+            base::TimeDelta::FromMilliseconds(50));
+  EXPECT_EQ(time_in_state[2].thread_id, 123);
+  EXPECT_EQ(time_in_state[2].cluster_core_index, 4u);
+  EXPECT_EQ(time_in_state[2].core_frequency_khz, 400000u);
+  EXPECT_EQ(time_in_state[2].cumulative_cpu_time,
+            base::TimeDelta::FromMilliseconds(30));
+  EXPECT_EQ(time_in_state[3].thread_id, 123);
+  EXPECT_EQ(time_in_state[3].cluster_core_index, 4u);
+  EXPECT_EQ(time_in_state[3].core_frequency_khz, 500000u);
+  EXPECT_EQ(time_in_state[3].cumulative_cpu_time,
+            base::TimeDelta::FromMilliseconds(20));
+
+  // Calling ParseProcTimeInState again adds to the vector.
+  const char kStatThread456[] =
+      "cpu0\n"
+      "\n"           // extra empty line is fine.
+      "1000000 10";  // missing "\n" at end is fine.
+  EXPECT_TRUE(
+      metrics->ParseProcTimeInState(kStatThread456, 456, time_in_state));
+
+  ASSERT_EQ(time_in_state.size(), 5u);
+  EXPECT_EQ(time_in_state[4].thread_id, 456);
+  EXPECT_EQ(time_in_state[4].cluster_core_index, 0u);
+  EXPECT_EQ(time_in_state[4].core_frequency_khz, 1000000u);
+  EXPECT_EQ(time_in_state[4].cumulative_cpu_time,
+            base::TimeDelta::FromMilliseconds(100));
+
+  // Calling ParseProcTimeInState with invalid data returns false.
+  EXPECT_FALSE(
+      metrics->ParseProcTimeInState("100000 5\n"  // no header
+                                    "200000 6\n",
+                                    123, time_in_state));
+  EXPECT_FALSE(
+      metrics->ParseProcTimeInState("cpu0\n"
+                                    "100000\n",  // no time value
+                                    123, time_in_state));
+  EXPECT_FALSE(
+      metrics->ParseProcTimeInState("header0\n"  // invalid header / line
+                                    "100000 5\n",
+                                    123, time_in_state));
+  EXPECT_FALSE(
+      metrics->ParseProcTimeInState("cpu0\n"
+                                    "100000 5\n"
+                                    "invalid334 4\n",  // invalid header / line
+                                    123, time_in_state));
+}
 #endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
 // Disable on Android because base_unittests runs inside a Dalvik VM that
@@ -521,7 +605,7 @@ TEST(ProcessMetricsTest, DISABLED_GetNumberOfThreads) {
 }
 #endif  // defined(OS_LINUX)
 
-#if defined(OS_LINUX) || (defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_LINUX) || defined(OS_MAC)
 namespace {
 
 // Keep these in sync so the GetChildOpenFdCount test can refer to correct test
@@ -602,11 +686,11 @@ TEST(ProcessMetricsTest, GetChildOpenFdCount) {
   WaitForEvent(temp_path, kSignalReady);
 
   std::unique_ptr<ProcessMetrics> metrics =
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
       ProcessMetrics::CreateProcessMetrics(child.Handle(), nullptr);
 #else
       ProcessMetrics::CreateProcessMetrics(child.Handle());
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_APPLE)
 
   const int fd_count = metrics->GetOpenFdCount();
   EXPECT_GE(fd_count, 0);
@@ -627,11 +711,11 @@ TEST(ProcessMetricsTest, GetChildOpenFdCount) {
 TEST(ProcessMetricsTest, GetOpenFdCount) {
   base::ProcessHandle process = base::GetCurrentProcessHandle();
   std::unique_ptr<base::ProcessMetrics> metrics =
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
       ProcessMetrics::CreateProcessMetrics(process, nullptr);
 #else
       ProcessMetrics::CreateProcessMetrics(process);
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_APPLE)
 
   ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
@@ -645,7 +729,7 @@ TEST(ProcessMetricsTest, GetOpenFdCount) {
   EXPECT_EQ(new_fd_count, fd_count + 1);
 }
 
-#endif  // defined(OS_LINUX) || (defined(OS_MACOSX) && !defined(OS_IOS))
+#endif  // defined(OS_LINUX) || defined(OS_MAC)
 
 #if defined(OS_ANDROID) || defined(OS_LINUX)
 
@@ -736,6 +820,58 @@ TEST(ProcessMetricsTestLinux, GetCumulativeCPUUsagePerThread) {
 
     if (prev_it != prev_thread_times.end())
       EXPECT_GE(entry.second, prev_it->second);
+  }
+}
+
+TEST(ProcessMetricsTestLinux, GetPerThreadCumulativeCPUTimeInState) {
+  ProcessHandle handle = GetCurrentProcessHandle();
+  std::unique_ptr<ProcessMetrics> metrics(
+      ProcessMetrics::CreateProcessMetrics(handle));
+
+  // Only some test systems will support GetPerThreadCumulativeCPUTimeInState,
+  // as it relies on /proc/pid/task/tid/time_in_state support in the kernel. In
+  // Android, this is only supported in newer kernels with a patch such as this:
+  // https://android-review.googlesource.com/c/kernel/common/+/610460/.
+  bool expect_success;
+  std::string contents;
+  {
+    FilePath time_in_state_path = FilePath("/proc")
+                                      .Append(NumberToString(handle))
+                                      .Append("task")
+                                      .Append(NumberToString(handle))
+                                      .Append("time_in_state");
+    expect_success = ReadFileToString(time_in_state_path, &contents) &&
+                     StartsWith(contents, "cpu", CompareCase::SENSITIVE);
+  }
+
+  ProcessMetrics::TimeInStatePerThread prev_thread_times;
+  EXPECT_EQ(metrics->GetPerThreadCumulativeCPUTimeInState(prev_thread_times),
+            expect_success)
+      << "time_in_state example contents: \n"
+      << contents;
+
+  // Only non-zero entries are reported.
+  for (const auto& entry : prev_thread_times) {
+    EXPECT_NE(entry.thread_id, 0);
+    EXPECT_GT(entry.cumulative_cpu_time, base::TimeDelta());
+  }
+
+  ProcessMetrics::TimeInStatePerThread current_thread_times;
+  EXPECT_EQ(metrics->GetPerThreadCumulativeCPUTimeInState(current_thread_times),
+            expect_success);
+
+  // Reported times should not decrease.
+  for (const auto& entry : current_thread_times) {
+    auto prev_it = std::find_if(
+        prev_thread_times.begin(), prev_thread_times.end(),
+        [&entry](const ProcessMetrics::ThreadTimeInState& prev_entry) {
+          return entry.thread_id == prev_entry.thread_id &&
+                 entry.core_type == prev_entry.core_type &&
+                 entry.core_frequency_khz == prev_entry.core_frequency_khz;
+        });
+
+    if (prev_it != prev_thread_times.end())
+      EXPECT_GE(entry.cumulative_cpu_time, prev_it->cumulative_cpu_time);
   }
 }
 

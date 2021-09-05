@@ -36,7 +36,9 @@
 #include "base/optional.h"
 #include "base/unguessable_token.h"
 #include "mojo/public/cpp/base/big_buffer.h"
+#include "third_party/blink/public/common/feature_policy/document_policy.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
+#include "third_party/blink/public/mojom/loader/content_security_notifier.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/mhtml_load_result.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/timing/worker_timing_container.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
@@ -83,6 +85,7 @@ class Document;
 class DocumentParser;
 class FrameLoader;
 class HistoryItem;
+class LocalDOMWindow;
 class LocalFrame;
 class LocalFrameClient;
 class MHTMLArchive;
@@ -96,12 +99,6 @@ namespace mojom {
 enum class CommitResult : int32_t;
 }
 
-// Indicates whether the global object (i.e. Window instance) associated with
-// the previous document in a browsing context was replaced or reused for the
-// new Document corresponding to the just-committed navigation; effective in the
-// main world and all isolated worlds. WindowProxies are not affected.
-enum class GlobalObjectReusePolicy { kCreateNew, kUseExisting };
-
 // The DocumentLoader fetches a main resource and handles the result.
 // TODO(https://crbug.com/855189). This was originally structured to have a
 // provisional load, then commit but that is no longer necessary and this class
@@ -109,8 +106,6 @@ enum class GlobalObjectReusePolicy { kCreateNew, kUseExisting };
 class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
                                    public UseCounter,
                                    public WebNavigationBodyLoader::Client {
-  USING_GARBAGE_COLLECTED_MIXIN(DocumentLoader);
-
  public:
   DocumentLoader(LocalFrame*,
                  WebNavigationType navigation_type,
@@ -119,7 +114,6 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   ~DocumentLoader() override;
 
   static bool WillLoadUrlAsEmpty(const KURL&);
-  static WebHistoryCommitType LoadTypeToCommitType(WebFrameLoadType);
 
   LocalFrame* GetFrame() const { return frame_; }
 
@@ -164,7 +158,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
                                        scoped_refptr<SerializedScriptValue>,
                                        HistoryScrollRestorationType,
                                        WebFrameLoadType,
-                                       Document*);
+                                       bool is_content_initiated);
   const ResourceResponse& GetResponse() const { return response_; }
   bool IsClientRedirect() const { return is_client_redirect_; }
   bool ReplacesCurrentHistoryItem() const {
@@ -194,14 +188,11 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   void StartLoading();
   void StopLoading();
 
+  // CommitNavigation() does the work of creating a Document and
+  // DocumentParser, as well as creating a new LocalDOMWindow if needed. It also
+  // initializes a bunch of state on the Document (e.g., the state based on
+  // response headers).
   void CommitNavigation();
-
-  GlobalObjectReusePolicy GetGlobalObjectReusePolicy() const {
-    return global_object_reuse_policy_;
-  }
-
-  // Starts loading the response.
-  void StartLoadingResponse();
 
   // Called when the browser process has asked this renderer process to commit a
   // same document navigation in that frame. Returns false if the navigation
@@ -211,7 +202,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
       WebFrameLoadType,
       HistoryItem*,
       ClientRedirectPolicy,
-      Document* origin_document,
+      LocalDOMWindow* origin_window,
       bool has_event,
       std::unique_ptr<WebDocumentLoader::ExtraData>);
 
@@ -223,9 +214,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
     return application_cache_host_.Get();
   }
 
-  WebURLRequest::PreviewsState GetPreviewsState() const {
-    return previews_state_;
-  }
+  PreviewsState GetPreviewsState() const { return previews_state_; }
 
   struct InitialScrollState {
     DISALLOW_NEW();
@@ -283,7 +272,6 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
 
   // UseCounter
   void CountUse(mojom::WebFeature) override;
-  void CountDeprecation(mojom::WebFeature) override;
 
   void SetApplicationCacheHostForTesting(ApplicationCacheHostForFrame* host) {
     application_cache_host_ = host;
@@ -320,16 +308,18 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
 
   const KURL& WebBundlePhysicalUrl() const { return web_bundle_physical_url_; }
 
-  bool LastSameDocumentNavigationWasBrowserInitiated() const {
-    return last_same_document_navigation_was_browser_initiated_;
-  }
-
   bool NavigationScrollAllowed() const { return navigation_scroll_allowed_; }
 
   // We want to make sure that the largest content is painted before the "LCP
   // limit", so that we get a good LCP value. This returns the remaining time to
   // the LCP limit. See crbug.com/1065508 for details.
   base::TimeDelta RemainingTimeToLCPLimit() const;
+
+  mojom::blink::ContentSecurityNotifier& GetContentSecurityNotifier();
+
+  // Returns the value of the text fragment token and then resets it to false
+  // to ensure the token can only be used to invoke a single text fragment.
+  bool ConsumeTextFragmentToken();
 
  protected:
   Vector<KURL> redirect_chain_;
@@ -343,15 +333,11 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
       mojom::MHTMLLoadResult::kSuccess;
 
  private:
-  // InstallNewDocument() does the work of creating a Document and
-  // DocumentParser, as well as creating a new LocalDOMWindow if needed. It also
-  // initalizes a bunch of state on the Document (e.g., the state based on
-  // response headers).
-  void InstallNewDocument(
-      const KURL&,
-      const scoped_refptr<const SecurityOrigin> initiator_origin,
+  network::mojom::blink::WebSandboxFlags CalculateSandboxFlags();
+  scoped_refptr<SecurityOrigin> CalculateOrigin(
       Document* owner_document,
-      const AtomicString& mime_type);
+      network::mojom::blink::WebSandboxFlags);
+  void InitializeWindow(Document* owner_document);
   void DidInstallNewDocument(Document*);
   void WillCommitNavigation();
   void DidCommitNavigation();
@@ -363,7 +349,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
       WebFrameLoadType,
       HistoryItem*,
       ClientRedirectPolicy,
-      Document*,
+      bool is_content_initiated,
       bool has_event,
       std::unique_ptr<WebDocumentLoader::ExtraData>);
 
@@ -381,6 +367,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   DocumentPolicy::ParsedDocumentPolicy CreateDocumentPolicy();
 
   void StartLoadingInternal();
+  void StartLoadingResponse();
   void FinishedLoading(base::TimeTicks finish_time);
   void CancelLoadAfterCSPDenied(const ResourceResponse&);
 
@@ -410,10 +397,9 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
                            bool should_report_corb_blocking,
                            const base::Optional<WebURLError>& error) override;
 
-  // Checks if the origin requested persisting the client hints, and notifies
-  // the |WebContentSettingsClient| with the list of client hints and the
-  // persistence duration.
-  void ParseAndPersistClientHints(const ResourceResponse&);
+  void ApplyClientHintsConfig(
+      const WebVector<network::mojom::WebClientHintsType>&
+          enabled_client_hints);
 
   // For SignedExchangeSubresourcePrefetch feature. If the page was loaded from
   // a signed exchage which has "allowed-alt-sxg" link headers in the inner
@@ -441,7 +427,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   Referrer referrer_;
   scoped_refptr<EncodedFormData> http_body_;
   AtomicString http_content_type_;
-  WebURLRequest::PreviewsState previews_state_;
+  PreviewsState previews_state_;
   base::Optional<WebOriginPolicy> origin_policy_;
   const scoped_refptr<const SecurityOrigin> requestor_origin_;
   const KURL unreachable_url_;
@@ -474,8 +460,6 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   ResourceResponse response_;
 
   WebFrameLoadType load_type_;
-  GlobalObjectReusePolicy global_object_reuse_policy_ =
-      GlobalObjectReusePolicy::kCreateNew;
 
   bool is_client_redirect_;
   bool replaces_current_history_item_;
@@ -483,6 +467,8 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
 
   const Member<ContentSecurityPolicy> content_security_policy_;
   const bool was_blocked_by_csp_;
+  mojo::Remote<mojom::blink::ContentSecurityNotifier>
+      content_security_notifier_;
 
   const scoped_refptr<SecurityOrigin> origin_to_commit_;
   WebNavigationType navigation_type_;
@@ -528,6 +514,11 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   // Whether this load request was initiated by the same origin.
   bool is_same_origin_navigation_ = false;
 
+  // If true, the navigation loading this document should allow a text fragment
+  // to invoke. This token may be instead consumed to pass this permission
+  // through a redirect.
+  bool has_text_fragment_token_ = false;
+
   // See WebNavigationParams for definition.
   const bool was_discarded_ = false;
 
@@ -560,14 +551,13 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
 
   const Vector<String> force_enabled_origin_trials_;
 
-  // Whether this load request is a result of a browser initiated same-document
-  // navigation.
-  bool last_same_document_navigation_was_browser_initiated_ = false;
-
   // Whether the document can be scrolled on load
   bool navigation_scroll_allowed_ = true;
 
-  bool origin_isolation_restricted_ = false;
+  bool origin_isolated_ = false;
+
+  // Whether this load request is cross browsing context group.
+  bool is_cross_browsing_context_group_navigation_ = false;
 };
 
 DECLARE_WEAK_IDENTIFIER_MAP(DocumentLoader);

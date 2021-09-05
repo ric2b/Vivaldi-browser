@@ -223,10 +223,11 @@ void GLSurfaceEGLSurfaceControl::CommitPendingTransaction(
   // the next transaction.
   DCHECK_LE(pending_surfaces_count_, surface_list_.size());
   for (size_t i = pending_surfaces_count_; i < surface_list_.size(); ++i) {
-    const auto& surface_state = surface_list_[i];
+    auto& surface_state = surface_list_[i];
     pending_transaction_->SetBuffer(*surface_state.surface, nullptr,
                                     base::ScopedFD());
     pending_transaction_->SetVisibility(*surface_state.surface, false);
+    surface_state.visibility = false;
   }
 
   // TODO(khushalsagar): Consider using the SetDamageRect API for partial
@@ -250,11 +251,6 @@ void GLSurfaceEGLSurfaceControl::CommitPendingTransaction(
       std::move(primary_plane_fences_));
   primary_plane_fences_.reset();
   pending_transaction_->SetOnCompleteCb(std::move(callback), gpu_task_runner_);
-
-  // Cache only those surfaces which were used in this transaction. The surfaces
-  // removed here are persisted in |resources_to_release| so we can release
-  // them after receiving read fences from the framework.
-  surface_list_.resize(pending_surfaces_count_);
   pending_surfaces_count_ = 0u;
   frame_rate_update_pending_ = false;
 
@@ -307,6 +303,12 @@ bool GLSurfaceEGLSurfaceControl::ScheduleOverlayPlane(
   pending_surfaces_count_++;
   auto& surface_state = surface_list_.at(pending_surfaces_count_ - 1);
 
+  // Make the surface visible if its hidden or uninitialized..
+  if (uninitialized || !surface_state.visibility) {
+    pending_transaction_->SetVisibility(*surface_state.surface, true);
+    surface_state.visibility = true;
+  }
+
   if (uninitialized || surface_state.z_order != z_order) {
     surface_state.z_order = z_order;
     pending_transaction_->SetZOrder(*surface_state.surface, z_order);
@@ -325,9 +327,11 @@ bool GLSurfaceEGLSurfaceControl::ScheduleOverlayPlane(
     // its the primary plane.
     is_primary_plane = !scoped_hardware_buffer->is_video();
     DCHECK(!is_primary_plane || !primary_plane_fences_);
-    primary_plane_fences_.emplace();
-    primary_plane_fences_->available_fence =
-        scoped_hardware_buffer->TakeAvailableFence();
+    if (is_primary_plane) {
+      primary_plane_fences_.emplace();
+      primary_plane_fences_->available_fence =
+          scoped_hardware_buffer->TakeAvailableFence();
+    }
 
     auto* a_surface = surface_state.surface->surface();
     DCHECK_EQ(pending_frame_resources_.count(a_surface), 0u);
@@ -361,30 +365,12 @@ bool GLSurfaceEGLSurfaceControl::ScheduleOverlayPlane(
   }
 
   if (hardware_buffer) {
-    gfx::Rect dst = bounds_rect;
-
-    // Get the crop rectangle from the image which is the actual region of valid
-    // pixels. This region could be smaller than the buffer dimensions. Hence
-    // scale the |crop_rect| according to the valid pixel area rather than
-    // buffer dimensions. crbug.com/1027766 for more details.
-    gfx::Rect valid_pixel_rect = image->GetCropRect();
     gfx::Size buffer_size = GetBufferSize(hardware_buffer);
+    gfx::RectF scaled_rect =
+        gfx::ScaleRect(crop_rect, buffer_size.width(), buffer_size.height());
 
-    // If the image doesn't provide a |valid_pixel_rect|, assume the entire
-    // buffer is valid.
-    if (valid_pixel_rect.IsEmpty()) {
-      valid_pixel_rect.set_size(buffer_size);
-    } else {
-      // Clamp the |valid_pixel_rect| to the buffer dimensions to make sure for
-      // some reason it does not overflows.
-      valid_pixel_rect.Intersect(gfx::Rect(buffer_size));
-    }
-    gfx::RectF scaled_rect = gfx::RectF(
-        crop_rect.x() * valid_pixel_rect.width() + valid_pixel_rect.x(),
-        crop_rect.y() * valid_pixel_rect.height() + valid_pixel_rect.y(),
-        crop_rect.width() * valid_pixel_rect.width(),
-        crop_rect.height() * valid_pixel_rect.height());
     gfx::Rect src = gfx::ToEnclosedRect(scaled_rect);
+    gfx::Rect dst = bounds_rect;
 
     if (uninitialized || surface_state.src != src || surface_state.dst != dst ||
         surface_state.transform != transform) {

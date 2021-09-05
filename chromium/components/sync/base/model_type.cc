@@ -83,6 +83,10 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
      "Autofill Wallet Metadata",
      sync_pb::EntitySpecifics::kWalletMetadataFieldNumber,
      ModelTypeForHistograms::kAutofillWalletMetadata},
+    {AUTOFILL_WALLET_OFFER, "AUTOFILL_OFFER", "autofill_wallet_offer",
+     "Autofill Wallet Offer",
+     sync_pb::EntitySpecifics::kAutofillOfferFieldNumber,
+     ModelTypeForHistograms::kAutofillWalletOffer},
     {THEMES, "THEME", "themes", "Themes",
      sync_pb::EntitySpecifics::kThemeFieldNumber,
      ModelTypeForHistograms::kThemes},
@@ -134,10 +138,10 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
     {APP_LIST, "APP_LIST", "app_list", "App List",
      sync_pb::EntitySpecifics::kAppListFieldNumber,
      ModelTypeForHistograms::kAppList},
-    {SUPERVISED_USER_WHITELISTS, "MANAGED_USER_WHITELIST",
+    {SUPERVISED_USER_ALLOWLISTS, "MANAGED_USER_WHITELIST",
      "managed_user_whitelists", "Managed User Whitelists",
      sync_pb::EntitySpecifics::kManagedUserWhitelistFieldNumber,
-     ModelTypeForHistograms::kSupervisedUserWhitelists},
+     ModelTypeForHistograms::kSupervisedUserAllowlists},
     {ARC_PACKAGE, "ARC_PACKAGE", "arc_package", "Arc Package",
      sync_pb::EntitySpecifics::kArcPackageFieldNumber,
      ModelTypeForHistograms::kArcPackage},
@@ -185,9 +189,6 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
     {NIGORI, "NIGORI", "nigori", "Encryption Keys",
      sync_pb::EntitySpecifics::kNigoriFieldNumber,
      ModelTypeForHistograms::kNigori},
-    {DEPRECATED_EXPERIMENTS, "EXPERIMENTS", "experiments", "Experiments",
-     sync_pb::EntitySpecifics::kExperimentsFieldNumber,
-     ModelTypeForHistograms::kDeprecatedExperiments},
 };
 
 static_assert(base::size(kModelTypeInfoMap) == ModelType::NUM_ENTRIES,
@@ -227,6 +228,9 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
       break;
     case AUTOFILL_WALLET_METADATA:
       specifics->mutable_wallet_metadata();
+      break;
+    case AUTOFILL_WALLET_OFFER:
+      specifics->mutable_autofill_offer();
       break;
     case THEMES:
       specifics->mutable_theme();
@@ -276,7 +280,7 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
     case APP_LIST:
       specifics->mutable_app_list();
       break;
-    case SUPERVISED_USER_WHITELISTS:
+    case SUPERVISED_USER_ALLOWLISTS:
       specifics->mutable_managed_user_whitelist();
       break;
     case ARC_PACKAGE:
@@ -305,9 +309,6 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
       break;
     case NIGORI:
       specifics->mutable_nigori();
-      break;
-    case DEPRECATED_EXPERIMENTS:
-      specifics->mutable_experiments();
       break;
     case WEB_APPS:
       specifics->mutable_web_app();
@@ -421,7 +422,7 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
   if (specifics.has_app_list())
     return APP_LIST;
   if (specifics.has_managed_user_whitelist())
-    return SUPERVISED_USER_WHITELISTS;
+    return SUPERVISED_USER_ALLOWLISTS;
   if (specifics.has_arc_package())
     return ARC_PACKAGE;
   if (specifics.has_printer())
@@ -434,8 +435,6 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
     return USER_CONSENTS;
   if (specifics.has_nigori())
     return NIGORI;
-  if (specifics.has_experiments())
-    return DEPRECATED_EXPERIMENTS;
   if (specifics.has_send_tab_to_self())
     return SEND_TAB_TO_SELF;
   if (specifics.has_security_event())
@@ -450,6 +449,8 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
     return OS_PRIORITY_PREFERENCES;
   if (specifics.has_sharing_message())
     return SHARING_MESSAGE;
+  if (specifics.has_autofill_offer())
+    return AUTOFILL_WALLET_OFFER;
 
   if (specifics.has_notes())
     return NOTES;
@@ -464,6 +465,7 @@ ModelTypeSet EncryptableUserTypes() {
   ModelTypeSet encryptable_user_types = UserTypes();
   // Wallet data is not encrypted since it actually originates on the server.
   encryptable_user_types.Remove(AUTOFILL_WALLET_DATA);
+  encryptable_user_types.Remove(AUTOFILL_WALLET_OFFER);
   // Commit-only types are never encrypted since they are consumed server-side.
   encryptable_user_types.RemoveAll(CommitOnlyTypes());
   // Other types that are never encrypted because consumed server-side.
@@ -473,7 +475,7 @@ ModelTypeSet EncryptableUserTypes() {
   encryptable_user_types.Remove(PRIORITY_PREFERENCES);
   encryptable_user_types.Remove(OS_PRIORITY_PREFERENCES);
   encryptable_user_types.Remove(SUPERVISED_USER_SETTINGS);
-  encryptable_user_types.Remove(SUPERVISED_USER_WHITELISTS);
+  encryptable_user_types.Remove(SUPERVISED_USER_ALLOWLISTS);
   // Proxy types have no sync representation and are therefore not encrypted.
   // Note however that proxy types map to one or more protocol types, which
   // may or may not be encrypted themselves.

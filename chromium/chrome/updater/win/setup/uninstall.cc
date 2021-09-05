@@ -33,7 +33,8 @@ namespace updater {
 
 void DeleteComServer(HKEY root) {
   for (const auto& clsid :
-       {__uuidof(UpdaterClass), __uuidof(GoogleUpdate3WebUserClass)}) {
+       {__uuidof(UpdaterClass), CLSID_UpdaterControlServiceClass,
+        CLSID_GoogleUpdate3WebUserClass}) {
     InstallUtil::DeleteRegistryKey(root, GetComServerClsidRegistryPath(clsid),
                                    WorkItem::kWow64Default);
   }
@@ -50,7 +51,7 @@ void DeleteComService() {
                                  WorkItem::kWow64Default);
   if (!installer::InstallServiceWorkItem::DeleteService(
           kWindowsServiceName, base::ASCIIToUTF16(UPDATER_KEY),
-          __uuidof(UpdaterServiceClass), GUID_NULL))
+          {CLSID_UpdaterServiceClass}, {}))
     LOG(WARNING) << "DeleteService failed.";
 }
 

@@ -40,7 +40,6 @@ class CORE_EXPORT HTMLIFrameElement final
     : public HTMLFrameElementBase,
       public Supplementable<HTMLIFrameElement> {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(HTMLIFrameElement);
 
  public:
   void Trace(Visitor*) const override;
@@ -56,7 +55,7 @@ class CORE_EXPORT HTMLIFrameElement final
   const AttrNameToTrustedType& GetCheckedAttributeTypes() const override;
 
   ParsedFeaturePolicy ConstructContainerPolicy() const override;
-  DocumentPolicy::FeatureState ConstructRequiredPolicy() const override;
+  DocumentPolicyFeatureState ConstructRequiredPolicy() const override;
 
   mojom::blink::FrameOwnerElementType OwnerType() const final {
     return mojom::blink::FrameOwnerElementType::kIframe;

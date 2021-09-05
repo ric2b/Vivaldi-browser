@@ -7,8 +7,8 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
+#include "base/task/current_thread.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -65,10 +65,9 @@ class SettingsPrivateApiTest : public ExtensionApiTest {
   void SetPrefPolicy(const std::string& key, policy::PolicyLevel level) {
     policy::PolicyMap policies;
     policies.Set(key, level, policy::POLICY_SCOPE_USER,
-                 policy::POLICY_SOURCE_CLOUD,
-                 base::WrapUnique(new base::Value(true)), nullptr);
+                 policy::POLICY_SOURCE_CLOUD, base::Value(true), nullptr);
     provider_.UpdateChromePolicy(policies);
-    DCHECK(base::MessageLoopCurrent::Get());
+    DCHECK(base::CurrentThread::Get());
     base::RunLoop loop;
     loop.RunUntilIdle();
   }

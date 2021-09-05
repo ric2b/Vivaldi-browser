@@ -36,7 +36,7 @@ public class FindToolbarPhone extends FindToolbar {
         setVisibility(View.VISIBLE);
 
         // Note(david@vivaldi.com): We need to adjust the margin when using tab strip.
-        VivaldiUtils.updateTopMarginForTabsOnPhoneUI(this,
+        VivaldiUtils.updateViewsTopMargin(this,
                 SharedPreferencesManager.getInstance().readBoolean(
                         VivaldiPreferences.SHOW_TAB_STRIP, true)
                         ? (int) getResources().getDimension(

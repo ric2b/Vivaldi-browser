@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <string>
 
-#include "base/macros.h"
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
@@ -20,11 +19,11 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include <map>
 
 #include "base/values.h"
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 namespace printing {
 
@@ -37,7 +36,12 @@ PRINTING_EXPORT base::Optional<bool> IsColorModelSelected(int color_mode);
 PRINTING_EXPORT void GetColorModelForMode(int color_mode,
                                           std::string* color_setting_name,
                                           std::string* color_value);
+
+#if defined(OS_MAC) || defined(OS_CHROMEOS)
+// Convert from |color_mode| to a print-color-mode value from PWG 5100.13.
+PRINTING_EXPORT std::string GetIppColorModelForMode(int color_mode);
 #endif
+#endif  // defined(USE_CUPS)
 
 // Inform the printing system that it may embed this user-agent string
 // in its output's metadata.
@@ -69,11 +73,13 @@ class PRINTING_EXPORT PrintSettings {
     }
   };
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   using AdvancedSettings = std::map<std::string, base::Value>;
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
   PrintSettings();
+  PrintSettings(const PrintSettings&) = delete;
+  PrintSettings& operator=(const PrintSettings&) = delete;
   ~PrintSettings();
 
   // Reinitialize the settings to the default values.
@@ -83,8 +89,10 @@ class PRINTING_EXPORT PrintSettings {
   const PageMargins& requested_custom_margins_in_points() const {
     return requested_custom_margins_in_points_;
   }
-  void set_margin_type(MarginType margin_type) { margin_type_ = margin_type; }
-  MarginType margin_type() const { return margin_type_; }
+  void set_margin_type(mojom::MarginType margin_type) {
+    margin_type_ = margin_type;
+  }
+  mojom::MarginType margin_type() const { return margin_type_; }
 
   // Updates the orientation and flip the page if needed.
   void SetOrientation(bool landscape);
@@ -136,11 +144,11 @@ class PRINTING_EXPORT PrintSettings {
   bool supports_alpha_blend() const { return supports_alpha_blend_; }
 
   int device_units_per_inch() const {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     return 72;
-#else   // defined(OS_MACOSX)
+#else   // defined(OS_MAC)
     return dpi();
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
   }
 
   void set_ranges(const PageRanges& ranges) { ranges_ = ranges; }
@@ -170,8 +178,8 @@ class PRINTING_EXPORT PrintSettings {
   void set_collate(bool collate) { collate_ = collate; }
   bool collate() const { return collate_; }
 
-  void set_color(ColorModel color) { color_ = color; }
-  ColorModel color() const { return color_; }
+  void set_color(mojom::ColorModel color) { color_ = color; }
+  mojom::ColorModel color() const { return color_; }
 
   void set_copies(int copies) { copies_ = copies; }
   int copies() const { return copies_; }
@@ -206,12 +214,12 @@ class PRINTING_EXPORT PrintSettings {
     pages_per_sheet_ = pages_per_sheet;
   }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   AdvancedSettings& advanced_settings() { return advanced_settings_; }
   const AdvancedSettings& advanced_settings() const {
     return advanced_settings_;
   }
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 #if defined(OS_CHROMEOS)
   void set_send_user_info(bool send_user_info) {
@@ -240,7 +248,7 @@ class PRINTING_EXPORT PrintSettings {
   bool selection_only_;
 
   // Indicates what kind of margins should be applied to the printable area.
-  MarginType margin_type_;
+  mojom::MarginType margin_type_;
 
   // Strings to be printed as headers and footers if requested by the user.
   base::string16 title_;
@@ -255,8 +263,8 @@ class PRINTING_EXPORT PrintSettings {
   // True if the user wants to print with collate.
   bool collate_;
 
-  // True if the user wants to print with collate.
-  ColorModel color_;
+  // Color model type for the printer to use.
+  mojom::ColorModel color_;
 
   // Number of copies user wants to print.
   int copies_;
@@ -305,10 +313,10 @@ class PRINTING_EXPORT PrintSettings {
   // Number of pages per sheet.
   int pages_per_sheet_;
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Advanced settings.
   AdvancedSettings advanced_settings_;
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 #if defined(OS_CHROMEOS)
   // Whether to send user info.
@@ -320,8 +328,6 @@ class PRINTING_EXPORT PrintSettings {
   // PIN code entered by the user.
   std::string pin_value_;
 #endif
-
-  DISALLOW_COPY_AND_ASSIGN(PrintSettings);
 };
 
 }  // namespace printing

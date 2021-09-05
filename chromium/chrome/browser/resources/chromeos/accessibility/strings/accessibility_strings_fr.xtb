@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Élément de liste</translation>
 <translation id="1013742170491673792">recherche</translation>
 <translation id="1014370462248694370">Balayer l'écran vers la droite avec deux doigts</translation>
+<translation id="1016393160682012902">Appuyez sur une touche du clavier ou une touche du clavier braille actualisable pour connaître sa fonction, ou effectuez un geste pour savoir quelle commande lui est associée. Appuyez sur Ctrl+W ou sur Échap pour quitter.</translation>
 <translation id="1022586497894531524">Est-ce la première fois que vous utilisez les commentaires audio de ChromeVox ? Ce tutoriel rapide explique les bases pour commencer à utiliser ChromeVox.</translation>
 <translation id="1025074108959230262">Mode persistant désactivé</translation>
 <translation id="1031961866430398710">puis</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Lien interne</translation>
 <translation id="4909019435900810068">Reculer d'un mot</translation>
 <translation id="4911349081560453449">Aucune case à cocher précédente</translation>
-<translation id="4915087353619183190">Démarrage du mode d'apprentissage. Appuyez sur une touche du clavier, sur une touche braille actualisable ou sur un geste pour en savoir plus sur son fonctionnement. Appuyez sur Ctrl+W ou sur Échap pour quitter.</translation>
 <translation id="492295894462528572">Avant-propos</translation>
 <translation id="495046168593986294">Faire défiler vers le haut</translation>
 <translation id="495170559598752135">Actions</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Vert</translation>
 <translation id="602001110135236999">Vers la gauche</translation>
 <translation id="6034000775414344507">Gris clair</translation>
+<translation id="6036135911048686884">Explorez au toucher</translation>
 <translation id="6037602951055904232">Panoramique avant</translation>
 <translation id="6044160928851315051">Asssombrir l'écran</translation>
 <translation id="6082768461603900813">Navigation de base</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{dièse}one{# dièse}other{# dièses}}</translation>
 <translation id="8378855320830505539">Section</translation>
 <translation id="8382679411218029383">Saisie semi-automatique intégrée ou sous forme de liste</translation>
+<translation id="8394908167088220973">Contenu multimédia : lecture/pause</translation>
 <translation id="8428213095426709021">Paramètres</translation>
 <translation id="8428603554127842284">niveau <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">quitter le contenu structuré, tel que les tableaux</translation>
 <translation id="8779057862865475116">Aucun lien précédent</translation>
 <translation id="8796411681063377102">En-tête suivant de niveau 3</translation>
+<translation id="8823311177246872527">Page <ph name="CURRENTPAGE" /> sur <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bannière</translation>
 <translation id="8851136666856101339">principal</translation>
 <translation id="8882002077197914455">En-tête de ligne</translation>

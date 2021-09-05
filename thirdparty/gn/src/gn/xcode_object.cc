@@ -994,7 +994,7 @@ void PBXShellScriptBuildPhase::Print(std::ostream& out, unsigned indent) const {
   PrintProperty(out, rules, "name", name_);
   PrintProperty(out, rules, "outputPaths", EmptyPBXObjectVector());
   PrintProperty(out, rules, "runOnlyForDeploymentPostprocessing", 0u);
-  PrintProperty(out, rules, "shellPath", "/bin/sh");
+  PrintProperty(out, rules, "shellPath", "/usr/bin/python3");
   PrintProperty(out, rules, "shellScript", shell_script_);
   PrintProperty(out, rules, "showEnvVarsInLog", 0u);
   out << indent_str << "};\n";

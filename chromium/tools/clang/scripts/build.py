@@ -50,8 +50,6 @@ BUG_REPORT_URL = ('https://crbug.com and run'
                   ' tools/clang/scripts/process_crashreports.py'
                   ' (only works inside Google) which will upload a report')
 
-FIRST_LLVM_COMMIT = '97724f18c79c7cc81ced24239eb5e883bf1398ef'
-
 
 win_sdk_dir = None
 dia_dll = None
@@ -158,8 +156,7 @@ def CheckoutLLVM(commit, dir):
     # Also check that the first commit is reachable.
     if (RunCommand(['git', 'diff-index', '--quiet', 'HEAD'], fail_hard=False)
         and RunCommand(['git', 'fetch'], fail_hard=False)
-        and RunCommand(['git', 'checkout', commit], fail_hard=False)
-        and RunCommand(['git', 'show', FIRST_LLVM_COMMIT], fail_hard=False)):
+        and RunCommand(['git', 'checkout', commit], fail_hard=False)):
       return
 
     # If we can't use the current repo, delete it.
@@ -191,12 +188,12 @@ def GetLatestLLVMCommit():
   return ref['object']['sha']
 
 
-def GetCommitCount(commit):
-  """Get the number of commits from FIRST_LLVM_COMMIT to commit.
+def GetCommitDescription(commit):
+  """Get the output of `git describe`.
 
   Needs to be called from inside the git repository dir."""
-  return subprocess.check_output(['git', 'rev-list', '--count',
-                                  FIRST_LLVM_COMMIT + '..' + commit]).rstrip()
+  return subprocess.check_output(
+      ['git', 'describe', '--long', '--abbrev=8', commit]).rstrip()
 
 
 def DeleteChromeToolsShim():
@@ -256,7 +253,7 @@ def AddGnuWinToPath():
     return
 
   gnuwin_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, 'gnuwin')
-  GNUWIN_VERSION = '12'
+  GNUWIN_VERSION = '13'
   GNUWIN_STAMP = os.path.join(gnuwin_dir, 'stamp')
   if ReadStampFile(GNUWIN_STAMP) == GNUWIN_VERSION:
     print('GNU Win tools already up to date.')
@@ -337,6 +334,26 @@ def VerifyVersionOfBuiltClangMatchesVERSION():
     sys.exit(1)
 
 
+def VerifyZlibSupport():
+  """Check that clang was built with zlib support enabled."""
+  clang = os.path.join(LLVM_BUILD_DIR, 'bin', 'clang')
+  test_file = '/dev/null'
+  if sys.platform == 'win32':
+    clang += '-cl.exe'
+    test_file = 'nul'
+
+  print('Checking for zlib support')
+  clang_out = subprocess.check_output([
+      clang, '--driver-mode=gcc', '-target', 'x86_64-unknown-linux-gnu', '-gz',
+      '-c', '-###', '-x', 'c', test_file ],
+      stderr=subprocess.STDOUT, universal_newlines=True)
+  if (re.search(r'--compress-debug-sections', clang_out)):
+    print('OK')
+  else:
+    print(('Failed to detect zlib support!\n\n(driver output: %s)') % clang_out)
+    sys.exit(1)
+
+
 def CopyLibstdcpp(args, build_dir):
   if not args.gcc_toolchain:
     return
@@ -383,6 +400,9 @@ def main():
                       'building; --gcc-toolchain=/opt/foo picks '
                       '/opt/foo/bin/gcc')
   parser.add_argument('--pgo', action='store_true', help='build with PGO')
+  parser.add_argument('--thinlto',
+                      action='store_true',
+                      help='build with ThinLTO')
   parser.add_argument('--llvm-force-head-revision', action='store_true',
                       help='build the latest revision')
   parser.add_argument('--run-tests', action='store_true',
@@ -408,8 +428,8 @@ def main():
                       default=sys.platform in ('linux2', 'darwin'))
   args = parser.parse_args()
 
-  if args.pgo and not args.bootstrap:
-    print('--pgo requires --bootstrap')
+  if (args.pgo or args.thinlto) and not args.bootstrap:
+    print('--pgo/--thinlto requires --bootstrap')
     return 1
   if args.with_android and not os.path.exists(ANDROID_NDK_DIR):
     print('Android NDK not found at ' + ANDROID_NDK_DIR)
@@ -456,16 +476,21 @@ def main():
   # enough GCC to build Clang.
   MaybeDownloadHostGcc(args)
 
+  if sys.platform == 'darwin':
+    isysroot = subprocess.check_output(['xcrun', '--show-sdk-path']).rstrip()
+
   global CLANG_REVISION, PACKAGE_VERSION
   if args.llvm_force_head_revision:
-    CLANG_REVISION = GetLatestLLVMCommit()
+    checkout_revision = GetLatestLLVMCommit()
+  else:
+    checkout_revision = CLANG_REVISION
 
   if not args.skip_checkout:
-    CheckoutLLVM(CLANG_REVISION, LLVM_DIR);
+    CheckoutLLVM(checkout_revision, LLVM_DIR)
 
   if args.llvm_force_head_revision:
-    PACKAGE_VERSION = 'n%s-%s-0' % (GetCommitCount(CLANG_REVISION),
-                                   CLANG_REVISION[:8])
+    CLANG_REVISION = GetCommitDescription(checkout_revision)
+    PACKAGE_VERSION = '%s-0' % CLANG_REVISION
 
   print('Locally building clang %s...' % PACKAGE_VERSION)
   WriteStampFile('', STAMP_FILE)
@@ -516,6 +541,8 @@ def main():
       '-DCOMPILER_RT_USE_LIBCXX=NO',
       # Don't run Go bindings tests; PGO makes them confused.
       '-DLLVM_INCLUDE_GO_TESTS=OFF',
+      # TODO(crbug.com/1113475): Update binutils.
+      '-DENABLE_X86_RELAX_RELOCATIONS=NO',
   ]
 
   if args.gcc_toolchain:
@@ -533,8 +560,10 @@ def main():
   if sys.platform == 'darwin':
     # For libc++, we only want the headers.
     base_cmake_args.extend([
-        '-DLIBCXX_ENABLE_SHARED=OFF', '-DLIBCXX_ENABLE_STATIC=OFF',
-        '-DLIBCXX_INCLUDE_TESTS=OFF'
+        '-DLIBCXX_ENABLE_SHARED=OFF',
+        '-DLIBCXX_ENABLE_STATIC=OFF',
+        '-DLIBCXX_INCLUDE_TESTS=OFF',
+        '-DLIBCXX_ENABLE_EXPERIMENTAL_LIBRARY=OFF',
     ])
     # Prefer Python 2. TODO(crbug.com/1076834): Remove this.
     base_cmake_args.append('-DPython3_EXECUTABLE=/nonexistent')
@@ -685,6 +714,8 @@ def main():
     if cc is not None:  instrument_args.append('-DCMAKE_C_COMPILER=' + cc)
     if cxx is not None: instrument_args.append('-DCMAKE_CXX_COMPILER=' + cxx)
     if lld is not None: instrument_args.append('-DCMAKE_LINKER=' + lld)
+    if args.thinlto:
+      instrument_args.append('-DLLVM_ENABLE_LTO=Thin')
 
     RunCommand(['cmake'] + instrument_args + [os.path.join(LLVM_DIR, 'llvm')],
                msvc_arch='x64')
@@ -715,15 +746,13 @@ def main():
     # from PGO as well. Perhaps the training could be done asynchronously by
     # dedicated buildbots that upload profiles to the cloud.
     training_source = 'pgo_training-1.ii'
-    with open(training_source, 'w') as f:
+    with open(training_source, 'wb') as f:
       DownloadUrl(CDS_URL + '/' + training_source, f)
     train_cmd = [os.path.join(LLVM_INSTRUMENTED_DIR, 'bin', 'clang++'),
                 '-target', 'x86_64-unknown-unknown', '-O2', '-g', '-std=c++14',
                  '-fno-exceptions', '-fno-rtti', '-w', '-c', training_source]
     if sys.platform == 'darwin':
-      train_cmd.extend(['-stdlib=libc++', '-isysroot',
-                        subprocess.check_output(['xcrun',
-                                                 '--show-sdk-path']).rstrip()])
+      train_cmd.extend(['-stdlib=libc++', '-isysroot', isysroot])
     RunCommand(train_cmd, msvc_arch='x64')
 
     # Merge profiles.
@@ -750,9 +779,48 @@ def main():
         # iPhones). armv7k is Apple Watch, which we don't need.
         '-DDARWIN_ios_ARCHS=armv7;armv7s;arm64',
         '-DDARWIN_iossim_ARCHS=i386;x86_64',
-        # We don't need 32-bit intel support for macOS, we only ship 64-bit.
-        '-DDARWIN_osx_ARCHS=x86_64',
         ])
+    if args.bootstrap:
+      # mac/arm64 needs MacOSX11.0.sdk. System Xcode (+ SDK) on the chrome bots
+      # is something much older.
+      # Options:
+      # - temporarily set system Xcode to Xcode 12 beta while running this
+      #   script, (cf build/swarming_xcode_install.py, but it looks unused)
+      # - use Xcode 12 beta for everything on tot bots, only need to fuzz with
+      #   scripts/slave/recipes/chromium_upload_clang.py then (but now the
+      #   chrome/ios build will use the 11.0 SDK too and we'd be on the hook for
+      #   keeping it green -- if it's currently green, who knows)
+      # - pass flags to cmake to try to coax it into using Xcode 12 beta for the
+      #   LLVM build without it being system Xcode.
+      #
+      # The last option seems best, so let's go with that. We need to pass
+      # -isysroot to the 11.0 SDK and -B to the /usr/bin so that the new ld64 is
+      # used.
+      # The compiler-rt build overrides -isysroot flags set via cflags, and we
+      # only need to use the 11 SDK for the compiler-rt build. So set only
+      # DARWIN_macosx_CACHED_SYSROOT to the 11.0 SDK and use the regular SDK
+      # for the rest of the build. (The new ld is used for all links.)
+      sys.path.insert(1, os.path.join(CHROMIUM_DIR, 'build'))
+      import mac_toolchain
+      LLVM_XCODE = os.path.join(THIRD_PARTY_DIR, 'llvm-xcode')
+      mac_toolchain.InstallXcodeBinaries('xcode_12_beta', LLVM_XCODE)
+      isysroot_11 = os.path.join(LLVM_XCODE, 'Contents', 'Developer',
+                                 'Platforms', 'MacOSX.platform', 'Developer',
+                                 'SDKs', 'MacOSX11.0.sdk')
+      xcode_bin = os.path.join(LLVM_XCODE, 'Contents', 'Developer',
+                               'Toolchains', 'XcodeDefault.xctoolchain', 'usr',
+                               'bin')
+      # Include an arm64 slice for libclang_rt.osx.a. This requires using
+      # MacOSX11.0.sdk (via -isysroot, via DARWIN_macosx_CACHED_SYSROOT) and
+      # the new ld, via -B
+      compiler_rt_args.extend([
+          # We don't need 32-bit intel support for macOS, we only ship 64-bit.
+          '-DDARWIN_osx_ARCHS=arm64;x86_64',
+          '-DDARWIN_macosx_CACHED_SYSROOT=' + isysroot_11,
+      ])
+      ldflags += ['-B', xcode_bin]
+    else:
+      compiler_rt_args.extend(['-DDARWIN_osx_ARCHS=x86_64'])
   else:
     compiler_rt_args.append('-DCOMPILER_RT_BUILD_BUILTINS=OFF')
 
@@ -765,8 +833,7 @@ def main():
   if sys.platform == 'darwin' and args.bootstrap:
     # When building on 10.9, /usr/include usually doesn't exist, and while
     # Xcode's clang automatically sets a sysroot, self-built clangs don't.
-    cflags = ['-isysroot', subprocess.check_output(
-        ['xcrun', '--show-sdk-path']).rstrip()]
+    cflags = ['-isysroot', isysroot]
     cxxflags = ['-stdlib=libc++'] + cflags
     ldflags += ['-stdlib=libc++']
     deployment_target = '10.7'
@@ -808,6 +875,8 @@ def main():
       '-DCHROMIUM_TOOLS=%s' % ';'.join(chrome_tools)]
   if args.pgo:
     cmake_args.append('-DLLVM_PROFDATA_FILE=' + LLVM_PROFDATA_FILE)
+  if args.thinlto:
+    cmake_args.append('-DLLVM_ENABLE_LTO=Thin')
   if sys.platform == 'win32':
     cmake_args.append('-DLLVM_ENABLE_ZLIB=FORCE_ON')
   if sys.platform == 'darwin':
@@ -831,6 +900,7 @@ def main():
     RunCommand(['ninja', 'cr-install'], msvc_arch='x64')
 
   VerifyVersionOfBuiltClangMatchesVERSION()
+  VerifyZlibSupport()
 
   if sys.platform == 'win32':
     platform = 'windows'

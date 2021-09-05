@@ -4,22 +4,28 @@
 
 package org.chromium.chrome.browser.signin.account_picker;
 
-import android.accounts.Account;
+import android.accounts.AccountManager;
+import android.app.Activity;
 import android.content.Intent;
 
+import androidx.annotation.MainThread;
 import androidx.annotation.Nullable;
 
-import org.chromium.base.task.PostTask;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.base.Callback;
+import org.chromium.base.ThreadUtils;
+import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninUtils;
+import org.chromium.chrome.browser.signin.WebSigninBridge;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
-import org.chromium.components.signin.AccountUtils;
+import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.base.GoogleServiceAuthError;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
+import org.chromium.ui.base.WindowAndroid;
 
 /**
  * This class is used in web sign-in flow for the account picker bottom sheet.
@@ -27,63 +33,118 @@ import org.chromium.content_public.browser.UiThreadTaskTraits;
  * It is responsible for the sign-in and adding account functions needed for the
  * web sign-in flow.
  */
-public class AccountPickerDelegate implements AccountPickerCoordinator.Listener {
+public class AccountPickerDelegate implements WebSigninBridge.Listener {
+    private final WindowAndroid mWindowAndroid;
     private final ChromeActivity mChromeActivity;
     private final Tab mTab;
+    private final WebSigninBridge.Factory mWebSigninBridgeFactory;
+    private final String mContinueUrl;
+    private final SigninManager mSigninManager;
+    private @Nullable WebSigninBridge mWebSigninBridge;
+    private Callback<GoogleServiceAuthError> mOnSignInErrorCallback;
 
-    public AccountPickerDelegate(ChromeActivity chromeActivity) {
-        mChromeActivity = chromeActivity;
-        // TODO(https://crbug.com/1095554): Check if website redirects after sign-in
+    public AccountPickerDelegate(WindowAndroid windowAndroid,
+            WebSigninBridge.Factory webSigninBridgeFactory, String continueUrl) {
+        mWindowAndroid = windowAndroid;
+        mChromeActivity = (ChromeActivity) mWindowAndroid.getActivity().get();
         mTab = mChromeActivity.getActivityTab();
+        mWebSigninBridgeFactory = webSigninBridgeFactory;
+        mContinueUrl = continueUrl;
+        mSigninManager = IdentityServicesProvider.get().getSigninManager(
+                Profile.getLastUsedRegularProfile());
     }
+
     /**
-     * Notifies that the user has selected an account.
-     *
-     * @param accountName The email of the selected account.
-     * @param isDefaultAccount Whether the selected account is the first in the account list.
+     * Releases resources used by this class.
      */
-    @Override
-    public void onAccountSelected(String accountName, boolean isDefaultAccount) {
-        Account account = AccountUtils.findAccountByName(
-                AccountManagerFacadeProvider.getInstance().tryGetGoogleAccounts(), accountName);
-        IdentityServicesProvider.get().getSigninManager().signIn(
-                SigninAccessPoint.WEB_SIGNIN, account, new SigninManager.SignInCallback() {
+    public void onDismiss() {
+        destroyWebSigninBridge();
+    }
+
+    /**
+     * Signs the user into the given account.
+     */
+    public void signIn(CoreAccountInfo coreAccountInfo,
+            Callback<GoogleServiceAuthError> onSignInErrorCallback) {
+        mOnSignInErrorCallback = onSignInErrorCallback;
+        mWebSigninBridge = mWebSigninBridgeFactory.create(
+                Profile.getLastUsedRegularProfile(), coreAccountInfo, this);
+        mSigninManager.signIn(
+                SigninAccessPoint.WEB_SIGNIN, coreAccountInfo, new SigninManager.SignInCallback() {
                     @Override
                     public void onSignInComplete() {
-                        // TODO(https://crbug.com/1092399): Implement sign-in properly in delegate
-                        // We should wait for the cookie signin and cookie regeneration here,
-                        // PostTask.postDelayedTask is just a temporary measure for testing the
-                        // flow, it will be removed soon.
-                        PostTask.postDelayedTask(UiThreadTaskTraits.DEFAULT, () -> {
-                            // TODO(https//crbug.com/1092399):
-                            // Replace this with a continue URL got from GAIA
-                            mTab.loadUrl(new LoadUrlParams("https://google.com"));
-                        }, 2000);
+                        // After the sign-in is finished in Chrome, we still need to wait for
+                        // WebSigninBridge to be called to redirect to the continue url.
                     }
 
                     @Override
                     public void onSignInAborted() {
-                        // TODO(https//crbug.com/1092399): Add UI to show in this case
+                        AccountPickerDelegate.this.destroyWebSigninBridge();
                     }
                 });
     }
 
     /**
      * Notifies when the user clicked the "add account" button.
+     *
+     * TODO(https//crbug.com/1117000): Change the callback argument to CoreAccountInfo
      */
-    @Override
-    public void addAccount() {
-        // TODO(https//crbug.com/1097031): We should select the added account
-        // and collapse the account chooser after the account is actually added.
+    public void addAccount(Callback<String> callback) {
         AccountManagerFacadeProvider.getInstance().createAddAccountIntent(
                 (@Nullable Intent intent) -> {
                     if (intent != null) {
-                        mChromeActivity.startActivity(intent);
+                        WindowAndroid.IntentCallback intentCallback =
+                                new WindowAndroid.IntentCallback() {
+                                    @Override
+                                    public void onIntentCompleted(
+                                            WindowAndroid window, int resultCode, Intent data) {
+                                        if (resultCode == Activity.RESULT_OK) {
+                                            callback.onResult(data.getStringExtra(
+                                                    AccountManager.KEY_ACCOUNT_NAME));
+                                        }
+                                    }
+                                };
+                        mWindowAndroid.showIntent(intent, intentCallback, null);
                     } else {
                         // AccountManagerFacade couldn't create intent, use SigninUtils to open
                         // settings instead.
                         SigninUtils.openSettingsForAllAccounts(mChromeActivity);
                     }
                 });
+    }
+
+    /**
+     * Notifies when the user clicked the "Go incognito mode" button.
+     */
+    public void goIncognitoMode() {}
+
+    /**
+     * Sign-in completed successfully and the primary account is available in the cookie jar.
+     */
+    @MainThread
+    @Override
+    public void onSigninSucceded() {
+        ThreadUtils.assertOnUiThread();
+        mTab.loadUrl(new LoadUrlParams(mContinueUrl));
+    }
+
+    /**
+     * Sign-in process failed.
+     *
+     * @param error Details about the error that occurred in the sign-in process.
+     */
+    @MainThread
+    @Override
+    public void onSigninFailed(GoogleServiceAuthError error) {
+        ThreadUtils.assertOnUiThread();
+        mOnSignInErrorCallback.onResult(error);
+        destroyWebSigninBridge();
+    }
+
+    private void destroyWebSigninBridge() {
+        if (mWebSigninBridge != null) {
+            mWebSigninBridge.destroy();
+            mWebSigninBridge = null;
+        }
     }
 }

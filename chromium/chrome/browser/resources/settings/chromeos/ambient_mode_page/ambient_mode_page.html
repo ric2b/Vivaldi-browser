@@ -3,28 +3,60 @@
 <link rel="import" href="ambient_mode_browser_proxy.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_radio_button/cr_radio_button.html">
 <link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="constants.html">
+<link rel="import" href="topic_source_list.html">
 <link rel="import" href="../os_route.html">
 <link rel="import" href="../../router.html">
+<link rel="import" href="../../prefs/prefs.html">
+<link rel="import" href="../../prefs/prefs_behavior.html">
 <link rel="import" href="../../controls/settings_radio_group.html">
 <link rel="import" href="../../controls/settings_toggle_button.html">
 <link rel="import" href="../../settings_shared_css.html">
 
 <dom-module id="settings-ambient-mode-page">
   <template>
-    <style include="cr-shared-style settings-shared">
+    <style include="cr-shared-style settings-shared iron-flex">
       #ambientModeEnable {
+        border-bottom: var(--cr-separator-line);
+        border-top: var(--cr-separator-line);
+      }
+
+      #pageDescription {
+        padding-inline-start: var(--cr-section-padding);
+        padding-top: 0;
+      }
+
+      #topicSourceListDiv {
         border-bottom: var(--cr-separator-line);
       }
 
-      #topicSourceDescription {
-        display: block;
-        padding-inline-end: var(--cr-section-padding);
+      /* Set padding on children instead of the container itself to ensure that
+       * separator lines can fill the entire width of the page. */
+      #topicSourceListDiv > *,
+      #weatherDiv > * {
+        /* Padded to the right to allow space for a ripple */
+        padding-inline-end: calc(var(--cr-section-padding) -
+            var(--cr-icon-ripple-padding));
         padding-inline-start: var(--cr-section-padding);
       }
+
+      #weatherTitle {
+        padding-bottom: 16px;
+        padding-top: 16px;
+      }
+
+      .list-item {
+        padding-inline-start: var(--cr-section-padding);
+      }
+
     </style>
+    <h2 id="pageDescription">
+      $i18n{ambientModePageDescription}
+    </h2>
+
     <settings-toggle-button id="ambientModeEnable"
         class="primary-toggle"
         pref="{{prefs.settings.ambient_mode.enabled}}"
@@ -33,29 +65,35 @@
     </settings-toggle-button>
 
     <template is="dom-if" if="[[prefs.settings.ambient_mode.enabled.value]]">
-      <label id="topicSourceDescription" class="cr-padded-text">
-          $i18n{ambientModeTopicSourceTitle}
-      </label>
-
-      <!-- TODO(b/159746638): Implement a new UI to pick topic source and open
-      subpage. -->
-      <div class="list-frame">
-        <!-- Disable the radio buttons before the selection is fetched from
-        server. -->
-        <cr-radio-group id="topicSourceRadioGroup"
-            aria-labelledby="topicSourceDescription"
-            selected="[[selectedTopicSource_]]"
-            on-click="onTopicSourceClicked_"
+      <div id="topicSourceListDiv" class="layout vertical flex">
+        <topic-source-list topic-sources="[[topicSources_]]"
+            selected-topic-source="[[selectedTopicSource_]]"
+            has-google-photos-albums="[[hasGooglePhotosAlbums_]]"
             disabled="[[!isValidTopicSource_(selectedTopicSource_)]]">
-          <cr-radio-button name="[[AmbientModeTopicSource.GOOGLE_PHOTOS]]"
-              class="list-item underbar"
-              label="$i18n{ambientModeTopicSourceGooglePhotos}">
-          </cr-radio-button>
-          <cr-radio-button name="[[AmbientModeTopicSource.ART_GALLERY]]"
-              class="list-item underbar"
-              label="$i18n{ambientModeTopicSourceArtGallery}">
-          </cr-radio-button>
-        </cr-radio-group>
+        </topic-source-list>
+      </div>
+      <div id="weatherDiv" class="layout vertical flex">
+        <h2 id="weatherTitle" aria-hidden="true">
+          $i18n{ambientModeWeatherTitle}
+        </h2>
+        <div class="list-frame">
+          <cr-radio-group
+              id="ambientTemperatureUnit"
+              selected="{{selectedTemperatureUnit_}}"
+              disabled$="[[!isValidTemperatureUnit_(selectedTemperatureUnit_)]]"
+              aria-labelledby="weatherTitle">
+            <cr-radio-button
+                name="[[AmbientModeTemperatureUnit_.FAHRENHEIT]]"
+                class="list-item underbar"
+                label="$i18n{ambientModeTemperatureUnitFahrenheit}">
+            </cr-radio-button>
+            <cr-radio-button
+                name="[[AmbientModeTemperatureUnit_.CELSIUS]]"
+                class="list-item"
+                label="$i18n{ambientModeTemperatureUnitCelsius}">
+            </cr-radio-button>
+          </cr-radio-group>
+        </div>
       </div>
     </template>
   </template>

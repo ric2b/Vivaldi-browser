@@ -38,7 +38,9 @@ class LoginDisplayHostMojo : public LoginDisplayHostCommon,
                              public AuthStatusConsumer,
                              public OobeUI::Observer {
  public:
-  LoginDisplayHostMojo();
+  enum class DisplayedScreen { SIGN_IN_SCREEN, USER_ADDING_SCREEN };
+
+  explicit LoginDisplayHostMojo(DisplayedScreen displayed_screen);
   ~LoginDisplayHostMojo() override;
 
   // Called when the gaia dialog is destroyed.
@@ -83,8 +85,6 @@ class LoginDisplayHostMojo : public LoginDisplayHostCommon,
   void HideOobeDialog() override;
   void UpdateOobeDialogState(ash::OobeDialogState state) override;
   void OnCancelPasswordChangedFlow() override;
-  void ShowFeedback() override;
-  void ShowResetScreen() override;
   void HandleDisplayCaptivePortal() override;
   void UpdateAddUserButtonStatus() override;
   void RequestSystemInfoUpdate() override;
@@ -121,6 +121,10 @@ class LoginDisplayHostMojo : public LoginDisplayHostCommon,
                               OobeScreenId new_screen) override;
   void OnDestroyingOobeUI() override;
 
+  // TODO(https://crbug.com/1103564) This function needed to isolate error
+  // messages on the Views and WebUI side. Consider removing.
+  bool IsOobeUIDialogVisible() const;
+
  private:
   void LoadOobeDialog();
 
@@ -142,6 +146,10 @@ class LoginDisplayHostMojo : public LoginDisplayHostCommon,
 
   // Removes this as a |OobeUI::Observer| if it has been added as an observer.
   void StopObservingOobeUI();
+
+  // Create ExistingUserController and link it to LoginDisplayHostMojo so we can
+  // consume auth status events.
+  void CreateExistingUserController();
 
   // State associated with a pending authentication attempt.
   struct AuthState {
@@ -190,6 +198,9 @@ class LoginDisplayHostMojo : public LoginDisplayHostCommon,
 
   // Set if Gaia dialog is shown with prefilled email.
   base::Optional<AccountId> gaia_reauth_account_id_;
+
+  // Store which screen is currently displayed.
+  DisplayedScreen displayed_screen_ = DisplayedScreen::SIGN_IN_SCREEN;
 
   base::WeakPtrFactory<LoginDisplayHostMojo> weak_factory_{this};
 

@@ -10,6 +10,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/threading/hang_watcher.h"
 
 // -----------------------------------------------------------------------------
 // Usage documentation
@@ -149,6 +150,7 @@ class CategorizedWorkerPool;
 class DesktopCaptureDevice;
 class InProcessUtilityThread;
 class NestedMessagePumpAndroid;
+class NetworkServiceInstancePrivate;
 class PepperPrintSettingsManagerImpl;
 class RenderProcessHostImpl;
 class RenderWidgetHostViewMac;
@@ -187,6 +189,14 @@ class GpuChannelHost;
 namespace leveldb_env {
 class DBTracker;
 }
+namespace location {
+namespace nearby {
+namespace chrome {
+class ScheduledExecutor;
+class SubmittableExecutor;
+}  // namespace chrome
+}  // namespace nearby
+}  // namespace location
 namespace media {
 class AudioInputDevice;
 class AudioOutputDevice;
@@ -380,6 +390,7 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend class blink::DiskDataAllocator;
   friend class chromeos::MojoUtils;  // http://crbug.com/1055467
   friend class content::BrowserProcessSubThread;
+  friend class content::NetworkServiceInstancePrivate;
   friend class content::PepperPrintSettingsManagerImpl;
   friend class content::RenderProcessHostImpl;
   friend class content::RenderWidgetHostViewMac;  // http://crbug.com/121917
@@ -454,6 +465,8 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitives {
   friend class history_report::HistoryReportJniBridge;
   friend class internal::TaskTracker;
   friend class leveldb_env::DBTracker;
+  friend class location::nearby::chrome::ScheduledExecutor;
+  friend class location::nearby::chrome::SubmittableExecutor;
   friend class media::BlockingUrlProtocol;
   friend class mojo::core::ScopedIPCSupport;
   friend class net::MultiThreadedCertVerifierScopedAllowBaseSyncPrimitives;
@@ -571,6 +584,11 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {
 #if DCHECK_IS_ON()
   const bool was_disallowed_;
 #endif
+
+  // Since this object is used to indicate that sync primitives will be used to
+  // wait for an event ignore the current operation for hang watching purposes
+  // since the wait time duration is unknown.
+  base::HangWatchScopeDisabled hang_watch_scope_disabled_;
 
   DISALLOW_COPY_AND_ASSIGN(ScopedAllowBaseSyncPrimitivesOutsideBlockingScope);
 };

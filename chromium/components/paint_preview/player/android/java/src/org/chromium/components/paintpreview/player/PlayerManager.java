@@ -11,6 +11,8 @@ import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
 import android.widget.FrameLayout;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.TraceEvent;
@@ -21,9 +23,6 @@ import org.chromium.url.GURL;
 
 import java.util.HashMap;
 import java.util.Map;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 /**
  * This is the only public class in this package and is hence the access point of this component for
@@ -37,6 +36,7 @@ public class PlayerManager {
     private Runnable mViewReadyCallback;
     private static final String sInitEvent = "paint_preview PlayerManager init";
     private PlayerSwipeRefreshHandler mPlayerSwipeRefreshHandler;
+    private PlayerGestureListener mPlayerGestureListener;
     private boolean mIgnoreInitialScrollOffset;
 
     /**
@@ -48,6 +48,7 @@ public class PlayerManager {
      * @param refreshCallback Called when the paint preview should be refreshed.
      * @param viewReadyCallback Called when the view is ready. Will not be called if compositorError
      *     is called prior to the view being ready.
+     * @param userInteractionCallback Called when the use interacts with the paint preview.
      * @param backgroundColor The color used for the background.
      * @param compositorErrorCallback Called when the compositor has had an error (either during
      *     initialization or due to a disconnect).
@@ -56,22 +57,31 @@ public class PlayerManager {
      */
     public PlayerManager(GURL url, Context context,
             NativePaintPreviewServiceProvider nativePaintPreviewServiceProvider,
-            String directoryKey, @Nonnull LinkClickHandler linkClickHandler,
-            @Nullable Runnable refreshCallback, Runnable viewReadyCallback, int backgroundColor,
-            Runnable compositorErrorCallback, boolean ignoreInitialScrollOffset) {
+            String directoryKey, @NonNull LinkClickHandler linkClickHandler,
+            @Nullable Runnable refreshCallback, Runnable viewReadyCallback,
+            Runnable userInteractionCallback, int backgroundColor, Runnable compositorErrorCallback,
+            boolean ignoreInitialScrollOffset) {
         TraceEvent.startAsync(sInitEvent, hashCode());
         mContext = context;
         mDelegate = new PlayerCompositorDelegateImpl(nativePaintPreviewServiceProvider, url,
-                directoryKey, this::onCompositorReady, linkClickHandler, compositorErrorCallback);
+                directoryKey, this::onCompositorReady, compositorErrorCallback);
         mHostView = new FrameLayout(mContext);
         if (refreshCallback != null) {
             mPlayerSwipeRefreshHandler = new PlayerSwipeRefreshHandler(mContext, refreshCallback);
         }
+        mPlayerGestureListener =
+                new PlayerGestureListener(linkClickHandler, userInteractionCallback);
         mHostView.setLayoutParams(
                 new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         mHostView.setBackgroundColor(backgroundColor);
         mViewReadyCallback = viewReadyCallback;
         mIgnoreInitialScrollOffset = ignoreInitialScrollOffset;
+    }
+
+    public void setUserFrustrationCallback(Runnable userFrustrationCallback) {
+        PlayerUserFrustrationDetector userFrustrationDetector =
+                new PlayerUserFrustrationDetector(userFrustrationCallback);
+        mPlayerGestureListener.setUserFrustrationDetector(userFrustrationDetector);
     }
 
     /**
@@ -89,7 +99,7 @@ public class PlayerManager {
         mRootFrameCoordinator = new PlayerFrameCoordinator(mContext, mDelegate, rootFrame.getGuid(),
                 rootFrame.getContentWidth(), rootFrame.getContentHeight(),
                 rootFrame.getInitialScrollX(), rootFrame.getInitialScrollY(), true,
-                mPlayerSwipeRefreshHandler);
+                mPlayerSwipeRefreshHandler, mPlayerGestureListener);
         buildSubFrameCoordinators(mRootFrameCoordinator, rootFrame);
         mHostView.addView(mRootFrameCoordinator.getView(),
                 new FrameLayout.LayoutParams(
@@ -158,9 +168,15 @@ public class PlayerManager {
             PlayerFrameCoordinator childCoordinator = new PlayerFrameCoordinator(mContext,
                     mDelegate, childFrame.getGuid(), childFrame.getContentWidth(),
                     childFrame.getContentHeight(), childFrame.getInitialScrollX(),
-                    childFrame.getInitialScrollY(), false, null);
+                    childFrame.getInitialScrollY(), false, null, mPlayerGestureListener);
             buildSubFrameCoordinators(childCoordinator, childFrame);
             frameCoordinator.addSubFrame(childCoordinator, frame.getSubFrameClips()[i]);
+        }
+    }
+
+    public void setCompressOnClose(boolean compressOnClose) {
+        if (mDelegate != null) {
+            mDelegate.setCompressOnClose(compressOnClose);
         }
     }
 
@@ -173,5 +189,10 @@ public class PlayerManager {
 
     public View getView() {
         return mHostView;
+    }
+
+    @VisibleForTesting
+    public boolean checkRequiredBitmapsLoadedForTest() {
+        return mRootFrameCoordinator.checkRequiredBitmapsLoadedForTest();
     }
 }

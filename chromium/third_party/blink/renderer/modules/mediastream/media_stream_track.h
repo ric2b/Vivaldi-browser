@@ -50,18 +50,17 @@ class MODULES_EXPORT MediaStreamTrack
     : public EventTargetWithInlineData,
       public ActiveScriptWrappable<MediaStreamTrack>,
       public MediaStreamSource::Observer {
-  USING_GARBAGE_COLLECTED_MIXIN(MediaStreamTrack);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   MediaStreamTrack(ExecutionContext*, MediaStreamComponent*);
   MediaStreamTrack(ExecutionContext*,
                    MediaStreamComponent*,
-                   bool pan_tilt_zoom_allowed);
+                   base::OnceClosure callback);
   MediaStreamTrack(ExecutionContext*,
                    MediaStreamComponent*,
                    MediaStreamSource::ReadyState,
-                   bool pan_tilt_zoom_allowed);
+                   base::OnceClosure callback);
   ~MediaStreamTrack() override;
 
   String kind() const;

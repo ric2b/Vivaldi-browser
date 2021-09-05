@@ -22,8 +22,7 @@ const float kEpsilon = 0.00001;
 class DarkModeImageClassifierTest : public testing::Test {
  public:
   DarkModeImageClassifierTest() {
-    dark_mode_image_classifier_ =
-        DarkModeImageClassifier::MakeBitmapImageClassifier();
+    dark_mode_image_classifier_ = std::make_unique<DarkModeImageClassifier>();
   }
 
   // Loads the image from |file_name|.
@@ -149,6 +148,14 @@ TEST_F(DarkModeImageClassifierTest, FeaturesAndClassification) {
   EXPECT_NEAR(0.0151367f, features.color_buckets_ratio, kEpsilon);
   EXPECT_NEAR(0.0f, features.transparency_ratio, kEpsilon);
   EXPECT_NEAR(0.0f, features.background_ratio, kEpsilon);
+}
+
+TEST_F(DarkModeImageClassifierTest, InvalidImage) {
+  PaintImage paint_image;
+  SkRect src = SkRect::MakeWH(50, 50);
+  SkRect dst = SkRect::MakeWH(50, 50);
+  EXPECT_EQ(image_classifier()->Classify(paint_image, src, dst),
+            DarkModeClassification::kDoNotApplyFilter);
 }
 
 TEST_F(DarkModeImageClassifierTest, Caching) {

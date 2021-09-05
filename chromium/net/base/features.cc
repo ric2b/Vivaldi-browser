@@ -164,5 +164,19 @@ const base::Feature kTLSLegacyCryptoFallbackForMetrics{
 const base::Feature kUseLookalikesForNavigationSuggestions{
     "UseLookalikesForNavigationSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kReportPoorConnectivity{"ReportPoorConnectivity",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kPreemptiveMobileNetworkActivation{
+    "PreemptiveMobileNetworkActivation", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kLimitOpenUDPSockets{"LimitOpenUDPSockets",
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
+
+extern const base::FeatureParam<int> kLimitOpenUDPSocketsMax(
+    &kLimitOpenUDPSockets,
+    "LimitOpenUDPSocketsMax",
+    6000);
+
 }  // namespace features
 }  // namespace net

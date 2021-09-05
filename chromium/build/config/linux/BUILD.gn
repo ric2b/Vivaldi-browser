@@ -42,13 +42,10 @@ config("x11") {
     "xcb",
     "xcb-dri3",
     "Xcomposite",
-    "Xcursor",
     "Xdamage",
     "Xext",
     "Xfixes",
-    "Xi",
     "Xrender",
-    "Xtst",
   ]
 }
 
@@ -66,14 +63,6 @@ config("xfixes") {
 
 config("libcap") {
   libs = [ "cap" ]
-}
-
-config("xi") {
-  libs = [ "Xi" ]
-}
-
-config("xtst") {
-  libs = [ "Xtst" ]
 }
 
 config("libresolv") {

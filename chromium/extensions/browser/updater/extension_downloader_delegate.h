@@ -63,7 +63,10 @@ class ExtensionDownloaderDelegate {
   // DOWNLOADING_CRX_RETRY -> DOWNLOADING_CRX -> FINISHED.
   // Note: enum used for UMA. Do NOT reorder or remove entries. Don't forget to
   // update enums.xml (name: ExtensionInstallationDownloadingStage) when adding
-  // new entries.
+  // new entries. Don't forget to update device_management_backend.proto (name:
+  // ExtensionInstallReportLogEvent::DownloadingStage) when adding new entries.
+  // Don't forget to update ConvertDownloadingStageToProto method in
+  // ExtensionInstallEventLogCollector.
   enum class Stage {
     // Downloader just received extension download request.
     PENDING = 0,
@@ -158,6 +161,8 @@ class ExtensionDownloaderDelegate {
                 const base::Optional<int> response,
                 const int fetch_attempts);
     explicit FailureData(ManifestInvalidError manifest_invalid_error);
+    FailureData(ManifestInvalidError manifest_invalid_error,
+                const std::string& app_status_error);
     explicit FailureData(const std::string& additional_info);
     ~FailureData();
 
@@ -176,11 +181,14 @@ class ExtensionDownloaderDelegate {
     // only set when no update is available and install fails with the error
     // CRX_FETCH_URL_EMPTY.
     const base::Optional<std::string> additional_info;
+    // Type of app status error returned by update server on fetching the update
+    // manifest.
+    const base::Optional<std::string> app_status_error;
   };
 
   // A callback that is called to indicate if ExtensionDownloader should ignore
   // the cached entry and download a new .crx file.
-  typedef base::Callback<void(bool should_download)> InstallCallback;
+  using InstallCallback = base::OnceCallback<void(bool should_download)>;
 
   // One of the following 3 methods is always invoked for a given extension
   // id, if AddExtension() or AddPendingExtension() returned true when that
@@ -241,7 +249,7 @@ class ExtensionDownloaderDelegate {
                                            const GURL& download_url,
                                            const PingResult& ping_result,
                                            const std::set<int>& request_ids,
-                                           const InstallCallback& callback) = 0;
+                                           InstallCallback callback) = 0;
 
   // Invoked when an extension fails to load, but a retry is triggered.
   // It allows unittests to easily set up and verify resourse request and

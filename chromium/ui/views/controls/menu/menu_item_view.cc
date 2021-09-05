@@ -53,29 +53,26 @@ namespace views {
 
 namespace {
 
-// Difference in the font size (in pixels) between menu label font and "new"
-// badge font size.
-constexpr int kNewBadgeFontSizeAdjustment = -1;
-
-// Space between primary text and "new" badge.
-constexpr int kNewBadgeHorizontalMargin = 8;
-
-// Highlight size around "new" badge.
-constexpr gfx::Insets kNewBadgeInternalPadding{4};
-
-// The corner radius of the rounded rect for the "new" badge.
-constexpr int kNewBadgeCornerRadius = 3;
-static_assert(kNewBadgeCornerRadius <= kNewBadgeInternalPadding.left(),
-              "New badge corner radius should not exceed padding.");
+// Returns the appropriate font to use for the "new" badge based on the font
+// currently being used to render the title of the menu item.
+gfx::FontList DeriveNewBadgeFont(const gfx::FontList& primary_font) {
+  // Preferred font is slightly smaller and slightly more bold than the title
+  // font. The size change is required to make it look correct in the badge; we
+  // add a small degree of bold to prevent color smearing/blurring due to font
+  // smoothing. This ensures readability on all platforms and in both light and
+  // dark modes.
+  return primary_font.Derive(MenuConfig::kNewBadgeFontSizeAdjustment,
+                             gfx::Font::NORMAL, gfx::Font::Weight::MEDIUM);
+}
 
 // Returns the horizontal space required for the "new" badge.
 int GetNewBadgeRequiredWidth(const gfx::FontList& primary_font) {
   const base::string16 new_text =
       l10n_util::GetStringUTF16(IDS_MENU_ITEM_NEW_BADGE);
-  gfx::FontList badge_font =
-      primary_font.DeriveWithSizeDelta(kNewBadgeFontSizeAdjustment);
+  gfx::FontList badge_font = DeriveNewBadgeFont(primary_font);
   return gfx::GetStringWidth(new_text, badge_font) +
-         kNewBadgeInternalPadding.width() + 2 * kNewBadgeHorizontalMargin;
+         2 * MenuConfig::kNewBadgeInternalPadding +
+         2 * MenuConfig::kNewBadgeHorizontalMargin;
 }
 
 // Returns the highlight rect for the "new" badge given the font and text rect
@@ -83,8 +80,8 @@ int GetNewBadgeRequiredWidth(const gfx::FontList& primary_font) {
 gfx::Rect GetNewBadgeRectOutsetAroundText(const gfx::FontList& badge_font,
                                           const gfx::Rect& badge_text_rect) {
   gfx::Rect badge_rect = badge_text_rect;
-  badge_rect.Inset(
-      -gfx::AdjustVisualBorderForFont(badge_font, kNewBadgeInternalPadding));
+  badge_rect.Inset(-gfx::AdjustVisualBorderForFont(
+      badge_font, gfx::Insets(MenuConfig::kNewBadgeInternalPadding)));
   return badge_rect;
 }
 
@@ -174,7 +171,9 @@ base::string16 MenuItemView::GetTooltipText(const gfx::Point& p) const {
   }
 
   const MenuDelegate* delegate = GetDelegate();
-  CHECK(delegate);
+  if (!delegate)
+    return base::string16();
+
   gfx::Point location(p);
   ConvertPointToScreen(this, &location);
   return delegate->GetTooltipText(command_, location);
@@ -206,7 +205,8 @@ void MenuItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   } else {
     item_text = title_;
   }
-  node_data->SetName(GetAccessibleNameForMenuItem(item_text, GetMinorText()));
+  node_data->SetName(GetAccessibleNameForMenuItem(item_text, GetMinorText(),
+                                                  ShouldShowNewBadge()));
 
   switch (type_) {
     case Type::kSubMenu:
@@ -215,7 +215,8 @@ void MenuItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
       break;
     case Type::kCheckbox:
     case Type::kRadio: {
-      const bool is_checked = GetDelegate()->IsItemChecked(GetCommand());
+      const bool is_checked =
+          GetDelegate() && GetDelegate()->IsItemChecked(GetCommand());
       node_data->SetCheckedState(is_checked ? ax::mojom::CheckedState::kTrue
                                             : ax::mojom::CheckedState::kFalse);
     } break;
@@ -262,7 +263,8 @@ bool MenuItemView::IsBubble(MenuAnchorPosition anchor) {
 // static
 base::string16 MenuItemView::GetAccessibleNameForMenuItem(
     const base::string16& item_text,
-    const base::string16& minor_text) {
+    const base::string16& minor_text,
+    bool is_new_feature) {
   base::string16 accessible_name = item_text;
 
   // Filter out the "&" for accessibility clients.
@@ -282,6 +284,12 @@ base::string16 MenuItemView::GetAccessibleNameForMenuItem(
   if (!minor_text.empty()) {
     accessible_name.push_back(' ');
     accessible_name.append(minor_text);
+  }
+
+  if (is_new_feature) {
+    accessible_name.push_back(' ');
+    accessible_name.append(l10n_util::GetStringUTF16(
+        IDS_MENU_ITEM_NEW_BADGE_SCREEN_READER_MESSAGE));
   }
 
   return accessible_name;
@@ -748,6 +756,12 @@ void MenuItemView::SetAlerted() {
   SchedulePaint();
 }
 
+bool MenuItemView::ShouldShowNewBadge() const {
+  static const bool feature_enabled =
+      base::FeatureList::IsEnabled(features::kEnableNewBadgeOnMenuItems);
+  return feature_enabled && is_new_;
+}
+
 MenuItemView::MenuItemView(MenuItemView* parent,
                            int command,
                            MenuItemView::Type type) {
@@ -816,7 +830,7 @@ void MenuItemView::Init(MenuItemView* parent,
   if (type_ == Type::kCheckbox || type_ == Type::kRadio) {
     radio_check_image_view_ = AddChildView(std::make_unique<ImageView>());
     bool show_check_radio_icon =
-        type_ == Type::kRadio || (type_ == Type::kCheckbox &&
+        type_ == Type::kRadio || (type_ == Type::kCheckbox && GetDelegate() &&
                                   GetDelegate()->IsItemChecked(GetCommand()));
     radio_check_image_view_->SetVisible(show_check_radio_icon);
     radio_check_image_view_->set_can_process_events_within_subtree(false);
@@ -943,7 +957,6 @@ void MenuItemView::PaintButton(gfx::Canvas* canvas, PaintButtonMode mode) {
   if (forced_visual_selection_.has_value())
     render_selection = *forced_visual_selection_;
 
-  MenuDelegate* delegate = GetDelegate();
   // Render the background. As MenuScrollViewContainer draws the background, we
   // only need the background when we want it to look different, as when we're
   // selected.
@@ -966,10 +979,12 @@ void MenuItemView::PaintButton(gfx::Canvas* canvas, PaintButtonMode mode) {
   top_margin += (available_height - total_text_height) / 2;
 
   // Render the check.
-  if (type_ == Type::kCheckbox && delegate->IsItemChecked(GetCommand())) {
+  MenuDelegate* delegate = GetDelegate();
+  if (type_ == Type::kCheckbox && delegate &&
+      delegate->IsItemChecked(GetCommand())) {
     radio_check_image_view_->SetImage(GetMenuCheckImage(icon_color));
   } else if (type_ == Type::kRadio) {
-    const bool toggled = delegate->IsItemChecked(GetCommand());
+    const bool toggled = delegate && delegate->IsItemChecked(GetCommand());
     const gfx::VectorIcon& radio_icon =
         toggled ? kMenuRadioSelectedIcon : kMenuRadioEmptyIcon;
     const SkColor radio_icon_color = GetNativeTheme()->GetSystemColor(
@@ -1009,7 +1024,7 @@ void MenuItemView::PaintButton(gfx::Canvas* canvas, PaintButtonMode mode) {
     DrawNewBadge(
         canvas,
         gfx::Point(label_start + gfx::GetStringWidth(title(), style.font_list) +
-                       kNewBadgeHorizontalMargin,
+                       MenuConfig::kNewBadgeHorizontalMargin,
                    top_margin),
         style.font_list, flags);
   }
@@ -1333,8 +1348,7 @@ void MenuItemView::DrawNewBadge(gfx::Canvas* canvas,
                                 const gfx::Point& unmirrored_badge_start,
                                 const gfx::FontList& primary_font,
                                 int text_render_flags) {
-  gfx::FontList badge_font =
-      primary_font.DeriveWithSizeDelta(kNewBadgeFontSizeAdjustment);
+  gfx::FontList badge_font = DeriveNewBadgeFont(primary_font);
   const base::string16 new_text =
       l10n_util::GetStringUTF16(IDS_MENU_ITEM_NEW_BADGE);
 
@@ -1342,7 +1356,7 @@ void MenuItemView::DrawNewBadge(gfx::Canvas* canvas,
   gfx::Rect badge_text_bounds(unmirrored_badge_start,
                               gfx::GetStringSize(new_text, badge_font));
   badge_text_bounds.Offset(
-      kNewBadgeInternalPadding.left(),
+      MenuConfig::kNewBadgeInternalPadding,
       gfx::GetFontCapHeightCenterOffset(primary_font, badge_font));
   if (base::i18n::IsRTL())
     badge_text_bounds.set_x(GetMirroredXForRect(badge_text_bounds));
@@ -1354,7 +1368,7 @@ void MenuItemView::DrawNewBadge(gfx::Canvas* canvas,
   new_flags.setColor(background_color);
   canvas->DrawRoundRect(
       GetNewBadgeRectOutsetAroundText(badge_font, badge_text_bounds),
-      kNewBadgeCornerRadius, new_flags);
+      MenuConfig::kNewBadgeCornerRadius, new_flags);
 
   // Render the badge text.
   const SkColor foreground_color = GetNativeTheme()->GetSystemColor(
@@ -1438,12 +1452,6 @@ bool MenuItemView::HasChecksOrRadioButtons() const {
   return std::any_of(
       menu_items.cbegin(), menu_items.cend(),
       [](const auto* item) { return item->HasChecksOrRadioButtons(); });
-}
-
-bool MenuItemView::ShouldShowNewBadge() const {
-  static const bool feature_enabled =
-      base::FeatureList::IsEnabled(features::kEnableNewBadgeOnMenuItems);
-  return feature_enabled && is_new_;
 }
 
 BEGIN_METADATA(MenuItemView)

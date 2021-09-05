@@ -9,6 +9,7 @@
 #include <lib/fidl/cpp/binding.h>
 
 #include "base/atomicops.h"
+#include "base/callback.h"
 #include "base/containers/flat_set.h"
 #include "base/gtest_prod_util.h"
 #include "base/threading/thread_checker.h"
@@ -22,9 +23,9 @@ class NET_EXPORT_PRIVATE NetworkChangeNotifierFuchsia
     : public NetworkChangeNotifier {
  public:
   // Registers for asynchronous notifications of changes to network interfaces.
-  // Interfaces can be filtered out by passing in |required_features|, which is
-  // defined in fuchsia::hardware::ethernet.
-  explicit NetworkChangeNotifierFuchsia(uint32_t required_features);
+  // Interfaces are filtered by |required_features|.
+  explicit NetworkChangeNotifierFuchsia(
+      fuchsia::hardware::ethernet::Features required_features);
   ~NetworkChangeNotifierFuchsia() override;
 
   // NetworkChangeNotifier implementation.
@@ -34,11 +35,10 @@ class NET_EXPORT_PRIVATE NetworkChangeNotifierFuchsia
   friend class NetworkChangeNotifierFuchsiaTest;
 
   // For testing purposes. Receives a |netstack| pointer for easy mocking.
-  // Interfaces can be filtered out by passing in |required_features|, which is
-  // defined in fuchsia::hardware::ethernet.
+  // Interfaces are filtered by |required_features|.
   NetworkChangeNotifierFuchsia(
-      fuchsia::netstack::NetstackPtr netstack,
-      uint32_t required_features,
+      fidl::InterfaceHandle<fuchsia::netstack::Netstack> netstack,
+      fuchsia::hardware::ethernet::Features required_features,
       SystemDnsConfigChangeNotifier* system_dns_config_notifier = nullptr);
 
   // Forwards the network interface list along with the result of
@@ -53,11 +53,14 @@ class NET_EXPORT_PRIVATE NetworkChangeNotifierFuchsia
       std::vector<fuchsia::netstack::NetInterface> interfaces,
       std::vector<fuchsia::netstack::RouteTableEntry> table);
 
-  // Bitmap of required features for an interface to be taken into account. The
-  // features are defined in fuchsia::hardware::ethernet.
-  const uint32_t required_features_;
+  // Required features for an interface to be taken into account.
+  const fuchsia::hardware::ethernet::Features required_features_;
 
   fuchsia::netstack::NetstackPtr netstack_;
+
+  // Used to allow the constructor to block until the initial state is received
+  // from |netstack_|.
+  base::OnceClosure on_initial_interfaces_received_;
 
   // The ConnectionType of the default network interface, stored as an atomic
   // 32-bit int for safe concurrent access.

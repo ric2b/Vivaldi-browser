@@ -26,12 +26,12 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "components/autofill/content/renderer/field_data_manager.h"
 #include "components/autofill/core/common/autofill_data_validation.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_regexes.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/autofill_util.h"
+#include "components/autofill/core/common/field_data_manager.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "content/public/renderer/render_frame.h"
@@ -1087,7 +1087,8 @@ void ForEachMatchingFormFieldCommon(
         // string. To tell the difference between the values entered by the user
         // and the site, we'll sanitize the value. If the sanitized value is
         // empty, it means that the site has filled the field, in this case, the
-        // field is not skipped.
+        // field is not skipped. Nevertheless the below condition does not hold
+        // for sites set the |kValue| attribute to the user-input value.
         (IsAutofillableInputElement(input_element) ||
          IsTextAreaElement(*element)) &&
         element->UserHasEditedTheField() &&

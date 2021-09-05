@@ -4,19 +4,17 @@
 
 import("//build/config/chromecast_build.gni")
 import("//build/config/features.gni")
-import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//content/common/features.gni")
 import("//media/media_options.gni")
 import("//ppapi/buildflags/buildflags.gni")
-import("//printing/buildflags/buildflags.gni")
 import("//third_party/webrtc/webrtc.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
 if (is_component_build) {
-  link_target_type = "jumbo_source_set"
+  link_target_type = "source_set"
 } else {
-  link_target_type = "jumbo_static_library"
+  link_target_type = "static_library"
 }
 
 target(link_target_type, "renderer") {
@@ -47,6 +45,8 @@ target(link_target_type, "renderer") {
     "accessibility/render_accessibility_impl.h",
     "accessibility/render_accessibility_manager.cc",
     "accessibility/render_accessibility_manager.h",
+    "agent_scheduling_group.cc",
+    "agent_scheduling_group.h",
     "android/synchronous_layer_tree_frame_sink_impl.cc",
     "android/synchronous_layer_tree_frame_sink_impl.h",
     "browser_exposed_renderer_interfaces.cc",
@@ -75,35 +75,18 @@ target(link_target_type, "renderer") {
     "frame_blame_context.h",
     "frame_owner_properties_converter.cc",
     "frame_owner_properties_converter.h",
-    "frame_swap_message_queue.cc",
-    "frame_swap_message_queue.h",
     "gpu_benchmarking_extension.cc",
     "gpu_benchmarking_extension.h",
     "history_entry.cc",
     "history_entry.h",
     "history_serialization.cc",
     "history_serialization.h",
-    "ime_event_guard.cc",
-    "ime_event_guard.h",
     "impression_conversions.cc",
     "impression_conversions.h",
     "in_process_renderer_thread.cc",
     "in_process_renderer_thread.h",
-    "input/frame_input_handler_impl.cc",
-    "input/frame_input_handler_impl.h",
-    "input/input_event_prediction.cc",
-    "input/input_event_prediction.h",
     "input/input_target_client_impl.cc",
     "input/input_target_client_impl.h",
-    "input/main_thread_event_queue.cc",
-    "input/main_thread_event_queue.h",
-    "input/main_thread_event_queue_task.h",
-    "input/main_thread_event_queue_task_list.cc",
-    "input/main_thread_event_queue_task_list.h",
-    "input/widget_input_handler_impl.cc",
-    "input/widget_input_handler_impl.h",
-    "input/widget_input_handler_manager.cc",
-    "input/widget_input_handler_manager.h",
     "internal_document_state_data.cc",
     "internal_document_state_data.h",
     "java/gin_java_bridge_dispatcher.cc",
@@ -116,16 +99,8 @@ target(link_target_type, "renderer") {
     "java/gin_java_function_invocation_helper.h",
     "loader/child_url_loader_factory_bundle.cc",
     "loader/child_url_loader_factory_bundle.h",
-    "loader/code_cache_loader_impl.cc",
-    "loader/code_cache_loader_impl.h",
-    "loader/frame_request_blocker.cc",
-    "loader/frame_request_blocker.h",
-    "loader/internet_disconnected_web_url_loader.cc",
-    "loader/internet_disconnected_web_url_loader.h",
     "loader/navigation_body_loader.cc",
     "loader/navigation_body_loader.h",
-    "loader/navigation_response_override_parameters.cc",
-    "loader/navigation_response_override_parameters.h",
     "loader/request_extra_data.cc",
     "loader/request_extra_data.h",
     "loader/resource_dispatcher.cc",
@@ -211,12 +186,8 @@ target(link_target_type, "renderer") {
     "navigation_state.h",
     "net_info_helper.cc",
     "net_info_helper.h",
-    "performance_manager/v8_per_frame_memory_reporter_impl.cc",
-    "performance_manager/v8_per_frame_memory_reporter_impl.h",
     "peripheral_content_heuristic.cc",
     "peripheral_content_heuristic.h",
-    "queue_message_swap_promise.cc",
-    "queue_message_swap_promise.h",
     "render_frame_impl.cc",
     "render_frame_impl.h",
     "render_frame_metadata_observer_impl.cc",
@@ -405,6 +376,7 @@ target(link_target_type, "renderer") {
     "//ui/base",
     "//ui/base/clipboard",
     "//ui/base/cursor:cursor_base",
+    "//ui/base/dragdrop/mojom:mojom_shared",
     "//ui/base/ime",
     "//ui/display",
     "//ui/events:dom_keycode_converter",
@@ -415,6 +387,7 @@ target(link_target_type, "renderer") {
     "//ui/latency",
     "//ui/native_theme",
     "//ui/surface",
+    "//url",
     "//v8",
   ]
   allow_circular_includes_from = []
@@ -422,11 +395,6 @@ target(link_target_type, "renderer") {
   if (is_android) {
     set_sources_assignment_filter([])
     sources += [
-      "input/synchronous_compositor_proxy.cc",
-      "input/synchronous_compositor_proxy.h",
-      "input/synchronous_compositor_registry.h",
-      "input/synchronous_layer_tree_frame_sink.h",
-
       # Add back the Linux file which Android shares.
       "render_view_linux.cc",
     ]
@@ -452,15 +420,8 @@ target(link_target_type, "renderer") {
     ]
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     deps += [ "//components/services/font/public/cpp" ]
-  }
-
-  if (is_mac) {
-    sources += [
-      "text_input_client_observer.cc",
-      "text_input_client_observer.h",
-    ]
   }
 
   if (is_fuchsia) {
@@ -477,6 +438,7 @@ target(link_target_type, "renderer") {
       "//media/fuchsia/audio",
       "//media/fuchsia/cdm/client",
       "//media/fuchsia/mojom",
+      "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
     ]
   }
 
@@ -654,11 +616,7 @@ target(link_target_type, "renderer") {
     ]
   }
 
-  if (enable_basic_printing) {
-    deps += [ "//printing" ]
-  }
-
-  if (is_linux || is_android) {
+  if (is_linux || is_chromeos || is_android) {
     deps += [ "//sandbox:sandbox_buildflags" ]
   }
 

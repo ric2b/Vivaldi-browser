@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Күндөн калкалоочу көз айнек</translation>
 <translation id="115443833402798225">Хангул Ахнматае</translation>
 <translation id="1155759005174418845">Каталанча</translation>
+<translation id="1172970565351728681">Болжол менен <ph name="REMAINING_TIME" /> калды</translation>
 <translation id="1173894706177603556">Атын өзгөртүү</translation>
 <translation id="117624967391683467"><ph name="FILE_NAME" /> көчүрүлүүдө…</translation>
 <translation id="1178581264944972037">Бир азга токтотуу</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">"<ph name="FILENAME" />" деген файл мурунтан эле бар. Эмне кыласыз?</translation>
 <translation id="2121825465123208577">Өлчөмүн өзгөртүү</translation>
 <translation id="2136953289241069843">Транслитерация (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">"<ph name="PATH" />" ачылган жок: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Жараксыз символ: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Вьетнамча баскычтоп (TCVN)</translation>
 <translation id="2168214441502403371">Персче баскычтоп</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Менчик укугу <ph name="DESTINATION_DOMAIN" /> доменине өткөрүлүп берилет.</translation>
 <translation id="3241720467332021590">Ирландча</translation>
 <translation id="3245321423178950146">Белгисиз аткаруучу</translation>
+<translation id="3248185426436836442">Күтүлүүдө</translation>
 <translation id="3252266817569339921">Французча</translation>
 <translation id="3254434849914415189"><ph name="FILE_TYPE" /> файлдары үчүн демейки колдонмону тандаңыз:</translation>
 <translation id="3264582393905923483">Контекст</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Жаздырылган жылы</translation>
 <translation id="3338239663705455570">Словенче баскычтоп</translation>
 <translation id="3353984535370177728">Жүктөлө турган куржунду тандоо</translation>
+<translation id="3356580349448036450">Аяктады</translation>
 <translation id="3399597614303179694">Македония баскычтобу</translation>
 <translation id="3414856743105198592">Суурулма каражат форматталганда, андагы бардык дайындар өчүп калат. Уланта бересизби?</translation>
 <translation id="3437801641691368414">Түзүлгөн убакыты</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Файлдарды "<ph name="FOLDER_NAME" />" папкасына жылдырууга уруксатыңыз жок.</translation>
 <translation id="3786301125658655746">Офлайндасыз</translation>
 <translation id="3789841737615482174">Орнотуу</translation>
+<translation id="3793469551756281394">Болжол менен <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /> калды</translation>
 <translation id="3798449238516105146">Версия</translation>
 <translation id="3801082500826908679">Фарерче</translation>
 <translation id="3809272675881623365">Коён</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Бул папка Windows менен бөлүшүлдү</translation>
 <translation id="4487088045714738411">Белгийче баскычтоп</translation>
 <translation id="4522570452068850558">Чоо-жайлары</translation>
+<translation id="4542387084127299777">"<ph name="PATH" />" ачылган жок</translation>
 <translation id="4552678318981539154">Көбүрөөк сактоо мейкиндигин сатып алыңыз…</translation>
 <translation id="4559767610552730302">Боке</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> файл</translation>
@@ -510,6 +514,7 @@
 <translation id="6629841649550503054">Бардык нерселердин камдык көчүрмөсү <ph name="BEGIN_LINK" />Google Drive'га<ph name="END_LINK" /> сакталды!</translation>
 <translation id="6643016212128521049">Тазалоо</translation>
 <translation id="6650726141019353908">Кызгылтым көпөлөк</translation>
+<translation id="6657585470893396449">Сырсөз</translation>
 <translation id="6710213216561001401">Мурунку</translation>
 <translation id="6718273304615422081">Кысылууда…</translation>
 <translation id="6751256176799620176">1 куржун тандалды</translation>
@@ -550,7 +555,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Орнотулбай калды.</translation>
 <translation id="7040138676081995583">Төмөнкү менен ачыңыз…</translation>
-<translation id="7059566040011178088"><ph name="REMAINING_TIME" /> азыраак</translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> нерсе тандалды</translation>
 <translation id="7106346894903675391">Көбүрөөк сактоо мейкиндигин сатып алыңыз…</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;Drive'ды издөө&lt;/em&gt;</translation>
@@ -661,7 +665,6 @@
 <translation id="8193175696669055101">Түзмөктүн үлгүсү</translation>
 <translation id="8208580316430297579">Санат иши</translation>
 <translation id="8223479393428528563">Бул файлдарды оффлайнда колдонуу үчүн, онлайн режимине кайтып, файлдарды оң баскыч менен чыкылдатып, андан соң <ph name="OFFLINE_CHECKBOX_NAME" /> параметрин тандаңыз.</translation>
-<translation id="8231972167769262174"><ph name="REMAINING_TIME" /> жөнүндө</translation>
 <translation id="8249296373107784235">Токтотуу</translation>
 <translation id="8261506727792406068">Жок кылуу</translation>
 <translation id="8269755669432358899">Файлдардын маалымат камтылган панелдерин жыйыштыруу</translation>
@@ -724,6 +727,7 @@
 <translation id="9065203028668620118">Түзөтүү</translation>
 <translation id="9099674669267916096">Барактардын саны</translation>
 <translation id="9110990317705400362">Серептөө аракетиңиздин коопсуздугун чыңдоо үчүн болгон аракетибизди жумшап жатабыз. Буга чейин серепчиңизге кеңейтүү кошууну вебсайттар сунуштап турушчу. Ал эми Google Chrome'дун эң акыркы версияларында керектүү кеңейтүүлөрдү Кеңейтүүлөр бетинен кошуп, орното турганыңызды Chrome'го өзүңүз ачык билдиресиз. <ph name="BEGIN_LINK" />Көбүрөөк билүү<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Кулпуну ачуу</translation>
 <translation id="912419004897138677">Кодек</translation>
 <translation id="9129931661813833980">Папканы кадап коюу</translation>
 <translation id="9130775360844693113">"<ph name="DESTINATION_NAME" />" жалпы дискинин колдонуучулары бул файлдарды колдоно алышат.</translation>

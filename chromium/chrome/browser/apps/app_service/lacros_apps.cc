@@ -6,11 +6,14 @@
 
 #include <utility>
 
+#include "ash/public/cpp/app_menu_constants.h"
 #include "base/bind.h"
 #include "build/branding_buildflags.h"
 #include "chrome/browser/apps/app_service/app_icon_factory.h"
-#include "chrome/browser/chromeos/lacros/lacros_manager.h"
+#include "chrome/browser/apps/app_service/menu_util.h"
+#include "chrome/browser/chromeos/crosapi/browser_manager.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
+#include "chrome/grit/generated_resources.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "extensions/common/constants.h"
@@ -68,9 +71,9 @@ apps::mojom::IconKeyPtr LacrosApps::NewIconKey(State state) {
 void LacrosApps::Connect(
     mojo::PendingRemote<apps::mojom::Subscriber> subscriber_remote,
     apps::mojom::ConnectOptionsPtr opts) {
-  bool is_ready = chromeos::LacrosManager::Get()->IsReady();
+  bool is_ready = crosapi::BrowserManager::Get()->IsReady();
   if (!is_ready) {
-    chromeos::LacrosManager::Get()->SetLoadCompleteCallback(base::BindOnce(
+    crosapi::BrowserManager::Get()->SetLoadCompleteCallback(base::BindOnce(
         &LacrosApps::OnLoadComplete, weak_factory_.GetWeakPtr()));
   }
   std::vector<apps::mojom::AppPtr> apps;
@@ -84,16 +87,16 @@ void LacrosApps::Connect(
 
 void LacrosApps::LoadIcon(const std::string& app_id,
                           apps::mojom::IconKeyPtr icon_key,
-                          apps::mojom::IconCompression icon_compression,
+                          apps::mojom::IconType icon_type,
                           int32_t size_hint_in_dip,
                           bool allow_placeholder_icon,
                           LoadIconCallback callback) {
   if (icon_key &&
       icon_key->resource_id != apps::mojom::IconKey::kInvalidResourceId) {
-    LoadIconFromResource(
-        icon_compression, size_hint_in_dip, icon_key->resource_id,
-        /*is_placeholder_icon=*/false,
-        static_cast<IconEffects>(icon_key->icon_effects), std::move(callback));
+    LoadIconFromResource(icon_type, size_hint_in_dip, icon_key->resource_id,
+                         /*is_placeholder_icon=*/false,
+                         static_cast<IconEffects>(icon_key->icon_effects),
+                         std::move(callback));
     return;
   }
   // On failure, we still run the callback, with the zero IconValue.
@@ -105,15 +108,23 @@ void LacrosApps::Launch(const std::string& app_id,
                         apps::mojom::LaunchSource launch_source,
                         int64_t display_id) {
   DCHECK_EQ(extension_misc::kLacrosAppId, app_id);
-  chromeos::LacrosManager::Get()->Start();
+  crosapi::BrowserManager::Get()->NewWindow();
 }
 
 void LacrosApps::GetMenuModel(const std::string& app_id,
                               apps::mojom::MenuType menu_type,
                               int64_t display_id,
                               GetMenuModelCallback callback) {
-  // No menu items.
-  std::move(callback).Run(apps::mojom::MenuItems::New());
+  apps::mojom::MenuItemsPtr menu_items = apps::mojom::MenuItems::New();
+
+  // TODO(crbug.com/1108462): "New Window" menu should be hidden if
+  // incognito only mode is enforced by user's profile pref.
+  AddCommandItem((menu_type == apps::mojom::MenuType::kAppList)
+                     ? ash::APP_CONTEXT_MENU_NEW_WINDOW
+                     : ash::MENU_NEW_WINDOW,
+                 IDS_APP_LIST_NEW_WINDOW, &menu_items);
+
+  std::move(callback).Run(std::move(menu_items));
 }
 
 void LacrosApps::OnLoadComplete(bool success) {

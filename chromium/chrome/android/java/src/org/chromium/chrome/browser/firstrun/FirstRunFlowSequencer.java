@@ -10,7 +10,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.text.TextUtils;
+import android.os.SystemClock;
 
 import androidx.annotation.VisibleForTesting;
 
@@ -18,7 +18,9 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.CommandLine;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -80,9 +82,12 @@ public abstract class FirstRunFlowSequencer  {
             return;
         }
 
+        long childAccountStatusStart = SystemClock.elapsedRealtime();
         new AndroidChildAccountHelper() {
             @Override
             public void onParametersReady() {
+                RecordHistogram.recordTimesHistogram("MobileFre.ChildAccountStatusDuration",
+                        SystemClock.elapsedRealtime() - childAccountStatusStart);
                 initializeSharedState(getChildAccountStatus());
                 processFreEnvironmentPreNative();
             }
@@ -112,11 +117,6 @@ public abstract class FirstRunFlowSequencer  {
     @VisibleForTesting
     protected List<Account> getGoogleAccounts() {
         return AccountManagerFacadeProvider.getInstance().tryGetGoogleAccounts();
-    }
-
-    @VisibleForTesting
-    protected boolean hasAnyUserSeenToS() {
-        return ToSAckedReceiver.checkAnyUserHasSeenToS();
     }
 
     @VisibleForTesting
@@ -156,6 +156,9 @@ public abstract class FirstRunFlowSequencer  {
 
     void initializeSharedState(@ChildAccountStatus.Status int childAccountStatus) {
         mChildAccountStatus = childAccountStatus;
+        // Note that fetching accounts isn't instrumented because it's typically very fast. It seems
+        // fetching child account status causes accounts to be cached. Revisit this if the ordering
+        // of these calls is changed.
         mGoogleAccounts = getGoogleAccounts();
     }
 
@@ -218,8 +221,8 @@ public abstract class FirstRunFlowSequencer  {
      * @param showSignInSettings Whether the user selected to see the settings once signed in.
      */
     public static void markFlowAsCompleted(String signInAccountName, boolean showSignInSettings) {
-        // When the user accepts ToS in the Setup Wizard (see ToSAckedReceiver), we do not
-        // show the ToS page to the user because the user has already accepted one outside FRE.
+        // When the user accepts ToS in the Setup Wizard, we do not show the ToS page to the user
+        // because the user has already accepted one outside FRE.
         if (!FirstRunUtils.isFirstRunEulaAccepted()) {
             FirstRunUtils.setEulaAccepted();
         }
@@ -229,29 +232,41 @@ public abstract class FirstRunFlowSequencer  {
     }
 
     /**
-     * Checks if the First Run needs to be launched.
-     * @param fromIntent The intent that was used to launch Chrome.
+     * Checks if the First Run Experience needs to be launched.
      * @param preferLightweightFre Whether to prefer the Lightweight First Run Experience.
+     * @param fromIntent Intent used to launch the caller.
      * @return Whether the First Run Experience needs to be launched.
      */
     public static boolean checkIfFirstRunIsNecessary(
-            Intent fromIntent, boolean preferLightweightFre) {
+            boolean preferLightweightFre, Intent fromIntent) {
+        boolean isCct = fromIntent.getBooleanExtra(
+                                FirstRunActivityBase.EXTRA_CHROME_LAUNCH_INTENT_IS_CCT, false)
+                || LaunchIntentDispatcher.isCustomTabIntent(fromIntent);
+        return checkIfFirstRunIsNecessary(preferLightweightFre, isCct);
+    }
+
+    /**
+     * Checks if the First Run Experience needs to be launched.
+     * @param preferLightweightFre Whether to prefer the Lightweight First Run Experience.
+     * @param isCct Whether this check is being made in the context of a CCT.
+     * @return Whether the First Run Experience needs to be launched.
+     */
+    public static boolean checkIfFirstRunIsNecessary(boolean preferLightweightFre, boolean isCct) {
         // If FRE is disabled (e.g. in tests), proceed directly to the intent handling.
         if (CommandLine.getInstance().hasSwitch(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
                 || ApiCompatibilityUtils.isDemoUser()
                 || ApiCompatibilityUtils.isRunningInUserTestHarness()) {
             return false;
         }
-
-        // If Chrome isn't opened via the Chrome icon, and the user accepted the ToS
-        // in the Setup Wizard, skip any First Run Experience screens and proceed directly
-        // to the intent handling.
-        final boolean fromChromeIcon =
-                fromIntent != null && TextUtils.equals(fromIntent.getAction(), Intent.ACTION_MAIN);
-        if (!fromChromeIcon && ToSAckedReceiver.checkAnyUserHasSeenToS()) return false;
-
         if (FirstRunStatus.getFirstRunFlowComplete()) {
             // Promo pages are removed, so there is nothing else to show in FRE.
+            return false;
+        }
+        if (isCct && FirstRunStatus.isEphemeralSkipFirstRun()) {
+            // Domain policies may have caused CCTs to skip the FRE. While this needs to be figured
+            // out at runtime for each app restart, it should apply to all CCTs for the duration of
+            // the app's lifetime.
+            // TODO(https://crbug.com/1108582): Replace this with a shared pref.
             return false;
         }
         return !preferLightweightFre
@@ -272,7 +287,7 @@ public abstract class FirstRunFlowSequencer  {
     public static boolean launch(Context caller, Intent fromIntent, boolean requiresBroadcast,
             boolean preferLightweightFre) {
         // Check if the user needs to go through First Run at all.
-        if (!checkIfFirstRunIsNecessary(fromIntent, preferLightweightFre)) return false;
+        if (!checkIfFirstRunIsNecessary(preferLightweightFre, fromIntent)) return false;
 
         String intentUrl = IntentHandler.getUrlFromIntent(fromIntent);
         Uri uri = intentUrl != null ? Uri.parse(intentUrl) : null;
@@ -284,7 +299,7 @@ public abstract class FirstRunFlowSequencer  {
         Log.d(TAG, "Redirecting user through FRE.");
 
         // Launch the async restriction checking as soon as we know we'll be running FRE.
-        FirstRunAppRestrictionInfo.getInstance().initialize();
+        FirstRunAppRestrictionInfo.startInitializationHint();
 
         if ((fromIntent.getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {
             FreIntentCreator intentCreator = new FreIntentCreator();

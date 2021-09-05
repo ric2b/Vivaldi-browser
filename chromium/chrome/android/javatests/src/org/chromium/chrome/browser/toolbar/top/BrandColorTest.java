@@ -4,13 +4,13 @@
 
 package org.chromium.chrome.browser.toolbar.top;
 
-import android.annotation.TargetApi;
 import android.graphics.Color;
 import android.os.Build;
 import android.text.TextUtils;
 
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -24,7 +24,7 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
@@ -39,8 +39,6 @@ import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.UiRestriction;
 import org.chromium.ui.util.ColorUtils;
-
-import java.util.concurrent.Callable;
 
 /**
  * Contains tests for the brand color feature.
@@ -72,18 +70,13 @@ public class BrandColorTest {
                 + "</html>");
     }
 
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     private void checkForBrandColor(final int brandColor) {
-        CriteriaHelper.pollUiThread(
-                new Criteria("The toolbar background doesn't contain the right color") {
-                    @Override
-                    public boolean isSatisfied() {
-                        if (mToolbarDataProvider.getPrimaryColor() != brandColor) return false;
-                        return mToolbarDataProvider.getPrimaryColor()
-                                == mToolbar.getBackgroundDrawable().getColor();
-                    }
-                });
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && !SysUtils.isLowEndDevice()) {
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(mToolbarDataProvider.getPrimaryColor(), Matchers.is(brandColor));
+            Criteria.checkThat(mToolbarDataProvider.getPrimaryColor(),
+                    Matchers.is(mToolbar.getBackgroundDrawable().getColor()));
+        });
+        if (!SysUtils.isLowEndDevice()) {
             final int expectedStatusBarColor;
             if (mSupportsDarkStatusIcons) {
                 expectedStatusBarColor = brandColor == mDefaultColor ? Color.WHITE : brandColor;
@@ -92,13 +85,10 @@ public class BrandColorTest {
                         ? Color.BLACK
                         : ColorUtils.getDarkenedColorForStatusBar(brandColor);
             }
-            CriteriaHelper.pollUiThread(
-                    Criteria.equals(expectedStatusBarColor, new Callable<Integer>() {
-                        @Override
-                        public Integer call() {
-                            return mActivityTestRule.getActivity().getWindow().getStatusBarColor();
-                        }
-                    }));
+            CriteriaHelper.pollUiThread(() -> {
+                Criteria.checkThat(mActivityTestRule.getActivity().getWindow().getStatusBarColor(),
+                        Matchers.is(expectedStatusBarColor));
+            });
         }
     }
 

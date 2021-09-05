@@ -195,7 +195,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   // Overridden from ui::TextInputClient:
   void SetCompositionText(const ui::CompositionText& composition) override;
-  void ConfirmCompositionText(bool keep_selection) override;
+  uint32_t ConfirmCompositionText(bool keep_selection) override;
   void ClearCompositionText() override;
   void InsertText(const base::string16& text) override;
   void InsertChar(const ui::KeyEvent& event) override;
@@ -233,9 +233,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 #endif
 
 #if defined(OS_CHROMEOS)
-  // Set the autocorrect range
+  gfx::Range GetAutocorrectRange() const override;
+  gfx::Rect GetAutocorrectCharacterBounds() const override;
   bool SetAutocorrectRange(const base::string16& autocorrect_text,
                            const gfx::Range& range) override;
+  void ClearAutocorrectRange() override;
 #endif
 
 #if defined(OS_WIN)
@@ -697,6 +699,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   // See OnDisplayMetricsChanged() for details.
   bool needs_to_update_display_metrics_ = false;
+
+  // Saved value of WebPreferences' |double_tap_to_zoom_enabled|.
+  bool double_tap_to_zoom_enabled_ = false;
 
   Visibility visibility_ = Visibility::HIDDEN;
 

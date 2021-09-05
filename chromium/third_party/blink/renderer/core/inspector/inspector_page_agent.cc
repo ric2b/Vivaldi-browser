@@ -34,7 +34,7 @@
 
 #include "base/containers/span.h"
 #include "build/build_config.h"
-#include "third_party/blink/public/platform/web_screen_info.h"
+#include "third_party/blink/public/common/widget/screen_info.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_regexp.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
@@ -60,6 +60,7 @@
 #include "third_party/blink/renderer/core/inspector/inspected_frames.h"
 #include "third_party/blink/renderer/core/inspector/inspector_css_agent.h"
 #include "third_party/blink/renderer/core/inspector/inspector_resource_content_loader.h"
+#include "third_party/blink/renderer/core/inspector/protocol/Page.h"
 #include "third_party/blink/renderer/core/inspector/v8_inspector_string.h"
 #include "third_party/blink/renderer/core/layout/adjust_for_absolute_zoom.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
@@ -70,6 +71,7 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
+#include "third_party/blink/renderer/core/script/classic_script.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
 #include "third_party/blink/renderer/platform/loader/fetch/memory_cache.h"
@@ -77,6 +79,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/loader/fetch/text_resource_decoder_options.h"
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
+#include "third_party/blink/renderer/platform/network/network_utils.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/text/base64.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_utf8_adaptor.h"
@@ -881,9 +884,9 @@ void InspectorPageAgent::DidClearDocumentOfWindowObject(LocalFrame* frame) {
     const String source = scripts_to_evaluate_on_load_.Get(key);
     const String world_name = worlds_to_evaluate_on_load_.Get(key);
     if (world_name.IsEmpty()) {
-      frame->GetScriptController().ExecuteScriptInMainWorld(
-          source, ScriptSourceLocationType::kUnknown,
-          ScriptController::kExecuteScriptWhenScriptsDisabled);
+      ClassicScript::CreateUnspecifiedScript(ScriptSourceCode(source))
+          ->RunScript(frame,
+                      ScriptController::kExecuteScriptWhenScriptsDisabled);
       continue;
     }
 
@@ -895,14 +898,14 @@ void InspectorPageAgent::DidClearDocumentOfWindowObject(LocalFrame* frame) {
     // Note: An error event in an isolated world will never be dispatched to
     // a foreign world.
     v8::HandleScope handle_scope(V8PerIsolateData::MainThreadIsolate());
-    frame->GetScriptController().ExecuteScriptInIsolatedWorld(
-        world->GetWorldId(), source, KURL(), SanitizeScriptErrors::kSanitize);
+    ClassicScript::CreateUnspecifiedScript(ScriptSourceCode(source))
+        ->RunScriptInIsolatedWorldAndReturnValue(frame, world->GetWorldId());
   }
 
   if (!script_to_evaluate_on_load_once_.IsEmpty()) {
-    frame->GetScriptController().ExecuteScriptInMainWorld(
-        script_to_evaluate_on_load_once_, ScriptSourceLocationType::kUnknown,
-        ScriptController::kExecuteScriptWhenScriptsDisabled);
+    ClassicScript::CreateUnspecifiedScript(
+        ScriptSourceCode(script_to_evaluate_on_load_once_))
+        ->RunScript(frame, ScriptController::kExecuteScriptWhenScriptsDisabled);
   }
 }
 
@@ -1060,6 +1063,33 @@ void InspectorPageAgent::WindowOpen(Document* document,
   GetFrontend()->flush();
 }
 
+namespace {
+protocol::Page::SecureContextType CreateProtocolSecureContextType(
+    SecureContextModeExplanation explanation) {
+  switch (explanation) {
+    case SecureContextModeExplanation::kSecure:
+      return protocol::Page::SecureContextTypeEnum::Secure;
+    case SecureContextModeExplanation::kInsecureAncestor:
+      return protocol::Page::SecureContextTypeEnum::InsecureAncestor;
+    case SecureContextModeExplanation::kInsecureScheme:
+      return protocol::Page::SecureContextTypeEnum::InsecureScheme;
+    case SecureContextModeExplanation::kSecureLocalhost:
+      return protocol::Page::SecureContextTypeEnum::SecureLocalhost;
+  }
+}
+protocol::Page::CrossOriginIsolatedContextType
+CreateProtocolCrossOriginIsolatedContextType(ExecutionContext* context) {
+  if (context->IsCrossOriginIsolated()) {
+    return protocol::Page::CrossOriginIsolatedContextTypeEnum::Isolated;
+  } else if (context->IsFeatureEnabled(
+                 mojom::blink::FeaturePolicyFeature::kCrossOriginIsolated)) {
+    return protocol::Page::CrossOriginIsolatedContextTypeEnum::NotIsolated;
+  }
+  return protocol::Page::CrossOriginIsolatedContextTypeEnum::
+      NotIsolatedFeatureDisabled;
+}
+}  // namespace
+
 std::unique_ptr<protocol::Page::Frame> InspectorPageAgent::BuildObjectForFrame(
     LocalFrame* frame) {
   DocumentLoader* loader = frame->Loader().GetDocumentLoader();
@@ -1068,9 +1098,19 @@ std::unique_ptr<protocol::Page::Frame> InspectorPageAgent::BuildObjectForFrame(
           .setId(IdentifiersFactory::FrameId(frame))
           .setLoaderId(IdentifiersFactory::LoaderId(loader))
           .setUrl(UrlWithoutFragment(loader->Url()).GetString())
+          .setDomainAndRegistry(blink::network_utils::GetDomainAndRegistry(
+              loader->Url().Host(),
+              blink::network_utils::PrivateRegistryFilter::
+                  kIncludePrivateRegistries))
           .setMimeType(frame->Loader().GetDocumentLoader()->MimeType())
           .setSecurityOrigin(
               SecurityOrigin::Create(loader->Url())->ToRawString())
+          .setSecureContextType(CreateProtocolSecureContextType(
+              frame->DomWindow()
+                  ->GetSecurityContext()
+                  .GetSecureContextModeExplanation()))
+          .setCrossOriginIsolatedContextType(
+              CreateProtocolCrossOriginIsolatedContextType(frame->DomWindow()))
           .build();
   if (loader->Url().HasFragmentIdentifier())
     frame_object->setUrlFragment("#" + loader->Url().FragmentIdentifier());
@@ -1086,6 +1126,13 @@ std::unique_ptr<protocol::Page::Frame> InspectorPageAgent::BuildObjectForFrame(
   }
   if (loader && !loader->UnreachableURL().IsEmpty())
     frame_object->setUnreachableUrl(loader->UnreachableURL().GetString());
+  if (frame->IsAdRoot()) {
+    frame_object->setAdFrameType(protocol::Page::AdFrameTypeEnum::Root);
+  } else if (frame->IsAdSubframe()) {
+    frame_object->setAdFrameType(protocol::Page::AdFrameTypeEnum::Child);
+  } else {
+    frame_object->setAdFrameType(protocol::Page::AdFrameTypeEnum::None);
+  }
   return frame_object;
 }
 

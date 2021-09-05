@@ -14,6 +14,7 @@
 #include "components/query_tiles/internal/tile_manager.h"
 #include "components/query_tiles/internal/tile_service_scheduler.h"
 #include "components/query_tiles/internal/tile_types.h"
+#include "components/query_tiles/logger.h"
 #include "components/query_tiles/tile_service.h"
 
 namespace query_tiles {
@@ -28,13 +29,15 @@ class InitializableTileService : public TileService {
   ~InitializableTileService() override = default;
 };
 
-class TileServiceImpl : public InitializableTileService {
+class TileServiceImpl : public InitializableTileService,
+                        public TileServiceScheduler::Delegate {
  public:
   TileServiceImpl(std::unique_ptr<ImagePrefetcher> image_prefetcher,
                   std::unique_ptr<TileManager> tile_manager,
                   std::unique_ptr<TileServiceScheduler> scheduler,
                   std::unique_ptr<TileFetcher> tile_fetcher,
-                  base::Clock* clock);
+                  base::Clock* clock,
+                  std::unique_ptr<Logger> logger);
   ~TileServiceImpl() override;
 
   // Disallow copy/assign.
@@ -52,6 +55,11 @@ class TileServiceImpl : public InitializableTileService {
                           BackgroundTaskFinishedCallback callback) override;
   void CancelTask() override;
   void PurgeDb() override;
+  void SetServerUrl(const std::string& base_url) override;
+  Logger* GetLogger() override;
+
+  // TileServiceScheduler::Delegate implementation.
+  TileGroup* GetTileGroup() override;
 
   // Called when tile manager is initialized.
   void OnTileManagerInitialized(SuccessCallback callback,
@@ -87,6 +95,8 @@ class TileServiceImpl : public InitializableTileService {
 
   // Clock object.
   base::Clock* clock_;
+
+  std::unique_ptr<Logger> logger_;
 
   base::WeakPtrFactory<TileServiceImpl> weak_ptr_factory_{this};
 };

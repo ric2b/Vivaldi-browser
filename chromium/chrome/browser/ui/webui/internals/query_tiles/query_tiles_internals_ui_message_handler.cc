@@ -20,7 +20,7 @@ QueryTilesInternalsUIMessageHandler::QueryTilesInternalsUIMessageHandler(
     Profile* profile)
     : tile_service_(query_tiles::TileServiceFactory::GetForKey(
           profile->GetProfileKey())) {
-  DCHECK(tile_service_);
+  CHECK(tile_service_);
 }
 
 QueryTilesInternalsUIMessageHandler::~QueryTilesInternalsUIMessageHandler() =
@@ -45,16 +45,31 @@ void QueryTilesInternalsUIMessageHandler::RegisterMessages() {
       "getTileData",
       base::Bind(&QueryTilesInternalsUIMessageHandler::HandleGetTileData,
                  weak_ptr_factory_.GetWeakPtr()));
+
+  web_ui()->RegisterMessageCallback(
+      "setServerUrl",
+      base::Bind(&QueryTilesInternalsUIMessageHandler::HandleSetServerUrl,
+                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 void QueryTilesInternalsUIMessageHandler::HandleGetTileData(
     const base::ListValue* args) {
-  NOTIMPLEMENTED();
+  AllowJavascript();
+  const base::Value* callback_id;
+  auto result = args->Get(0, &callback_id);
+  DCHECK(result);
+  ResolveJavascriptCallback(*callback_id,
+                            tile_service_->GetLogger()->GetTileData());
 }
 
 void QueryTilesInternalsUIMessageHandler::HandleGetServiceStatus(
     const base::ListValue* args) {
-  NOTIMPLEMENTED();
+  AllowJavascript();
+  const base::Value* callback_id;
+  auto result = args->Get(0, &callback_id);
+  DCHECK(result);
+  ResolveJavascriptCallback(*callback_id,
+                            tile_service_->GetLogger()->GetServiceStatus());
 }
 
 void QueryTilesInternalsUIMessageHandler::HandleStartFetch(
@@ -67,4 +82,29 @@ void QueryTilesInternalsUIMessageHandler::HandleStartFetch(
 void QueryTilesInternalsUIMessageHandler::HandlePurgeDb(
     const base::ListValue* args) {
   tile_service_->PurgeDb();
+}
+
+void QueryTilesInternalsUIMessageHandler::HandleSetServerUrl(
+    const base::ListValue* args) {
+  AllowJavascript();
+  DCHECK_EQ(args->GetList().size(), 1u) << "Missing argument server URL.";
+  tile_service_->SetServerUrl(args->GetList()[0].GetString());
+}
+
+void QueryTilesInternalsUIMessageHandler::OnServiceStatusChanged(
+    const base::Value& status) {
+  FireWebUIListener("service-status-changed", status);
+}
+
+void QueryTilesInternalsUIMessageHandler::OnTileDataAvailable(
+    const base::Value& data) {
+  FireWebUIListener("tile-data-available", data);
+}
+
+void QueryTilesInternalsUIMessageHandler::OnJavascriptAllowed() {
+  logger_observer_.Add(tile_service_->GetLogger());
+}
+
+void QueryTilesInternalsUIMessageHandler::OnJavascriptDisallowed() {
+  logger_observer_.RemoveAll();
 }

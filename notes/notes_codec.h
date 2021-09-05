@@ -46,7 +46,6 @@ class NotesCodec {
   std::unique_ptr<base::Value> Encode(const NoteNode* notes_node,
                                       const NoteNode* other_notes_node,
                                       const NoteNode* trash_notes_node,
-                                      int64_t sync_transaction_version,
                                       const std::string& sync_metadata_str);
 
   // Decodes the previously encoded value to the specified nodes as well as
@@ -75,11 +74,6 @@ class NotesCodec {
   // user.
   const std::string& stored_checksum() const { return stored_checksum_; }
 
-  // Return the sync transaction version of the notes model root.
-  int64_t model_sync_transaction_version() const {
-    return model_sync_transaction_version_;
-  }
-
   // Returns whether the IDs were reassigned during decoding. Always returns
   // false after encoding.
   bool ids_reassigned() const { return ids_reassigned_; }
@@ -106,7 +100,6 @@ class NotesCodec {
   static const char kTypeSeparator[];
   static const char kTypeOther[];
   static const char kTypeTrash[];
-  static const char kSyncTransactionVersion[];
 
  private:
   // Encodes node and all its children into a Value object and returns it.
@@ -174,9 +167,6 @@ class NotesCodec {
 
   // Maximum ID assigned when decoding data.
   int64_t maximum_id_;
-
-  // Sync transaction version set on notes model root.
-  int64_t model_sync_transaction_version_;
 
   DISALLOW_COPY_AND_ASSIGN(NotesCodec);
 };

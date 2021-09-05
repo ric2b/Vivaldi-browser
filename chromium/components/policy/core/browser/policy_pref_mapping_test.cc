@@ -264,7 +264,7 @@ class PolicyTestCase {
     const std::string os("win");
 #elif defined(OS_IOS)
     const std::string os("ios");
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
     const std::string os("mac");
 #elif defined(OS_CHROMEOS)
     const std::string os("chromeos");
@@ -359,7 +359,7 @@ void SetProviderPolicy(MockConfigurationPolicyProvider* provider,
     ASSERT_TRUE(policy_details);
     policy_map.Set(
         it.first, level, POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-        it.second.CreateDeepCopy(),
+        it.second.Clone(),
         policy_details->max_external_data_size
             ? std::make_unique<ExternalDataFetcher>(nullptr, it.first)
             : nullptr);
@@ -491,8 +491,10 @@ void VerifyPolicyToPrefMappings(const base::FilePath& test_case_path,
             EXPECT_FALSE(pref->IsUserControlled());
             EXPECT_TRUE(pref->IsManaged());
           }
-          if (pref_case->value())
-            EXPECT_TRUE(pref->GetValue()->Equals(pref_case->value()));
+          if (pref_case->value()) {
+            EXPECT_TRUE(pref->GetValue()->Equals(pref_case->value()))
+                << *pref->GetValue() << " != " << *pref_case->value();
+          }
         }
       }
     }

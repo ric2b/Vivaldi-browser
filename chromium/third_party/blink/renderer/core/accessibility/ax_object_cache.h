@@ -42,6 +42,7 @@ class AbstractInlineTextBox;
 class AccessibleNode;
 class HTMLCanvasElement;
 class HTMLOptionElement;
+class HTMLFrameOwnerElement;
 class HTMLSelectElement;
 class IntPoint;
 class LayoutRect;
@@ -67,15 +68,15 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
 
   virtual void SelectionChanged(Node*) = 0;
   virtual void ChildrenChanged(Node*) = 0;
-  virtual void ChildrenChanged(LayoutObject*) = 0;
+  virtual void ChildrenChanged(const LayoutObject*) = 0;
   virtual void ChildrenChanged(AccessibleNode*) = 0;
   virtual void CheckedStateChanged(Node*) = 0;
   virtual void ListboxOptionStateChanged(HTMLOptionElement*) = 0;
   virtual void ListboxSelectedChildrenChanged(HTMLSelectElement*) = 0;
   virtual void ListboxActiveIndexChanged(HTMLSelectElement*) = 0;
-  virtual void LocationChanged(LayoutObject*) = 0;
+  virtual void LocationChanged(const LayoutObject*) = 0;
   virtual void RadiobuttonRemovedFromGroup(HTMLInputElement*) = 0;
-  virtual void ImageLoaded(LayoutObject*) = 0;
+  virtual void ImageLoaded(const LayoutObject*) = 0;
 
   virtual void Remove(AccessibleNode*) = 0;
   virtual void Remove(LayoutObject*) = 0;
@@ -84,9 +85,12 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
 
   virtual const Element* RootAXEditableElement(const Node*) = 0;
 
+  // Called when aspects of the style (e.g. color, alignment) change.
+  virtual void StyleChanged(const LayoutObject*) = 0;
+
   // Called by a node when text or a text equivalent (e.g. alt) attribute is
   // changed.
-  virtual void TextChanged(LayoutObject*) = 0;
+  virtual void TextChanged(const LayoutObject*) = 0;
   virtual void DocumentTitleChanged() = 0;
   // Called when a node has just been attached, so we can make sure we have the
   // right subclass of AXObject.
@@ -121,6 +125,10 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   virtual void HandleAttributeChanged(const QualifiedName& attr_name,
                                       AccessibleNode*) = 0;
 
+  // Called when a HTMLFrameOwnerElement (such as an iframe element) changes the
+  // embedding token of its child frame.
+  virtual void EmbeddingTokenChanged(HTMLFrameOwnerElement*) = 0;
+
   virtual void SetCanvasObjectBounds(HTMLCanvasElement*,
                                      Element*,
                                      const LayoutRect&) = 0;
@@ -131,13 +139,14 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   virtual void HandleScrollPositionChanged(LocalFrameView*) = 0;
   virtual void HandleScrollPositionChanged(LayoutObject*) = 0;
 
-  // Called when scroll bars are added / removed (as the view resizes).
-  virtual void HandleLayoutComplete(LayoutObject*) = 0;
   virtual void HandleScrolledToAnchor(const Node* anchor_node) = 0;
 
   // Called when the frame rect changes, which can sometimes happen
   // without producing any layout or other notifications.
   virtual void HandleFrameRectsChanged(Document&) = 0;
+
+  // Called when a layout object's bounding box may have changed.
+  virtual void InvalidateBoundingBox(const LayoutObject*) = 0;
 
   virtual const AtomicString& ComputedRoleForNode(Node*) = 0;
   virtual String ComputedNameForNode(Node*) = 0;

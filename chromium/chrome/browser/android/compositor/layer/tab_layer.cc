@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/i18n/rtl.h"
+#include "base/numerics/safe_conversions.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_collections.h"
 #include "cc/layers/nine_patch_layer.h"
@@ -25,9 +26,11 @@
 #include "ui/gfx/geometry/insets_f.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect_f.h"
-#include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/transform.h"
+
+// Vivaldi
+#include "chrome/browser/android/compositor/resources/toolbar_resource.h"
 
 namespace android {
 
@@ -133,7 +136,6 @@ void TabLayer::SetProperties(int id,
                              float content_width,
                              float content_height,
                              float view_width,
-                             float view_height,
                              bool show_toolbar,
                              int default_theme_color,
                              int toolbar_background_color,
@@ -142,7 +144,6 @@ void TabLayer::SetProperties(int id,
                              bool show_tab_title,
                              int toolbar_textbox_resource_id,
                              int toolbar_textbox_background_color,
-                             float toolbar_textbox_alpha,
                              float toolbar_alpha,
                              float content_offset,
                              float side_border_scale,
@@ -227,14 +228,25 @@ void TabLayer::SetProperties(int id,
   // Update Resource Ids For Layers That Impact Layout
   //--------------------------------------------------------------------------
 
-  // Vivaldi
-  toolbar_layer_->ShouldPositionToolbar(false);
+  //** Vivaldi
+  float toolbar_offset = content_offset;
+  ToolbarResource* resource =
+      ToolbarResource::From(resource_manager_->GetResource(
+          ui::ANDROID_RESOURCE_TYPE_DYNAMIC, toolbar_resource_id));
+  toolbar_layer_->ShouldPositionToolbar(true);
+  // (Note:david@vivaldi.com): When |content_offset| is 0 toolbar is at the
+  // bottom
+  if (content_offset == 0)
+    toolbar_offset = height - resource->size().height();
+  else
+    toolbar_offset -= resource->size().height();
+  //** Vivaldi
 
   // TODO(kkimlabs): Tab switcher doesn't show the progress bar.
   toolbar_layer_->PushResource(
       toolbar_resource_id, toolbar_background_color, anonymize_toolbar,
       toolbar_textbox_background_color, toolbar_textbox_resource_id,
-      toolbar_textbox_alpha, view_height, content_offset, false, false);
+      toolbar_offset, false, false);
   toolbar_layer_->UpdateProgressBar(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
   float toolbar_impact_height = 0;
@@ -438,10 +450,9 @@ void TabLayer::SetProperties(int id,
 
   if (!back_visible) {
     gfx::Rect rounded_descaled_content_area(
-        round(descaled_local_content_area.x()),
-        round(descaled_local_content_area.y()),
-        round(desired_content_size.width()),
-        round(desired_content_size.height()));
+        base::ClampRound(descaled_local_content_area.x()),
+        base::ClampRound(descaled_local_content_area.y()),
+        desired_content_size.width(), desired_content_size.height());
 
     SetContentProperties(
         id, ids, can_use_live_layer, static_to_view_blend, true, alpha,

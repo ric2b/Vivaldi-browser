@@ -16,6 +16,7 @@
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
+#include "google_apis/gaia/gaia_urls.h"
 
 using autofill::GaiaIdHash;
 using autofill::PasswordForm;
@@ -54,8 +55,6 @@ bool CanAccountStorageBeEnabled(const syncer::SyncService* sync_service) {
 //   storage).
 bool IsUserEligibleForAccountStorage(const syncer::SyncService* sync_service) {
   return CanAccountStorageBeEnabled(sync_service) &&
-         sync_service->GetTransportState() !=
-             syncer::SyncService::TransportState::DISABLED &&
          sync_service->IsEngineInitialized() &&
          !sync_service->GetUserSettings()->IsUsingSecondaryPassphrase() &&
          !sync_service->IsSyncFeatureEnabled();
@@ -73,6 +72,8 @@ PasswordForm::Store PasswordStoreFromInt(int value) {
 
 const char kAccountStorageOptedInKey[] = "opted_in";
 const char kAccountStorageDefaultStoreKey[] = "default_store";
+const char kMoveToAccountStoreOfferedCountKey[] =
+    "move_to_account_store_refused_count";
 
 // Returns the total number of accounts for which an opt-in to the account
 // storage exists. Used for metrics.
@@ -116,6 +117,13 @@ class AccountStorageSettingsReader {
     return PasswordStoreFromInt(*value);
   }
 
+  int GetMoveOfferedToNonOptedInUserCount() const {
+    if (!account_settings_)
+      return 0;
+    return account_settings_->FindIntKey(kMoveToAccountStoreOfferedCountKey)
+        .value_or(0);
+  }
+
  private:
   // May be null, if no settings for this account were saved yet.
   const base::Value* account_settings_ = nullptr;
@@ -143,6 +151,8 @@ class ScopedAccountStorageSettingsUpdate {
 
   void SetOptedIn() {
     base::Value* account_settings = GetOrCreateAccountSettings();
+    // The count of refusals is only tracked when the user is not opted-in.
+    account_settings->RemoveKey(kMoveToAccountStoreOfferedCountKey);
     account_settings->SetBoolKey(kAccountStorageOptedInKey, true);
   }
 
@@ -150,6 +160,13 @@ class ScopedAccountStorageSettingsUpdate {
     base::Value* account_settings = GetOrCreateAccountSettings();
     account_settings->SetIntKey(kAccountStorageDefaultStoreKey,
                                 static_cast<int>(default_store));
+  }
+
+  void RecordMoveOfferedToNonOptedInUser() {
+    base::Value* account_settings = GetOrCreateAccountSettings();
+    int count = account_settings->FindIntKey(kMoveToAccountStoreOfferedCountKey)
+                    .value_or(0);
+    account_settings->SetIntKey(kMoveToAccountStoreOfferedCountKey, ++count);
   }
 
   void ClearAllSettings() { update_->RemoveKey(account_hash_); }
@@ -186,7 +203,8 @@ bool IsOptedInForAccountStorage(const PrefService* pref_service,
 }
 
 bool ShouldShowAccountStorageReSignin(const PrefService* pref_service,
-                                      const syncer::SyncService* sync_service) {
+                                      const syncer::SyncService* sync_service,
+                                      const GURL& current_page_url) {
   DCHECK(pref_service);
 
   // Checks that the sync_service is not null and the feature is enabled.
@@ -197,6 +215,11 @@ bool ShouldShowAccountStorageReSignin(const PrefService* pref_service,
   // In order to show a re-signin prompt, no user may be logged in.
   if (!sync_service->HasDisableReason(
           syncer::SyncService::DisableReason::DISABLE_REASON_NOT_SIGNED_IN)) {
+    return false;
+  }
+
+  if (current_page_url.GetOrigin() ==
+      GaiaUrls::GetInstance()->gaia_url().GetOrigin()) {
     return false;
   }
 
@@ -282,7 +305,9 @@ void OptOutOfAccountStorageAndClearSettingsForAccount(
 
 bool ShouldShowAccountStorageBubbleUi(const PrefService* pref_service,
                                       const syncer::SyncService* sync_service) {
-  return !sync_service->IsSyncFeatureEnabled() &&
+  // `sync_service` is null in incognito mode, or if --disable-sync was
+  // specified on the command-line.
+  return sync_service && !sync_service->IsSyncFeatureEnabled() &&
          (IsOptedInForAccountStorage(pref_service, sync_service) ||
           IsUserEligibleForAccountStorage(sync_service));
 }
@@ -385,7 +410,7 @@ PasswordAccountStorageUserState ComputePasswordAccountStorageUserState(
   if (sync_service->HasDisableReason(
           syncer::SyncService::DisableReason::DISABLE_REASON_NOT_SIGNED_IN)) {
     // Signed out. Check if any account storage opt-in exists.
-    return ShouldShowAccountStorageReSignin(pref_service, sync_service)
+    return ShouldShowAccountStorageReSignin(pref_service, sync_service, GURL())
                ? PasswordAccountStorageUserState::kSignedOutAccountStoreUser
                : PasswordAccountStorageUserState::kSignedOutUser;
   }
@@ -425,6 +450,34 @@ PasswordAccountStorageUsageLevel ComputePasswordAccountStorageUsageLevel(
     case UserState::kSyncUser:
       return UsageLevel::kSyncing;
   }
+}
+
+void RecordMoveOfferedToNonOptedInUser(
+    PrefService* pref_service,
+    const syncer::SyncService* sync_service) {
+  DCHECK(pref_service);
+  DCHECK(sync_service);
+  std::string gaia_id = sync_service->GetAuthenticatedAccountInfo().gaia;
+  DCHECK(!gaia_id.empty());
+  DCHECK(!AccountStorageSettingsReader(pref_service,
+                                       GaiaIdHash::FromGaiaId(gaia_id))
+              .IsOptedIn());
+  ScopedAccountStorageSettingsUpdate(pref_service,
+                                     GaiaIdHash::FromGaiaId(gaia_id))
+      .RecordMoveOfferedToNonOptedInUser();
+}
+
+int GetMoveOfferedToNonOptedInUserCount(
+    const PrefService* pref_service,
+    const syncer::SyncService* sync_service) {
+  DCHECK(pref_service);
+  DCHECK(sync_service);
+  std::string gaia_id = sync_service->GetAuthenticatedAccountInfo().gaia;
+  DCHECK(!gaia_id.empty());
+  AccountStorageSettingsReader reader(pref_service,
+                                      GaiaIdHash::FromGaiaId(gaia_id));
+  DCHECK(!reader.IsOptedIn());
+  return reader.GetMoveOfferedToNonOptedInUserCount();
 }
 
 }  // namespace features_util

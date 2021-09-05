@@ -24,12 +24,12 @@
 #include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "browser/thumbnails/thumbnail_capture_contents.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/common/chrome_paths.h"
+#include "components/datasource/vivaldi_data_source_api.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h" // nogncheck
 #include "content/browser/web_contents/web_contents_impl.h" // nogncheck
 #include "content/public/browser/browser_task_traits.h"
@@ -48,7 +48,6 @@
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/vivaldi_browser_window.h"
-#include "ui/vivaldi_skia_utils.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
@@ -56,8 +55,6 @@ using content::BrowserThread;
 using content::RenderWidgetHost;
 using content::RenderWidgetHostView;
 using content::WebContents;
-using vivaldi::skia_utils::SmartCropAndSize;
-using vivaldi::ui_tools::EncodeBitmap;
 
 namespace {
 
@@ -210,8 +207,9 @@ base::FilePath ConstructCaptureFilename(
 #elif defined(OS_WIN)
     base_path = base_path.Append(base::UTF8ToUTF16(new_string));
 #endif
-    base_path = base_path.AddExtension(extension);
   }
+  base_path = base_path.AddExtension(extension);
+
   // Ensure unique filename.
   int unique_number = base::GetUniquePathNumber(base_path);
   if (unique_number > 0) {
@@ -229,8 +227,8 @@ bool SaveBitmapOnWorkerThread(SkBitmap bitmap,
   DCHECK(file_path->empty());
   std::vector<unsigned char> data;
   std::string mime_type;
-  bool encoded = EncodeBitmap(bitmap, &data, &mime_type, format.image_format,
-                              format.encode_quality);
+  bool encoded = ::vivaldi::skia_utils::EncodeBitmap(
+      bitmap, format.image_format, format.encode_quality, data, mime_type);
   if (!encoded)
     return false;
   if (!format.save_to_disk) {
@@ -247,7 +245,7 @@ bool SaveBitmapOnWorkerThread(SkBitmap bitmap,
     base::CreateDirectory(path);
   }
   base::FilePath::StringPieceType ext = FILE_PATH_LITERAL(".jpg");
-  if (format.image_format == ImageFormat::IMAGE_FORMAT_PNG) {
+  if (format.image_format == ::vivaldi::skia_utils::ImageFormat::kPNG) {
     ext = FILE_PATH_LITERAL(".png");
   }
   path = ConstructCaptureFilename(std::move(path), format.save_file_pattern,
@@ -336,8 +334,8 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureUIFunction::Run() {
   }
   if (params->params.encode_format.get()) {
     format_.image_format = *params->params.encode_format == "jpg"
-      ? ImageFormat::IMAGE_FORMAT_JPEG
-      : ImageFormat::IMAGE_FORMAT_PNG;
+      ? ::vivaldi::skia_utils::ImageFormat::kJPEG
+      : ::vivaldi::skia_utils::ImageFormat::kPNG;
   }
   if (params->params.encode_quality.get()) {
     format_.encode_quality = *params->params.encode_quality.get();
@@ -443,8 +441,8 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
   }
   if (params->params.encode_format) {
     format_.image_format = *params->params.encode_format == "jpg"
-                               ? ImageFormat::IMAGE_FORMAT_JPEG
-                               : ImageFormat::IMAGE_FORMAT_PNG;
+                               ? ::vivaldi::skia_utils::ImageFormat::kJPEG
+                               : ::vivaldi::skia_utils::ImageFormat::kPNG;
   }
   if (params->params.encode_quality) {
     format_.encode_quality = *params->params.encode_quality;
@@ -493,10 +491,16 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
         Error("width or height must not be given with full_page"));
   }
 
+  content::WebContents* tabstrip_contents = nullptr;
   int tab_id = params->tab_id;
-  content::WebContents* tabstrip_contents =
-      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id,
-                                                      browser_context());
+  if (tab_id) {
+    tabstrip_contents = ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
+      tab_id, browser_context());
+  } else {
+    Browser* browser = BrowserList::GetInstance()->GetLastActive();
+    tabstrip_contents =
+      browser ? browser->tab_strip_model()->GetActiveWebContents() : nullptr;
+  }
   if (!tabstrip_contents)
     return RespondNow(Error("No such tab - " + std::to_string(tab_id)));
 
@@ -582,81 +586,33 @@ void ThumbnailsCaptureTabFunction::OnImageConverted(bool success) {
   }
 }
 
-ThumbnailsCaptureUrlFunction::ThumbnailsCaptureUrlFunction() = default;
+ThumbnailsCaptureBookmarkFunction::ThumbnailsCaptureBookmarkFunction() = default;
 
-ThumbnailsCaptureUrlFunction::~ThumbnailsCaptureUrlFunction() = default;
+ThumbnailsCaptureBookmarkFunction::~ThumbnailsCaptureBookmarkFunction() = default;
 
-ExtensionFunction::ResponseAction ThumbnailsCaptureUrlFunction::Run() {
-  using vivaldi::thumbnails::CaptureUrl::Params;
+ExtensionFunction::ResponseAction ThumbnailsCaptureBookmarkFunction::Run() {
+  using vivaldi::thumbnails::CaptureBookmark::Params;
 
   std::unique_ptr<Params> params(Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  if (!base::StringToInt64(params->params.bookmark_id, &bookmark_id_) ||
-      bookmark_id_ <= 0) {
+  int64_t bookmark_id;
+  if (!base::StringToInt64(params->params.bookmark_id, &bookmark_id) ||
+      bookmark_id <= 0) {
     return RespondNow(Error("bookmarkId is not a valid positive integer - " +
                             params->params.bookmark_id));
   }
-  gfx::Size initial_size(params->params.width, params->params.height);
-  if (initial_size.IsEmpty())
-    return RespondNow(Error("initial width or height are not positive"));
-  gfx::Size scaled_size(params->params.scaled_width,
-                        params->params.scaled_height);
-  if (scaled_size.IsEmpty())
-    return RespondNow(Error("scaled width or height are not positive"));
   url_ = GURL(params->params.url);
 
-  ::vivaldi::ThumbnailCaptureContents::Start(
-      browser_context(), url_, initial_size, scaled_size,
-      base::BindOnce(&ThumbnailsCaptureUrlFunction::OnCaptured, this));
+  VivaldiDataSourcesAPI::CaptureBookmarkThumbnail(
+      browser_context(), bookmark_id, url_,
+      base::BindOnce(&ThumbnailsCaptureBookmarkFunction::SendResult, this));
 
   return RespondLater();
 }
 
-void ThumbnailsCaptureUrlFunction::OnCaptured(
-    ::vivaldi::CapturePage::Result captured) {
-  scoped_refptr<VivaldiDataSourcesAPI> api =
-      VivaldiDataSourcesAPI::FromBrowserContext(browser_context());
-  DCHECK(api);
-  if (!api) {
-    SendResult(false);
-    return;
-  }
-  base::PostTask(
-      FROM_HERE,
-      {base::ThreadPool(), base::TaskPriority::USER_VISIBLE, base::MayBlock(),
-       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-      base::BindOnce(&ThumbnailsCaptureUrlFunction::ConvertImageOnWorkerThread,
-                     this, std::move(api), std::move(captured)));
-}
-
-void ThumbnailsCaptureUrlFunction::ConvertImageOnWorkerThread(
-    scoped_refptr<VivaldiDataSourcesAPI> api,
-    ::vivaldi::CapturePage::Result captured) {
-  do {
-    SkBitmap bitmap;
-    if (!captured.MovePixelsToBitmap(&bitmap))
-      break;
-    std::vector<unsigned char> data;
-    std::string mime_type;
-    bool encoded = EncodeBitmap(bitmap, &data, &mime_type,
-                                ImageFormat::IMAGE_FORMAT_PNG, 100);
-    if (!encoded)
-      break;
-    api->AddImageDataForBookmark(
-        bookmark_id_, base::RefCountedBytes::TakeVector(&data),
-        base::BindOnce(&ThumbnailsCaptureUrlFunction::SendResult, this));
-    return;
-  } while (false);
-
-  base::PostTask(
-      FROM_HERE, {BrowserThread::UI},
-      base::BindOnce(&ThumbnailsCaptureUrlFunction::SendResult, this,
-                     false));
-}
-
-void ThumbnailsCaptureUrlFunction::SendResult(bool success) {
-  namespace Results = vivaldi::thumbnails::CaptureUrl::Results;
+void ThumbnailsCaptureBookmarkFunction::SendResult(bool success) {
+  namespace Results = vivaldi::thumbnails::CaptureBookmark::Results;
 
   if (!success) {
     LOG(ERROR) << "Failed to capture url " << url_.possibly_invalid_spec();

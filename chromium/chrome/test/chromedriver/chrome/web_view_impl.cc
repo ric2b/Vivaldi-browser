@@ -16,9 +16,9 @@
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/test/chromedriver/chrome/browser_info.h"
 #include "chrome/test/chromedriver/chrome/cast_tracker.h"
-#include "chrome/test/chromedriver/chrome/debugger_tracker.h"
 #include "chrome/test/chromedriver/chrome/devtools_client_impl.h"
 #include "chrome/test/chromedriver/chrome/dom_tracker.h"
 #include "chrome/test/chromedriver/chrome/download_directory_override_manager.h"
@@ -72,6 +72,8 @@ const char* GetAsString(MouseEventType type) {
       return "mouseReleased";
     case kMovedMouseEventType:
       return "mouseMoved";
+    case kWheelMouseEventType:
+      return "mouseWheel";
     default:
       return "";
   }
@@ -176,8 +178,7 @@ WebViewImpl::WebViewImpl(const std::string& id,
           new GeolocationOverrideManager(client_.get())),
       network_conditions_override_manager_(
           new NetworkConditionsOverrideManager(client_.get())),
-      heap_snapshot_taker_(new HeapSnapshotTaker(client_.get())),
-      debugger_(new DebuggerTracker(client_.get())) {
+      heap_snapshot_taker_(new HeapSnapshotTaker(client_.get())) {
   // Downloading in headless mode requires the setting of
   // Browser.setDownloadBehavior. This is handled by the
   // DownloadDirectoryOverrideManager, which is only instantiated
@@ -233,6 +234,10 @@ bool WebViewImpl::WasCrashed() {
 
 Status WebViewImpl::ConnectIfNecessary() {
   return client_->ConnectIfNecessary();
+}
+
+Status WebViewImpl::SetUpDevTools() {
+  return client_->SetUpDevTools();
 }
 
 Status WebViewImpl::HandleReceivedEvents() {
@@ -558,7 +563,8 @@ Status WebViewImpl::DispatchMouseEvents(const std::vector<MouseEvent>& events,
   Status status(kOk);
   for (auto it = events.begin(); it != events.end(); ++it) {
     base::DictionaryValue params;
-    params.SetString("type", GetAsString(it->type));
+    std::string type = GetAsString(it->type);
+    params.SetString("type", type);
     params.SetInteger("x", it->x);
     params.SetInteger("y", it->y);
     params.SetInteger("modifiers", it->modifiers);
@@ -566,6 +572,10 @@ Status WebViewImpl::DispatchMouseEvents(const std::vector<MouseEvent>& events,
     params.SetInteger("buttons", it->buttons);
     params.SetInteger("clickCount", it->click_count);
     params.SetString("pointerType", GetAsString(it->pointer_type));
+    if (type == "mouseWheel") {
+      params.SetInteger("deltaX", it->delta_x);
+      params.SetInteger("deltaY", it->delta_y);
+    }
 
     const bool last_event = (it == events.end() - 1);
     if (async_dispatch_events || !last_event) {
@@ -673,12 +683,49 @@ Status WebViewImpl::DispatchKeyEvents(const std::vector<KeyEvent>& events,
       ui::DomCode dom_code = ui::UsLayoutKeyboardCodeToDomCode(it->key_code);
       code = ui::KeycodeConverter::DomCodeToCodeString(dom_code);
     }
+
+    bool is_ctrl_cmd_key_down = false;
+#if defined(OS_MAC)
+    if (it->modifiers & kMetaKeyModifierMask)
+      is_ctrl_cmd_key_down = true;
+#else
+    if (it->modifiers & kControlKeyModifierMask)
+      is_ctrl_cmd_key_down = true;
+#endif
     if (!code.empty())
       params.SetString("code", code);
     if (!it->key.empty())
       params.SetString("key", it->key);
     else if (it->is_from_action)
       params.SetString("key", it->modified_text);
+
+    if (is_ctrl_cmd_key_down) {
+      std::string command;
+      if (code == "KeyA") {
+        command = "SelectAll";
+      } else if (code == "KeyC") {
+        command = "Copy";
+      } else if (code == "KeyX") {
+        command = "Cut";
+      } else if (code == "KeyY") {
+        command = "Redo";
+      } else if (code == "KeyV") {
+        if (it->modifiers & kShiftKeyModifierMask)
+          command = "PasteAndMatchStyle";
+        else
+          command = "Paste";
+      } else if (code == "KeyZ") {
+        if (it->modifiers & kShiftKeyModifierMask)
+          command = "Redo";
+        else
+          command = "Undo";
+      }
+
+      std::unique_ptr<base::ListValue> command_list(new base::ListValue);
+      command_list->AppendString(command);
+      params.SetList("commands", std::move(command_list));
+    }
+
     if (it->location != 0) {
       // The |location| parameter in DevTools protocol only accepts 1 (left
       // modifiers) and 2 (right modifiers). For location 3 (numeric keypad),
@@ -817,6 +864,11 @@ Status WebViewImpl::IsPendingNavigation(const Timeout* timeout,
 
 JavaScriptDialogManager* WebViewImpl::GetJavaScriptDialogManager() {
   return dialog_manager_.get();
+}
+
+MobileEmulationOverrideManager* WebViewImpl::GetMobileEmulationOverrideManager()
+    const {
+  return mobile_emulation_override_manager_.get();
 }
 
 Status WebViewImpl::OverrideGeolocation(const Geoposition& geoposition) {

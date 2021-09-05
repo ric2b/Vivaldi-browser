@@ -42,7 +42,7 @@ class XRFrame final : public ScriptWrappable {
 
   XRSession* session() const { return session_; }
 
-  XRViewerPose* getViewerPose(XRReferenceSpace*, ExceptionState&) const;
+  XRViewerPose* getViewerPose(XRReferenceSpace*, ExceptionState&);
   XRPose* getPose(XRSpace*, XRSpace*, ExceptionState&);
   XRWorldInformation* worldInformation() const { return world_information_; }
   XRAnchorSet* trackedAnchors() const;
@@ -51,6 +51,8 @@ class XRFrame final : public ScriptWrappable {
   void Trace(Visitor*) const override;
 
   void Deactivate();
+
+  bool IsActive() const;
 
   void SetAnimationFrame(bool is_animation_frame) {
     is_animation_frame_ = is_animation_frame;

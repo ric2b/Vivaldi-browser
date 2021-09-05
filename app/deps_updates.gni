@@ -1,4 +1,15 @@
 
+if (vivaldi_build_tests) {
+  update_template_instance("//components:components_tests_pak") {
+    sources += [
+      "$root_gen_dir/vivaldi/app/vivaldi_native_strings_en-US.pak"
+    ]
+    deps += [
+      "//vivaldi/app:vivaldi_native_strings",
+    ]
+  }
+}
+
 if (!is_android) {
   update_template_instance("//chrome:packed_resources") {
     if (!defined(additional_extra_paks)) {
@@ -12,15 +23,6 @@ if (!is_android) {
       "//vivaldi/app:vivaldi_native_strings",
       "//vivaldi/app:vivaldi_unscaled_native_resources",
       "//vivaldi/app:vivaldi_merge_repacks",
-    ]
-  }
-
-  update_template_instance("//components:components_tests_pak") {
-    sources += [
-      "$root_gen_dir/vivaldi/app/vivaldi_native_strings_en-US.pak"
-    ]
-    deps += [
-      "//vivaldi/app:vivaldi_native_strings",
     ]
   }
 
@@ -75,6 +77,7 @@ if (!is_android) {
       "$root_gen_dir/vivaldi/vivaldi_native_resources_100_percent.pak",
     ]
   }
+
   update_template_instance("//chrome/android:chrome_apk_paks_locales") {
     if (!defined(additional_source_patterns)) {
       additional_source_patterns = []
@@ -86,6 +89,13 @@ if (!is_android) {
     deps += [
       "//vivaldi/app:vivaldi_native_strings",
       "//vivaldi/app:vivaldi_unscaled_native_resources",
+    ]
+  }
+
+  update_template_instance("//chrome/android:chrome_apk_paks_extra") {
+    deps += [ "//vivaldi/app:vivaldi_unscaled_native_resources" ]
+    additional_paks += [
+      "$root_gen_dir/vivaldi/vivaldi_native_unscaled.pak",
     ]
   }
 }

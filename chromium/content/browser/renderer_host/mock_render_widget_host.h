@@ -58,11 +58,15 @@ class MockRenderWidgetHost : public RenderWidgetHostImpl {
 
   InputRouter* input_router() { return input_router_.get(); }
 
-  uint32_t processed_frame_messages_count();
-
   static MockRenderWidgetHost* Create(RenderWidgetHostDelegate* delegate,
                                       RenderProcessHost* process,
                                       int32_t routing_id);
+
+  static MockRenderWidgetHost* Create(
+      RenderWidgetHostDelegate* delegate,
+      RenderProcessHost* process,
+      int32_t routing_id,
+      mojo::PendingAssociatedRemote<blink::mojom::Widget> pending_blink_widget);
 
   blink::mojom::WidgetInputHandler* GetWidgetInputHandler() override;
 
@@ -75,9 +79,11 @@ class MockRenderWidgetHost : public RenderWidgetHostImpl {
   blink::WebInputEvent::Type acked_touch_event_type_;
 
  private:
-  MockRenderWidgetHost(RenderWidgetHostDelegate* delegate,
-                       RenderProcessHost* process,
-                       int routing_id);
+  MockRenderWidgetHost(
+      RenderWidgetHostDelegate* delegate,
+      RenderProcessHost* process,
+      int32_t routing_id,
+      mojo::PendingAssociatedRemote<blink::mojom::Widget> pending_blink_widget);
 
   std::unique_ptr<FlingScheduler> fling_scheduler_;
   DISALLOW_COPY_AND_ASSIGN(MockRenderWidgetHost);

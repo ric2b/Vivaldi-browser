@@ -21,7 +21,7 @@
 #include "components/autofill/core/common/renderer_id.h"
 #import "components/autofill/ios/browser/autofill_agent.h"
 #include "components/autofill/ios/browser/autofill_driver_ios.h"
-#include "components/password_manager/ios/unique_id_tab_helper.h"
+#include "components/autofill/ios/form_util/unique_id_data_tab_helper.h"
 #include "ios/chrome/browser/autofill/address_normalizer_factory.h"
 #import "ios/chrome/browser/autofill/form_suggestion_controller.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
@@ -131,7 +131,10 @@ FormStructureBrowserTest::FormStructureBrowserTest()
       DataDrivenTest(GetTestDataDir()) {
   feature_list_.InitWithFeatures(
       // Enabled
-      {},
+      {
+          // TODO(crbug.com/1098943): Remove once experiment is over.
+          autofill::features::kAutofillEnableSupportForMoreStructureInNames,
+      },
       // Disabled
       {autofill::features::kAutofillEnforceMinRequiredFieldsForHeuristics,
        autofill::features::kAutofillEnforceMinRequiredFieldsForQuery,
@@ -144,7 +147,7 @@ void FormStructureBrowserTest::SetUp() {
 
   // Create a PasswordController instance that will handle set up for renderer
   // ids.
-  UniqueIDTabHelper::CreateForWebState(web_state());
+  UniqueIDDataTabHelper::CreateForWebState(web_state());
   password_controller_ =
       [[PasswordController alloc] initWithWebState:web_state()];
 
@@ -203,16 +206,11 @@ void FormStructureBrowserTest::GenerateResults(const std::string& input,
 
 std::string FormStructureBrowserTest::FormStructuresToString(
     const std::map<FormRendererId, std::unique_ptr<FormStructure>>& forms) {
-  std::map<uint32_t, const FormStructure*> sorted_forms;
+  std::string forms_string;
+  // The forms are sorted by renderer ID, which should make the order
+  // deterministic.
   for (const auto& form_kv : forms) {
     const auto* form = form_kv.second.get();
-    uint32_t renderer_id = form->unique_renderer_id().value();
-    EXPECT_TRUE(sorted_forms.emplace(renderer_id, form).second);
-  }
-
-  std::string forms_string;
-  for (const auto& form_kv : sorted_forms) {
-    const auto* form = form_kv.second;
     for (const auto& field : *form) {
       std::string name = base::UTF16ToUTF8(field->name);
       if (base::StartsWith(name, "gChrome~field~",

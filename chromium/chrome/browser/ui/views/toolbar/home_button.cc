@@ -6,14 +6,17 @@
 
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_prefs/user_prefs.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/menu_model.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
@@ -143,7 +146,14 @@ void HomePageUndoBubble::WindowClosing() {
 // HomeButton -----------------------------------------------------------
 
 HomeButton::HomeButton(views::ButtonListener* listener, Browser* browser)
-    : ToolbarButton(listener), browser_(browser) {}
+    : ToolbarButton(listener), browser_(browser) {
+  set_triggerable_event_flags(ui::EF_LEFT_MOUSE_BUTTON |
+                              ui::EF_MIDDLE_MOUSE_BUTTON);
+  SetTooltipText(l10n_util::GetStringUTF16(IDS_TOOLTIP_HOME));
+  SetAccessibleName(l10n_util::GetStringUTF16(IDS_ACCNAME_HOME));
+  SetID(VIEW_ID_HOME_BUTTON);
+  SizeToPreferredSize();
+}
 
 HomeButton::~HomeButton() {
 }
@@ -183,4 +193,11 @@ int HomeButton::OnPerformDrop(const ui::DropTargetEvent& event) {
     HomePageUndoBubble::ShowBubble(browser_, old_is_ntp, old_homepage, this);
   }
   return ui::DragDropTypes::DRAG_NONE;
+}
+
+void HomeButton::UpdateIcon() {
+  const gfx::VectorIcon& home_image = ui::TouchUiController::Get()->touch_ui()
+                                          ? kNavigateHomeTouchIcon
+                                          : kNavigateHomeIcon;
+  UpdateIconsWithStandardColors(home_image);
 }

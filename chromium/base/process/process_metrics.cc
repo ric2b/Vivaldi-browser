@@ -8,42 +8,33 @@
 
 #include "base/check.h"
 #include "base/notreached.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
 
+namespace base {
+
 namespace {
+
 int CalculateEventsPerSecond(uint64_t event_count,
                              uint64_t* last_event_count,
                              base::TimeTicks* last_calculated) {
-  base::TimeTicks time = base::TimeTicks::Now();
+  const base::TimeTicks time = base::TimeTicks::Now();
 
-  if (*last_event_count == 0) {
-    // First call, just set the last values.
-    *last_calculated = time;
-    *last_event_count = event_count;
-    return 0;
-  }
-
-  int64_t events_delta = event_count - *last_event_count;
-  int64_t time_delta = (time - *last_calculated).InMicroseconds();
-  if (time_delta == 0) {
-    NOTREACHED();
-    return 0;
+  int events_per_second = 0;
+  if (*last_event_count != 0) {
+    const int64_t events_delta = event_count - *last_event_count;
+    const base::TimeDelta time_delta = time - *last_calculated;
+    DCHECK(!time_delta.is_zero());
+    events_per_second = ClampRound(events_delta / time_delta.InSecondsF());
   }
 
   *last_calculated = time;
   *last_event_count = event_count;
-
-  int64_t events_delta_for_ms =
-      events_delta * base::Time::kMicrosecondsPerSecond;
-  // Round the result up by adding 1/2 (the second term resolves to 1/2 without
-  // dropping down into floating point).
-  return (events_delta_for_ms + time_delta / 2) / time_delta;
+  return events_per_second;
 }
 
 }  // namespace
-
-namespace base {
 
 SystemMemoryInfoKB::SystemMemoryInfoKB() = default;
 
@@ -63,7 +54,7 @@ SystemMetrics SystemMetrics::Sample() {
   GetVmStatInfo(&system_metrics.vmstat_info_);
   GetSystemDiskInfo(&system_metrics.disk_info_);
 #endif
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   GetSwapInfo(&system_metrics.swap_info_);
 #endif
 #if defined(OS_WIN)
@@ -83,7 +74,7 @@ std::unique_ptr<Value> SystemMetrics::ToValue() const {
   res->Set("meminfo", std::move(meminfo));
   res->Set("diskinfo", disk_info_.ToValue());
 #endif
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   res->Set("swapinfo", swap_info_.ToValue());
 #endif
 #if defined(OS_WIN)
@@ -94,11 +85,11 @@ std::unique_ptr<Value> SystemMetrics::ToValue() const {
 }
 
 std::unique_ptr<ProcessMetrics> ProcessMetrics::CreateCurrentProcessMetrics() {
-#if !defined(OS_MACOSX) || defined(OS_IOS)
+#if !defined(OS_MAC)
   return CreateProcessMetrics(base::GetCurrentProcessHandle());
 #else
   return CreateProcessMetrics(base::GetCurrentProcessHandle(), nullptr);
-#endif  // !defined(OS_MACOSX) || defined(OS_IOS)
+#endif  // !defined(OS_MAC)
 }
 
 #if !defined(OS_FREEBSD) || !defined(OS_POSIX)
@@ -122,12 +113,11 @@ double ProcessMetrics::GetPlatformIndependentCPUUsage() {
   last_cumulative_cpu_ = cumulative_cpu;
   last_cpu_time_ = time;
 
-  return 100.0 * system_time_delta.InMicrosecondsF() /
-         time_delta.InMicrosecondsF();
+  return 100.0 * system_time_delta / time_delta;
 }
 #endif
 
-#if defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_AIX)
+#if defined(OS_APPLE) || defined(OS_LINUX) || defined(OS_AIX)
 int ProcessMetrics::CalculateIdleWakeupsPerSecond(
     uint64_t absolute_idle_wakeups) {
   return CalculateEventsPerSecond(absolute_idle_wakeups,
@@ -139,9 +129,9 @@ int ProcessMetrics::GetIdleWakeupsPerSecond() {
   NOTIMPLEMENTED();  // http://crbug.com/120488
   return 0;
 }
-#endif  // defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_AIX)
+#endif  // defined(OS_APPLE) || defined(OS_LINUX) || defined(OS_AIX)
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 int ProcessMetrics::CalculatePackageIdleWakeupsPerSecond(
     uint64_t absolute_package_idle_wakeups) {
   return CalculateEventsPerSecond(absolute_package_idle_wakeups,
@@ -149,7 +139,7 @@ int ProcessMetrics::CalculatePackageIdleWakeupsPerSecond(
                                   &last_package_idle_wakeups_time_);
 }
 
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_APPLE)
 
 #if !defined(OS_WIN)
 uint64_t ProcessMetrics::GetCumulativeDiskUsageInBytes() {

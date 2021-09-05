@@ -126,8 +126,12 @@ void NinjaCBinaryTargetWriter::Run() {
   //    object file list.
   std::vector<OutputFile> obj_files;
   std::vector<SourceFile> other_files;
-  WriteSources(*pch_files, input_deps, order_only_deps, &obj_files,
-               &other_files);
+  if (!target_->source_types_used().SwiftSourceUsed()) {
+    WriteSources(*pch_files, input_deps, order_only_deps, &obj_files,
+                 &other_files);
+  } else {
+    WriteSwiftSources(input_deps, order_only_deps, &obj_files);
+  }
 
   // Link all MSVC pch object files. The vector will be empty on GCC toolchains.
   obj_files.insert(obj_files.end(), pch_obj_files.begin(), pch_obj_files.end());
@@ -225,6 +229,44 @@ void NinjaCBinaryTargetWriter::WriteCompilerVars() {
                  CTool::kCToolObjCxx, &ConfigValues::cflags_objcc, opts,
                  path_output_, out_);
   }
+  if (target_->source_types_used().SwiftSourceUsed()) {
+    if (subst.used.count(&CSubstitutionSwiftModuleName)) {
+      out_ << CSubstitutionSwiftModuleName.ninja_name << " = ";
+      EscapeStringToStream(out_, target_->swift_values().module_name(), opts);
+      out_ << std::endl;
+    }
+
+    if (subst.used.count(&CSubstitutionSwiftBridgeHeader)) {
+      out_ << CSubstitutionSwiftBridgeHeader.ninja_name << " = ";
+      if (!target_->swift_values().bridge_header().is_null()) {
+        path_output_.WriteFile(out_, target_->swift_values().bridge_header());
+      } else {
+        out_ << R"("")";
+      }
+      out_ << std::endl;
+    }
+
+    if (subst.used.count(&CSubstitutionSwiftModuleDirs)) {
+      // Uniquify the list of swiftmodule dirs (in case multiple swiftmodules
+      // are generated in the same directory).
+      UniqueVector<SourceDir> swiftmodule_dirs;
+      for (const Target* dep : target_->swift_values().modules())
+        swiftmodule_dirs.push_back(dep->swift_values().module_output_dir());
+
+      out_ << CSubstitutionSwiftModuleDirs.ninja_name << " =";
+      PathOutput swiftmodule_path_output(
+          path_output_.current_dir(),
+          settings_->build_settings()->root_path_utf8(), ESCAPE_NINJA_COMMAND);
+      IncludeWriter swiftmodule_path_writer(swiftmodule_path_output);
+      for (const SourceDir& swiftmodule_dir : swiftmodule_dirs) {
+        swiftmodule_path_writer(swiftmodule_dir, out_);
+      }
+      out_ << std::endl;
+    }
+
+    WriteOneFlag(target_, &CSubstitutionSwiftFlags, false, CTool::kCToolSwift,
+                 &ConfigValues::swiftflags, opts, path_output_, out_);
+  }
 
   WriteSharedVars(subst);
 }
@@ -312,7 +354,7 @@ void NinjaCBinaryTargetWriter::WriteGCCPCHCommand(
             std::back_inserter(extra_deps));
 
   // Build line to compile the file.
-  WriteCompilerBuildLine(target_->config_values().precompiled_source(),
+  WriteCompilerBuildLine({target_->config_values().precompiled_source()},
                          extra_deps, order_only_deps, tool_name, outputs);
 
   // This build line needs a custom language-specific flags value. Rule-specific
@@ -364,7 +406,7 @@ void NinjaCBinaryTargetWriter::WriteWindowsPCHCommand(
             std::back_inserter(extra_deps));
 
   // Build line to compile the file.
-  WriteCompilerBuildLine(target_->config_values().precompiled_source(),
+  WriteCompilerBuildLine({target_->config_values().precompiled_source()},
                          extra_deps, order_only_deps, tool_name, outputs);
 
   // This build line needs a custom language-specific flags value. Rule-specific
@@ -387,11 +429,14 @@ void NinjaCBinaryTargetWriter::WriteSources(
     const std::vector<OutputFile>& order_only_deps,
     std::vector<OutputFile>* object_files,
     std::vector<SourceFile>* other_files) {
+  DCHECK(!target_->source_types_used().SwiftSourceUsed());
   object_files->reserve(object_files->size() + target_->sources().size());
 
   std::vector<OutputFile> tool_outputs;  // Prevent reallocation in loop.
   std::vector<OutputFile> deps;
   for (const auto& source : target_->sources()) {
+    DCHECK_NE(source.type(), SourceFile::SOURCE_SWIFT);
+
     // Clear the vector but maintain the max capacity to prevent reallocations.
     deps.resize(0);
     const char* tool_name = Tool::kToolNone;
@@ -433,7 +478,7 @@ void NinjaCBinaryTargetWriter::WriteSources(
           }
         }
       }
-      WriteCompilerBuildLine(source, deps, order_only_deps, tool_name,
+      WriteCompilerBuildLine({source}, deps, order_only_deps, tool_name,
                              tool_outputs);
     }
 
@@ -441,6 +486,89 @@ void NinjaCBinaryTargetWriter::WriteSources(
     // output, but we'll only link to the first output.
     object_files->push_back(tool_outputs[0]);
   }
+
+  out_ << std::endl;
+}
+
+void NinjaCBinaryTargetWriter::WriteSwiftSources(
+    const std::vector<OutputFile>& input_deps,
+    const std::vector<OutputFile>& order_only_deps,
+    std::vector<OutputFile>* object_files) {
+  DCHECK(target_->source_types_used().SwiftSourceUsed());
+  object_files->reserve(object_files->size() + target_->sources().size());
+
+  // If the target contains .swift source files, they needs to be compiled as
+  // a single unit but still can produce more than one object file (if the
+  // whole module optimization is disabled).
+  if (target_->source_types_used().SwiftSourceUsed()) {
+    const Tool* tool =
+        target_->toolchain()->GetToolForSourceType(SourceFile::SOURCE_SWIFT);
+
+    const OutputFile swiftmodule_output_file =
+        target_->swift_values().module_output_file();
+
+    std::vector<OutputFile> additional_outputs;
+    SubstitutionWriter::ApplyListToLinkerAsOutputFile(
+        target_, tool, tool->outputs(), &additional_outputs);
+
+    additional_outputs.erase(
+        std::remove(additional_outputs.begin(), additional_outputs.end(),
+                    swiftmodule_output_file),
+        additional_outputs.end());
+
+    for (const OutputFile& output : additional_outputs) {
+      const SourceFile output_as_source =
+          output.AsSourceFile(target_->settings()->build_settings());
+
+      if (output_as_source.type() == SourceFile::SOURCE_O) {
+        object_files->push_back(output);
+      }
+    }
+
+    const SubstitutionList& partial_outputs_subst = tool->partial_outputs();
+    if (!partial_outputs_subst.list().empty()) {
+      // Avoid re-allocation during loop.
+      std::vector<OutputFile> partial_outputs;
+      for (const auto& source : target_->sources()) {
+        if (source.type() != SourceFile::SOURCE_SWIFT)
+          continue;
+
+        partial_outputs.resize(0);
+        SubstitutionWriter::ApplyListToCompilerAsOutputFile(
+            target_, source, partial_outputs_subst, &partial_outputs);
+
+        for (const OutputFile& output : partial_outputs) {
+          additional_outputs.push_back(output);
+          SourceFile output_as_source =
+              output.AsSourceFile(target_->settings()->build_settings());
+          if (output_as_source.type() == SourceFile::SOURCE_O) {
+            object_files->push_back(output);
+          }
+        }
+      }
+    }
+
+    UniqueVector<OutputFile> swift_order_only_deps;
+    swift_order_only_deps.reserve(order_only_deps.size());
+    swift_order_only_deps.Append(order_only_deps.begin(),
+                                 order_only_deps.end());
+
+    for (const Target* swiftmodule : target_->swift_values().modules())
+      swift_order_only_deps.push_back(swiftmodule->dependency_output_file());
+
+    WriteCompilerBuildLine(target_->sources(), input_deps,
+                           swift_order_only_deps.vector(), tool->name(),
+                           {swiftmodule_output_file});
+
+    if (!additional_outputs.empty()) {
+      out_ << std::endl;
+      WriteCompilerBuildLine(
+          {swiftmodule_output_file.AsSourceFile(settings_->build_settings())},
+          input_deps, swift_order_only_deps.vector(),
+          GeneralTool::kGeneralToolStamp, additional_outputs);
+    }
+  }
+
   out_ << std::endl;
 }
 
@@ -458,21 +586,16 @@ void NinjaCBinaryTargetWriter::WriteLinkerStuff(
   out_ << ": " << rule_prefix_
        << Tool::GetToolTypeForTargetFinalOutput(target_);
 
-  UniqueVector<OutputFile> extra_object_files;
-  UniqueVector<const Target*> linkable_deps;
-  UniqueVector<const Target*> non_linkable_deps;
-  UniqueVector<const Target*> framework_deps;
-  GetDeps(&extra_object_files, &linkable_deps, &non_linkable_deps,
-          &framework_deps);
+  ClassifiedDeps classified_deps = GetClassifiedDeps();
 
   // Object files.
   path_output_.WriteFiles(out_, object_files);
-  path_output_.WriteFiles(out_, extra_object_files);
+  path_output_.WriteFiles(out_, classified_deps.extra_object_files);
 
   // Dependencies.
   std::vector<OutputFile> implicit_deps;
   std::vector<OutputFile> solibs;
-  for (const Target* cur : linkable_deps) {
+  for (const Target* cur : classified_deps.linkable_deps) {
     // All linkable deps should have a link output file.
     DCHECK(!cur->link_output_file().value().empty())
         << "No link output file for "
@@ -521,10 +644,8 @@ void NinjaCBinaryTargetWriter::WriteLinkerStuff(
   // always necessary to relink the current target if one of the framework
   // is regenerated, but it ensure that if one of the framework API changes,
   // any dependent target will relink it (see crbug.com/1037607).
-  if (!framework_deps.empty()) {
-    for (const Target* dep : framework_deps) {
-      implicit_deps.push_back(dep->dependency_output_file());
-    }
+  for (const Target* dep : classified_deps.framework_deps) {
+    implicit_deps.push_back(dep->dependency_output_file());
   }
 
   // The input dependency is only needed if there are no object files, as the
@@ -542,6 +663,19 @@ void NinjaCBinaryTargetWriter::WriteLinkerStuff(
         transitive_rustlibs.push_back(dep->dependency_output_file());
         implicit_deps.push_back(dep->dependency_output_file());
       }
+    }
+  }
+
+  // Swift modules from dependencies (and possibly self).
+  std::vector<OutputFile> swiftmodules;
+  if (target_->IsFinal()) {
+    for (const Target* dep : classified_deps.swiftmodule_deps) {
+      swiftmodules.push_back(dep->swift_values().module_output_file());
+      implicit_deps.push_back(dep->swift_values().module_output_file());
+    }
+    if (target_->swift_values().builds_module()) {
+      swiftmodules.push_back(target_->swift_values().module_output_file());
+      implicit_deps.push_back(target_->swift_values().module_output_file());
     }
   }
 
@@ -564,7 +698,7 @@ void NinjaCBinaryTargetWriter::WriteLinkerStuff(
   // the sources, there is already an implicit order-only dependency. However,
   // it's extra work to separate these out and there's no disadvantage to
   // listing them again.
-  WriteOrderOnlyDependencies(non_linkable_deps);
+  WriteOrderOnlyDependencies(classified_deps.non_linkable_deps);
 
   // End of the link "build" line.
   out_ << std::endl;
@@ -581,6 +715,9 @@ void NinjaCBinaryTargetWriter::WriteLinkerStuff(
     out_ << std::endl;
     out_ << "  frameworks =";
     WriteFrameworks(out_, tool_);
+    out_ << std::endl;
+    out_ << "  swiftmodules =";
+    WriteSwiftModules(out_, tool_, swiftmodules);
     out_ << std::endl;
   } else if (target_->output_type() == Target::STATIC_LIBRARY) {
     out_ << "  arflags =";

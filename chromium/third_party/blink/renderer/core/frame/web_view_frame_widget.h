@@ -50,16 +50,15 @@ class CORE_EXPORT WebViewFrameWidget : public WebFrameWidgetBase {
       CrossVariantMojoAssociatedRemote<mojom::blink::WidgetHostInterfaceBase>
           widget_host,
       CrossVariantMojoAssociatedReceiver<mojom::blink::WidgetInterfaceBase>
-          widget);
+          widget,
+      bool is_for_nested_main_frame);
   ~WebViewFrameWidget() override;
 
   // WebWidget overrides:
-  void Close(scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner,
-             base::OnceCallback<void()> cleanup_task) override;
+  void Close(
+      scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner) override;
   WebSize Size() override;
   void Resize(const WebSize&) override;
-  void DidEnterFullscreen() override;
-  void DidExitFullscreen() override;
   void UpdateLifecycle(WebLifecycleUpdate requested_update,
                        DocumentUpdateReason reason) override;
   void ThemeChanged() override;
@@ -71,19 +70,37 @@ class CORE_EXPORT WebViewFrameWidget : public WebFrameWidgetBase {
   WebURL GetURLForDebugTrace() override;
   WebString GetLastToolTipTextForTesting() const override;
 
+  // blink::mojom::FrameWidget
+  void EnableDeviceEmulation(const DeviceEmulationParams& parameters) override;
+  void DisableDeviceEmulation() override;
+
   // WebFrameWidget overrides:
   void DidDetachLocalFrameTree() override;
   WebInputMethodController* GetActiveWebInputMethodController() const override;
   bool ScrollFocusedEditableElementIntoView() override;
   WebHitTestResult HitTestResultAt(const gfx::PointF&) override;
+  void SetZoomLevelForTesting(double zoom_level) override;
+  void ResetZoomLevelForTesting() override;
+  void SetDeviceScaleFactorForTesting(float factor) override;
 
   // WebFrameWidgetBase overrides:
   bool ForSubframe() const override { return false; }
+  bool ForTopLevelFrame() const override { return !is_for_nested_main_frame_; }
   HitTestResult CoreHitTestResultAt(const gfx::PointF&) override;
   void ZoomToFindInPageRect(const WebRect& rect_in_root_frame) override;
+  void SetZoomLevel(double zoom_level) override;
+  void SetAutoResizeMode(bool auto_resize,
+                         const gfx::Size& min_size_before_dsf,
+                         const gfx::Size& max_size_before_dsf,
+                         float device_scale_factor) override;
+  void SetPageScaleStateAndLimits(float page_scale_factor,
+                                  bool is_pinch_gesture_active,
+                                  float minimum,
+                                  float maximum) override;
 
   // FrameWidget overrides:
   void SetRootLayer(scoped_refptr<cc::Layer>) override;
+  bool ShouldHandleImeEvents() override;
 
   // WidgetBaseClient overrides:
   void BeginMainFrame(base::TimeTicks last_frame_time) override;
@@ -107,8 +124,14 @@ class CORE_EXPORT WebViewFrameWidget : public WebFrameWidgetBase {
   void BeginCommitCompositorFrame() override;
   void EndCommitCompositorFrame(base::TimeTicks commit_start_time) override;
   void FocusChanged(bool enabled) override;
+  float GetDeviceScaleFactorForTesting() override;
+  gfx::Rect ViewportVisibleRect() override;
 
   void Trace(Visitor*) const override;
+
+  void SetIsNestedMainFrameWidget(bool is_nested);
+  void DidAutoResize(const gfx::Size& size);
+  void SetDeviceColorSpaceForTesting(const gfx::ColorSpace& color_space);
 
  private:
   PageWidgetEventHandler* GetPageWidgetEventHandler() override;
@@ -116,6 +139,21 @@ class CORE_EXPORT WebViewFrameWidget : public WebFrameWidgetBase {
 
   scoped_refptr<WebViewImpl> web_view_;
   base::Optional<base::TimeTicks> commit_compositor_frame_start_time_;
+
+  // Web tests override the zoom factor in the renderer with this. We store it
+  // to keep the override if the browser passes along VisualProperties with the
+  // real device scale factor. A value of -INFINITY means this is ignored.
+  double zoom_level_for_testing_ = -INFINITY;
+
+  // Web tests override the device scale factor in the renderer with this. We
+  // store it to keep the override if the browser passes along VisualProperties
+  // with the real device scale factor. A value of 0.f means this is ignored.
+  float device_scale_factor_for_testing_ = 0;
+
+  // This bit is used to tell if this is a nested widget (an "inner web
+  // contents") like a <webview> or <portal> widget. If false, the widget is the
+  // top level widget.
+  bool is_for_nested_main_frame_ = false;
 
   SelfKeepAlive<WebViewFrameWidget> self_keep_alive_;
 

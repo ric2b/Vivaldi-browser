@@ -24,6 +24,7 @@
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/image_capture/image_capture_impl.h"
 #include "content/browser/keyboard_lock/keyboard_lock_service_impl.h"
+#include "content/browser/loader/content_security_notifier.h"
 #include "content/browser/media/session/media_session_service_impl.h"
 #include "content/browser/picture_in_picture/picture_in_picture_service_impl.h"
 #include "content/browser/process_internals/process_internals.mojom.h"
@@ -42,13 +43,12 @@
 #include "content/browser/worker_host/shared_worker_host.h"
 #include "content/browser/xr/service/vr_service_impl.h"
 #include "content/common/input/input_injector.mojom.h"
-#include "content/common/media/renderer_audio_input_stream_factory.mojom.h"
-#include "content/common/media/renderer_audio_output_stream_factory.mojom.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/device_service.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/shared_worker_instance.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/url_constants.h"
@@ -88,8 +88,11 @@
 #include "third_party/blink/public/mojom/input/input_host.mojom.h"
 #include "third_party/blink/public/mojom/insecure_input/insecure_input_service.mojom.h"
 #include "third_party/blink/public/mojom/keyboard_lock/keyboard_lock.mojom.h"
+#include "third_party/blink/public/mojom/loader/content_security_notifier.mojom.h"
 #include "third_party/blink/public/mojom/loader/navigation_predictor.mojom.h"
 #include "third_party/blink/public/mojom/locks/lock_manager.mojom.h"
+#include "third_party/blink/public/mojom/media/renderer_audio_input_stream_factory.mojom.h"
+#include "third_party/blink/public/mojom/media/renderer_audio_output_stream_factory.mojom.h"
 #include "third_party/blink/public/mojom/mediasession/media_session.mojom.h"
 #include "third_party/blink/public/mojom/mediastream/media_devices.mojom.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
@@ -97,6 +100,7 @@
 #include "third_party/blink/public/mojom/native_io/native_io.mojom.h"
 #include "third_party/blink/public/mojom/notifications/notification_service.mojom.h"
 #include "third_party/blink/public/mojom/payments/payment_app.mojom.h"
+#include "third_party/blink/public/mojom/payments/payment_credential.mojom.h"
 #include "third_party/blink/public/mojom/permissions/permission.mojom.h"
 #include "third_party/blink/public/mojom/picture_in_picture/picture_in_picture.mojom.h"
 #include "third_party/blink/public/mojom/prerender/prerender.mojom.h"
@@ -138,7 +142,7 @@
 #include "media/mojo/mojom/remoting.mojom-forward.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "content/browser/renderer_host/text_input_host_impl.h"
 #include "third_party/blink/public/mojom/input/text_input_host.mojom.h"
 #endif
@@ -187,7 +191,7 @@ void BindTextDetection(
   GetShapeDetectionService()->BindTextDetection(std::move(receiver));
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 void BindTextInputHost(
     mojo::PendingReceiver<blink::mojom::TextInputHost> receiver) {
   GetIOThreadTaskRunner({})->PostTask(
@@ -488,8 +492,10 @@ void BindVibrationManager(
 
 // Documents/frames
 void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
-  map->Add<blink::mojom::AppCacheBackend>(base::BindRepeating(
-      &RenderFrameHostImpl::CreateAppCacheBackend, base::Unretained(host)));
+  if (StoragePartition::IsAppCacheEnabled()) {
+    map->Add<blink::mojom::AppCacheBackend>(base::BindRepeating(
+        &RenderFrameHostImpl::CreateAppCacheBackend, base::Unretained(host)));
+  }
 
   map->Add<blink::mojom::AudioContextManager>(base::BindRepeating(
       &RenderFrameHostImpl::GetAudioContextManager, base::Unretained(host)));
@@ -500,12 +506,27 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
   map->Add<blink::mojom::ContactsManager>(base::BindRepeating(
       &RenderFrameHostImpl::GetContactsManager, base::Unretained(host)));
 
+  map->Add<blink::mojom::ContentSecurityNotifier>(base::BindRepeating(
+      [](RenderFrameHostImpl* host,
+         mojo::PendingReceiver<blink::mojom::ContentSecurityNotifier>
+             receiver) {
+        mojo::MakeSelfOwnedReceiver(std::make_unique<ContentSecurityNotifier>(
+                                        host->GetGlobalFrameRoutingId()),
+                                    std::move(receiver));
+      },
+      base::Unretained(host)));
+
   map->Add<blink::mojom::DedicatedWorkerHostFactory>(base::BindRepeating(
       &RenderFrameHostImpl::CreateDedicatedWorkerHostFactory,
       base::Unretained(host)));
 
   map->Add<blink::mojom::FeatureObserver>(base::BindRepeating(
       &RenderFrameHostImpl::GetFeatureObserver, base::Unretained(host)));
+
+  if (base::FeatureList::IsEnabled(blink::features::kFontAccess)) {
+    map->Add<blink::mojom::FontAccessManager>(base::BindRepeating(
+        &RenderFrameHostImpl::GetFontAccessManager, base::Unretained(host)));
+  }
 
   map->Add<blink::mojom::FileSystemManager>(base::BindRepeating(
       &RenderFrameHostImpl::GetFileSystemManager, base::Unretained(host)));
@@ -514,7 +535,7 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
       &RenderFrameHostImpl::GetGeolocationService, base::Unretained(host)));
 
   map->Add<blink::mojom::IdleManager>(base::BindRepeating(
-      &RenderFrameHostImpl::GetIdleManager, base::Unretained(host)));
+      &RenderFrameHostImpl::BindIdleManager, base::Unretained(host)));
 
   if (base::FeatureList::IsEnabled(blink::features::kNativeFileSystemAPI)) {
     map->Add<blink::mojom::NativeFileSystemManager>(
@@ -623,11 +644,11 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
         GetIOThreadTaskRunner({}));
   }
 
-  map->Add<mojom::RendererAudioInputStreamFactory>(
+  map->Add<blink::mojom::RendererAudioInputStreamFactory>(
       base::BindRepeating(&RenderFrameHostImpl::CreateAudioInputStreamFactory,
                           base::Unretained(host)));
 
-  map->Add<mojom::RendererAudioOutputStreamFactory>(
+  map->Add<blink::mojom::RendererAudioOutputStreamFactory>(
       base::BindRepeating(&RenderFrameHostImpl::CreateAudioOutputStreamFactory,
                           base::Unretained(host)));
 
@@ -693,7 +714,7 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
       &RenderFrameHostImpl::BindSerialService, base::Unretained(host)));
 #endif  // !defined(OS_ANDROID)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   map->Add<blink::mojom::TextInputHost>(
       base::BindRepeating(&BindTextInputHost));
 #endif
@@ -710,6 +731,8 @@ void PopulateBinderMapWithContext(
       &EmptyBinderForFrame<blink::mojom::InsecureInputService>));
   map->Add<blink::mojom::PrerenderProcessor>(base::BindRepeating(
       &EmptyBinderForFrame<blink::mojom::PrerenderProcessor>));
+  map->Add<payments::mojom::PaymentCredential>(base::BindRepeating(
+      &EmptyBinderForFrame<payments::mojom::PaymentCredential>));
   map->Add<payments::mojom::PaymentRequest>(base::BindRepeating(
       &EmptyBinderForFrame<payments::mojom::PaymentRequest>));
   map->Add<blink::mojom::AnchorElementMetricsHost>(base::BindRepeating(
@@ -822,6 +845,9 @@ void PopulateDedicatedWorkerBinders(DedicatedWorkerHost* host,
                           base::Unretained(host)));
   map->Add<blink::mojom::WakeLockService>(base::BindRepeating(
       &DedicatedWorkerHost::CreateWakeLockService, base::Unretained(host)));
+  map->Add<blink::mojom::ContentSecurityNotifier>(
+      base::BindRepeating(&DedicatedWorkerHost::CreateContentSecurityNotifier,
+                          base::Unretained(host)));
   map->Add<blink::mojom::CacheStorage>(base::BindRepeating(
       &DedicatedWorkerHost::BindCacheStorage, base::Unretained(host)));
 #if !defined(OS_ANDROID)
@@ -876,6 +902,12 @@ void PopulateSharedWorkerBinders(SharedWorkerHost* host, mojo::BinderMap* map) {
   // Do nothing for interfaces that the renderer might request, but doesn't
   // always expect to be bound.
   map->Add<blink::mojom::FeatureObserver>(base::DoNothing());
+  // Ignore the pending receiver because it's not clear how to handle
+  // notifications about content security (e.g., mixed contents and certificate
+  // errors) on shared workers. Generally these notifications are routed to the
+  // ancestor frame's WebContents like dedicated workers, but shared workers
+  // don't have the ancestor frame.
+  map->Add<blink::mojom::ContentSecurityNotifier>(base::DoNothing());
 
   // static binders
   map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
@@ -888,8 +920,10 @@ void PopulateSharedWorkerBinders(SharedWorkerHost* host, mojo::BinderMap* map) {
   // worker host binders
   // base::Unretained(host) is safe because the map is owned by
   // |SharedWorkerHost::broker_|.
-  map->Add<blink::mojom::AppCacheBackend>(base::BindRepeating(
-      &SharedWorkerHost::CreateAppCacheBackend, base::Unretained(host)));
+  if (StoragePartition::IsAppCacheEnabled()) {
+    map->Add<blink::mojom::AppCacheBackend>(base::BindRepeating(
+        &SharedWorkerHost::CreateAppCacheBackend, base::Unretained(host)));
+  }
   map->Add<blink::mojom::QuicTransportConnector>(base::BindRepeating(
       &SharedWorkerHost::CreateQuicTransportConnector, base::Unretained(host)));
   map->Add<blink::mojom::CacheStorage>(base::BindRepeating(
@@ -948,6 +982,12 @@ void PopulateServiceWorkerBinders(ServiceWorkerHost* host,
   // Do nothing for interfaces that the renderer might request, but doesn't
   // always expect to be bound.
   map->Add<blink::mojom::FeatureObserver>(base::DoNothing());
+  // Ignore the pending receiver because it's not clear how to handle
+  // notifications about content security (e.g., mixed contents and certificate
+  // errors) on service workers. Generally these notifications are routed to the
+  // ancestor frame's WebContents like dedicated workers, but service workers
+  // don't have the ancestor frame.
+  map->Add<blink::mojom::ContentSecurityNotifier>(base::DoNothing());
 
   // static binders
   map->Add<shape_detection::mojom::BarcodeDetectionProvider>(

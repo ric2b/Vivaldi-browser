@@ -61,31 +61,6 @@ def _ParseArgs(args):
   input_opts.add_argument(
       '--android-manifest', required=True, help='AndroidManifest.xml path.')
   input_opts.add_argument(
-      '--expected-file',
-      help='Expected contents for the check. If'
-      '--android-manifest-verify-diff-base is set, this is a diff file. If'
-      'not, this is a AndroidManifest file.')
-  input_opts.add_argument(
-      '--android-manifest-normalized', help='Normalized manifest.')
-  input_opts.add_argument(
-      '--android-manifest-expectations-failure-file',
-      help='Write to this file if expected manifest contents do not match '
-      'final manifest contents.')
-  input_opts.add_argument(
-      '--fail-on-expectations',
-      action="store_true",
-      help='When passed, fails the build on AndroidManifest expectation '
-      'mismatches.')
-  input_opts.add_argument(
-      '--expected-manifest-base-expectation',
-      help='When we expect the actual normalized manifest is different from'
-      'the file from --android-manifest-expected, this file specifies the'
-      'difference.')
-  input_opts.add_argument(
-      '--only-verify-expectations',
-      action='store_true',
-      help='If passed, only verify the android manifest expectation and exit.')
-  input_opts.add_argument(
       '--r-java-root-package-name',
       default='base',
       help='Short package name for this target\'s root R java file (ex. '
@@ -222,7 +197,9 @@ def _ParseArgs(args):
       '--optimized-proto-path',
       help='Output for `aapt2 optimize` for proto format (enables the step).')
   input_opts.add_argument(
-      '--resources-config-path', help='Path to aapt2 resources config file.')
+      '--resources-config-paths',
+      default='[]',
+      help='GN list of paths to aapt2 resources config files.')
 
   output_opts.add_argument(
       '--info-path', help='Path to output info file for the partial apk.')
@@ -255,6 +232,7 @@ def _ParseArgs(args):
       action='store_true',
       help='Whether resources are being generated for a bundle module.')
 
+  diff_utils.AddCommandLineFlags(parser)
   options = parser.parse_args(args)
 
   resource_utils.HandleCommonOptions(options)
@@ -268,6 +246,8 @@ def _ParseArgs(args):
       options.values_filter_rules)
   options.extra_main_r_text_files = build_utils.ParseGnList(
       options.extra_main_r_text_files)
+  options.resources_config_paths = build_utils.ParseGnList(
+      options.resources_config_paths)
 
   if options.optimized_proto_path and not options.proto_path:
     # We could write to a temp file, but it's simpler to require it.
@@ -483,41 +463,6 @@ def _FixManifest(options, temp_dir):
 
   manifest_utils.SaveManifest(doc, debug_manifest_path)
   return debug_manifest_path, orig_package
-
-
-def _VerifyManifest(actual_manifest, expected_file, normalized_manifest,
-                    expected_manifest_base_expectation,
-                    unexpected_manifest_failure_file, fail_on_mismatch):
-  with build_utils.AtomicOutput(normalized_manifest) as normalized_output:
-    normalized_output.write(manifest_utils.NormalizeManifest(actual_manifest))
-
-  if expected_manifest_base_expectation:
-    with tempfile.NamedTemporaryFile() as generated_diff:
-      actual_diff_content = diff_utils.GenerateDiffWithOnlyAdditons(
-          expected_manifest_base_expectation, normalized_manifest)
-      generated_diff.write(actual_diff_content)
-      generated_diff.flush()
-
-      msg = diff_utils.DiffFileContents(expected_file, generated_diff.name)
-  else:
-    msg = diff_utils.DiffFileContents(expected_file, normalized_manifest)
-
-  if not msg:
-    return
-
-  msg_header = """\
-AndroidManifest.xml expectations file needs updating. For details see:
-https://chromium.googlesource.com/chromium/src/+/HEAD/chrome/android/java/README.md
-"""
-  sys.stderr.write(msg_header)
-  sys.stderr.write(msg)
-  if unexpected_manifest_failure_file:
-    build_utils.MakeDirectory(os.path.dirname(unexpected_manifest_failure_file))
-    with open(unexpected_manifest_failure_file, 'w') as f:
-      f.write(msg_header)
-      f.write(msg)
-  if fail_on_mismatch:
-    sys.exit(1)
 
 
 def _CreateKeepPredicate(resource_exclusion_regex,
@@ -938,6 +883,14 @@ def _PackageApk(options, build):
   return desired_manifest_package_name
 
 
+def _CombineResourceConfigs(resources_config_paths, out_config_path):
+  with open(out_config_path, 'w') as out_config:
+    for config_path in resources_config_paths:
+      with open(config_path) as config:
+        out_config.write(config.read())
+        out_config.write('\n')
+
+
 def _OptimizeApk(output, options, temp_dir, unoptimized_path, r_txt_path):
   """Optimize intermediate .ap_ file with aapt2.
 
@@ -959,17 +912,13 @@ def _OptimizeApk(output, options, temp_dir, unoptimized_path, r_txt_path):
   # Optimize the resources.arsc file by obfuscating resource names and only
   # allow usage via R.java constant.
   if options.strip_resource_names:
-    # Resources of type ID are references to UI elements/views. They are used by
-    # UI automation testing frameworks. They are kept in so that they dont break
-    # tests, even though they may not actually be used during runtime. See
-    # https://crbug.com/900993
-    id_resources = _ExtractIdResources(r_txt_path)
+    no_collapse_resources = _ExtractNonCollapsableResources(r_txt_path)
     gen_config_path = os.path.join(temp_dir, 'aapt2.config')
-    if options.resources_config_path:
-      shutil.copyfile(options.resources_config_path, gen_config_path)
-    with open(gen_config_path, 'a+') as config:
-      for resource in id_resources:
-        config.write('{}#no_obfuscate\n'.format(resource))
+    if options.resources_config_paths:
+      _CombineResourceConfigs(options.resources_config_paths, gen_config_path)
+    with open(gen_config_path, 'a') as config:
+      for resource in no_collapse_resources:
+        config.write('{}#no_collapse\n'.format(resource))
 
     optimize_command += [
         '--collapse-resource-names',
@@ -989,21 +938,30 @@ def _OptimizeApk(output, options, temp_dir, unoptimized_path, r_txt_path):
       optimize_command, print_stdout=False, print_stderr=False)
 
 
-def _ExtractIdResources(rtxt_path):
-  """Extract resources of type ID from the R.txt file
+def _ExtractNonCollapsableResources(rtxt_path):
+  """Extract resources that should not be collapsed from the R.txt file
+
+  Resources of type ID are references to UI elements/views. They are used by
+  UI automation testing frameworks. They are kept in so that they don't break
+  tests, even though they may not actually be used during runtime. See
+  https://crbug.com/900993
+  App icons (aka mipmaps) are sometimes referenced by other apps by name so must
+  be keps as well. See https://b/161564466
 
   Args:
     rtxt_path: Path to R.txt file with all the resources
   Returns:
-    List of id resources in the form of id/<resource_name>
+    List of resources in the form of <resource_type>/<resource_name>
   """
-  id_resources = []
+  resources = []
+  _NO_COLLAPSE_TYPES = ['id', 'mipmap']
   with open(rtxt_path) as rtxt:
     for line in rtxt:
-      if ' id ' in line:
-        resource_name = line.split()[2]
-        id_resources.append('id/{}'.format(resource_name))
-  return id_resources
+      for resource_type in _NO_COLLAPSE_TYPES:
+        if ' {} '.format(resource_type) in line:
+          resource_name = line.split()[2]
+          resources.append('{}/{}'.format(resource_type, resource_name))
+  return resources
 
 
 @contextlib.contextmanager
@@ -1048,14 +1006,11 @@ def _WriteOutputs(options, build):
       shutil.move(temp, final)
 
 
-def _VerifyExpectations(options):
+def _CreateNormalizedManifest(options):
   with build_utils.TempDir() as tempdir:
     fixed_manifest, _ = _FixManifest(options, tempdir)
-    _VerifyManifest(fixed_manifest, options.expected_file,
-                    options.android_manifest_normalized,
-                    options.expected_manifest_base_expectation,
-                    options.android_manifest_expectations_failure_file,
-                    options.fail_on_expectations)
+    with open(fixed_manifest) as f:
+      return manifest_utils.NormalizeManifest(f.read())
 
 
 def _OnStaleMd5(options):
@@ -1100,6 +1055,12 @@ def _OnStaleMd5(options):
     custom_root_package_name = options.r_java_root_package_name
     grandparent_custom_package_name = None
 
+    # Always generate an R.java file for the package listed in
+    # AndroidManifest.xml because this is where Android framework looks to find
+    # onResourcesLoaded() for shared library apks. While not actually necessary
+    # for application apks, it also doesn't hurt.
+    apk_package_name = manifest_package_name
+
     if options.package_name and not options.arsc_package_name:
       # Feature modules have their own custom root package name and should
       # inherit from the appropriate base module package. This behaviour should
@@ -1108,18 +1069,17 @@ def _OnStaleMd5(options):
       # apk under test.
       custom_root_package_name = options.package_name
       grandparent_custom_package_name = options.r_java_root_package_name
-
-    if options.shared_resources or options.app_as_shared_lib:
-      package_for_library = manifest_package_name
-    else:
-      package_for_library = None
+      # Feature modules have the same manifest package as the base module but
+      # they should not create an R.java for said manifest package because it
+      # will be created in the base module.
+      apk_package_name = None
 
     logging.debug('Creating R.srcjar')
     resource_utils.CreateRJavaFiles(
-        build.srcjar_dir, package_for_library, build.r_txt_path,
-        options.extra_res_packages, options.extra_r_text_files,
-        rjava_build_options, options.srcjar_out, custom_root_package_name,
-        grandparent_custom_package_name, options.extra_main_r_text_files)
+        build.srcjar_dir, apk_package_name, build.r_txt_path,
+        options.extra_res_packages, rjava_build_options, options.srcjar_out,
+        custom_root_package_name, grandparent_custom_package_name,
+        options.extra_main_r_text_files)
     build_utils.ZipDir(build.srcjar_path, build.srcjar_dir)
 
     # Sanity check that the created resources have the expected package ID.
@@ -1147,31 +1107,30 @@ def main(args):
   options = _ParseArgs(args)
 
   if options.expected_file:
-    _VerifyExpectations(options)
-  if options.only_verify_expectations:
-    return
+    actual_data = _CreateNormalizedManifest(options)
+    diff_utils.CheckExpectations(actual_data, options)
+    if options.only_verify_expectations:
+      return
 
-  depfile_deps = (
-      options.dependencies_res_zips + options.extra_main_r_text_files +
-      options.extra_r_text_files + options.include_resources)
+  depfile_deps = (options.dependencies_res_zips +
+                  options.extra_main_r_text_files + options.include_resources)
 
-  possible_input_paths = depfile_deps + [
+  possible_input_paths = depfile_deps + options.resources_config_paths + [
       options.aapt2_path,
       options.android_manifest,
       options.expected_file,
-      options.expected_manifest_base_expectation,
-      options.resources_config_path,
+      options.expected_file_base,
       options.shared_resources_allowlist,
       options.use_resource_ids_path,
       options.webp_binary,
   ]
   input_paths = [p for p in possible_input_paths if p]
   input_strings = [
-      options.android_manifest_expectations_failure_file,
       options.app_as_shared_lib,
       options.arsc_package_name,
       options.debuggable,
       options.extra_res_packages,
+      options.failure_file,
       options.include_resources,
       options.locale_allowlist,
       options.manifest_package,
@@ -1198,7 +1157,7 @@ def main(args):
   ]
   output_paths = [options.srcjar_out]
   possible_output_paths = [
-      options.android_manifest_normalized,
+      options.actual_file,
       options.arsc_path,
       options.emit_ids_out,
       options.info_path,

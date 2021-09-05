@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Post i lista</translation>
 <translation id="1013742170491673792">sökfält</translation>
 <translation id="1014370462248694370">Svep åt höger med två fingrar</translation>
+<translation id="1016393160682012902">Tryck på en tangent på tangentbordet, en tangent på den uppdateringsbara punktskriftsskärmen eller en skärmrörelse om du vill veta vad den gör. Tryck på Ctrl och w eller Esc när du vill avsluta.</translation>
 <translation id="1022586497894531524">Är det första gången du använder talad feedback med ChromeVox? I dessa korta självstudier förklaras de grundläggande stegen för att komma igång med ChromeVox.</translation>
 <translation id="1025074108959230262">Låsta knappar har inaktiverats</translation>
 <translation id="1031961866430398710">sedan</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Intern länk</translation>
 <translation id="4909019435900810068">Flytta bakåt ett ord</translation>
 <translation id="4911349081560453449">Det finns ingen föregående kryssruta</translation>
-<translation id="4915087353619183190">Inlärningsläget startas. Tryck på en qwerty-tangent, en uppdateringsbar braille-tangent eller en skärmrörelse för att ta reda på vad den har för funktion. Tryck på Ctrl och w eller Escape när du vill avsluta.</translation>
 <translation id="492295894462528572">Förord</translation>
 <translation id="495046168593986294">Rulla upp</translation>
 <translation id="495170559598752135">Åtgärder</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Grön</translation>
 <translation id="602001110135236999">Rulla åt vänster</translation>
 <translation id="6034000775414344507">Ljusgrå</translation>
+<translation id="6036135911048686884">Tryck och dra för att utforska</translation>
 <translation id="6037602951055904232">Panorera framåt</translation>
 <translation id="6044160928851315051">Släck skärmen</translation>
 <translation id="6082768461603900813">Grundläggande navigering</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{nummertecken}other{# nummertecken}}</translation>
 <translation id="8378855320830505539">Område</translation>
 <translation id="8382679411218029383">Autoslutför med både direktinfogning och lista</translation>
+<translation id="8394908167088220973">Spela upp/Pausa</translation>
 <translation id="8428213095426709021">Inställningar</translation>
 <translation id="8428603554127842284">nivå <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">menyfält</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">stäng strukturerat innehåll, t.ex. tabeller</translation>
 <translation id="8779057862865475116">Det finns ingen föregående länk</translation>
 <translation id="8796411681063377102">Nästa rubrik på nivå 3</translation>
+<translation id="8823311177246872527">Sida <ph name="CURRENTPAGE" /> av <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">banner</translation>
 <translation id="8851136666856101339">huvud</translation>
 <translation id="8882002077197914455">Radrubrik</translation>

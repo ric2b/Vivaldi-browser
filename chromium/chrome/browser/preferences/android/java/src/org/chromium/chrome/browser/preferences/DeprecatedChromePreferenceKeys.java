@@ -47,6 +47,7 @@ public class DeprecatedChromePreferenceKeys {
                 "chrome_home_opt_out_snackbar_shown",
                 "chrome_home_user_enabled",
                 "chrome_modern_design_enabled",
+                "chromium.invalidations.uuid",
                 "click_to_call_open_dialer_directly",
                 "crash_dump_upload",
                 "crash_dump_upload_no_cellular",
@@ -61,6 +62,7 @@ public class DeprecatedChromePreferenceKeys {
                 "physical_web",
                 "physical_web_sharing",
                 "sole_integration_enabled",
+                "start_surface_single_pane_enabled",
                 "tab_persistent_store_task_runner_enabled",
                 "webapk_number_of_uninstalls",
                 "website_settings_filter"

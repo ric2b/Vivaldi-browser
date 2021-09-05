@@ -240,7 +240,7 @@ bool ResolveSingleCertRef(const CertPEMsByGUIDMap& certs_by_guid,
   if (!GUIDRefToPEMEncoding(certs_by_guid, guid_ref, &pem_encoded))
     return false;
 
-  onc_object->RemoveWithoutPathExpansion(key_guid_ref, nullptr);
+  onc_object->RemoveKey(key_guid_ref);
   onc_object->SetKey(key_pem, base::Value(pem_encoded));
   return true;
 }
@@ -278,7 +278,7 @@ bool ResolveCertRefList(const CertPEMsByGUIDMap& certs_by_guid,
     pem_list->AppendString(pem_encoded);
   }
 
-  onc_object->RemoveWithoutPathExpansion(key_guid_ref_list, nullptr);
+  onc_object->RemoveKey(key_guid_ref_list);
   onc_object->SetWithoutPathExpansion(key_pem_list, std::move(pem_list));
   return true;
 }
@@ -299,7 +299,7 @@ bool ResolveSingleCertRefToList(const CertPEMsByGUIDMap& certs_by_guid,
 
   std::unique_ptr<base::ListValue> pem_list(new base::ListValue);
   pem_list->AppendString(pem_encoded);
-  onc_object->RemoveWithoutPathExpansion(key_guid_ref, nullptr);
+  onc_object->RemoveKey(key_guid_ref);
   onc_object->SetWithoutPathExpansion(key_pem_list, std::move(pem_list));
   return true;
 }
@@ -316,7 +316,7 @@ bool ResolveCertRefsOrRefToList(const CertPEMsByGUIDMap& certs_by_guid,
     if (onc_object->HasKey(key_guid_ref)) {
       LOG(ERROR) << "Found both " << key_guid_refs << " and " << key_guid_ref
                  << ". Ignoring and removing the latter.";
-      onc_object->RemoveWithoutPathExpansion(key_guid_ref, nullptr);
+      onc_object->RemoveKey(key_guid_ref);
     }
     return ResolveCertRefList(certs_by_guid, key_guid_refs, key_pem_list,
                               onc_object);
@@ -768,7 +768,7 @@ std::string GetSourceAsString(::onc::ONCSource source) {
     case ::onc::ONC_SOURCE_USER_IMPORT:
       return "user import";
   }
-  NOTREACHED() << "unknown ONC source " << source;
+  NOTREACHED();
   return "unknown";
 }
 
@@ -1056,7 +1056,7 @@ NetworkTypePattern NetworkTypePatternFromOncType(const std::string& type) {
     return NetworkTypePattern::WiFi();
   if (type == ::onc::network_type::kWireless)
     return NetworkTypePattern::Wireless();
-  NOTREACHED() << "Unrecognized ONC type: " << type;
+  NET_LOG(ERROR) << "Unrecognized ONC type: " << type;
   return NetworkTypePattern::Default();
 }
 
@@ -1080,7 +1080,7 @@ base::Value ConvertOncProxySettingsToProxyConfig(
     const base::Value* manual_dict =
         onc_proxy_settings.FindKey(::onc::proxy::kManual);
     if (!manual_dict) {
-      NOTREACHED() << "Manual proxy missing dictionary";
+      NET_LOG(ERROR) << "Manual proxy missing dictionary";
       return base::Value();
     }
     std::string manual_spec;
@@ -1247,7 +1247,7 @@ int ImportNetworksForUser(const user_manager::User* user,
               NetworkTypePattern::Ethernet());
       if (ethernet) {
         config_handler->SetShillProperties(ethernet->path(), *shill_dict,
-                                           base::Closure(),
+                                           base::OnceClosure(),
                                            network_handler::ErrorCallback());
       } else {
         ethernet_not_found = true;

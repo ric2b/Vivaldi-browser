@@ -15,7 +15,7 @@
 #include "base/posix/eintr_wrapper.h"
 #include "build/build_config.h"
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include <asm-generic/ioctls.h>
 #include <linux/serial.h>
 
@@ -34,9 +34,9 @@ struct termios2 {
 };
 }
 
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include <IOKit/serial/ioss.h>
 #endif
 
@@ -66,7 +66,7 @@ bool BitrateToSpeedConstant(int bitrate, speed_t* speed) {
     BITRATE_TO_SPEED_CASE(9600)
     BITRATE_TO_SPEED_CASE(19200)
     BITRATE_TO_SPEED_CASE(38400)
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
     BITRATE_TO_SPEED_CASE(57600)
     BITRATE_TO_SPEED_CASE(115200)
     BITRATE_TO_SPEED_CASE(230400)
@@ -80,7 +80,7 @@ bool BitrateToSpeedConstant(int bitrate, speed_t* speed) {
 #undef BITRATE_TO_SPEED_CASE
 }
 
-#if !defined(OS_LINUX)
+#if !defined(OS_LINUX) && !defined(OS_CHROMEOS)
 // Convert a known nominal speed into an integral bitrate. Returns |true|
 // if the conversion was successful and |false| otherwise.
 bool SpeedConstantToBitrate(speed_t speed, int* bitrate) {
@@ -126,7 +126,11 @@ scoped_refptr<SerialIoHandler> SerialIoHandler::Create(
 void SerialIoHandlerPosix::ReadImpl() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(pending_read_buffer());
-  DCHECK(file().IsValid());
+
+  if (!file().IsValid()) {
+    QueueReadCompleted(0, mojom::SerialReceiveError::DISCONNECTED);
+    return;
+  }
 
   // Try to read immediately. This is needed because on some platforms
   // (e.g., OSX) there may not be a notification from the message loop
@@ -138,7 +142,11 @@ void SerialIoHandlerPosix::ReadImpl() {
 void SerialIoHandlerPosix::WriteImpl() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(pending_write_buffer());
-  DCHECK(file().IsValid());
+
+  if (!file().IsValid()) {
+    QueueWriteCompleted(0, mojom::SerialSendError::DISCONNECTED);
+    return;
+  }
 
   EnsureWatchingWrites();
 }
@@ -156,7 +164,7 @@ void SerialIoHandlerPosix::CancelWriteImpl() {
 }
 
 bool SerialIoHandlerPosix::ConfigurePortImpl() {
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   struct termios2 config;
   if (ioctl(file().GetPlatformFile(), TCGETS2, &config) < 0) {
 #else
@@ -179,11 +187,11 @@ bool SerialIoHandlerPosix::ConfigurePortImpl() {
 
   DCHECK(options().bitrate);
   speed_t bitrate_opt = B0;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   bool need_iossiospeed = false;
 #endif
   if (BitrateToSpeedConstant(options().bitrate, &bitrate_opt)) {
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
     config.c_cflag &= ~CBAUD;
     config.c_cflag |= bitrate_opt;
 #else
@@ -192,11 +200,11 @@ bool SerialIoHandlerPosix::ConfigurePortImpl() {
 #endif
   } else {
     // Attempt to set a custom speed.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
     config.c_cflag &= ~CBAUD;
     config.c_cflag |= CBAUDEX;
     config.c_ispeed = config.c_ospeed = options().bitrate;
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
     // cfsetispeed and cfsetospeed sometimes work for custom baud rates on OS
     // X but the IOSSIOSPEED ioctl is more reliable but has to be done after
     // the rest of the port parameters are set or else it will be overwritten.
@@ -264,7 +272,7 @@ bool SerialIoHandlerPosix::ConfigurePortImpl() {
     config.c_cflag &= ~CRTSCTS;
   }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   if (ioctl(file().GetPlatformFile(), TCSETS2, &config) < 0) {
 #else
   if (tcsetattr(file().GetPlatformFile(), TCSANOW, &config) != 0) {
@@ -273,7 +281,7 @@ bool SerialIoHandlerPosix::ConfigurePortImpl() {
     return false;
   }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (need_iossiospeed) {
     speed_t bitrate = options().bitrate;
     if (ioctl(file().GetPlatformFile(), IOSSIOSPEED, &bitrate) == -1) {
@@ -309,7 +317,6 @@ SerialIoHandlerPosix::~SerialIoHandlerPosix() = default;
 
 void SerialIoHandlerPosix::AttemptRead(bool within_read) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
   if (pending_read_buffer()) {
     int bytes_read =
         HANDLE_EINTR(read(file().GetPlatformFile(), pending_read_buffer(),
@@ -321,12 +328,15 @@ void SerialIoHandlerPosix::AttemptRead(bool within_read) {
       } else if (errno == ENXIO) {
         RunReadCompleted(within_read, 0,
                          mojom::SerialReceiveError::DEVICE_LOST);
+        StopWatchingFileRead();
       } else {
+        VPLOG(1) << "Read failed";
         RunReadCompleted(within_read, 0,
                          mojom::SerialReceiveError::SYSTEM_ERROR);
       }
     } else if (bytes_read == 0) {
       RunReadCompleted(within_read, 0, mojom::SerialReceiveError::DEVICE_LOST);
+      StopWatchingFileRead();
     } else {
       bool break_detected = false;
       bool parity_error_detected = false;
@@ -368,13 +378,18 @@ void SerialIoHandlerPosix::RunReadCompleted(bool within_read,
 
 void SerialIoHandlerPosix::OnFileCanWriteWithoutBlocking() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
   if (pending_write_buffer()) {
     int bytes_written =
         HANDLE_EINTR(write(file().GetPlatformFile(), pending_write_buffer(),
                            pending_write_buffer_len()));
     if (bytes_written < 0) {
-      WriteCompleted(0, mojom::SerialSendError::SYSTEM_ERROR);
+      if (errno == ENXIO) {
+        WriteCompleted(0, mojom::SerialSendError::DISCONNECTED);
+        StopWatchingFileWrite();
+      } else {
+        VPLOG(1) << "Write failed";
+        WriteCompleted(0, mojom::SerialSendError::SYSTEM_ERROR);
+      }
     } else {
       WriteCompleted(bytes_written, mojom::SerialSendError::NONE);
     }
@@ -428,12 +443,27 @@ void SerialIoHandlerPosix::StopWatchingFileWrite() {
   }
 }
 
-bool SerialIoHandlerPosix::Flush() const {
-  if (tcflush(file().GetPlatformFile(), TCIOFLUSH) != 0) {
-    VPLOG(1) << "Failed to flush port";
-    return false;
+void SerialIoHandlerPosix::Flush(mojom::SerialPortFlushMode mode) const {
+  int queue_selector;
+  switch (mode) {
+    case mojom::SerialPortFlushMode::kReceiveAndTransmit:
+      queue_selector = TCIOFLUSH;
+      break;
+    case mojom::SerialPortFlushMode::kReceive:
+      queue_selector = TCIFLUSH;
+      break;
+    case mojom::SerialPortFlushMode::kTransmit:
+      queue_selector = TCOFLUSH;
+      break;
   }
-  return true;
+
+  if (tcflush(file().GetPlatformFile(), queue_selector) != 0)
+    VPLOG(1) << "Failed to flush port";
+}
+
+void SerialIoHandlerPosix::Drain() {
+  if (tcdrain(file().GetPlatformFile()) != 0)
+    VPLOG(1) << "Failed to drain port";
 }
 
 mojom::SerialPortControlSignalsPtr SerialIoHandlerPosix::GetControlSignals()
@@ -502,7 +532,7 @@ bool SerialIoHandlerPosix::SetControlSignals(
 }
 
 mojom::SerialConnectionInfoPtr SerialIoHandlerPosix::GetPortInfo() const {
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   struct termios2 config;
   if (ioctl(file().GetPlatformFile(), TCGETS2, &config) < 0) {
 #else
@@ -514,7 +544,7 @@ mojom::SerialConnectionInfoPtr SerialIoHandlerPosix::GetPortInfo() const {
   }
 
   auto info = mojom::SerialConnectionInfo::New();
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Linux forces c_ospeed to contain the correct value, which is nice.
   info->bitrate = config.c_ospeed;
 #else

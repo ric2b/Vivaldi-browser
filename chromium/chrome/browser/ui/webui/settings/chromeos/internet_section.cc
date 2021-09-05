@@ -19,6 +19,7 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -316,6 +317,22 @@ const std::vector<SearchConcept>& GetCellularConnectedSearchConcepts() {
   return *tags;
 }
 
+// TODO(1093185): Merge GetCellularSetupSearchConcepts() with
+// GetCellularConnectedSearchConcepts() when flag is enabled.
+const std::vector<SearchConcept>& GetCellularSetupSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_ADD_CELLULAR,
+       mojom::kMobileDataNetworksSubpagePath,
+       mojom::SearchResultIcon::kCellular,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kCellularAddNetwork},
+       {IDS_OS_SETTINGS_TAG_ADD_CELLULAR_ALT1,
+        IDS_OS_SETTINGS_TAG_ADD_CELLULAR_ALT2, SearchConcept::kAltTagEnd}},
+  });
+  return *tags;
+}
+
 const std::vector<SearchConcept>& GetCellularMeteredSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_SETTINGS_INTERNET_NETWORK_METERED,
@@ -433,6 +450,7 @@ const std::vector<mojom::Setting>& GetCellularDetailsSettings() {
       mojom::Setting::kCellularProxy,
       mojom::Setting::kCellularAutoConnectToNetwork,
       mojom::Setting::kCellularMetered,
+      mojom::Setting::kCellularAddNetwork,
   });
   return *settings;
 }
@@ -482,7 +500,9 @@ bool IsPartOfDetailsSubpage(mojom::SearchResultType type,
 
 std::string GetDetailsSubpageUrl(const std::string& url_to_modify,
                                  const std::string& guid) {
-  return base::StringPrintf("%s?guid=%s", url_to_modify.c_str(), guid.c_str());
+  return base::StringPrintf(
+      "%s%sguid=%s", url_to_modify.c_str(),
+      url_to_modify.find('?') == std::string::npos ? "?" : "&", guid.c_str());
 }
 
 }  // namespace
@@ -509,6 +529,7 @@ InternetSection::~InternetSection() = default;
 
 void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
+      {"internetAddCellular", IDS_SETTINGS_INTERNET_ADD_CELLULAR},
       {"internetAddConnection", IDS_SETTINGS_INTERNET_ADD_CONNECTION},
       {"internetAddConnectionExpandA11yLabel",
        IDS_SETTINGS_INTERNET_ADD_CONNECTION_EXPAND_ACCESSIBILITY_LABEL},
@@ -569,6 +590,7 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"networkIPAddress", IDS_SETTINGS_INTERNET_NETWORK_IP_ADDRESS},
       {"networkIPConfigAuto", IDS_SETTINGS_INTERNET_NETWORK_IP_CONFIG_AUTO},
       {"networkMetered", IDS_SETTINGS_INTERNET_NETWORK_METERED},
+      {"networkMeteredDesc", IDS_SETTINGS_INTERNET_NETWORK_METERED_DESC},
       {"networkNameserversLearnMore", IDS_LEARN_MORE},
       {"networkPrefer", IDS_SETTINGS_INTERNET_NETWORK_PREFER},
       {"networkPrimaryUserControlled",
@@ -593,6 +615,8 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_INTERNET_CELLULAR_CONTACT_SPECIFIC_CARRIER},
       {"cellularContactDefaultCarrier",
        IDS_SETTINGS_INTERNET_CELLULAR_CONTACT_DEFAULT_CARRIER},
+      {"cellularSetupDialogTitle",
+       IDS_SETTINGS_INTERNET_CELLULAR_SETUP_DIALOG_TITLE},
       {"tetherPhoneOutOfRange",
        IDS_SETTINGS_INTERNET_TETHER_PHONE_OUT_OF_RANGE},
       {"gmscoreNotificationsTitle",
@@ -647,10 +671,14 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
                           !ash::features::IsSeparateNetworkIconsEnabled());
   html_source->AddBoolean(
       "showMeteredToggle",
-      base::FeatureList::IsEnabled(features::kMeteredShowToggle));
+      base::FeatureList::IsEnabled(::features::kMeteredShowToggle));
 
   html_source->AddString("networkGoogleNameserversLearnMoreUrl",
                          chrome::kGoogleNameserversLearnMoreURL);
+  html_source->AddBoolean(
+      "updatedCellularActivationUi",
+      base::FeatureList::IsEnabled(
+          chromeos::features::kUpdatedCellularActivationUi));
 
   html_source->AddString(
       "networkNotSynced",
@@ -786,23 +814,26 @@ std::string InternetSection::ModifySearchResultUrl(
     mojom::SearchResultType type,
     OsSettingsIdentifier id,
     const std::string& url_to_modify) const {
+  std::string modified_url =
+      OsSettingsSection::ModifySearchResultUrl(type, id, url_to_modify);
+
   if (IsPartOfDetailsSubpage(type, id, mojom::Subpage::kEthernetDetails))
-    return GetDetailsSubpageUrl(url_to_modify, *connected_ethernet_guid_);
+    return GetDetailsSubpageUrl(modified_url, *connected_ethernet_guid_);
 
   if (IsPartOfDetailsSubpage(type, id, mojom::Subpage::kWifiDetails))
-    return GetDetailsSubpageUrl(url_to_modify, *connected_wifi_guid_);
+    return GetDetailsSubpageUrl(modified_url, *connected_wifi_guid_);
 
   if (IsPartOfDetailsSubpage(type, id, mojom::Subpage::kCellularDetails))
-    return GetDetailsSubpageUrl(url_to_modify, *cellular_guid_);
+    return GetDetailsSubpageUrl(modified_url, *cellular_guid_);
 
   if (IsPartOfDetailsSubpage(type, id, mojom::Subpage::kTetherDetails))
-    return GetDetailsSubpageUrl(url_to_modify, *connected_tether_guid_);
+    return GetDetailsSubpageUrl(modified_url, *connected_tether_guid_);
 
   if (IsPartOfDetailsSubpage(type, id, mojom::Subpage::kVpnDetails))
-    return GetDetailsSubpageUrl(url_to_modify, *connected_vpn_guid_);
+    return GetDetailsSubpageUrl(modified_url, *connected_vpn_guid_);
 
-  // URL does not need to be modified; use default implementation.
-  return OsSettingsSection::ModifySearchResultUrl(type, id, url_to_modify);
+  // Use default implementation.
+  return modified_url;
 }
 
 void InternetSection::OnDeviceStateListChanged() {
@@ -891,6 +922,7 @@ void InternetSection::OnNetworkList(
   updater.RemoveSearchTags(GetWifiMeteredSearchConcepts());
   updater.RemoveSearchTags(GetCellularSearchConcepts());
   updater.RemoveSearchTags(GetCellularConnectedSearchConcepts());
+  updater.RemoveSearchTags(GetCellularSetupSearchConcepts());
   updater.RemoveSearchTags(GetCellularMeteredSearchConcepts());
   updater.RemoveSearchTags(GetInstantTetheringConnectedSearchConcepts());
   updater.RemoveSearchTags(GetVpnConnectedSearchConcepts());
@@ -922,15 +954,20 @@ void InternetSection::OnNetworkList(
       case NetworkType::kWiFi:
         connected_wifi_guid_ = network->guid;
         updater.AddSearchTags(GetWifiConnectedSearchConcepts());
-        if (base::FeatureList::IsEnabled(features::kMeteredShowToggle))
+        if (base::FeatureList::IsEnabled(::features::kMeteredShowToggle))
           updater.AddSearchTags(GetWifiMeteredSearchConcepts());
         break;
 
       case NetworkType::kCellular:
         // Note: GUID is set above.
         updater.AddSearchTags(GetCellularConnectedSearchConcepts());
-        if (base::FeatureList::IsEnabled(features::kMeteredShowToggle))
+        if (base::FeatureList::IsEnabled(::features::kMeteredShowToggle))
           updater.AddSearchTags(GetCellularMeteredSearchConcepts());
+
+        if (base::FeatureList::IsEnabled(
+                chromeos::features::kUpdatedCellularActivationUi)) {
+          updater.AddSearchTags(GetCellularSetupSearchConcepts());
+        }
         break;
 
       case NetworkType::kTether:

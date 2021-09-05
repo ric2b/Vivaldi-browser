@@ -1,9 +1,5 @@
-#import("//build/buildflag_header.gni")
 import("//build/config/chrome_build.gni")
-#import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
-#import("//build/config/ui.gni")
-#import("//build/config/locales.gni")
 
 import("//vivaldi/app/deps_updates.gni")
 import("//vivaldi/base/deps_updates.gni")
@@ -24,7 +20,7 @@ import("//vivaldi/notes/deps_updates.gni")
 import("//vivaldi/prefs/deps_updates.gni")
 import("//vivaldi/renderer/deps_updates.gni")
 import("//vivaldi/sync/deps_updates.gni")
-import("//vivaldi/third_party/deps_updates.gni")
+import("//vivaldi/thirdparty/deps_updates.gni")
 import("//vivaldi/ui/deps_updates.gni")
 import("//vivaldi/vivaldi_account/deps_updates.gni")
 import("//vivaldi/vivapp/deps_updates.gni")
@@ -50,6 +46,24 @@ update_target("//third_party/blink/public:all_blink") {
     "//third_party/blink/renderer/platform:blink_platform_unittests",
     "//third_party/blink/renderer/platform/wtf:wtf_unittests",
   ]
+}
+
+update_template_instance("//third_party/blink/renderer/core/frame:frame") {
+  if (!is_android && enable_basic_printing && current_toolchain != default_toolchain) {
+    deps -= [ "//printing" ]
+    deps += [ "//printing/buildflags" ]
+  }
+}
+
+update_template_instance("//printing/buildflags:buildflags") {
+  if (!is_android && current_toolchain != default_toolchain) {
+    flags = []
+    flags = [
+      "ENABLE_PRINTING=false",
+      "ENABLE_PRINT_PREVIEW=false",
+      "ENABLE_TAGGED_PDF=false",
+    ]
+  }
 }
 
 foreach(_target,
@@ -78,7 +92,7 @@ if (!is_android) {
 
 _targets=[]
 
-if (!is_android) {
+if (vivaldi_build_tests) {
   _targets += [
     "//chrome/test:browser_tests",
     "//chrome/test:interactive_ui_tests",
@@ -100,7 +114,7 @@ foreach(_target, _targets) {
   }
 }
 
-if (!is_android) {
+if (vivaldi_build_tests) {
   update_template_instance("//components:components_unittests") {
     if (!is_linux && !is_android) {
       deps -= [
@@ -117,7 +131,7 @@ if (!is_android) {
   }
 }
 
-update_template_instance("//components/autofill/core/browser:browser") {
+update_target("//components/autofill/core/browser:browser") {
   deps += [
     "//vivaldi/prefs:prefs_files_generated",
   ]
@@ -165,12 +179,12 @@ update_target("//chrome/browser/updates/announcement_notification:announcement_n
   deps += ["//chrome/app:generated_resources"]
 }
 
-update_template_instance("//content/public/browser:browser_sources") {
+update_target("//content/public/browser:browser_sources") {
   deps -= [ "//content/browser" ]
   public_deps += [ "//content/browser" ]
 }
 
-update_template_instance("//content/gpu:gpu_sources") {
+update_target("//content/gpu:gpu_sources") {
   deps -= [ "//media/gpu/ipc/service" ]
   public_deps = [ "//media/gpu/ipc/service" ]
 }

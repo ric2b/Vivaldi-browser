@@ -194,14 +194,14 @@ std::unique_ptr<EyeDropper> WebContentsDelegate::OpenEyeDropper(
 
 void WebContentsDelegate::RunFileChooser(
     RenderFrameHost* render_frame_host,
-    std::unique_ptr<FileSelectListener> listener,
+    scoped_refptr<FileSelectListener> listener,
     const blink::mojom::FileChooserParams& params) {
   listener->FileSelectionCanceled();
 }
 
 void WebContentsDelegate::EnumerateDirectory(
     WebContents* web_contents,
-    std::unique_ptr<FileSelectListener> listener,
+    scoped_refptr<FileSelectListener> listener,
     const base::FilePath& path) {
   listener->FileSelectionCanceled();
 }
@@ -316,7 +316,11 @@ bool WebContentsDelegate::ShouldAnimateBrowserControlsHeightChanges() {
 }
 
 bool WebContentsDelegate::DoBrowserControlsShrinkRendererSize(
-    const WebContents* web_contents) {
+    WebContents* web_contents) {
+  return false;
+}
+
+bool WebContentsDelegate::OnlyExpandTopControlsAtPageTop() {
   return false;
 }
 
@@ -335,6 +339,13 @@ std::unique_ptr<WebContents> WebContentsDelegate::ActivatePortalWebContents(
     WebContents* predecessor_contents,
     std::unique_ptr<WebContents> portal_contents) {
   return portal_contents;
+}
+
+void WebContentsDelegate::UpdateInspectedWebContentsIfNecessary(
+    WebContents* old_contents,
+    WebContents* new_contents,
+    base::OnceCallback<void()> callback) {
+  std::move(callback).Run();
 }
 
 bool WebContentsDelegate::ShouldShowStaleContentOnEviction(

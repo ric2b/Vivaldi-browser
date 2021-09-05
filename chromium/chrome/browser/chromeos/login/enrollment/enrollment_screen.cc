@@ -15,8 +15,10 @@
 #include "chrome/browser/chromeos/login/configuration_keys.h"
 #include "chrome/browser/chromeos/login/enrollment/enrollment_uma.h"
 #include "chrome/browser/chromeos/login/screen_manager.h"
+#include "chrome/browser/chromeos/login/screens/base_screen.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
+#include "chrome/browser/chromeos/login/wizard_context.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/tpm_auto_update_mode_policy_handler.h"
@@ -91,6 +93,8 @@ std::string EnrollmentScreen::GetResultString(Result result) {
       return "Completed";
     case Result::BACK:
       return "Back";
+    case Result::SKIPPED_FOR_TESTS:
+      return BaseScreen::kNotApplicable;
   }
 }
 
@@ -197,6 +201,14 @@ void EnrollmentScreen::OnAuthCleared(const base::Closure& callback) {
   callback.Run();
 }
 
+bool EnrollmentScreen::MaybeSkip(WizardContext* context) {
+  if (context->skip_to_login_for_tests && !config_.is_forced()) {
+    exit_callback_.Run(Result::SKIPPED_FOR_TESTS);
+    return true;
+  }
+  return false;
+}
+
 void EnrollmentScreen::ShowImpl() {
   VLOG(1) << "Show enrollment screen";
   UMA(policy::kMetricEnrollmentTriggered);
@@ -283,7 +295,7 @@ void EnrollmentScreen::ProcessRetry() {
   ++num_retries_;
   LOG(WARNING) << "Enrollment retries: " << num_retries_
                << ", current auth: " << current_auth_ << ".";
-  Show();
+  Show(context());
 }
 
 void EnrollmentScreen::OnCancel() {
@@ -297,7 +309,7 @@ void EnrollmentScreen::OnCancel() {
   UMA(policy::kMetricEnrollmentCancelled);
 
   if (AdvanceToNextAuth()) {
-    Show();
+    Show(context());
     return;
   }
 
@@ -343,7 +355,7 @@ void EnrollmentScreen::OnEnrollmentError(policy::EnrollmentStatus status) {
       current_auth_ == AUTH_ATTESTATION) {
     UMA(policy::kMetricEnrollmentDeviceNotPreProvisioned);
     if (AdvanceToNextAuth()) {
-      Show();
+      Show(context());
       return;
     }
   }
@@ -444,15 +456,15 @@ void EnrollmentScreen::ShowAttributePromptScreen() {
   std::string asset_id;
   std::string location;
 
-  if (GetConfiguration()) {
-    auto* asset_id_value = GetConfiguration()->FindKeyOfType(
+  if (!context()->configuration.DictEmpty()) {
+    auto* asset_id_value = context()->configuration.FindKeyOfType(
         configuration::kEnrollmentAssetId, base::Value::Type::STRING);
     if (asset_id_value) {
       VLOG(1) << "Using Asset ID from configuration "
               << asset_id_value->GetString();
       asset_id = asset_id_value->GetString();
     }
-    auto* location_value = GetConfiguration()->FindKeyOfType(
+    auto* location_value = context()->configuration.FindKeyOfType(
         configuration::kEnrollmentLocation, base::Value::Type::STRING);
     if (location_value) {
       VLOG(1) << "Using Location from configuration "
@@ -470,8 +482,8 @@ void EnrollmentScreen::ShowAttributePromptScreen() {
     location = policy->annotated_location();
   }
 
-  if (GetConfiguration()) {
-    auto* auto_attributes = GetConfiguration()->FindKeyOfType(
+  if (!context()->configuration.DictEmpty()) {
+    auto* auto_attributes = context()->configuration.FindKeyOfType(
         configuration::kEnrollmentAutoAttributes, base::Value::Type::BOOLEAN);
     if (auto_attributes && auto_attributes->GetBool()) {
       VLOG(1) << "Automatically accept attributes";

@@ -9,9 +9,11 @@ import {Cdd, Destination} from './data/destination.js';
 import {PrinterType} from './data/destination_match.js';
 // <if expr="chromeos">
 import {DestinationPolicies} from './data/destination_policies.js';
-import {PrinterStatus} from './data/printer_status_cros.js';
 // </if>
 import {MeasurementSystemUnitType} from './data/measurement_system.js';
+// <if expr="chromeos">
+import {PrinterStatus, PrinterStatusReason} from './data/printer_status_cros.js';
+// </if>
 
 /**
  * @typedef {{selectSaveAsPdfDestination: boolean,
@@ -266,10 +268,8 @@ export class NativeLayer {
   /**
    * Opens the Google Cloud Print sign-in tab. If the user signs in
    * successfully, the user-accounts-updated event will be sent in response.
-   * @param {boolean} addAccount Whether to open an 'add a new account' or
-   *     default sign in page.
    */
-  signIn(addAccount) {}
+  signIn() {}
 
   // <if expr="chromeos">
   /**
@@ -278,6 +278,16 @@ export class NativeLayer {
    * @return {!Promise<!PrinterStatus>}
    */
   requestPrinterStatusUpdate(printerId) {}
+
+  /**
+   * Records the histogram to capture the printer status of the current
+   * destination and whether the user chose to print or cancel.
+   * @param {!PrinterStatusReason} statusReason Current destination printer
+   * status
+   * @param {boolean} didUserAttemptPrint True if user printed, false if user
+   * canceled.
+   */
+  recordPrinterStatusHistogram(statusReason, didUserAttemptPrint) {}
   // </if>
 
   /**
@@ -381,14 +391,34 @@ export class NativeLayerImpl {
   }
 
   /** @override */
-  signIn(addAccount) {
-    chrome.send('signIn', [addAccount]);
+  signIn() {
+    chrome.send('signIn');
   }
 
   // <if expr="chromeos">
   /** @override */
   requestPrinterStatusUpdate(printerId) {
     return sendWithPromise('requestPrinterStatus', printerId);
+  }
+
+  /** @override */
+  recordPrinterStatusHistogram(statusReason, didUserAttemptPrint) {
+    let histogram;
+    switch (statusReason) {
+      case (PrinterStatusReason.NO_ERROR):
+        histogram = 'PrintPreview.PrinterStatus.AttemptedPrintWithGoodStatus';
+        break;
+      case (PrinterStatusReason.UNKNOWN_REASON):
+        histogram =
+            'PrintPreview.PrinterStatus.AttemptedPrintWithUnknownStatus';
+        break;
+      default:
+        histogram = 'PrintPreview.PrinterStatus.AttemptedPrintWithErrorStatus';
+        break;
+    }
+    chrome.send(
+        'metricsHandler:recordBooleanHistogram',
+        [histogram, didUserAttemptPrint]);
   }
   // </if>
 

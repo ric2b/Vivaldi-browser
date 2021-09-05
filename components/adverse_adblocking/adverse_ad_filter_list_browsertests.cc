@@ -134,9 +134,8 @@ class VivaldiSubresourceFilterBrowserTest
 
 IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
                        MainFrameActivation_SubresourceFilterList) {
-  content::ConsoleObserverDelegate console_observer(web_contents(),
-                                                    kActivationConsoleMessage);
-  web_contents()->SetDelegate(&console_observer);
+  content::WebContentsConsoleObserver console_observer(web_contents());
+  console_observer.SetPattern(kActivationConsoleMessage);
   GURL url(GetTestUrl("subresource_filter/frame_with_included_script.html"));
   ConfigureAsSubresourceFilterOnlyURL(url);
   ASSERT_NO_FATAL_FAILURE(SetRulesetToDisallowURLsWithPathSuffix(
@@ -155,7 +154,8 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
   ui_test_utils::NavigateToURL(browser(), url);
   EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 
-  EXPECT_EQ(kActivationConsoleMessage, console_observer.message());
+  EXPECT_EQ(subresource_filter::kActivationConsoleMessage,
+    console_observer.GetMessageAt(0u));
 
   // The main frame document should never be filtered.
   SetRulesetToDisallowURLsWithPathSuffix("frame_with_included_script.html");
@@ -185,9 +185,8 @@ IN_PROC_BROWSER_TEST_F(
 
 IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
                        MainFrameActivation) {
-  content::ConsoleObserverDelegate console_observer(web_contents(),
-                                                    kActivationConsoleMessage);
-  web_contents()->SetDelegate(&console_observer);
+  content::WebContentsConsoleObserver console_observer(web_contents());
+  console_observer.SetPattern(kActivationConsoleMessage);
   GURL url(GetTestUrl("subresource_filter/frame_with_included_script.html"));
   ConfigureAsSubresourceFilterOnlyURL(url);
   ASSERT_NO_FATAL_FAILURE(SetRulesetToDisallowURLsWithPathSuffix(
@@ -200,7 +199,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
   ui_test_utils::NavigateToURL(browser(), url);
   EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 
-  EXPECT_EQ(console_observer.message(), kActivationConsoleMessage);
+  EXPECT_EQ(kActivationConsoleMessage, console_observer.GetMessageAt(0u));
 
   // The main frame document should never be filtered.
   SetRulesetToDisallowURLsWithPathSuffix("frame_with_included_script.html");
@@ -297,9 +296,8 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
                        HistoryNavigationActivation) {
-  content::ConsoleObserverDelegate console_observer(web_contents(),
-                                                    kActivationConsoleMessage);
-  web_contents()->SetDelegate(&console_observer);
+  content::WebContentsConsoleObserver console_observer(web_contents());
+  console_observer.SetPattern(kActivationConsoleMessage);
   GURL url_with_activation(GetTestUrl(kTestFrameSetPath));
   GURL url_without_activation(
       embedded_test_server()->GetURL("a.com", kTestFrameSetPath));
@@ -318,14 +316,14 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
       kSubframeNames, kExpectScriptInFrameToLoadWithoutActivation));
 
   // No message should be displayed for navigating to URL without activation.
-  EXPECT_TRUE(console_observer.message().empty());
+  EXPECT_TRUE(console_observer.messages().empty());
 
   ui_test_utils::NavigateToURL(browser(), url_with_activation);
   ASSERT_NO_FATAL_FAILURE(ExpectParsedScriptElementLoadedStatusInFrames(
       kSubframeNames, kExpectScriptInFrameToLoadWithActivation));
 
   // Console message should now be displayed.
-  EXPECT_EQ(console_observer.message(), kActivationConsoleMessage);
+  EXPECT_EQ(kActivationConsoleMessage, console_observer.GetMessageAt(0u));
 
   ASSERT_TRUE(web_contents()->GetController().CanGoBack());
   content::WindowedNotificationObserver back_navigation_stop_observer(
@@ -351,9 +349,8 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
 // dynamically inserting a subframe afterwards, and still expecting activation.
 IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
                        PageLevelActivationOutlivesSameDocumentNavigation) {
-  content::ConsoleObserverDelegate console_observer(web_contents(),
-                                                    kActivationConsoleMessage);
-  web_contents()->SetDelegate(&console_observer);
+  content::WebContentsConsoleObserver console_observer(web_contents());
+  console_observer.SetPattern(kActivationConsoleMessage);
   GURL url(GetTestUrl(kTestFrameSetPath));
   ConfigureAsSubresourceFilterOnlyURL(url);
   ASSERT_NO_FATAL_FAILURE(
@@ -371,7 +368,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
   ASSERT_TRUE(dynamic_frame);
   EXPECT_FALSE(WasParsedScriptElementLoaded(dynamic_frame));
 
-  EXPECT_EQ(console_observer.message(), kActivationConsoleMessage);
+  EXPECT_EQ(kActivationConsoleMessage, console_observer.GetMessageAt(0u));
 }
 
 // If a navigation starts but aborts before commit, page level activation should

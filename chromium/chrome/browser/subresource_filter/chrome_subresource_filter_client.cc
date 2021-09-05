@@ -17,7 +17,7 @@
 #include "chrome/browser/subresource_filter/subresource_filter_content_settings_manager.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
-#include "components/content_settings/browser/tab_specific_content_settings.h"
+#include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/safe_browsing/core/db/database_manager.h"
@@ -118,9 +118,12 @@ ChromeSubresourceFilterClient::OnPageActivationComputed(
 
   const GURL& url(navigation_handle->GetURL());
   if (url.SchemeIsHTTPOrHTTPS()) {
-    settings_manager_->ResetSiteMetadataBasedOnActivation(
-        url, effective_activation_level ==
-                 subresource_filter::mojom::ActivationLevel::kEnabled);
+    settings_manager_->SetSiteMetadataBasedOnActivation(
+        url,
+        effective_activation_level ==
+            subresource_filter::mojom::ActivationLevel::kEnabled,
+        SubresourceFilterContentSettingsManager::ActivationSource::
+            kSafeBrowsing);
   }
 
   if (settings_manager_->GetSitePermission(url) == CONTENT_SETTING_ALLOW) {
@@ -161,9 +164,13 @@ void ChromeSubresourceFilterClient::ShowUI(const GURL& url) {
       InfoBarService::FromWebContents(web_contents());
   AdsBlockedInfobarDelegate::Create(infobar_service);
 #endif
-  content_settings::TabSpecificContentSettings* content_settings =
-      content_settings::TabSpecificContentSettings::FromWebContents(
-          web_contents());
+  // TODO(https://crbug.com/1103176): Plumb the actual frame reference here
+  // (it comes  from
+  // ContentSubresourceFilterThrottleManager::DidDisallowFirstSubresource, which
+  // comes from a specific frame).
+  content_settings::PageSpecificContentSettings* content_settings =
+      content_settings::PageSpecificContentSettings::GetForFrame(
+          web_contents()->GetMainFrame());
   content_settings->OnContentBlocked(ContentSettingsType::ADS);
 
   LogAction(SubresourceFilterAction::kUIShown);

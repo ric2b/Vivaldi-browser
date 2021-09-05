@@ -8,7 +8,6 @@
 #include <stdint.h>
 
 #include <set>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -24,7 +23,7 @@
 #include "gpu/command_buffer/client/raster_implementation_gles.h"
 #include "gpu/config/skia_limits.h"
 #include "gpu/skia_bindings/grcontext_for_gles2_interface.h"
-#include "third_party/skia/include/gpu/GrContext.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -128,6 +127,8 @@ gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
     ResourceFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
+    GrSurfaceOrigin surface_origin,
+    SkAlphaType alpha_type,
     uint32_t usage,
     gpu::SurfaceHandle surface_handle) {
   base::AutoLock locked(lock_);
@@ -141,6 +142,8 @@ gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
     ResourceFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
+    GrSurfaceOrigin surface_origin,
+    SkAlphaType alpha_type,
     uint32_t usage,
     base::span<const uint8_t> pixel_data) {
   base::AutoLock locked(lock_);
@@ -153,12 +156,24 @@ gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
     gfx::GpuMemoryBuffer* gpu_memory_buffer,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     const gfx::ColorSpace& color_space,
+    GrSurfaceOrigin surface_origin,
+    SkAlphaType alpha_type,
     uint32_t usage) {
   base::AutoLock locked(lock_);
   auto mailbox = gpu::Mailbox::GenerateForSharedImage();
   shared_images_.insert(mailbox);
   most_recent_size_ = gpu_memory_buffer->GetSize();
   return mailbox;
+}
+
+gpu::Mailbox TestSharedImageInterface::CreateSharedImageWithAHB(
+    const gpu::Mailbox& mailbox,
+    uint32_t usage,
+    const gpu::SyncToken& sync_token) {
+  base::AutoLock locked(lock_);
+  auto out_mailbox = gpu::Mailbox::GenerateForSharedImage();
+  shared_images_.insert(out_mailbox);
+  return out_mailbox;
 }
 
 void TestSharedImageInterface::UpdateSharedImage(
@@ -188,6 +203,8 @@ gpu::SharedImageInterface::SwapChainMailboxes
 TestSharedImageInterface::CreateSwapChain(ResourceFormat format,
                                           const gfx::Size& size,
                                           const gfx::ColorSpace& color_space,
+                                          GrSurfaceOrigin surface_origin,
+                                          SkAlphaType alpha_type,
                                           uint32_t usage) {
   auto front_buffer = gpu::Mailbox::GenerateForSharedImage();
   auto back_buffer = gpu::Mailbox::GenerateForSharedImage();
@@ -417,7 +434,7 @@ gpu::ContextSupport* TestContextProvider::ContextSupport() {
   return support();
 }
 
-class GrContext* TestContextProvider::GrContext() {
+class GrDirectContext* TestContextProvider::GrContext() {
   DCHECK(bound_);
   CheckValidThreadOrLockAcquired();
 

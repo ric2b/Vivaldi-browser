@@ -9,9 +9,13 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/strings/string_number_conversions.h"
 #include "chrome/browser/prerender/isolated/isolated_prerender_features.h"
 #include "chrome/common/chrome_features.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
+
+const char kIsolatedPrerenderLimitNSPSubresourcesCmdLineFlag[] =
+    "isolated-prerender-max-subresource-per-prerender";
 
 const char kIsolatedPrerenderEnableNSPCmdLineFlag[] =
     "isolated-prerender-nsp-enabled";
@@ -65,6 +69,17 @@ IsolatedPrerenderMaximumNumberOfNoStatePrefetchAttempts() {
   return max;
 }
 
+size_t IsolatedPrerenderMainframeBodyLengthLimit() {
+  return 1024 * base::GetFieldTrialParamByFeatureAsInt(
+                    features::kIsolatePrerenders,
+                    "max_mainframe_body_length_kb", 5 * 1024);
+}
+
+size_t IsolatedPrerenderMaximumNumberOfConcurrentPrefetches() {
+  return static_cast<size_t>(base::GetFieldTrialParamByFeatureAsInt(
+      features::kIsolatePrerenders, "max_concurrent_prefetches", 1));
+}
+
 base::TimeDelta IsolatedPrerenderProbeTimeout() {
   return base::TimeDelta::FromMilliseconds(
       base::GetFieldTrialParamByFeatureAsInt(
@@ -99,13 +114,22 @@ bool IsolatedPrerenderCanaryCheckEnabled() {
       features::kIsolatePrerendersMustProbeOrigin, "do_canary", true);
 }
 
-GURL IsolatedPrerenderCanaryCheckURL() {
+GURL IsolatedPrerenderTLSCanaryCheckURL() {
   GURL url(base::GetFieldTrialParamValueByFeature(
-      features::kIsolatePrerendersMustProbeOrigin, "canary_url"));
+      features::kIsolatePrerendersMustProbeOrigin, "tls_canary_url"));
   if (url.is_valid()) {
     return url;
   }
-  return GURL("http://check.googlezip.net/connect");
+  return GURL("http://tls.tunnel.check.googlezip.net/connect");
+}
+
+GURL IsolatedPrerenderDNSCanaryCheckURL() {
+  GURL url(base::GetFieldTrialParamValueByFeature(
+      features::kIsolatePrerendersMustProbeOrigin, "dns_canary_url"));
+  if (url.is_valid()) {
+    return url;
+  }
+  return GURL("http://dns.tunnel.check.googlezip.net/connect");
 }
 
 base::TimeDelta IsolatedPrerenderCanaryCheckCacheLifetime() {
@@ -113,13 +137,22 @@ base::TimeDelta IsolatedPrerenderCanaryCheckCacheLifetime() {
       features::kIsolatePrerendersMustProbeOrigin, "canary_cache_hours", 24));
 }
 
-IsolatedPrerenderOriginProbeType IsolatedPrerenderOriginProbeMechanism() {
-  std::string param = base::GetFieldTrialParamValueByFeature(
-      features::kIsolatePrerendersMustProbeOrigin, "probe_type");
-  if (param == "dns")
-    return IsolatedPrerenderOriginProbeType::kDns;
-  if (param == "http_head")
-    return IsolatedPrerenderOriginProbeType::kHttpHead;
+bool IsolatedPrerenderMustHTTPProbeInsteadOfTLS() {
+  return base::GetFieldTrialParamByFeatureAsBool(
+      features::kIsolatePrerendersMustProbeOrigin, "replace_tls_with_http",
+      false);
+}
 
-  return IsolatedPrerenderOriginProbeType::kHttpHead;
+size_t IsolatedPrerenderMaxSubresourcesPerPrerender() {
+  std::string cmd_line_value =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          kIsolatedPrerenderLimitNSPSubresourcesCmdLineFlag);
+  size_t cmd_line_parsed;
+  if (!cmd_line_value.empty() &&
+      base::StringToSizeT(cmd_line_value, &cmd_line_parsed)) {
+    return cmd_line_parsed;
+  }
+
+  return base::GetFieldTrialParamByFeatureAsInt(
+      features::kIsolatePrerenders, "max_subresource_count_per_prerender", 50);
 }

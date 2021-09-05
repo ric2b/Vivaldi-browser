@@ -7,7 +7,6 @@
 #include <memory>
 
 #include "base/scoped_observer.h"
-#include "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/app_launcher/app_launcher_abuse_detector.h"
 #import "ios/chrome/browser/app_launcher/app_launcher_tab_helper.h"
 #import "ios/chrome/browser/autofill/autofill_tab_helper.h"
@@ -21,13 +20,10 @@
 #import "ios/chrome/browser/store_kit/store_kit_coordinator.h"
 #import "ios/chrome/browser/store_kit/store_kit_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab_title_util.h"
-#import "ios/chrome/browser/ui/activity_services/activity_scenario.h"
-#import "ios/chrome/browser/ui/activity_services/activity_service_coordinator.h"
-#import "ios/chrome/browser/ui/activity_services/requirements/activity_service_presentation.h"
+#import "ios/chrome/browser/ui/activity_services/activity_params.h"
+#import "ios/chrome/browser/ui/activity_services/requirements/activity_service_positioner.h"
 #import "ios/chrome/browser/ui/alert_coordinator/repost_form_coordinator.h"
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_coordinator.h"
-#import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_all_password_coordinator.h"
-#import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_injection_handler.h"
 #import "ios/chrome/browser/ui/badges/badge_popup_menu_coordinator.h"
 #import "ios/chrome/browser/ui/browser_container/browser_container_coordinator.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller+private.h"
@@ -43,6 +39,7 @@
 #import "ios/chrome/browser/ui/commands/password_breach_commands.h"
 #import "ios/chrome/browser/ui/commands/qr_generation_commands.h"
 #import "ios/chrome/browser/ui/commands/text_zoom_commands.h"
+#import "ios/chrome/browser/ui/commands/whats_new_commands.h"
 #import "ios/chrome/browser/ui/download/ar_quick_look_coordinator.h"
 #import "ios/chrome/browser/ui/download/features.h"
 #import "ios/chrome/browser/ui/download/pass_kit_coordinator.h"
@@ -61,12 +58,14 @@
 #import "ios/chrome/browser/ui/reading_list/reading_list_coordinator.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_coordinator.h"
 #import "ios/chrome/browser/ui/settings/autofill/autofill_add_credit_card_coordinator.h"
+#import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
 #import "ios/chrome/browser/ui/snackbar/snackbar_coordinator.h"
 #import "ios/chrome/browser/ui/text_zoom/text_zoom_coordinator.h"
 #import "ios/chrome/browser/ui/toolbar/accessory/toolbar_accessory_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/toolbar/accessory/toolbar_accessory_presenter.h"
 #import "ios/chrome/browser/ui/translate/legacy_translate_infobar_coordinator.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/ui/whats_new/default_browser_promo_coordinator.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/web/features.h"
@@ -76,7 +75,6 @@
 #import "ios/chrome/browser/web/repost_form_tab_helper_delegate.h"
 #include "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
-#include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -84,12 +82,11 @@
 #endif
 
 @interface BrowserCoordinator () <ActivityServiceCommands,
-                                  ActivityServicePresentation,
-                                  AutofillSecurityAlertPresenter,
                                   BrowserCoordinatorCommands,
+                                  DefaultBrowserPromoCommands,
                                   FormInputAccessoryCoordinatorNavigator,
                                   PageInfoCommands,
-                                  QRGenerationCommands,
+                                  PasswordBreachCommands,
                                   RepostFormTabHelperDelegate,
                                   ToolbarAccessoryCoordinatorDelegate,
                                   URLLoadingDelegate,
@@ -115,10 +112,6 @@
 // Presents a QLPreviewController in order to display USDZ format 3D models.
 @property(nonatomic, strong) ARQuickLookCoordinator* ARQuickLookCoordinator;
 
-// Coordinator for the activity view.
-@property(nonatomic, strong)
-    ActivityServiceCoordinator* activityServiceCoordinator;
-
 // Coordinator to add new credit card.
 @property(nonatomic, strong)
     AutofillAddCreditCardCoordinator* addCreditCardCoordinator;
@@ -134,14 +127,6 @@
 // keyboard.
 @property(nonatomic, strong)
     FormInputAccessoryCoordinator* formInputAccessoryCoordinator;
-
-// The object in charge of interacting with the web view. Used to fill the data
-// in the forms.
-@property(nonatomic, strong) ManualFillInjectionHandler* injectionHandler;
-
-// Coordinator in charge of the presenting password autofill options as a modal.
-@property(nonatomic, strong)
-    ManualFillAllPasswordCoordinator* allPasswordCoordinator;
 
 // Weak reference for the next coordinator to be displayed over the toolbar.
 @property(nonatomic, weak) ChromeCoordinator* nextToolbarCoordinator;
@@ -160,9 +145,6 @@
 // TODO(crbug.com/910017): Convert to coordinator.
 @property(nonatomic, strong) PrintController* printController;
 
-// Coordinator for the QR generator UI.
-@property(nonatomic, strong) QRGeneratorCoordinator* qrGeneratorCoordinator;
-
 // Coordinator for the QR scanner.
 @property(nonatomic, strong) QRScannerLegacyCoordinator* qrScannerCoordinator;
 
@@ -174,6 +156,9 @@
 
 // Coordinator for displaying Repost Form dialog.
 @property(nonatomic, strong) RepostFormCoordinator* repostFormCoordinator;
+
+// Coordinator for sharing scenarios.
+@property(nonatomic, strong) SharingCoordinator* sharingCoordinator;
 
 // Coordinator for displaying snackbars.
 @property(nonatomic, strong) SnackbarCoordinator* snackbarCoordinator;
@@ -188,6 +173,10 @@
 // option popup menus.
 @property(nonatomic, strong)
     LegacyTranslateInfobarCoordinator* translateInfobarCoordinator;
+
+// Coordinator that manages the default browser promo modal.
+@property(nonatomic, strong)
+    DefaultBrowserPromoCoordinator* defaultBrowserPromoCoordinator;
 
 // The container coordinators for the infobar modalities.
 @property(nonatomic, strong)
@@ -222,6 +211,9 @@
   [self startBrowserContainer];
   [self.dispatcher startDispatchingToTarget:self
                                 forProtocol:@protocol(TextZoomCommands)];
+  [self.browser->GetCommandDispatcher()
+      startDispatchingToTarget:self
+                   forProtocol:@protocol(WhatsNewCommands)];
   [self.dispatcher startDispatchingToTarget:self
                                 forProtocol:@protocol(FindInPageCommands)];
   [self createViewController];
@@ -234,7 +226,7 @@
   [self.dispatcher startDispatchingToTarget:self
                                 forProtocol:@protocol(PageInfoCommands)];
   [self.dispatcher startDispatchingToTarget:self
-                                forProtocol:@protocol(QRGenerationCommands)];
+                                forProtocol:@protocol(PasswordBreachCommands)];
   [self installDelegatesForAllWebStates];
   [self installDelegatesForBrowser];
   [self addWebStateListObserver];
@@ -271,9 +263,6 @@
 
 - (void)clearPresentedStateWithCompletion:(ProceduralBlock)completion
                            dismissOmnibox:(BOOL)dismissOmnibox {
-  [self.activityServiceCoordinator stop];
-  self.activityServiceCoordinator = nil;
-
   [self.passKitCoordinator stop];
 
   [self.openInMediator disableAll];
@@ -283,10 +272,11 @@
   [self.readingListCoordinator stop];
   self.readingListCoordinator = nil;
 
-  [self.qrGeneratorCoordinator stop];
-  self.qrGeneratorCoordinator = nil;
+  [self.sharingCoordinator stop];
+  self.sharingCoordinator = nil;
 
   [self.passwordBreachCoordinator stop];
+  self.passwordBreachCoordinator = nil;
 
   [self.pageInfoCoordinator stop];
 
@@ -343,20 +333,14 @@
   // coordinators.
   DCHECK(self.dispatcher);
 
-  /* ActivityServiceCoordinator is created and started by a command. */
-
   self.ARQuickLookCoordinator = [[ARQuickLookCoordinator alloc]
       initWithBaseViewController:self.viewController
                          browser:self.browser];
   [self.ARQuickLookCoordinator start];
 
-  self.injectionHandler = [[ManualFillInjectionHandler alloc]
-        initWithWebStateList:self.browser->GetWebStateList()
-      securityAlertPresenter:self];
   self.formInputAccessoryCoordinator = [[FormInputAccessoryCoordinator alloc]
       initWithBaseViewController:self.viewController
-                         browser:self.browser
-                injectionHandler:self.injectionHandler];
+                         browser:self.browser];
   self.formInputAccessoryCoordinator.navigator = self;
   [self.formInputAccessoryCoordinator start];
 
@@ -374,13 +358,6 @@
       [[PassKitCoordinator alloc] initWithBaseViewController:self.viewController
                                                      browser:self.browser];
 
-  self.passwordBreachCoordinator = [[PasswordBreachCoordinator alloc]
-      initWithBaseViewController:self.viewController
-                         browser:self.browser];
-  [self.browser->GetCommandDispatcher()
-      startDispatchingToTarget:self.passwordBreachCoordinator
-                   forProtocol:@protocol(PasswordBreachCommands)];
-
   self.printController = [[PrintController alloc] init];
   self.printController.baseViewController = self.viewController;
 
@@ -389,13 +366,15 @@
                          browser:self.browser];
   [self.qrScannerCoordinator start];
 
-  /* QRGeneratorCoordinator is created and started by a command. */
+  /* passwordBreachCoordinator is created and started by a BrowserCommand */
 
   /* ReadingListCoordinator is created and started by a BrowserCommand */
 
   /* RecentTabsCoordinator is created and started by a BrowserCommand */
 
   /* RepostFormCoordinator is created and started by a delegate method */
+
+  /* SharingCoordinator is created and started by an ActivityServiceCommand */
 
   self.storeKitCoordinator = [[StoreKitCoordinator alloc]
       initWithBaseViewController:self.viewController
@@ -428,12 +407,6 @@
 
 // Stops child coordinators.
 - (void)stopChildCoordinators {
-  [self.activityServiceCoordinator stop];
-  self.activityServiceCoordinator = nil;
-
-  [self.allPasswordCoordinator stop];
-  self.allPasswordCoordinator = nil;
-
   [self.ARQuickLookCoordinator stop];
   self.ARQuickLookCoordinator = nil;
 
@@ -442,7 +415,6 @@
 
   [self.formInputAccessoryCoordinator stop];
   self.formInputAccessoryCoordinator = nil;
-  self.injectionHandler = nil;
 
   [self.pageInfoCoordinator stop];
   self.pageInfoCoordinator = nil;
@@ -451,14 +423,9 @@
   self.passKitCoordinator = nil;
 
   [self.passwordBreachCoordinator stop];
-  [self.browser->GetCommandDispatcher()
-      stopDispatchingToTarget:self.passwordBreachCoordinator];
   self.passwordBreachCoordinator = nil;
 
   self.printController = nil;
-
-  [self.qrGeneratorCoordinator stop];
-  self.qrGeneratorCoordinator = nil;
 
   [self.qrScannerCoordinator stop];
   self.qrScannerCoordinator = nil;
@@ -471,6 +438,9 @@
 
   [self.repostFormCoordinator stop];
   self.repostFormCoordinator = nil;
+
+  [self.sharingCoordinator stop];
+  self.sharingCoordinator = nil;
 
   [self.snackbarCoordinator stop];
   self.snackbarCoordinator = nil;
@@ -492,51 +462,26 @@
 
   [self.infobarModalOverlayContainerCoordinator stop];
   self.infobarModalOverlayContainerCoordinator = nil;
-}
 
-#pragma mark - AutofillSecurityAlertPresenter
-
-- (void)presentSecurityWarningAlertWithText:(NSString*)body {
-  NSString* alertTitle =
-      l10n_util::GetNSString(IDS_IOS_MANUAL_FALLBACK_NOT_SECURE_TITLE);
-  NSString* defaultActionTitle =
-      l10n_util::GetNSString(IDS_IOS_MANUAL_FALLBACK_NOT_SECURE_OK_BUTTON);
-
-  UIAlertController* alert =
-      [UIAlertController alertControllerWithTitle:alertTitle
-                                          message:body
-                                   preferredStyle:UIAlertControllerStyleAlert];
-  UIAlertAction* defaultAction =
-      [UIAlertAction actionWithTitle:defaultActionTitle
-                               style:UIAlertActionStyleDefault
-                             handler:^(UIAlertAction* action){
-                             }];
-  [alert addAction:defaultAction];
-  UIViewController* presenter = self.viewController;
-  while (presenter.presentedViewController) {
-    presenter = presenter.presentedViewController;
-  }
-  [presenter presentViewController:alert animated:YES completion:nil];
+  [self.defaultBrowserPromoCoordinator stop];
+  self.defaultBrowserPromoCoordinator = nil;
 }
 
 #pragma mark - ActivityServiceCommands
 
 - (void)sharePage {
-  self.activityServiceCoordinator = [[ActivityServiceCoordinator alloc]
-      initWithBaseViewController:self.viewController
-                         browser:self.browser
-                        scenario:ActivityScenario::TabShareButton];
-  self.activityServiceCoordinator.positionProvider =
-      [self.viewController activityServicePositioner];
-  self.activityServiceCoordinator.presentationProvider = self;
-  [self.activityServiceCoordinator start];
-}
+  UIView* shareButton =
+      [self.viewController.activityServicePositioner shareButtonView];
 
-#pragma mark - ActivityServicePresentation
+  ActivityParams* params = [[ActivityParams alloc]
+      initWithScenario:ActivityScenario::TabShareButton];
 
-- (void)activityServiceDidEndPresenting {
-  [self.activityServiceCoordinator stop];
-  self.activityServiceCoordinator = nil;
+  self.sharingCoordinator =
+      [[SharingCoordinator alloc] initWithBaseViewController:self.viewController
+                                                     browser:self.browser
+                                                      params:params
+                                                  originView:shareButton];
+  [self.sharingCoordinator start];
 }
 
 #pragma mark - BrowserCoordinatorCommands
@@ -607,6 +552,26 @@
 - (void)showAddCreditCard {
   [self.formInputAccessoryCoordinator reset];
   [self.addCreditCardCoordinator start];
+}
+
+#pragma mark - WhatsNewCommands
+
+- (void)showDefaultBrowserFullscreenPromo {
+  if (!self.defaultBrowserPromoCoordinator) {
+    self.defaultBrowserPromoCoordinator =
+        [[DefaultBrowserPromoCoordinator alloc]
+            initWithBaseViewController:self.viewController
+                               browser:self.browser];
+    self.defaultBrowserPromoCoordinator.handler = self;
+  }
+  [self.defaultBrowserPromoCoordinator start];
+}
+
+#pragma mark - DefaultBrowserPromoCommands
+
+- (void)hidePromo {
+  [self.defaultBrowserPromoCoordinator stop];
+  self.defaultBrowserPromoCoordinator = nil;
 }
 
 #pragma mark - FindInPageCommands
@@ -742,23 +707,6 @@
   [self hidePageInfo];
 }
 
-#pragma mark - QRGenerationCommands
-
-- (void)generateQRCode:(GenerateQRCodeCommand*)command {
-  DCHECK(base::FeatureList::IsEnabled(kQRCodeGeneration));
-  self.qrGeneratorCoordinator = [[QRGeneratorCoordinator alloc]
-      initWithBaseViewController:self.viewController
-                         browser:self.browser
-                           title:command.title
-                             URL:command.URL];
-  [self.qrGeneratorCoordinator start];
-}
-
-- (void)hideQRCode {
-  [self.qrGeneratorCoordinator stop];
-  self.qrGeneratorCoordinator = nil;
-}
-
 #pragma mark - FormInputAccessoryCoordinatorNavigator
 
 - (void)openPasswordSettings {
@@ -774,14 +722,6 @@
 - (void)openCreditCardSettings {
   [HandlerForProtocol(self.dispatcher, ApplicationCommands)
       showCreditCardSettingsFromViewController:self.viewController];
-}
-
-- (void)openAllPasswordsPicker {
-  self.allPasswordCoordinator = [[ManualFillAllPasswordCoordinator alloc]
-      initWithBaseViewController:self.viewController
-                         browser:self.browser
-                injectionHandler:self.injectionHandler];
-  [self.allPasswordCoordinator start];
 }
 
 #pragma mark - RepostFormTabHelperDelegate
@@ -997,6 +937,18 @@
   if (StoreKitTabHelper::FromWebState(webState)) {
     StoreKitTabHelper::FromWebState(webState)->SetLauncher(nil);
   }
+}
+
+#pragma mark - PasswordBreachCommands
+
+- (void)showPasswordBreachForLeakType:(CredentialLeakType)leakType
+                                  URL:(const GURL&)URL {
+  self.passwordBreachCoordinator = [[PasswordBreachCoordinator alloc]
+      initWithBaseViewController:self.viewController
+                         browser:self.browser
+                        leakType:leakType
+                             URL:URL];
+  [self.passwordBreachCoordinator start];
 }
 
 @end

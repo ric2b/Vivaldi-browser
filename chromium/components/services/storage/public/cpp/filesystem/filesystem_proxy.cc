@@ -89,7 +89,7 @@ FilesystemProxy::FilesystemProxy(
     scoped_refptr<base::SequencedTaskRunner> ipc_task_runner)
     : root_(root),
       num_root_components_(GetNumPathComponents(root_)),
-      remote_directory_(std::move(directory)) {
+      remote_directory_(std::move(directory), ipc_task_runner) {
   DCHECK(root_.IsAbsolute());
 }
 
@@ -202,7 +202,7 @@ FileErrorOr<base::File> FilesystemProxy::OpenFile(const base::FilePath& path,
 
 bool FilesystemProxy::RemoveFile(const base::FilePath& path) {
   if (!remote_directory_)
-    return base::DeleteFile(MaybeMakeAbsolute(path), /*recursive=*/false);
+    return base::DeleteFile(MaybeMakeAbsolute(path));
 
   bool success = false;
   remote_directory_->RemoveFile(MakeRelative(path), &success);
@@ -226,7 +226,7 @@ bool FilesystemProxy::RemoveDirectory(const base::FilePath& path) {
     const base::FilePath full_path = MaybeMakeAbsolute(path);
     if (!base::DirectoryExists(full_path))
       return false;
-    return base::DeleteFile(full_path, /*recursive=*/false);
+    return base::DeleteFile(full_path);
   }
 
   bool success = false;
@@ -246,6 +246,20 @@ base::Optional<base::File::Info> FilesystemProxy::GetFileInfo(
   base::Optional<base::File::Info> info;
   remote_directory_->GetFileInfo(MakeRelative(path), &info);
   return info;
+}
+
+base::Optional<FilesystemProxy::PathAccessInfo> FilesystemProxy::GetPathAccess(
+    const base::FilePath& path) {
+  mojom::PathAccessInfoPtr info;
+  if (!remote_directory_)
+    info = FilesystemImpl::GetPathAccessLocal(MaybeMakeAbsolute(path));
+  else
+    remote_directory_->GetPathAccess(MakeRelative(path), &info);
+
+  if (!info)
+    return base::nullopt;
+
+  return PathAccessInfo{info->can_read, info->can_write};
 }
 
 base::File::Error FilesystemProxy::RenameFile(const base::FilePath& old_path,
@@ -286,6 +300,16 @@ FilesystemProxy::LockFile(const base::FilePath& path) {
   std::unique_ptr<FileLock> lock =
       std::make_unique<RemoteFileLockImpl>(std::move(remote_lock));
   return lock;
+}
+
+bool FilesystemProxy::SetOpenedFileLength(base::File* file, uint64_t length) {
+  if (!remote_directory_)
+    return file->SetLength(length);
+
+  bool success = false;
+  remote_directory_->SetOpenedFileLength(std::move(*file), length, &success,
+                                         file);
+  return success;
 }
 
 base::FilePath FilesystemProxy::MakeRelative(const base::FilePath& path) const {

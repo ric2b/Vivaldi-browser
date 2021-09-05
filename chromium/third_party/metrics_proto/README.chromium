@@ -1,8 +1,8 @@
 Name: Metrics Protos
 Short Name: metrics_proto
 URL: This is the canonical public repository
-Version: 317162786
-Date: 2020/06/18 UTC
+Version: 327401716
+Date: 2020/08/19 UTC
 License: BSD
 Security Critical: Yes
 
@@ -16,4 +16,4 @@ blaze run //analysis/uma/proto_export:proto_export -- \
   --output=$CHROMIUM_SRC/third_party/metrics_proto
 
 Local Modifications:
-Unchanged from the output of the export script.
+Changed to only picking up the result type enum for TILE_SUGGESTION.

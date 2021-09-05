@@ -15,10 +15,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ExpandableListView;
 
-import org.chromium.base.ActivityState;
-import org.chromium.base.ApplicationStatus;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.content.InvalidationAwareThumbnailProvider;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
@@ -27,10 +25,7 @@ import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.ViewUtils;
 
-import org.chromium.chrome.browser.ChromeTabbedActivity;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.vivaldi.browser.common.VivaldiUtils;
-import org.vivaldi.browser.preferences.VivaldiPreferences;
 import org.vivaldi.browser.preferences.VivaldiSyncActivity;
 import org.vivaldi.browser.sync.VivaldiProfileSyncService;
 import org.vivaldi.browser.vivaldi_account_manager.VivaldiAccountManager;
@@ -40,8 +35,7 @@ import org.vivaldi.browser.vivaldi_account_manager.VivaldiAccountManager;
  * synced devices, and snapshot documents sent from Chrome to Mobile in an expandable list view.
  */
 public class RecentTabsPage
-        implements NativePage, ApplicationStatus.ActivityStateListener,
-                   ExpandableListView.OnChildClickListener,
+        implements NativePage, ExpandableListView.OnChildClickListener,
                    ExpandableListView.OnGroupCollapseListener,
                    ExpandableListView.OnGroupExpandListener, RecentTabsManager.UpdatedCallback,
                    View.OnAttachStateChangeListener, View.OnCreateContextMenuListener,
@@ -63,18 +57,12 @@ public class RecentTabsPage
     private int mSnapshotHeight;
 
     /**
-     * Whether the page is in the foreground and is visible.
-     */
-    private boolean mInForeground;
-
-    /**
      * Whether {@link #mView} is attached to the application window.
      */
     private boolean mIsAttachedToWindow;
 
     //** Vivaldi */
     private VivaldiAccountManager.AccountStateObserver mAccountObserver;
-    private SharedPreferencesManager.Observer mPreferenceObserver;
 
     /**
      * Constructor returns an instance of RecentTabsPage.
@@ -104,11 +92,9 @@ public class RecentTabsPage
         mListView.setOnCreateContextMenuListener(this);
 
         mView.addOnAttachStateChangeListener(this);
-        ApplicationStatus.registerStateListenerForActivity(this, activity);
-        // {@link #mInForeground} will be updated once the view is attached to the window.
 
         if (!DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity)) {
-            mBrowserControlsStateProvider = activity.getFullscreenManager();
+            mBrowserControlsStateProvider = activity.getBrowserControlsManager();
             mBrowserControlsStateProvider.addObserver(this);
             onBottomControlsHeightChanged(mBrowserControlsStateProvider.getBottomControlsHeight(),
                     mBrowserControlsStateProvider.getBottomControlsMinHeight());
@@ -120,55 +106,8 @@ public class RecentTabsPage
 
         // Vivaldi
         mAccountObserver = () -> onUpdated();
-        // Note(david@vivaldi.com): We need to adjust the margin when using tab strip.
-        int initialHeight =
-                ((ChromeTabbedActivity) mActivity).getFullscreenManager().getTopControlsHeight();
-        int toolbarHeight =
-                ((ChromeTabbedActivity) mActivity).getToolbarManager().getToolbar().getHeight();
-        int tabStripHeight = (int) mActivity.getResources().getDimension(
-                R.dimen.tab_strip_height);
-        mPreferenceObserver = key -> {
-            if (VivaldiPreferences.SHOW_TAB_STRIP.equals(key)) {
-                if (mRecentTabsManager.getVivaldiRecentTabsManager() == null) {
-                    int marginTop = SharedPreferencesManager.getInstance().readBoolean(
-                            VivaldiPreferences.SHOW_TAB_STRIP, true)
-                            ? (initialHeight > toolbarHeight) ? 0 : tabStripHeight
-                            : (initialHeight > toolbarHeight) ? -tabStripHeight : 0;
-                    VivaldiUtils.updateTopMarginForTabsOnPhoneUI(mView, marginTop);
-                }
-            }
-        };
-        SharedPreferencesManager.getInstance().addObserver(mPreferenceObserver);
         mView.setPadding(0,0,0,0);
         mView.findViewById(R.id.recent_tabs_root).setBackgroundColor(Color.TRANSPARENT);
-    }
-
-    /**
-     * Updates whether the page is in the foreground based on whether the application is in the
-     * foreground and whether {@link #mView} is attached to the application window. If the page is
-     * no longer in the foreground, records the time that the page spent in the foreground to UMA.
-     */
-    private void updateForegroundState() {
-        // Note(david@vivaldi.com): We need to adjust the margin when using tab strip.
-        if (mRecentTabsManager.getVivaldiRecentTabsManager() != null) {
-            VivaldiUtils.updateTopMarginForTabsOnPhoneUI(mView,
-                    SharedPreferencesManager.getInstance().readBoolean(
-                            VivaldiPreferences.SHOW_TAB_STRIP, true)
-                            ? -(int) mActivity.getResources().getDimension(
-                                      R.dimen.tab_strip_height)
-                            : 0);
-        }
-
-        boolean inForeground = mIsAttachedToWindow
-                && ApplicationStatus.getStateForActivity(mActivity) == ActivityState.RESUMED;
-        if (mInForeground == inForeground) {
-            return;
-        }
-
-        mInForeground = inForeground;
-        if (mInForeground) {
-            mRecentTabsManager.recordRecentTabMetrics();
-        }
     }
 
     // NativePage overrides
@@ -214,25 +153,13 @@ public class RecentTabsPage
         mListView.setAdapter((RecentTabsRowAdapter) null);
 
         mView.removeOnAttachStateChangeListener(this);
-        ApplicationStatus.unregisterActivityStateListener(this);
         if (mBrowserControlsStateProvider != null) {
             mBrowserControlsStateProvider.removeObserver(this);
         }
-
-        // Vivaldi
-        SharedPreferencesManager.getInstance().removeObserver(mPreferenceObserver);
     }
 
     @Override
     public void updateForUrl(String url) {
-    }
-
-    // ApplicationStatus.ActivityStateListener
-    @Override
-    public void onActivityStateChange(Activity activity, int state) {
-        // Called when the user locks the screen or moves Chrome to the background via the task
-        // switcher.
-        updateForegroundState();
     }
 
     // View.OnAttachStateChangeListener
@@ -241,22 +168,17 @@ public class RecentTabsPage
         // Called when the user opens the RecentTabsPage or switches back to the RecentTabsPage from
         // another tab.
         mIsAttachedToWindow = true;
-        updateForegroundState();
 
         // Work around a bug on Samsung devices where the recent tabs page does not appear after
         // toggling the Sync quick setting.  For some reason, the layout is being dropped on the
         // flow and we need to force a root level layout to get the UI to appear.
         view.getRootView().requestLayout();
-
-        //** Vivaldi */
-        VivaldiAccountManager.get().addAccountStateObserver(mAccountObserver);
     }
 
     @Override
     public void onViewDetachedFromWindow(View view) {
         // Called when the user navigates from the RecentTabsPage or switches to another tab.
         mIsAttachedToWindow = false;
-        updateForegroundState();
 
         //** Vivaldi */
         VivaldiAccountManager.get().removeAccountStateObserver(mAccountObserver);
@@ -414,5 +336,11 @@ public class RecentTabsPage
             layoutParams.bottomMargin = bottomMargin;
             recentTabsRoot.setLayoutParams(layoutParams);
         }
+
+        // Note(david@vivaldi.com): We reset the margin when in tab switcher mode.
+        if (mRecentTabsManager.getVivaldiRecentTabsManager() != null)
+            VivaldiUtils.updateViewsTopMargin(recentTabsRoot,
+                    mActivity.getResources().getDimensionPixelOffset(
+                            R.dimen.control_container_height));
     }
 }

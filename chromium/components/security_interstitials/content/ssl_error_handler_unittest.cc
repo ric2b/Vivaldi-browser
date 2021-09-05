@@ -45,7 +45,6 @@
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/test/test_certificate_data.h"
 #include "net/test/test_data_directory.h"
-#include "net/url_request/url_request_test_util.h"
 #include "services/network/test/test_shared_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -1093,7 +1092,7 @@ TEST_F(SSLErrorHandlerNameMismatchTest,
 }
 
 // Flakily fails on linux_chromium_tsan_rel_ng. http://crbug.com/989128
-#if defined(OS_LINUX) && defined(THREAD_SANITIZER)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(THREAD_SANITIZER)
 #define MAYBE_TimeQueryStarted DISABLED_TimeQueryStarted
 #else
 #define MAYBE_TimeQueryStarted TimeQueryStarted
@@ -1131,7 +1130,7 @@ TEST_F(SSLErrorHandlerDateInvalidTest, MAYBE_TimeQueryStarted) {
 // clock can't be determined because network time is unavailable.
 
 // Flakily fails on linux_chromium_tsan_rel_ng. http://crbug.com/989225
-#if defined(OS_LINUX) && defined(THREAD_SANITIZER)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(THREAD_SANITIZER)
 #define MAYBE_NoTimeQueries DISABLED_NoTimeQueries
 #else
 #define MAYBE_NoTimeQueries NoTimeQueries
@@ -1158,7 +1157,7 @@ TEST_F(SSLErrorHandlerDateInvalidTest, MAYBE_NoTimeQueries) {
 // the system clock times out (e.g. because a network time query hangs).
 
 // Flakily fails on linux_chromium_tsan_rel_ng. http://crbug.com/989289
-#if defined(OS_LINUX) && defined(THREAD_SANITIZER)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(THREAD_SANITIZER)
 #define MAYBE_TimeQueryHangs DISABLED_TimeQueryHangs
 #else
 #define MAYBE_TimeQueryHangs TimeQueryHangs

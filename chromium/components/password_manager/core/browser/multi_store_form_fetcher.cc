@@ -108,18 +108,16 @@ void MultiStoreFormFetcher::OnGetPasswordStoreResults(
 }
 
 void MultiStoreFormFetcher::OnGetPasswordStoreResultsFrom(
-    scoped_refptr<PasswordStore> store,
+    PasswordStore* store,
     std::vector<std::unique_ptr<PasswordForm>> results) {
   DCHECK_EQ(State::WAITING, state_);
   DCHECK_GT(wait_counter_, 0);
 
-  if (store.get() == client_->GetProfilePasswordStore() &&
-      should_migrate_http_passwords_ && results.empty() &&
+  if (should_migrate_http_passwords_ && results.empty() &&
       form_digest_.url.SchemeIs(url::kHttpsScheme)) {
-    // TODO(crbug.com/1095556): Consider also supporting HTTP->HTTPS migration
-    // for the account store.
-    http_migrator_ = std::make_unique<HttpPasswordStoreMigrator>(
-        url::Origin::Create(form_digest_.url), client_, this);
+    http_migrators_[store] = std::make_unique<HttpPasswordStoreMigrator>(
+        url::Origin::Create(form_digest_.url), store,
+        client_->GetNetworkContext(), this);
     // The migrator will call us back at ProcessMigratedForms().
     return;
   }
@@ -168,7 +166,7 @@ void MultiStoreFormFetcher::SplitResults(
   is_blacklisted_in_profile_store_ = false;
   is_blacklisted_in_account_store_ = false;
   for (auto& result : results) {
-    if (!result->blacklisted_by_user)
+    if (!result->blocked_by_user)
       continue;
     // Ignore PSL matches for blacklisted entries.
     if (result->is_public_suffix_match)

@@ -35,8 +35,9 @@ class ChromiumDepGraph {
             licenseUrl: "https://raw.githubusercontent.com/google/desugar_jdk_libs/master/LICENSE",
             generateTarget: false),
         'com_android_tools_desugar_jdk_libs_configuration': new PropertyOverride(
-            // Configuration stored in //third_party/r8.
-            exclude: true),
+            licensePath: "licenses/desugar_jdk_libs_configuration.txt",
+            licenseName: "BSD 3-Clause",
+            generateTarget: false),
         'backport_util_concurrent_backport_util_concurrent': new PropertyOverride(
             licensePath: "licenses/CC01.0.txt",
             licenseName: "CC0 1.0"),
@@ -53,6 +54,9 @@ class ChromiumDepGraph {
             licenseUrl: "https://www.apache.org/licenses/LICENSE-2.0.txt",
             licenseName: "Apache 2.0"),
         'com_google_auto_service_auto_service_annotations': new PropertyOverride(
+            licenseUrl: "https://www.apache.org/licenses/LICENSE-2.0.txt",
+            licenseName: "Apache 2.0"),
+        'com_google_auto_value_auto_value_annotations': new PropertyOverride(
             licenseUrl: "https://www.apache.org/licenses/LICENSE-2.0.txt",
             licenseName: "Apache 2.0"),
         'com_google_code_findbugs_jFormatString': new PropertyOverride(
@@ -209,6 +213,9 @@ class ChromiumDepGraph {
             licenseUrl: "https://raw.githubusercontent.com/typetools/checker-framework/master/LICENSE.txt",
             licenseName: "GPL v2 with the classpath exception"),
         'org_checkerframework_dataflow': new PropertyOverride(
+            licenseUrl: "https://raw.githubusercontent.com/typetools/checker-framework/master/LICENSE.txt",
+            licenseName: "GPL v2 with the classpath exception"),
+        'org_checkerframework_dataflow_shaded': new PropertyOverride(
             licenseUrl: "https://raw.githubusercontent.com/typetools/checker-framework/master/LICENSE.txt",
             licenseName: "GPL v2 with the classpath exception"),
         'org_checkerframework_javacutil': new PropertyOverride(

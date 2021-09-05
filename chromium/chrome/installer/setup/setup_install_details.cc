@@ -4,6 +4,8 @@
 
 #include "chrome/installer/setup/setup_install_details.h"
 
+#include <string>
+
 #include "base/command_line.h"
 #include "base/strings/string16.h"
 #include "base/win/registry.h"
@@ -12,8 +14,8 @@
 #include "chrome/install_static/install_modes.h"
 #include "chrome/install_static/install_util.h"
 #include "chrome/installer/util/google_update_constants.h"
-#include "chrome/installer/util/master_preferences.h"
-#include "chrome/installer/util/master_preferences_constants.h"
+#include "chrome/installer/util/initial_preferences.h"
+#include "chrome/installer/util/initial_preferences_constants.h"
 #include "chrome/installer/util/util_constants.h"
 
 namespace {
@@ -73,8 +75,18 @@ std::unique_ptr<install_static::PrimaryInstallDetails> MakeInstallDetails(
   // keys.
   base::string16 update_ap;
   base::string16 update_cohort_name;
-  details->set_channel(install_static::DetermineChannel(
-      *mode, system_level, &update_ap, &update_cohort_name));
+
+  auto channel_from_cmd_line =
+      command_line.GetSwitchValueNative(installer::switches::kChannel);
+
+  auto channel = install_static::DetermineChannel(
+      *mode, system_level,
+      command_line.HasSwitch(installer::switches::kChannel)
+          ? channel_from_cmd_line.c_str()
+          : nullptr,
+      &update_ap, &update_cohort_name);
+  details->set_channel(channel.channel_name);
+  details->set_channel_origin(channel.origin);
   details->set_update_ap(update_ap);
   details->set_update_cohort_name(update_cohort_name);
 

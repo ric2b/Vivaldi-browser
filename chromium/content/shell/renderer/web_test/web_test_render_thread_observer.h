@@ -14,7 +14,7 @@
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 
 namespace content {
-class TestInterfaces;
+class TestRunner;
 
 class WebTestRenderThreadObserver : public RenderThreadObserver,
                                     public mojom::WebTestRenderThread {
@@ -24,7 +24,7 @@ class WebTestRenderThreadObserver : public RenderThreadObserver,
   WebTestRenderThreadObserver();
   ~WebTestRenderThreadObserver() override;
 
-  TestInterfaces* test_interfaces() const { return test_interfaces_.get(); }
+  TestRunner* test_runner() const { return test_runner_.get(); }
 
   // content::RenderThreadObserver:
   void RegisterMojoInterfaces(
@@ -41,7 +41,7 @@ class WebTestRenderThreadObserver : public RenderThreadObserver,
   void OnWebTestRenderThreadAssociatedRequest(
       mojo::PendingAssociatedReceiver<mojom::WebTestRenderThread> receiver);
 
-  std::unique_ptr<TestInterfaces> test_interfaces_;
+  std::unique_ptr<TestRunner> test_runner_;
 
   mojo::AssociatedReceiver<mojom::WebTestRenderThread> receiver_{this};
 

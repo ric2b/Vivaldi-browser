@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include "base/run_loop.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/printing/common/print.mojom.h"
@@ -28,8 +29,7 @@ PrintMockRenderThread::PrintMockRenderThread()
 {
 }
 
-PrintMockRenderThread::~PrintMockRenderThread() {
-}
+PrintMockRenderThread::~PrintMockRenderThread() = default;
 
 scoped_refptr<base::SingleThreadTaskRunner>
 PrintMockRenderThread::GetIOTaskRunner() {
@@ -45,6 +45,10 @@ bool PrintMockRenderThread::OnMessageReceived(const IPC::Message& msg) {
   if (content::MockRenderThread::OnMessageReceived(msg))
     return true;
 
+  // Gives a chance to handle Mojo interfaces as some messages has been
+  // converted to Mojo.
+  base::RunLoop().RunUntilIdle();
+
   // Some messages we do special handling.
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(PrintMockRenderThread, msg)
@@ -53,8 +57,6 @@ bool PrintMockRenderThread::OnMessageReceived(const IPC::Message& msg) {
                         OnGetDefaultPrintSettings)
     IPC_MESSAGE_HANDLER(PrintHostMsg_ScriptedPrint, OnScriptedPrint)
     IPC_MESSAGE_HANDLER(PrintHostMsg_UpdatePrintSettings, OnUpdatePrintSettings)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_DidGetPrintedPagesCount,
-                        OnDidGetPrintedPagesCount)
     IPC_MESSAGE_HANDLER_DELAY_REPLY(PrintHostMsg_DidPrintDocument,
                                     OnDidPrintDocument)
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -71,7 +73,7 @@ bool PrintMockRenderThread::OnMessageReceived(const IPC::Message& msg) {
 #if BUILDFLAG(ENABLE_PRINTING)
 
 void PrintMockRenderThread::OnGetDefaultPrintSettings(
-    PrintMsg_Print_Params* params) {
+    printing::mojom::PrintParams* params) {
   printer_->GetDefaultPrintSettings(params);
 }
 
@@ -84,13 +86,8 @@ void PrintMockRenderThread::OnScriptedPrint(
   }
 }
 
-void PrintMockRenderThread::OnDidGetPrintedPagesCount(int cookie,
-                                                      int number_pages) {
-  printer_->SetPrintedPagesCount(cookie, number_pages);
-}
-
 void PrintMockRenderThread::OnDidPrintDocument(
-    const PrintHostMsg_DidPrintDocument_Params& params,
+    const printing::mojom::DidPrintDocumentParams& params,
     IPC::Message* reply_msg) {
   printer_->PrintPage(params);
   PrintHostMsg_DidPrintDocument::WriteReplyParams(reply_msg, true);
@@ -105,12 +102,13 @@ void PrintMockRenderThread::OnDidStartPreview(
 }
 
 void PrintMockRenderThread::OnDidPreviewPage(
-    const PrintHostMsg_DidPreviewPage_Params& params,
+    const printing::mojom::DidPreviewPageParams& params,
     const PrintHostMsg_PreviewIds& ids) {
-  DCHECK_GE(params.page_number, printing::FIRST_PAGE_INDEX);
+  int page_number = params.page_number;
+  DCHECK_GE(page_number, printing::FIRST_PAGE_INDEX);
   print_preview_pages_remaining_--;
   print_preview_pages_.emplace_back(
-      params.page_number, params.content.metafile_data_region.GetSize());
+      params.page_number, params.content->metafile_data_region.GetSize());
 }
 
 void PrintMockRenderThread::OnCheckForCancel(const PrintHostMsg_PreviewIds& ids,

@@ -19,7 +19,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/browser_sync/browser_sync_switches.h"
 #include "components/invalidation/public/invalidator_state.h"
-//#include "components/invalidation/public/object_id_invalidation_map.h"
 #include "components/sync/base/invalidation_helper.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/sync_driver_switches.h"
@@ -28,8 +27,6 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/sync.h"
 #include "extensions/tools/vivaldi_tools.h"
-#include "google/cacheinvalidation/include/types.h"
-#include "google/cacheinvalidation/types.pb.h"
 #include "sync/vivaldi_invalidation_service.h"
 #include "sync/vivaldi_profile_sync_service.h"
 #include "sync/vivaldi_profile_sync_service_factory.h"
@@ -448,6 +445,61 @@ ExtensionFunction::ResponseAction SyncSetEncryptionPasswordFunction::Run() {
 
   return RespondNow(ArgumentList(
       vivaldi::sync::SetEncryptionPassword::Results::Create(success)));
+}
+
+ExtensionFunction::ResponseAction SyncBackupEncryptionTokenFunction::Run() {
+  std::unique_ptr<vivaldi::sync::BackupEncryptionToken::Params> params(
+      vivaldi::sync::BackupEncryptionToken::Params::Create(*args_));
+
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  VivaldiProfileSyncService* sync_manager =
+      VivaldiProfileSyncServiceFactory::GetForProfileVivaldi(
+          Profile::FromBrowserContext(browser_context()));
+  if (!sync_manager)
+    return RespondNow(Error("Sync manager is unavailable"));
+
+  if (!sync_manager->GetUserSettings()->IsEncryptEverythingEnabled())
+    return RespondNow(Error("Encryption not enabled"));
+
+  sync_manager->ui_helper()->BackupEncryptionToken(
+      base::FilePath::FromUTF8Unsafe(params->target_file),
+      base::BindOnce(&SyncBackupEncryptionTokenFunction::OnBackupDone, this));
+
+  return RespondLater();
+}
+
+void SyncBackupEncryptionTokenFunction::OnBackupDone(bool result) {
+  Respond(ArgumentList(
+      vivaldi::sync::BackupEncryptionToken::Results::Create(result)));
+}
+
+ExtensionFunction::ResponseAction SyncRestoreEncryptionTokenFunction::Run() {
+  std::unique_ptr<vivaldi::sync::RestoreEncryptionToken::Params> params(
+      vivaldi::sync::RestoreEncryptionToken::Params::Create(*args_));
+
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  VivaldiProfileSyncService* sync_manager =
+      VivaldiProfileSyncServiceFactory::GetForProfileVivaldi(
+          Profile::FromBrowserContext(browser_context()));
+  if (!sync_manager)
+    return RespondNow(Error("Sync manager is unavailable"));
+
+  if (!sync_manager->GetUserSettings()->IsPassphraseRequired())
+    return RespondNow(
+        Error("Sync currently isn't requiring an encryption password"));
+
+  sync_manager->ui_helper()->RestoreEncryptionToken(
+      base::FilePath::FromUTF8Unsafe(params->source_file),
+      base::BindOnce(&SyncRestoreEncryptionTokenFunction::OnRestoreDone, this));
+
+  return RespondLater();
+}
+
+void SyncRestoreEncryptionTokenFunction::OnRestoreDone(bool result) {
+  Respond(ArgumentList(
+      vivaldi::sync::RestoreEncryptionToken::Results::Create(result)));
 }
 
 SyncGetDefaultSessionNameFunction::SyncGetDefaultSessionNameFunction() =

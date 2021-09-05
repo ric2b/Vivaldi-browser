@@ -180,6 +180,7 @@ static_idl_files_in_core = get_path_info(
           "//third_party/blink/renderer/core/events/animation_playback_event_init.idl",
           "//third_party/blink/renderer/core/events/application_cache_error_event.idl",
           "//third_party/blink/renderer/core/events/application_cache_error_event_init.idl",
+          "//third_party/blink/renderer/core/events/before_create_policy_event.idl",
           "//third_party/blink/renderer/core/events/before_unload_event.idl",
           "//third_party/blink/renderer/core/events/clipboard_event.idl",
           "//third_party/blink/renderer/core/events/clipboard_event_init.idl",
@@ -246,6 +247,7 @@ static_idl_files_in_core = get_path_info(
           "//third_party/blink/renderer/core/fileapi/file_reader_sync.idl",
           "//third_party/blink/renderer/core/fileapi/url_file_api.idl",
           "//third_party/blink/renderer/core/frame/bar_prop.idl",
+          "//third_party/blink/renderer/core/frame/coop_access_violation_report_body.idl",
           "//third_party/blink/renderer/core/frame/csp/csp_violation_report_body.idl",
           "//third_party/blink/renderer/core/frame/deprecation_report_body.idl",
           "//third_party/blink/renderer/core/frame/document_policy_violation_report_body.idl",
@@ -669,6 +671,7 @@ static_idl_files_in_core = get_path_info(
 # These IDL definitions are used only for testing.
 static_idl_files_in_core_for_testing = get_path_info(
         [
+          "//third_party/blink/renderer/core/dom/testing/internals_storage_access.idl",
           "//third_party/blink/renderer/core/fetch/testing/internals_fetch.idl",
           "//third_party/blink/renderer/core/fetch/testing/worker_internals_fetch.idl",
           "//third_party/blink/renderer/core/testing/callback_function_test.idl",

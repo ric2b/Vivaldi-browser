@@ -34,9 +34,9 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/chromeos/accessibility/accessibility_event_rewriter_delegate.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
-#include "chrome/browser/chromeos/accessibility/spoken_feedback_event_rewriter_delegate.h"
 #include "chrome/browser/chromeos/app_mode/arc/arc_kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
@@ -44,6 +44,7 @@
 #include "chrome/browser/chromeos/app_mode/web_app/web_kiosk_app_manager.h"
 #include "chrome/browser/chromeos/arc/session/arc_service_launcher.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
+#include "chrome/browser/chromeos/crosapi/browser_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_unsupported_action_notifier.h"
 #include "chrome/browser/chromeos/crostini/crosvm_metrics.h"
 #include "chrome/browser/chromeos/dbus/chrome_features_service_provider.h"
@@ -70,7 +71,6 @@
 #include "chrome/browser/chromeos/extensions/login_screen/login_screen_ui/ui_handler.h"
 #include "chrome/browser/chromeos/external_metrics.h"
 #include "chrome/browser/chromeos/input_method/input_method_configuration.h"
-#include "chrome/browser/chromeos/lacros/lacros_manager.h"
 #include "chrome/browser/chromeos/language_preferences.h"
 #include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
 #include "chrome/browser/chromeos/logging.h"
@@ -165,6 +165,7 @@
 #include "chromeos/network/network_cert_loader.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/portal_detector/network_portal_detector_stub.h"
+#include "chromeos/services/cros_healthd/public/cpp/service_connection.h"
 #include "chromeos/system/statistics_provider.h"
 #include "chromeos/tpm/install_attributes.h"
 #include "chromeos/tpm/tpm_token_loader.h"
@@ -498,6 +499,7 @@ int ChromeBrowserMainPartsChromeos::PreEarlyInitialization() {
   // DBus is initialized in ChromeMainDelegate::PostEarlyInitialization().
   CHECK(DBusThreadManager::IsInitialized());
 
+#if !defined(USE_REAL_DBUS_CLIENTS)
   if (!base::SysInfo::IsRunningOnChromeOS() &&
       parsed_command_line().HasSwitch(
           switches::kFakeDriveFsLauncherChrootPath) &&
@@ -509,6 +511,7 @@ int ChromeBrowserMainPartsChromeos::PreEarlyInitialization() {
         parsed_command_line().GetSwitchValuePath(
             switches::kFakeDriveFsLauncherSocketPath));
   }
+#endif  // !defined(USE_REAL_DBUS_CLIENTS)
 
   return ChromeBrowserMainPartsLinux::PreEarlyInitialization();
 }
@@ -750,10 +753,10 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
       std::make_unique<lock_screen_apps::StateController>();
   lock_screen_apps_state_controller_->Initialize();
 
-  // Always construct LacrosManager, even if the lacros flag is disabled, so
+  // Always construct BrowserManager, even if the lacros flag is disabled, so
   // it can do cleanup work if needed. Initialized in PreProfileInit because the
   // profile-keyed service AppService can call into it.
-  lacros_manager_ = std::make_unique<LacrosManager>(
+  browser_manager_ = std::make_unique<crosapi::BrowserManager>(
       g_browser_process->platform_part()->cros_component_manager());
 
   if (immediate_login) {
@@ -897,9 +900,25 @@ void ChromeBrowserMainPartsChromeos::PostProfileInit() {
   network_pref_state_observer_ = std::make_unique<NetworkPrefStateObserver>();
 
   // Initialize the NetworkHealth aggregator.
-  network_health::NetworkHealthService* network_health_service =
-      network_health::NetworkHealthService::GetInstance();
-  DCHECK(network_health_service);
+  network_health::NetworkHealthService::GetInstance();
+
+  // Create the service connection to CrosHealthd platform service instance.
+  auto* cros_healthd = cros_healthd::ServiceConnection::GetInstance();
+
+  // Pass a callback to the CrosHealthd service connection that binds a pending
+  // remote to service.
+  cros_healthd->SetBindNetworkHealthServiceCallback(base::BindRepeating([] {
+    return network_health::NetworkHealthService::GetInstance()
+        ->GetHealthRemoteAndBindReceiver();
+  }));
+
+  // Pass a callback to the CrosHealthd service connection that binds a pending
+  // remote to the interface.
+  cros_healthd->SetBindNetworkDiagnosticsRoutinesCallback(
+      base::BindRepeating([] {
+        return network_health::NetworkHealthService::GetInstance()
+            ->GetDiagnosticsRemoteAndBindReceiver();
+      }));
 
   // Initialize input methods.
   input_method::InputMethodManager* manager =
@@ -974,9 +993,10 @@ void ChromeBrowserMainPartsChromeos::PreBrowserStart() {
 }
 
 void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
-  // Construct a delegate to connect ChromeVox and SpokenFeedbackEventRewriter.
-  spoken_feedback_event_rewriter_delegate_ =
-      std::make_unique<SpokenFeedbackEventRewriterDelegate>();
+  // Construct a delegate to connect the accessibility component extensions and
+  // AccessibilityEventRewriter.
+  accessibility_event_rewriter_delegate_ =
+      std::make_unique<AccessibilityEventRewriterDelegate>();
 
   event_rewriter_delegate_ = std::make_unique<EventRewriterDelegateImpl>(
       ash::Shell::Get()->activation_client());
@@ -986,7 +1006,7 @@ void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
   auto* event_rewriter_controller = ash::EventRewriterController::Get();
   event_rewriter_controller->Initialize(
       event_rewriter_delegate_.get(),
-      spoken_feedback_event_rewriter_delegate_.get());
+      accessibility_event_rewriter_delegate_.get());
 
   // Enable the KeyboardDrivenEventRewriter if the OEM manifest flag is on.
   if (system::InputDeviceSettings::Get()->ForceKeyboardDrivenUINavigation())
@@ -1040,7 +1060,7 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
 
   BootTimesRecorder::Get()->AddLogoutTimeMarker("UIMessageLoopEnded", true);
 
-  lacros_manager_.reset();
+  browser_manager_.reset();
 
   if (lock_screen_apps_state_controller_)
     lock_screen_apps_state_controller_->Shutdown();

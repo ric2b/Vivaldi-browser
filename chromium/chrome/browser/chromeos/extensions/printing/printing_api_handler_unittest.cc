@@ -188,7 +188,7 @@ chromeos::Printer ConstructPrinter(const std::string& id,
   chromeos::Printer printer(id);
   printer.set_display_name(name);
   printer.set_description(description);
-  printer.set_uri(uri);
+  EXPECT_TRUE(printer.SetUri(uri));
   printer.set_source(source);
   return printer;
 }
@@ -197,7 +197,7 @@ std::unique_ptr<printing::PrinterSemanticCapsAndDefaults>
 ConstructPrinterCapabilities() {
   auto capabilities =
       std::make_unique<printing::PrinterSemanticCapsAndDefaults>();
-  capabilities->color_model = printing::COLOR;
+  capabilities->color_model = printing::mojom::ColorModel::kColor;
   capabilities->duplex_modes.push_back(printing::mojom::DuplexMode::kSimplex);
   capabilities->copies_max = 2;
   capabilities->dpis.push_back(gfx::Size(kHorizontalDpi, kVerticalDpi));

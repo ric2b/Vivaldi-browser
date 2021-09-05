@@ -6,7 +6,9 @@
 
 #include "base/bind.h"
 #include "components/sync/base/sync_prefs.h"
-#include "components/sync/driver/sync_util.h"
+#include "components/sync/base/sync_util.h"
+#include "components/sync/invalidations/switches.h"
+#include "components/sync/invalidations/sync_invalidations_service.h"
 #include "components/sync_device_info/device_info_sync_client.h"
 #include "components/sync_device_info/device_info_util.h"
 #include "components/sync_device_info/local_device_info_util.h"
@@ -16,13 +18,23 @@ namespace syncer {
 LocalDeviceInfoProviderImpl::LocalDeviceInfoProviderImpl(
     version_info::Channel channel,
     const std::string& version,
-    const DeviceInfoSyncClient* sync_client)
-    : channel_(channel), version_(version), sync_client_(sync_client) {
+    const DeviceInfoSyncClient* sync_client,
+    SyncInvalidationsService* sync_invalidations_service)
+    : channel_(channel),
+      version_(version),
+      sync_client_(sync_client),
+      sync_invalidations_service_(sync_invalidations_service) {
   DCHECK(sync_client);
+  if (sync_invalidations_service_) {
+    sync_invalidations_service_->AddTokenObserver(this);
+  }
 }
 
 LocalDeviceInfoProviderImpl::~LocalDeviceInfoProviderImpl() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (sync_invalidations_service_) {
+    sync_invalidations_service_->RemoveTokenObserver(this);
+  }
 }
 
 version_info::Channel LocalDeviceInfoProviderImpl::GetChannel() const {
@@ -51,10 +63,23 @@ LocalDeviceInfoProviderImpl::RegisterOnInitializedCallback(
   return callback_list_.Add(callback);
 }
 
+void LocalDeviceInfoProviderImpl::OnFCMRegistrationTokenChanged() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(
+      base::FeatureList::IsEnabled(switches::kSubscribeForSyncInvalidations));
+  DCHECK(sync_invalidations_service_);
+  if (local_device_info_) {
+    local_device_info_->set_fcm_registration_token(
+        sync_invalidations_service_->GetFCMRegistrationToken());
+  }
+  // TODO(crbug.com/1102336): nudge device info update.
+}
+
 void LocalDeviceInfoProviderImpl::Initialize(
     const std::string& cache_guid,
     const std::string& client_name,
-    const base::SysInfo::HardwareInfo& hardware_info) {
+    const std::string& manufacturer_name,
+    const std::string& model_name) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!cache_guid.empty());
 
@@ -67,11 +92,11 @@ void LocalDeviceInfoProviderImpl::Initialize(
   local_device_info_ = std::make_unique<DeviceInfo>(
       cache_guid, session_name_override.empty()? client_name : session_name_override, version_, MakeUserAgentForSync(channel_),
       GetLocalDeviceType(), sync_client_->GetSigninScopedDeviceId(),
-      hardware_info,
+      manufacturer_name, model_name,
       /*last_updated_timestamp=*/base::Time(),
       DeviceInfoUtil::GetPulseInterval(),
       sync_client_->GetSendTabToSelfReceivingEnabled(),
-      sync_client_->GetLocalSharingInfo());
+      sync_client_->GetLocalSharingInfo(), GetFCMRegistrationToken());
 
   // Notify observers.
   callback_list_.Notify();
@@ -86,6 +111,13 @@ void LocalDeviceInfoProviderImpl::UpdateClientName(
     const std::string& client_name) {
   DCHECK(local_device_info_);
   local_device_info_->set_client_name(client_name);
+}
+
+std::string LocalDeviceInfoProviderImpl::GetFCMRegistrationToken() const {
+  if (sync_invalidations_service_) {
+    return sync_invalidations_service_->GetFCMRegistrationToken();
+  }
+  return std::string();
 }
 
 }  // namespace syncer

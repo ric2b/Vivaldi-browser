@@ -19,7 +19,7 @@
 #if defined(OS_ANDROID)
 #include "base/android/callback_android.h"
 #include "base/android/jni_string.h"
-#include "chrome/android/chrome_jni_headers/PaintPreviewDemoService_jni.h"
+#include "chrome/browser/paint_preview/android/jni_headers/PaintPreviewDemoService_jni.h"
 
 using base::android::JavaParamRef;
 using base::android::ScopedJavaGlobalRef;
@@ -102,7 +102,8 @@ void PaintPreviewDemoService::CaptureTabInternal(
   }
 
   PaintPreviewBaseService::CapturePaintPreview(
-      web_contents, file_path.value(), gfx::Rect(), /*max_per_capture_size=*/0,
+      web_contents, file_path.value(), gfx::Rect(), /*capture_links=*/true,
+      /*max_per_capture_size=*/0,
       base::BindOnce(&PaintPreviewDemoService::OnCaptured,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback), key));
 }
@@ -111,8 +112,9 @@ void PaintPreviewDemoService::OnCaptured(
     FinishedSuccessfullyCallback callback,
     const DirectoryKey& key,
     PaintPreviewBaseService::CaptureStatus status,
-    std::unique_ptr<PaintPreviewProto> proto) {
-  if (status != PaintPreviewBaseService::CaptureStatus::kOk || !proto) {
+    std::unique_ptr<CaptureResult> result) {
+  if (status != PaintPreviewBaseService::CaptureStatus::kOk ||
+      !result->capture_success) {
     std::move(callback).Run(false);
     return;
   }
@@ -120,7 +122,7 @@ void PaintPreviewDemoService::OnCaptured(
   GetTaskRunner()->PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(&FileManager::SerializePaintPreviewProto, GetFileManager(),
-                     key, *proto, true),
+                     key, result->proto, true),
       base::BindOnce(&PaintPreviewDemoService::OnSerializationFinished,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }

@@ -26,7 +26,7 @@ class TestSessionController : public ash::SessionController {
     return last_session_length_limit_;
   }
 
-  base::TimeTicks last_session_start_time() const {
+  base::Time last_session_start_time() const {
     return last_session_start_time_;
   }
 
@@ -56,7 +56,7 @@ class TestSessionController : public ash::SessionController {
   void RunUnlockAnimation(RunUnlockAnimationCallback callback) override;
   void NotifyChromeTerminating() override;
   void SetSessionLengthLimit(base::TimeDelta length_limit,
-                             base::TimeTicks start_time) override;
+                             base::Time start_time) override;
   void CanSwitchActiveUser(CanSwitchActiveUserCallback callback) override;
   void ShowMultiprofilesIntroDialog(
       ShowMultiprofilesIntroDialogCallback callback) override;
@@ -70,12 +70,15 @@ class TestSessionController : public ash::SessionController {
   void RemoveSessionActivationObserverForAccountId(
       const AccountId& account_id,
       ash::SessionActivationObserver* observer) override;
+  void AddObserver(ash::SessionObserver* observer) override;
+  void RemoveObserver(ash::SessionObserver* observer) override;
+  bool IsScreenLocked() const override;
 
  private:
   base::Optional<ash::SessionInfo> last_session_info_;
   base::Optional<ash::UserSession> last_user_session_;
   base::TimeDelta last_session_length_limit_;
-  base::TimeTicks last_session_start_time_;
+  base::Time last_session_start_time_;
   int update_user_session_count_ = 0;
   int lock_animation_complete_call_count_ = 0;
   int set_user_session_order_count_ = 0;

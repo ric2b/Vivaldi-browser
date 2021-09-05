@@ -7,8 +7,8 @@
 
 #include "ash/ash_export.h"
 #include "ash/login_status.h"
+#include "ash/public/cpp/session/session_observer.h"
 #include "ash/public/cpp/shelf_types.h"
-#include "ash/session/session_observer.h"
 #include "ash/shelf/shelf_component.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -19,6 +19,7 @@ class Window;
 }
 
 namespace ash {
+class HoldingSpaceTray;
 class ImeMenuTray;
 class LogoutButtonTray;
 class StatusAreaOverflowButtonTray;
@@ -28,6 +29,7 @@ class PaletteTray;
 class SelectToSpeakTray;
 class Shelf;
 class StatusAreaWidgetDelegate;
+class StopRecordingButtonTray;
 class UnifiedSystemTray;
 class TrayBackgroundView;
 class VirtualKeyboardTray;
@@ -73,6 +75,10 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
   // changes.
   void UpdateCollapseState();
 
+  // Logs the number of visible status area item pods. Called after the a pod
+  // changes visibility.
+  void LogVisiblePodCountMetric();
+
   // SessionObserver:
   void OnSessionStateChanged(session_manager::SessionState state) override;
 
@@ -110,7 +116,12 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
     return overview_button_tray_.get();
   }
   PaletteTray* palette_tray() { return palette_tray_.get(); }
+  StopRecordingButtonTray* stop_recording_button_tray() {
+    return stop_recording_button_tray_.get();
+  }
   ImeMenuTray* ime_menu_tray() { return ime_menu_tray_.get(); }
+  HoldingSpaceTray* holding_space_tray() { return holding_space_tray_.get(); }
+
   SelectToSpeakTray* select_to_speak_tray() {
     return select_to_speak_tray_.get();
   }
@@ -204,9 +215,11 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
   std::unique_ptr<UnifiedSystemTray> unified_system_tray_;
   std::unique_ptr<LogoutButtonTray> logout_button_tray_;
   std::unique_ptr<PaletteTray> palette_tray_;
+  std::unique_ptr<StopRecordingButtonTray> stop_recording_button_tray_;
   std::unique_ptr<VirtualKeyboardTray> virtual_keyboard_tray_;
   std::unique_ptr<ImeMenuTray> ime_menu_tray_;
   std::unique_ptr<SelectToSpeakTray> select_to_speak_tray_;
+  std::unique_ptr<HoldingSpaceTray> holding_space_tray_;
 
   // Vector of the tray buttons above. The ordering is used to determine which
   // tray buttons are hidden when they overflow the available width.

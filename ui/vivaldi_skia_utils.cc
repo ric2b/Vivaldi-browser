@@ -6,7 +6,13 @@
 
 #include "ui/vivaldi_skia_utils.h"
 
+#include "base/logging.h"
 #include "skia/ext/image_operations.h"
+#include "ui/gfx/codec/jpeg_codec.h"
+#include "ui/gfx/codec/png_codec.h"
+#include "ui/gfx/image/image.h"
+#include "ui/gfx/scrollbar_size.h"
+#include "ui/gfx/skbitmap_operations.h"
 
 namespace vivaldi {
 namespace skia_utils {
@@ -89,6 +95,39 @@ SkBitmap SmartCropAndSize(const SkBitmap& capture,
   }
 #endif
   return result;
+}
+
+bool EncodeBitmap(const SkBitmap& bitmap,
+                  ImageFormat image_format,
+                  int image_quality,
+                  std::vector<unsigned char>& data,
+                  std::string& mime_type) {
+  bool encoded = false;
+  switch (image_format) {
+    case ImageFormat::kJPEG:
+      if (bitmap.getPixels()) {
+        encoded = gfx::JPEGCodec::Encode(bitmap, image_quality, &data);
+        mime_type = "image/jpeg";  // kMimeTypeJpeg;
+        if (!encoded) {
+          LOG(ERROR) << "Failed to encode bitmap as jpeg";
+        }
+      } else {
+        LOG(ERROR) << "Cannot encode empty bitmap as jpeg";
+      }
+      break;
+    case ImageFormat::kPNG:
+      encoded =
+          gfx::PNGCodec::EncodeBGRASkBitmap(bitmap,
+                                            true,  // Discard transparency.
+                                            &data);
+      mime_type = "image/png";  // kMimeTypePng;
+      if (!encoded) {
+        LOG(ERROR) << "Failed to encode bitmap as png";
+      }
+      break;
+  }
+
+  return encoded;
 }
 
 }  // namespace skia_utils

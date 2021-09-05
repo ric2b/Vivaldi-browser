@@ -24,12 +24,13 @@ void WaitForDiscoverScreen();
 void ExitDiscoverPinSetupScreen();
 void SkipToEnrollmentOnRecovery();
 void WaitForEnrollmentScreen();
+void WaitForUserCreationScreen();
+void TapUserCreationNext();
 
 void WaitForEulaScreen();
 void TapEulaAccept();
 void WaitForSyncConsentScreen();
 void ExitScreenSyncConsent();
-void WaitForLastScreenAndTapGetStarted();
 
 class LanguageReloadObserver : public WelcomeScreen::Observer {
  public:

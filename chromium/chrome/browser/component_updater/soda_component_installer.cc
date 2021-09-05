@@ -9,6 +9,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/services/speech/buildflags.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/crx_file/id_util.h"
 #include "components/soda/constants.h"
@@ -35,10 +36,13 @@ static_assert(base::size(kSODAPublicKeySHA256) == crypto::kSHA256Length,
 
 const char kSODAManifestName[] = "SODA Library";
 
+constexpr base::FilePath::CharType kSodaEnUsConfigFileRelativePath[] =
+    FILE_PATH_LITERAL("SODAFiles/en_us/dictation.ascii_proto");
+
 }  // namespace
 
 SODAComponentInstallerPolicy::SODAComponentInstallerPolicy(
-    const OnSODAComponentReadyCallback& callback)
+    OnSODAComponentReadyCallback callback)
     : on_component_ready_callback_(callback) {}
 
 SODAComponentInstallerPolicy::~SODAComponentInstallerPolicy() = default;
@@ -121,8 +125,10 @@ std::vector<std::string> SODAComponentInstallerPolicy::GetMimeTypes() const {
 void UpdateSODAInstallDirPref(PrefService* prefs,
                               const base::FilePath& install_dir) {
 #if !defined(OS_ANDROID)
-  prefs->SetFilePath(prefs::kSODAPath,
+  prefs->SetFilePath(prefs::kSodaBinaryPath,
                      install_dir.Append(speech::kSodaBinaryRelativePath));
+  prefs->SetFilePath(prefs::kSodaEnUsConfigPath,
+                     install_dir.Append(kSodaEnUsConfigFileRelativePath));
 #endif
 }
 
@@ -130,7 +136,7 @@ void RegisterSODAComponent(ComponentUpdateService* cus,
                            PrefService* prefs,
                            base::OnceClosure callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
+#if BUILDFLAG(ENABLE_SODA)
   auto installer = base::MakeRefCounted<ComponentInstaller>(
       std::make_unique<SODAComponentInstallerPolicy>(base::BindRepeating(
           [](ComponentUpdateService* cus, PrefService* prefs,
@@ -149,18 +155,21 @@ void RegisterSODAComponent(ComponentUpdateService* cus,
   } else {
     // Register and uninstall the SODA component to delete the previously
     // installed SODA files.
-    if (!prefs->GetFilePath(prefs::kSODAPath).empty()) {
+    if (!prefs->GetFilePath(prefs::kSodaBinaryPath).empty()) {
       installer->Register(
           cus,
           base::BindOnce(
               [](ComponentUpdateService* cus, PrefService* prefs) {
                 if (component_updater::UninstallSODAComponent(cus, prefs)) {
-                  prefs->SetFilePath(prefs::kSODAPath, base::FilePath());
+                  prefs->SetFilePath(prefs::kSodaBinaryPath, base::FilePath());
+                  prefs->SetFilePath(prefs::kSodaEnUsConfigPath,
+                                     base::FilePath());
                 }
               },
               cus, prefs));
     }
   }
+#endif
 }
 
 bool UninstallSODAComponent(ComponentUpdateService* cus, PrefService* prefs) {

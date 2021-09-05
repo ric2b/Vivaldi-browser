@@ -6,6 +6,9 @@ package org.chromium.components.paintpreview.player;
 
 import android.graphics.Bitmap;
 import android.graphics.Rect;
+import android.text.TextUtils;
+
+import androidx.annotation.NonNull;
 
 import org.chromium.base.Callback;
 import org.chromium.base.UnguessableToken;
@@ -14,8 +17,6 @@ import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.components.paintpreview.browser.NativePaintPreviewServiceProvider;
 import org.chromium.url.GURL;
-
-import javax.annotation.Nonnull;
 
 /**
  * This class and its native counterpart (player_compositor_delegate.cc) communicate with the Paint
@@ -34,10 +35,9 @@ class PlayerCompositorDelegateImpl implements PlayerCompositorDelegate {
     private long mNativePlayerCompositorDelegate;
 
     PlayerCompositorDelegateImpl(NativePaintPreviewServiceProvider service, GURL url,
-            String directoryKey, @Nonnull CompositorListener compositorListener,
-            @Nonnull LinkClickHandler linkClickHandler, Runnable compositorErrorCallback) {
+            String directoryKey, @NonNull CompositorListener compositorListener,
+            Runnable compositorErrorCallback) {
         mCompositorListener = compositorListener;
-        mLinkClickHandler = linkClickHandler;
         if (service != null && service.getNativeService() != 0) {
             mNativePlayerCompositorDelegate = PlayerCompositorDelegateImplJni.get().initialize(this,
                     service.getNativeService(), url.getSpec(), directoryKey,
@@ -96,18 +96,26 @@ class PlayerCompositorDelegateImpl implements PlayerCompositorDelegate {
     }
 
     @Override
-    public void onClick(UnguessableToken frameGuid, int x, int y) {
+    public GURL onClick(UnguessableToken frameGuid, int x, int y) {
+        if (mNativePlayerCompositorDelegate == 0) {
+            return null;
+        }
+
+        String url = PlayerCompositorDelegateImplJni.get().onClick(
+                mNativePlayerCompositorDelegate, frameGuid, x, y);
+        if (TextUtils.isEmpty(url)) return null;
+
+        return new GURL(url);
+    }
+
+    @Override
+    public void setCompressOnClose(boolean compressOnClose) {
         if (mNativePlayerCompositorDelegate == 0) {
             return;
         }
 
-        PlayerCompositorDelegateImplJni.get().onClick(
-                mNativePlayerCompositorDelegate, frameGuid, x, y);
-    }
-
-    @CalledByNative
-    public void onLinkClicked(String url) {
-        mLinkClickHandler.onLinkClicked(new GURL(url));
+        PlayerCompositorDelegateImplJni.get().setCompressOnClose(
+                mNativePlayerCompositorDelegate, compressOnClose);
     }
 
     void destroy() {
@@ -127,7 +135,9 @@ class PlayerCompositorDelegateImpl implements PlayerCompositorDelegate {
         void requestBitmap(long nativePlayerCompositorDelegateAndroid, UnguessableToken frameGuid,
                 Callback<Bitmap> bitmapCallback, Runnable errorCallback, float scaleFactor,
                 int clipX, int clipY, int clipWidth, int clipHeight);
-        void onClick(long nativePlayerCompositorDelegateAndroid, UnguessableToken frameGuid, int x,
-                int y);
+        String onClick(long nativePlayerCompositorDelegateAndroid, UnguessableToken frameGuid,
+                int x, int y);
+        void setCompressOnClose(
+                long nativePlayerCompositorDelegateAndroid, boolean compressOnClose);
     }
 }

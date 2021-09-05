@@ -21,7 +21,7 @@
 #include "chrome/browser/ui/blocked_content/framebust_block_tab_helper.h"
 #include "chrome/common/custom_handlers/protocol_handler.h"
 #include "components/blocked_content/url_list_manager.h"
-#include "components/content_settings/browser/tab_specific_content_settings.h"
+#include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
@@ -47,8 +47,6 @@ class RapporServiceImpl;
 //   ContentSettingSimpleBubbleModel             - single content setting
 //     ContentSettingMixedScriptBubbleModel        - mixed script
 //     ContentSettingRPHBubbleModel                - protocol handlers
-//     ContentSettingMidiSysExBubbleModel          - midi sysex
-//     ContentSettingDomainListBubbleModel         - domain list (geolocation)
 //     ContentSettingPluginBubbleModel             - plugins
 //     ContentSettingSingleRadioGroup              - radio group
 //       ContentSettingCookiesBubbleModel            - cookies
@@ -242,6 +240,7 @@ class ContentSettingBubbleModel {
   void set_message(const base::string16& message) {
     bubble_content_.message = message;
   }
+  void clear_message() { bubble_content_.message.clear(); }
   void AddListItem(const ListItem& item);
   void RemoveListItem(int index);
   void set_radio_group(const RadioGroup& radio_group) {
@@ -383,11 +382,11 @@ class ContentSettingMediaStreamBubbleModel : public ContentSettingBubbleModel {
   // Updates the camera and microphone setting with the passed |setting|.
   void UpdateSettings(ContentSetting setting);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Initialize the bubble with the elements specific to the scenario when
   // camera or mic are disabled in a system (OS) level.
   void InitializeSystemMediaPermissionBubble();
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
   // Whether or not to show the bubble UI specific to when media permissions are
   // turned off in a system level.
@@ -406,7 +405,7 @@ class ContentSettingMediaStreamBubbleModel : public ContentSettingBubbleModel {
   // buttons.
   ContentSetting radio_item_setting_[2];
   // The state of the microphone and camera access.
-  content_settings::TabSpecificContentSettings::MicrophoneCameraState state_;
+  content_settings::PageSpecificContentSettings::MicrophoneCameraState state_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSettingMediaStreamBubbleModel);
 };
@@ -509,6 +508,38 @@ class ContentSettingSingleRadioGroup : public ContentSettingSimpleBubbleModel {
   ContentSetting block_setting_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSettingSingleRadioGroup);
+};
+
+// The bubble that informs users that Chrome does not have access to Location
+// and guides them to the system preferences to fix that problem if they wish.
+class ContentSettingGeolocationBubbleModel
+    : public ContentSettingSingleRadioGroup {
+ public:
+  ContentSettingGeolocationBubbleModel(Delegate* delegate,
+                                       content::WebContents* web_contents);
+
+  ContentSettingGeolocationBubbleModel(
+      const ContentSettingGeolocationBubbleModel&) = delete;
+  ContentSettingGeolocationBubbleModel& operator=(
+      const ContentSettingGeolocationBubbleModel&) = delete;
+
+  ~ContentSettingGeolocationBubbleModel() override;
+
+  // ContentSettingBubbleModel:
+  void OnManageButtonClicked() override;
+  void OnDoneButtonClicked() override;
+
+ private:
+  // Initialize the bubble with the elements specific to the scenario when
+  // geolocation is disabled on the system (OS) level.
+  void InitializeSystemGeolocationPermissionBubble();
+
+  // Whether or not to show the bubble UI specific to when geolocation
+  // permissions are turned off on a system level.
+  bool ShouldShowSystemGeolocationPermissions();
+
+  // Boolean indicating if geolocation is allowed by our Content Settings
+  bool is_allowed_ = false;
 };
 
 #if !defined(OS_ANDROID)

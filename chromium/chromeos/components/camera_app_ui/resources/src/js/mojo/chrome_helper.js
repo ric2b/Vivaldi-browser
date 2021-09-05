@@ -44,10 +44,10 @@ export class ChromeHelper {
 
   /**
    * Starts monitor monitoring system screen state of device.
-   * @param {function(chromeosCamera.mojom.ScreenState)} onChange Callback
+   * @param {function(!chromeosCamera.mojom.ScreenState)} onChange Callback
    *     called each time when device screen state changes with parameter of
    *     newly changed value.
-   * @return {!Promise<chromeosCamera.mojom.ScreenState>} Resolved to initial
+   * @return {!Promise<!chromeosCamera.mojom.ScreenState>} Resolved to initial
    *     system screen state.
    */
   async initScreenStateMonitor(onChange) {
@@ -58,6 +58,22 @@ export class ChromeHelper {
     return (await this.remote_.setScreenStateMonitor(
                 monitorCallbackRouter.$.bindNewPipeAndPassRemote()))
         .initialState;
+  }
+
+  /**
+   * Starts monitor monitoring the existence of external screens.
+   * @param {function(boolean)} onChange Callback called when the existence of
+   *     external screens changes.
+   * @return {!Promise<boolean>} Resolved to the initial state.
+   */
+  async initExternalScreenMonitor(onChange) {
+    const monitorCallbackRouter =
+        new chromeosCamera.mojom.ExternalScreenMonitorCallbackRouter();
+    monitorCallbackRouter.update.addListener(onChange);
+
+    return (await this.remote_.setExternalScreenMonitor(
+                monitorCallbackRouter.$.bindNewPipeAndPassRemote()))
+        .hasExternalScreen;
   }
 
   /**
@@ -88,7 +104,7 @@ export class ChromeHelper {
   /**
    * Checks return value from |handleCameraResult|.
    * @param {string} caller Caller identifier.
-   * @param {Promise<{isSuccess: boolean}>|null} value
+   * @param {!Promise<{isSuccess: boolean}>|null} value
    * @return {!Promise}
    */
   async checkReturn_(caller, value) {
@@ -176,6 +192,15 @@ export class ChromeHelper {
     const {state} = await idleManager.addMonitor(
         threshold, monitorCallbackRouter.$.bindNewPipeAndPassRemote());
     callback(state.screen === blink.mojom.ScreenIdleState.kLocked);
+  }
+
+  /**
+   * Checks if the logging consent option is enabled.
+   * @return {!Promise<boolean>}
+   */
+  async isMetricsAndCrashReportingEnabled() {
+    const {isEnabled} = await this.remote_.isMetricsAndCrashReportingEnabled();
+    return isEnabled;
   }
 
   /**

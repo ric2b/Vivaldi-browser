@@ -24,10 +24,11 @@ bool PapersEqual(const PrinterSemanticCapsAndDefaults::Paper& lhs,
 }
 
 void VerifyCapabilityColorModels(const PrinterSemanticCapsAndDefaults& caps) {
-  base::Optional<bool> maybe_color = IsColorModelSelected(caps.color_model);
+  base::Optional<bool> maybe_color =
+      IsColorModelSelected(static_cast<int>(caps.color_model));
   ASSERT_TRUE(maybe_color.has_value());
   EXPECT_TRUE(maybe_color.value());
-  maybe_color = IsColorModelSelected(caps.bw_model);
+  maybe_color = IsColorModelSelected(static_cast<int>(caps.bw_model));
   ASSERT_TRUE(maybe_color.has_value());
   EXPECT_FALSE(maybe_color.value());
 }
@@ -307,8 +308,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingBrotherPrinters) {
                                      kTestPpdData, &caps));
     EXPECT_TRUE(caps.color_changeable);
     EXPECT_TRUE(caps.color_default);
-    EXPECT_EQ(BROTHER_BRSCRIPT3_COLOR, caps.color_model);
-    EXPECT_EQ(BROTHER_BRSCRIPT3_BLACK, caps.bw_model);
+    EXPECT_EQ(mojom::ColorModel::kBrotherBRScript3Color, caps.color_model);
+    EXPECT_EQ(mojom::ColorModel::kBrotherBRScript3Black, caps.bw_model);
     VerifyCapabilityColorModels(caps);
   }
   {
@@ -327,8 +328,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingBrotherPrinters) {
                                      kTestPpdData, &caps));
     EXPECT_TRUE(caps.color_changeable);
     EXPECT_TRUE(caps.color_default);
-    EXPECT_EQ(BROTHER_CUPS_COLOR, caps.color_model);
-    EXPECT_EQ(BROTHER_CUPS_MONO, caps.bw_model);
+    EXPECT_EQ(mojom::ColorModel::kBrotherCUPSColor, caps.color_model);
+    EXPECT_EQ(mojom::ColorModel::kBrotherCUPSMono, caps.bw_model);
     VerifyCapabilityColorModels(caps);
   }
   {
@@ -370,18 +371,12 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingHpPrinters) {
                                    kTestPpdData, &caps));
   EXPECT_TRUE(caps.color_changeable);
   EXPECT_TRUE(caps.color_default);
-  EXPECT_EQ(HP_COLOR_COLOR, caps.color_model);
-  EXPECT_EQ(HP_COLOR_BLACK, caps.bw_model);
+  EXPECT_EQ(mojom::ColorModel::kHPColorColor, caps.color_model);
+  EXPECT_EQ(mojom::ColorModel::kHPColorBlack, caps.bw_model);
   VerifyCapabilityColorModels(caps);
 }
 
-// TODO(crbug.com/1081705): Epson "Ink" attribute bloats prints on Linux.
-#if defined(OS_LINUX)
-#define MAYBE_TestPpdParsingEpsonPrinters DISABLED_TestPpdParsingEpsonPrinters
-#else
-#define MAYBE_TestPpdParsingEpsonPrinters TestPpdParsingEpsonPrinters
-#endif
-TEST(PrintBackendCupsHelperTest, MAYBE_TestPpdParsingEpsonPrinters) {
+TEST(PrintBackendCupsHelperTest, TestPpdParsingEpsonPrinters) {
   constexpr char kTestPpdData[] =
       R"(*PPD-Adobe: "4.3"
 *ColorDevice: True
@@ -400,8 +395,8 @@ TEST(PrintBackendCupsHelperTest, MAYBE_TestPpdParsingEpsonPrinters) {
                                    kTestPpdData, &caps));
   EXPECT_TRUE(caps.color_changeable);
   EXPECT_TRUE(caps.color_default);
-  EXPECT_EQ(EPSON_INK_COLOR, caps.color_model);
-  EXPECT_EQ(EPSON_INK_MONO, caps.bw_model);
+  EXPECT_EQ(mojom::ColorModel::kEpsonInkColor, caps.color_model);
+  EXPECT_EQ(mojom::ColorModel::kEpsonInkMono, caps.bw_model);
   VerifyCapabilityColorModels(caps);
 }
 
@@ -420,8 +415,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingSamsungPrinters) {
                                    kTestPpdData, &caps));
   EXPECT_TRUE(caps.color_changeable);
   EXPECT_TRUE(caps.color_default);
-  EXPECT_EQ(COLORMODE_COLOR, caps.color_model);
-  EXPECT_EQ(COLORMODE_MONOCHROME, caps.bw_model);
+  EXPECT_EQ(mojom::ColorModel::kColorModeColor, caps.color_model);
+  EXPECT_EQ(mojom::ColorModel::kColorModeMonochrome, caps.bw_model);
   VerifyCapabilityColorModels(caps);
 }
 
@@ -445,8 +440,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingSharpPrinters) {
                                    kTestPpdData, &caps));
   EXPECT_TRUE(caps.color_changeable);
   EXPECT_TRUE(caps.color_default);
-  EXPECT_EQ(SHARP_ARCMODE_CMCOLOR, caps.color_model);
-  EXPECT_EQ(SHARP_ARCMODE_CMBW, caps.bw_model);
+  EXPECT_EQ(mojom::ColorModel::kSharpARCModeCMColor, caps.color_model);
+  EXPECT_EQ(mojom::ColorModel::kSharpARCModeCMBW, caps.bw_model);
   VerifyCapabilityColorModels(caps);
 }
 
@@ -468,8 +463,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingXeroxPrinters) {
                                    kTestPpdData, &caps));
   EXPECT_TRUE(caps.color_changeable);
   EXPECT_TRUE(caps.color_default);
-  EXPECT_EQ(XEROX_XRXCOLOR_AUTOMATIC, caps.color_model);
-  EXPECT_EQ(XEROX_XRXCOLOR_BW, caps.bw_model);
+  EXPECT_EQ(mojom::ColorModel::kXeroxXRXColorAutomatic, caps.color_model);
+  EXPECT_EQ(mojom::ColorModel::kXeroxXRXColorBW, caps.bw_model);
   VerifyCapabilityColorModels(caps);
 }
 

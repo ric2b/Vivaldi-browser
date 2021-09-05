@@ -87,6 +87,15 @@ void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
         prefs->GetBoolean(vivaldiprefs::kMouseGesturesDoubleClickMenuEnabled)) {
       web_prefs->vivaldi_show_context_menu_on_double_click = true;
     }
+    GURL url = web_contents->GetURL();
+    if (url.SchemeIs(content::kChromeUIScheme) &&
+        url.host() == vivaldi::kVivaldiGameHost) {
+      // Allow sounds without a user gesture first for this specific url, but
+      // this method is only called on renderer initialization so this will only
+      // work when the game is started in a new tab.
+      web_prefs->autoplay_policy =
+          content::AutoplayPolicy::kNoUserGestureRequired;
+    }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     extensions::VivaldiAppHelper* vivaldi_app_helper =

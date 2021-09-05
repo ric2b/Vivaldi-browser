@@ -17,7 +17,6 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_file_picker_accept_type.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_open_file_picker_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_save_file_picker_options.h"
-#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
 #include "third_party/blink/renderer/core/fileapi/file_error.h"
@@ -36,8 +35,6 @@
 namespace blink {
 
 namespace {
-// The name to use for the root directory of a sandboxed file system.
-constexpr const char kSandboxRootDirectoryName[] = "";
 
 mojom::blink::ChooseFileSystemEntryType ConvertChooserType(const String& input,
                                                            bool multiple) {
@@ -72,6 +69,18 @@ constexpr bool IsHTTPWhitespace(UChar chr) {
   return chr == ' ' || chr == '\n' || chr == '\t' || chr == '\r';
 }
 
+bool AddExtension(const String& extension,
+                  Vector<String>& extensions,
+                  ExceptionState& exception_state) {
+  if (!extension.StartsWith(".")) {
+    exception_state.ThrowTypeError("Extension '" + extension +
+                                   "' must start with '.'.");
+    return false;
+  }
+  extensions.push_back(extension.Substring(1));
+  return true;
+}
+
 Vector<mojom::blink::ChooseFileSystemEntryAcceptsOptionPtr> ConvertAccepts(
     const HeapVector<Member<FilePickerAcceptType>>& types,
     ExceptionState& exception_state) {
@@ -103,58 +112,22 @@ Vector<mojom::blink::ChooseFileSystemEntryAcceptsOptionPtr> ConvertAccepts(
       }
 
       mimeTypes.push_back(type);
-      extensions.AppendVector(a.second);
+      if (a.second.IsUSVString()) {
+        if (!AddExtension(a.second.GetAsUSVString(), extensions,
+                          exception_state))
+          return {};
+      } else {
+        for (const auto& extension : a.second.GetAsUSVStringSequence()) {
+          if (!AddExtension(extension, extensions, exception_state))
+            return {};
+        }
+      }
     }
     result.emplace_back(
         blink::mojom::blink::ChooseFileSystemEntryAcceptsOption::New(
             t->hasDescription() ? t->description() : g_empty_string,
             std::move(mimeTypes), std::move(extensions)));
   }
-  return result;
-}
-
-ScriptPromise GetOriginPrivateDirectoryImpl(ScriptState* script_state,
-                                            ExceptionState& exception_state) {
-  ExecutionContext* context = ExecutionContext::From(script_state);
-  if (!context->GetSecurityOrigin()->CanAccessNativeFileSystem()) {
-    if (context->GetSecurityContext().IsSandboxed(
-            network::mojom::blink::WebSandboxFlags::kOrigin)) {
-      exception_state.ThrowSecurityError(
-          "System directory access is denied because the context is "
-          "sandboxed and lacks the 'allow-same-origin' flag.");
-      return ScriptPromise();
-    } else {
-      exception_state.ThrowSecurityError("System directory access is denied.");
-      return ScriptPromise();
-    }
-  }
-
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
-  ScriptPromise result = resolver->Promise();
-
-  mojo::Remote<mojom::blink::NativeFileSystemManager> manager;
-  context->GetBrowserInterfaceBroker().GetInterface(
-      manager.BindNewPipeAndPassReceiver());
-
-  auto* raw_manager = manager.get();
-  raw_manager->GetSandboxedFileSystem(WTF::Bind(
-      [](ScriptPromiseResolver* resolver,
-         mojo::Remote<mojom::blink::NativeFileSystemManager>,
-         mojom::blink::NativeFileSystemErrorPtr result,
-         mojo::PendingRemote<mojom::blink::NativeFileSystemDirectoryHandle>
-             handle) {
-        ExecutionContext* context = resolver->GetExecutionContext();
-        if (!context)
-          return;
-        if (result->status != mojom::blink::NativeFileSystemStatus::kOk) {
-          native_file_system_error::Reject(resolver, *result);
-          return;
-        }
-        resolver->Resolve(MakeGarbageCollected<NativeFileSystemDirectoryHandle>(
-            context, kSandboxRootDirectoryName, std::move(handle)));
-      },
-      WrapPersistent(resolver), std::move(manager)));
-
   return result;
 }
 
@@ -165,15 +138,8 @@ void VerifyIsAllowedToShowFilePicker(const LocalDOMWindow& window,
     return;
   }
 
-  Document* document = window.document();
-  if (!document) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kAbortError, "");
-    return;
-  }
-
-  if (!document->GetSecurityOrigin()->CanAccessNativeFileSystem()) {
-    if (document->IsSandboxed(
-            network::mojom::blink::WebSandboxFlags::kOrigin)) {
+  if (!window.GetSecurityOrigin()->CanAccessNativeFileSystem()) {
+    if (window.IsSandboxed(network::mojom::blink::WebSandboxFlags::kOrigin)) {
       exception_state.ThrowSecurityError(
           "Sandboxed documents aren't allowed to show a file picker.");
       return;
@@ -242,7 +208,9 @@ ScriptPromise ShowFilePickerImpl(
             // System messages to the browser.
             // TODO(https://crbug.com/1017270): Remove this after spec change,
             // or when activation moves to browser.
-            LocalFrame::NotifyUserActivation(local_frame);
+            LocalFrame::NotifyUserActivation(
+                local_frame, mojom::blink::UserActivationNotificationType::
+                                 kNativeFileSystem);
 
             if (return_as_sequence) {
               HeapVector<Member<NativeFileSystemHandle>> results;
@@ -271,6 +239,8 @@ ScriptPromise GlobalNativeFileSystem::chooseFileSystemEntries(
     LocalDOMWindow& window,
     const ChooseFileSystemEntriesOptions* options,
     ExceptionState& exception_state) {
+  UseCounter::Count(window, WebFeature::kFileSystemPickerMethod);
+
   VerifyIsAllowedToShowFilePicker(window, exception_state);
   if (exception_state.HadException())
     return ScriptPromise();
@@ -292,6 +262,8 @@ ScriptPromise GlobalNativeFileSystem::showOpenFilePicker(
     LocalDOMWindow& window,
     const OpenFilePickerOptions* options,
     ExceptionState& exception_state) {
+  UseCounter::Count(window, WebFeature::kFileSystemPickerMethod);
+
   Vector<mojom::blink::ChooseFileSystemEntryAcceptsOptionPtr> accepts;
   if (options->hasTypes())
     accepts = ConvertAccepts(options->types(), exception_state);
@@ -322,6 +294,8 @@ ScriptPromise GlobalNativeFileSystem::showSaveFilePicker(
     LocalDOMWindow& window,
     const SaveFilePickerOptions* options,
     ExceptionState& exception_state) {
+  UseCounter::Count(window, WebFeature::kFileSystemPickerMethod);
+
   Vector<mojom::blink::ChooseFileSystemEntryAcceptsOptionPtr> accepts;
   if (options->hasTypes())
     accepts = ConvertAccepts(options->types(), exception_state);
@@ -349,6 +323,8 @@ ScriptPromise GlobalNativeFileSystem::showDirectoryPicker(
     LocalDOMWindow& window,
     const DirectoryPickerOptions* options,
     ExceptionState& exception_state) {
+  UseCounter::Count(window, WebFeature::kFileSystemPickerMethod);
+
   VerifyIsAllowedToShowFilePicker(window, exception_state);
   if (exception_state.HadException())
     return ScriptPromise();
@@ -358,22 +334,6 @@ ScriptPromise GlobalNativeFileSystem::showDirectoryPicker(
       mojom::blink::ChooseFileSystemEntryType::kOpenDirectory, {},
       /*accept_all=*/true,
       /*return_as_sequence=*/false);
-}
-
-// static
-ScriptPromise GlobalNativeFileSystem::getOriginPrivateDirectory(
-    ScriptState* script_state,
-    const LocalDOMWindow& window,
-    ExceptionState& exception_state) {
-  return GetOriginPrivateDirectoryImpl(script_state, exception_state);
-}
-
-// static
-ScriptPromise GlobalNativeFileSystem::getOriginPrivateDirectory(
-    ScriptState* script_state,
-    const WorkerGlobalScope& workerGlobalScope,
-    ExceptionState& exception_state) {
-  return GetOriginPrivateDirectoryImpl(script_state, exception_state);
 }
 
 }  // namespace blink

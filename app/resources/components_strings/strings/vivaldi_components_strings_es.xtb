@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">nombre desconocido</translation>
 <translation id="1089439967362294234">Cambiar contraseña</translation>
 <translation id="1110994991967754504">Seleccionar permiso de <ph name="PERMISSION_NAME" /></translation>
-<translation id="1152921474424827756">Acceder a una <ph name="BEGIN_LINK" />copia almacenada en caché<ph name="END_LINK" /> de <ph name="URL" /></translation>
 <translation id="1158211211994409885">El sitio <ph name="HOST_NAME" /> cerró inesperadamente la conexión.</translation>
 <translation id="1161325031994447685">Reconectarte a una red inalámbrica</translation>
 <translation id="1175364870820465910">Im&amp;primir...</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">Este sitio contiene programas dañinos</translation>
 <translation id="1916770123977586577">Recarga esta página para aplicar a este sitio tus ajustes actualizados</translation>
 <translation id="1919345977826869612">Anuncios</translation>
-<translation id="194030505837763158">Ir a <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Avanzado</translation>
-<translation id="2030481566774242610">¿Quisiste decir <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Revisar el proxy y el cortafuegos<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Audio</translation>
 <translation id="2119505898009119320">Emitido para: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -128,7 +125,6 @@
 <translation id="5287240709317226393">Mostrar cookies</translation>
 <translation id="5355557959165512791">Ahora mismo no puedes acceder a <ph name="SITE" /> porque su certificado ha sido revocado. Los ataques y errores de red suelen ser temporales, por lo que es probable que esta página funcione más tarde.</translation>
 <translation id="5386426401304769735">La cadena de certificados de este sitio contiene un certificado firmado con SHA-1.</translation>
-<translation id="5431657950005405462">Tu archivo no fue encontrado</translation>
 <translation id="5452270690849572955">No se puede encontrar el sitio (<ph name="HOST_NAME" />)</translation>
 <translation id="5457113250005438886">Inválido</translation>
 <translation id="5492298309214877701">Este sitio en la intranet de la empresa, organización o centro educativo tiene la misma URL que un sitio web externo.
@@ -174,7 +170,6 @@
 <translation id="6897140037006041989">Agente de usuario</translation>
 <translation id="7053983685419859001">Bloquear</translation>
 <translation id="7079718277001814089">Este sitio contiene programas maliciosos</translation>
-<translation id="7090678807593890770">Buscar <ph name="LINK" /> en Google</translation>
 <translation id="7108819624672055576">Permitido por una extensión</translation>
 <translation id="7111012039238467737">(Válido)</translation>
 <translation id="7113310725918019676">Permitir <ph name="BLOCKED_TYPE" /> de <ph name="DOMAIN" /></translation>
@@ -192,13 +187,12 @@
 <translation id="759889825892636187">El sitio <ph name="HOST_NAME" /> no puede procesar esta solicitud en este momento.</translation>
 <translation id="7662298039739062396">Ajuste controlado por una extensión</translation>
 <translation id="7663736086183791259">Certificado <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">Los atacantes a este sitio pueden intentar engañarte para que instales programas que empeoren tu experiencia de navegación (por ejemplo, cambiando tu página inicio o mostrando anuncios adicionales en los sitios que visites).</translation>
+<translation id="7669271284792375604">Los atacantes a este sitio pueden intentar engañarte para que instales programas que empeoren tu experiencia de navegación (por ejemplo, cambiando tu página principal o mostrando anuncios adicionales en los sitios que visites).</translation>
 <translation id="7714464543167945231">Certificado</translation>
 <translation id="7716147886133743102">Bloqueado por tu administrador</translation>
 <translation id="7716424297397655342">Este sitio no se puede cargar desde la caché</translation>
 <translation id="7758069387465995638">Puede que el cortafuegos o el antivirus hayan bloqueado la conexión.</translation>
 <translation id="7800304661137206267">La conexión se cifró con <ph name="CIPHER" />, con <ph name="MAC" /> para la autenticación del mensaje y con <ph name="KX" /> como mecanismo de intercambio de claves.</translation>
-<translation id="7802523362929240268">El sitio es legítimo</translation>
 <translation id="7834399512844817676">Normalmente <ph name="SITE" /> usa el cifrado para proteger tu información. Cuando Vivaldi intentó establecer una conexión con <ph name="SITE" />, el sitio web devolvió unas credenciales inusuales e incorrectas. Esto puede ocurrir si un atacante está intentando suplantar a <ph name="SITE" /> o si la conexión es interrumpida por el inicio de sesión en una red inalámbrica. Tu información sigue estando protegida, ya que Vivaldi detuvo la conexión antes de que se intercambiaran datos.</translation>
 <translation id="7878562273885520351">Tu contraseña pudo haberse visto comprometida</translation>
 <translation id="7951415247503192394">(32 bits)</translation>

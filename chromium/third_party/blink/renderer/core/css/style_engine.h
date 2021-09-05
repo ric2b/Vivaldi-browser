@@ -86,19 +86,35 @@ using StyleSheetKey = AtomicString;
 class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
                                       public FontSelectorClient,
                                       public NameClient {
-  USING_GARBAGE_COLLECTED_MIXIN(StyleEngine);
-
  public:
 
   class DOMRemovalScope {
     STACK_ALLOCATED();
 
    public:
-    DOMRemovalScope(StyleEngine& engine)
+    explicit DOMRemovalScope(StyleEngine& engine)
         : in_removal_(&engine.in_dom_removal_, true) {}
 
    private:
     base::AutoReset<bool> in_removal_;
+  };
+
+  // There are a few instances where we are marking nodes style dirty from
+  // within style recalc. That is generally not allowed, and if allowed we must
+  // make sure we mark inside the subtree we are currently traversing, be sure
+  // we will traverse the marked node as part of the current traversal. The
+  // current instances of this situation is marked with this scope object to
+  // skip DCHECKs. Do not introduce new functionality that requires introducing
+  // more such scopes.
+  class AllowMarkStyleDirtyFromRecalcScope {
+    STACK_ALLOCATED();
+
+   public:
+    explicit AllowMarkStyleDirtyFromRecalcScope(StyleEngine& engine)
+        : allow_marking_(&engine.allow_mark_style_dirty_from_recalc_, true) {}
+
+   private:
+    base::AutoReset<bool> allow_marking_;
   };
 
   explicit StyleEngine(Document&);
@@ -210,18 +226,19 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   }
   void ResetAuthorStyle(TreeScope&);
 
-  StyleResolver* Resolver() const { return resolver_; }
-
-  void SetRuleUsageTracker(StyleRuleUsageTracker*);
-
-  StyleResolver& EnsureResolver() {
-    UpdateActiveStyle();
-    if (!resolver_)
-      CreateResolver();
+  StyleResolver& GetStyleResolver() const {
+    DCHECK(resolver_);
     return *resolver_;
   }
 
-  bool HasResolver() const { return resolver_; }
+  void SetRuleUsageTracker(StyleRuleUsageTracker*);
+
+  void ComputeFont(Element& element,
+                   ComputedStyle* font_style,
+                   const CSSPropertyValueSet& font_properties) {
+    UpdateActiveStyle();
+    GetStyleResolver().ComputeFont(element, font_style, font_properties);
+  }
 
   PendingInvalidations& GetPendingNodeInvalidations() {
     return pending_invalidations_;
@@ -355,6 +372,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   StyleRuleKeyframes* KeyframeStylesForAnimation(
       const AtomicString& animation_name);
+  StyleRuleScrollTimeline* FindScrollTimelineRule(const AtomicString& name);
 
   DocumentStyleEnvironmentVariables& EnsureEnvironmentVariables();
 
@@ -369,6 +387,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   }
   bool NeedsFullStyleUpdate() const;
 
+  void UpdateViewport();
   void UpdateViewportStyle();
   void UpdateStyleAndLayoutTree();
   void RecalcStyle();
@@ -430,7 +449,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
     return global_rule_set_->GetRuleFeatureSet();
   }
 
-  void CreateResolver();
   void ClearResolvers();
 
   void CollectUserStyleFeaturesTo(RuleFeatureSet&) const;
@@ -468,7 +486,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
       InvalidationScope invalidation_scope);
   void InvalidateInitialData();
 
-  void UpdateViewport();
   void UpdateActiveUserStyleSheets();
   void UpdateActiveStyleSheets();
   void UpdateGlobalRuleSet() {
@@ -492,6 +509,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void AddUserKeyframeRules(const RuleSet&);
   void AddUserKeyframeStyle(StyleRuleKeyframes*);
   void AddPropertyRules(const RuleSet&);
+  void AddScrollTimelineRules(const RuleSet&);
 
   void UpdateColorScheme();
   bool SupportsDarkColorScheme();
@@ -555,6 +573,11 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   bool viewport_style_dirty_ = false;
   bool fonts_need_update_ = false;
 
+  // Set to true if we allow marking style dirty from style recalc. Ideally, we
+  // should get rid of this, but we keep track of where we allow it with
+  // AllowMarkStyleDirtyFromRecalcScope.
+  bool allow_mark_style_dirty_from_recalc_ = false;
+
   VisionDeficiency vision_deficiency_ = VisionDeficiency::kNoVisionDeficiency;
   Member<ReferenceFilterOperation> vision_deficiency_filter_;
 
@@ -596,6 +619,9 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   using KeyframesRuleMap =
       HeapHashMap<AtomicString, Member<StyleRuleKeyframes>>;
   KeyframesRuleMap keyframes_rule_map_;
+
+  HeapHashMap<AtomicString, Member<StyleRuleScrollTimeline>>
+      scroll_timeline_map_;
 
   scoped_refptr<DocumentStyleEnvironmentVariables> environment_variables_;
 

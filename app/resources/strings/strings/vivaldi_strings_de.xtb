@@ -4,11 +4,12 @@
 <translation id="1089894737218087497">Eigenständige Installation</translation>
 <translation id="1682285232070778125">Vivaldi als Standardbrowser festlegen</translation>
 <translation id="1974060860693918893">Erweitert</translation>
-<translation id="2134216661302048561">Das Vivaldi Installationsprogramm hat die Installation des Vivaldi Browsers noch nicht abgeschlossen. Sind Sie sicher, dass Sie es jetzt beenden wollen?</translation>
+<translation id="2134216661302048561">Die Vivaldi Installationsprogramm hat die Installation des Browsers noch nicht abgeschlossen. Sind Sie sicher, dass Sie es jetzt beenden wollen?</translation>
 <translation id="2286454467119466181">Einfach</translation>
 <translation id="237789874664518125">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Alle Rechte vorbehalten.. &lt;a&gt;Datenschutzerklärung&lt;/a&gt;</translation>
 <translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Alle Rechte vorbehalten.</translation>
 <translation id="2611953850925269349">Vivaldi trotzdem beenden?</translation>
+<translation id="2885378588091291677">Task-Manager</translation>
 <translation id="3004507951429848293">Durch Klicken auf die Schaltfläche „Akzeptieren und aktualisieren“ stimmen Sie den &lt;a&gt;Nutzungsbedingungen&lt;/a&gt; von Vivaldi zu.</translation>
 <translation id="335985608243443814">Durchsuchen …</translation>
 <translation id="3485073444286678268">Der Zielordner ist ungültig. Bitte wählen Sie einen anderen.</translation>
@@ -27,7 +28,7 @@
 <translation id="5247376421371319618">Akzeptieren und aktualisieren</translation>
 <translation id="5288672417093782294">Vivaldi-Benachrichtigungseinstellungen aufrufen</translation>
 <translation id="5302048478445481009">Sprache</translation>
-<translation id="5743878272102782872">Taskmanager - Vivaldi</translation>
+<translation id="5743878272102782872">Task-Manager – Vivaldi</translation>
 <translation id="6213772951145281007">Cookies und Websitedaten beim Beenden von Vivaldi löschen</translation>
 <translation id="6569282126279967574">Vivaldi ist abgestürzt. Jetzt neu starten?</translation>
 <translation id="694714344624446243">Vivaldi Installationsprogramm</translation>

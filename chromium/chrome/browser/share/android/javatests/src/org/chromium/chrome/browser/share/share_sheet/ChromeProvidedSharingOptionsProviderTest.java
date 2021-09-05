@@ -26,9 +26,10 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.supplier.Supplier;
+import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ChromeShareExtras;
 import org.chromium.chrome.browser.share.share_sheet.ShareSheetPropertyModelBuilder.ContentType;
 import org.chromium.chrome.browser.tab.Tab;
@@ -36,11 +37,14 @@ import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.share.ShareParams;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.user_prefs.UserPrefs;
+import org.chromium.components.user_prefs.UserPrefsJni;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.test.util.DummyUiActivity;
+import org.chromium.url.GURL;
 
-import java.util.Collection;
 import java.util.List;
 
 /**
@@ -58,10 +62,21 @@ public class ChromeProvidedSharingOptionsProviderTest {
     @Rule
     public TestRule mFeatureProcessor = new Features.JUnitProcessor();
 
+    @Rule
+    public JniMocker mJniMocker = new JniMocker();
+
     @Mock
-    private PrefServiceBridge mPrefServiceBridge;
+    private UserPrefs.Natives mUserPrefsNatives;
+
+    @Mock
+    private Profile mProfile;
+    @Mock
+    private PrefService mPrefService;
 
     private static final String URL = "http://www.google.com/";
+
+    @Mock
+    private ShareSheetCoordinator mShareSheetCoordinator;
 
     private Activity mActivity;
     private ChromeProvidedSharingOptionsProvider mChromeProvidedSharingOptionsProvider;
@@ -78,8 +93,12 @@ public class ChromeProvidedSharingOptionsProviderTest {
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
+        mJniMocker.mock(UserPrefsJni.TEST_HOOKS, mUserPrefsNatives);
+        Profile.setLastUsedProfileForTesting(mProfile);
+        Mockito.when(mUserPrefsNatives.get(mProfile)).thenReturn(mPrefService);
         Mockito.when(mTabProvider.get()).thenReturn(mTab);
         Mockito.when(mTab.getWebContents()).thenReturn(mWebContents);
+        Mockito.when(mTab.getUrl()).thenReturn(new GURL(URL));
         Mockito.when(mWebContents.isIncognito()).thenReturn(false);
         mActivity = mActivityTestRule.getActivity();
     }
@@ -103,7 +122,6 @@ public class ChromeProvidedSharingOptionsProviderTest {
                         mActivity.getResources().getString(
                                 R.string.send_tab_to_self_share_activity_title),
                         mActivity.getResources().getString(R.string.qr_code_share_icon_label)));
-        assertModelsAreFirstParty(propertyModels);
     }
 
     @Test
@@ -122,7 +140,6 @@ public class ChromeProvidedSharingOptionsProviderTest {
                 ImmutableList.of(mActivity.getResources().getString(R.string.sharing_copy_url),
                         mActivity.getResources().getString(
                                 R.string.send_tab_to_self_share_activity_title)));
-        assertModelsAreFirstParty(propertyModels);
     }
 
     @Test
@@ -142,14 +159,15 @@ public class ChromeProvidedSharingOptionsProviderTest {
                         mActivity.getResources().getString(
                                 R.string.send_tab_to_self_share_activity_title),
                         mActivity.getResources().getString(R.string.print_share_activity_title)));
-        assertModelsAreFirstParty(propertyModels);
     }
 
     @Test
     @MediumTest
-    @Features.EnableFeatures({ChromeFeatureList.CHROME_SHARING_HUB_V15})
+    @Features.EnableFeatures({ChromeFeatureList.CHROME_SHARING_HUB_V15,
+            ChromeFeatureList.CHROME_SHARE_HIGHLIGHTS_ANDROID})
     @Features.DisableFeatures(
-            {ChromeFeatureList.CHROME_SHARE_SCREENSHOT, ChromeFeatureList.CHROME_SHARE_QRCODE})
+            {ChromeFeatureList.CHROME_SHARE_SCREENSHOT, ChromeFeatureList.CHROME_SHARE_QRCODE,
+                    ChromeFeatureList.CHROME_SHARE_HIGHLIGHTS_ANDROID})
     public void
     createPropertyModels_sharingHub15Enabled_includesCopyText() {
         setUpChromeProvidedSharingOptionsProviderTest(/*printingEnabled=*/false);
@@ -160,7 +178,6 @@ public class ChromeProvidedSharingOptionsProviderTest {
         Assert.assertEquals("Incorrect number of property models.", 1, propertyModels.size());
         assertModelsAreInTheRightOrder(propertyModels,
                 ImmutableList.of(mActivity.getResources().getString(R.string.sharing_copy_text)));
-        assertModelsAreFirstParty(propertyModels);
     }
 
     @Test
@@ -181,7 +198,6 @@ public class ChromeProvidedSharingOptionsProviderTest {
                         mActivity.getResources().getString(
                                 R.string.send_tab_to_self_share_activity_title),
                         mActivity.getResources().getString(R.string.qr_code_share_icon_label)));
-        assertModelsAreFirstParty(propertyModels);
     }
 
     @Test
@@ -203,7 +219,36 @@ public class ChromeProvidedSharingOptionsProviderTest {
                         mActivity.getResources().getString(
                                 R.string.send_tab_to_self_share_activity_title),
                         mActivity.getResources().getString(R.string.qr_code_share_icon_label)));
-        assertModelsAreFirstParty(propertyModels);
+    }
+
+    @Test
+    @MediumTest
+    @Features.DisableFeatures({ChromeFeatureList.CHROME_SHARING_HUB_V15})
+    @Features.EnableFeatures({ChromeFeatureList.CHROME_SHARE_HIGHLIGHTS_ANDROID})
+    public void createPropertyModels_sharingHub15Disabled_noHighlights() {
+        setUpChromeProvidedSharingOptionsProviderTest(/*printingEnabled=*/false);
+        List<PropertyModel> propertyModels =
+                mChromeProvidedSharingOptionsProvider.getPropertyModels(
+                        ImmutableSet.of(ContentType.TEXT));
+
+        Assert.assertEquals("Incorrect number of property models.", 0, propertyModels.size());
+    }
+
+    @Test
+    @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.CHROME_SHARING_HUB_V15,
+            ChromeFeatureList.CHROME_SHARE_HIGHLIGHTS_ANDROID})
+    public void
+    createPropertyModels_sharingHub15HighlightsEnabled() {
+        setUpChromeProvidedSharingOptionsProviderTest(/*printingEnabled=*/false);
+        List<PropertyModel> propertyModels =
+                mChromeProvidedSharingOptionsProvider.getPropertyModels(
+                        ImmutableSet.of(ContentType.HIGHLIGHTED_TEXT));
+
+        Assert.assertEquals("Incorrect number of property models.", 2, propertyModels.size());
+        assertModelsAreInTheRightOrder(propertyModels,
+                ImmutableList.of(mActivity.getResources().getString(R.string.sharing_copy_text),
+                        mActivity.getResources().getString(R.string.sharing_highlights)));
     }
 
     @Test
@@ -214,7 +259,8 @@ public class ChromeProvidedSharingOptionsProviderTest {
                 new ChromeShareExtras.Builder().setImageSrcUrl(URL).build();
 
         assertEquals("URL should be imageSrcUrl.",
-                ChromeProvidedSharingOptionsProvider.getUrlToShare(shareParams, chromeShareExtras),
+                ChromeProvidedSharingOptionsProvider.getUrlToShare(
+                        shareParams, chromeShareExtras, ""),
                 URL);
     }
 
@@ -226,21 +272,35 @@ public class ChromeProvidedSharingOptionsProviderTest {
                 new ChromeShareExtras.Builder().setImageSrcUrl("").build();
 
         assertEquals("URL should be ShareParams URL.",
-                ChromeProvidedSharingOptionsProvider.getUrlToShare(shareParams, chromeShareExtras),
+                ChromeProvidedSharingOptionsProvider.getUrlToShare(
+                        shareParams, chromeShareExtras, ""),
+                URL);
+    }
+
+    @Test
+    @MediumTest
+    public void getUrlToShare_noShareParamsUrl_noImageUrl() {
+        ShareParams shareParams = new ShareParams.Builder(null, /*title=*/"", /*url=*/"").build();
+        ChromeShareExtras chromeShareExtras =
+                new ChromeShareExtras.Builder().setImageSrcUrl("").build();
+
+        assertEquals("URL should be ShareParams URL.",
+                ChromeProvidedSharingOptionsProvider.getUrlToShare(
+                        shareParams, chromeShareExtras, URL),
                 URL);
     }
 
     private void setUpChromeProvidedSharingOptionsProviderTest(boolean printingEnabled) {
-        Mockito.when(mPrefServiceBridge.getBoolean(anyString())).thenReturn(printingEnabled);
+        Mockito.when(mPrefService.getBoolean(anyString())).thenReturn(printingEnabled);
 
         mChromeProvidedSharingOptionsProvider =
                 new ChromeProvidedSharingOptionsProvider(mActivity, mTabProvider,
-                        /*bottomSheetController=*/null, new ShareSheetBottomSheetContent(mActivity),
-                        mPrefServiceBridge, new ShareParams.Builder(null, "", "").build(),
+                        /*bottomSheetController=*/null,
+                        new ShareSheetBottomSheetContent(mActivity, mShareSheetCoordinator),
+                        new ShareParams.Builder(null, "", "").build(),
                         new ChromeShareExtras.Builder().build(),
                         /*TabPrinterDelegate=*/null,
-                        /*shareStartTime=*/0,
-                        /*shareSheetCoordinator=*/null);
+                        /*shareStartTime=*/0, mShareSheetCoordinator);
     }
 
     private void assertModelsAreInTheRightOrder(
@@ -251,13 +311,5 @@ public class ChromeProvidedSharingOptionsProviderTest {
         }
         assertEquals(
                 "Property models in the wrong order.", expectedOrder, actualLabelOrder.build());
-    }
-
-    private void assertModelsAreFirstParty(Collection<PropertyModel> propertyModels) {
-        for (PropertyModel propertyModel : propertyModels) {
-            assertEquals(propertyModel.get(ShareSheetItemViewProperties.LABEL)
-                            + " isn't marked as first party.",
-                    true, propertyModel.get(ShareSheetItemViewProperties.IS_FIRST_PARTY));
-        }
     }
 }

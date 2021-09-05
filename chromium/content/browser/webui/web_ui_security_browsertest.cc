@@ -319,7 +319,7 @@ IN_PROC_BROWSER_TEST_F(WebUISecurityTest, WebUIReuseInSubframe) {
   }
   EXPECT_EQ(initial_site_instance,
             child->current_frame_host()->GetSiteInstance());
-  if (CreateNewHostForSameSiteSubframe()) {
+  if (ShouldCreateNewHostForSameSiteSubframe()) {
     EXPECT_NE(initial_web_ui, child->current_frame_host()->web_ui());
   } else {
     EXPECT_EQ(initial_web_ui, child->current_frame_host()->web_ui());
@@ -356,7 +356,7 @@ IN_PROC_BROWSER_TEST_F(WebUISecurityTest, WebUIReuseInSubframe) {
   }
   EXPECT_EQ(second_site_instance,
             child->current_frame_host()->GetSiteInstance());
-  if (CreateNewHostForSameSiteSubframe()) {
+  if (ShouldCreateNewHostForSameSiteSubframe()) {
     EXPECT_NE(second_web_ui, child->current_frame_host()->web_ui());
   } else {
     EXPECT_EQ(second_web_ui, child->current_frame_host()->web_ui());
@@ -508,6 +508,7 @@ IN_PROC_BROWSER_TEST_F(
   // Add a DataSource whose CSP allows chrome-untrusted://resources scripts.
   TestUntrustedDataSourceCSP csp;
   csp.script_src = "script-src chrome-untrusted://resources;";
+  csp.no_trusted_types = true;
   AddUntrustedDataSource(shell()->web_contents()->GetBrowserContext(),
                          "test-host", csp);
   GURL main_frame_url(GetChromeUntrustedUIURL("test-host/title1.html"));

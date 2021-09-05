@@ -45,9 +45,8 @@ const base::Feature kEnableRegularToChildTransitionFeature{
     "ArcEnableRegularToChildTransition", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls whether secondary accounts are added to ARC++ for child user.
-// This is added temporarily to allow further investigation.
-const base::Feature kEnableSecondaryAccountsForChildExperiment{
-    "ArcEnableSecondaryAccountForChild", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kEnableSecondaryAccountsForChild{
+    "ArcEnableSecondaryAccountForChild", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls whether we should delegate audio focus requests from ARC to Chrome.
 const base::Feature kEnableUnifiedAudioFocusFeature{
@@ -56,6 +55,11 @@ const base::Feature kEnableUnifiedAudioFocusFeature{
 // Controls experimental file picker feature for ARC.
 const base::Feature kFilePickerExperimentFeature{
     "ArcFilePickerExperiment", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Controls experimental 64-bit native bridge support for ARC on boards that
+// have 64-bit native bridge support available but not yet enabled.
+const base::Feature kNativeBridge64BitSupportExperimentFeature{
+    "ArcNativeBridge64BitSupportExperiment", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Toggles between native bridge implementations for ARC.
 // Note, that we keep the original feature name to preserve
@@ -68,10 +72,6 @@ const base::Feature kNativeBridgeToggleFeature{
 // will be disabled.
 const base::Feature kPictureInPictureFeature{"ArcPictureInPicture",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Controls experimental print spooler feature for ARC.
-const base::Feature kPrintSpoolerExperimentFeature{
-    "ArcPrintSpoolerExperiment", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls Smart Text Selection for Chrome.
 // When enabled, the context menu will show contextual quick actions based on

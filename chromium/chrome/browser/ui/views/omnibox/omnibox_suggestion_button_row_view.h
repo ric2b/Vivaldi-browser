@@ -13,6 +13,7 @@
 #include "ui/views/view.h"
 
 class OmniboxPopupContentsView;
+class OmniboxSuggestionRowButton;
 
 // A view to contain the button row within a result view.
 class OmniboxSuggestionButtonRowView : public views::View,
@@ -22,18 +23,16 @@ class OmniboxSuggestionButtonRowView : public views::View,
                                           int model_index);
   ~OmniboxSuggestionButtonRowView() override;
 
-  // Gets keyword information and applies it to the keyword button label.
-  // TODO(orinj): This should eventually be made private after refactoring.
-  void UpdateKeyword();
-
   // Called when themes, styles, and visibility is refreshed in result view.
   void OnStyleRefresh();
+
+  // Updates the suggestion row buttons based on the model.
+  void UpdateFromModel();
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
-  // views::View:
-  void Layout() override;
+  views::Button* GetActiveButton() const;
 
  private:
   // Get the popup model from the view.
@@ -42,15 +41,15 @@ class OmniboxSuggestionButtonRowView : public views::View,
   // Digs into the model with index to get the match for owning result view.
   const AutocompleteMatch& match() const;
 
+  void SetPillButtonVisibility(OmniboxSuggestionRowButton* button,
+                               OmniboxPopupModel::LineState state);
+
   OmniboxPopupContentsView* const popup_contents_view_;
   size_t const model_index_;
 
-  views::MdTextButton* keyword_button_ = nullptr;
-  views::MdTextButton* pedal_button_ = nullptr;
-  views::MdTextButton* tab_switch_button_ = nullptr;
-  views::FocusRing* keyword_button_focus_ring_ = nullptr;
-  views::FocusRing* pedal_button_focus_ring_ = nullptr;
-  views::FocusRing* tab_switch_button_focus_ring_ = nullptr;
+  OmniboxSuggestionRowButton* keyword_button_ = nullptr;
+  OmniboxSuggestionRowButton* pedal_button_ = nullptr;
+  OmniboxSuggestionRowButton* tab_switch_button_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(OmniboxSuggestionButtonRowView);
 };

@@ -26,6 +26,7 @@ void Tool::SetToolComplete() {
   outputs_.FillRequiredTypes(&substitution_bits_);
   rspfile_.FillRequiredTypes(&substitution_bits_);
   rspfile_content_.FillRequiredTypes(&substitution_bits_);
+  partial_outputs_.FillRequiredTypes(&substitution_bits_);
 }
 
 GeneralTool* Tool::AsGeneral() {
@@ -253,6 +254,8 @@ std::unique_ptr<Tool> Tool::CreateTool(const std::string& name) {
     return std::make_unique<CTool>(CTool::kCToolCc);
   else if (name == CTool::kCToolCxx)
     return std::make_unique<CTool>(CTool::kCToolCxx);
+  else if (name == CTool::kCToolCxxModule)
+    return std::make_unique<CTool>(CTool::kCToolCxxModule);
   else if (name == CTool::kCToolObjC)
     return std::make_unique<CTool>(CTool::kCToolObjC);
   else if (name == CTool::kCToolObjCxx)
@@ -261,6 +264,8 @@ std::unique_ptr<Tool> Tool::CreateTool(const std::string& name) {
     return std::make_unique<CTool>(CTool::kCToolRc);
   else if (name == CTool::kCToolAsm)
     return std::make_unique<CTool>(CTool::kCToolAsm);
+  else if (name == CTool::kCToolSwift)
+    return std::make_unique<CTool>(CTool::kCToolSwift);
   else if (name == CTool::kCToolAlink)
     return std::make_unique<CTool>(CTool::kCToolAlink);
   else if (name == CTool::kCToolSolink)
@@ -308,6 +313,8 @@ const char* Tool::GetToolTypeForSourceType(SourceFile::Type type) {
       return CTool::kCToolCc;
     case SourceFile::SOURCE_CPP:
       return CTool::kCToolCxx;
+    case SourceFile::SOURCE_MODULEMAP:
+      return CTool::kCToolCxxModule;
     case SourceFile::SOURCE_M:
       return CTool::kCToolObjC;
     case SourceFile::SOURCE_MM:
@@ -319,6 +326,8 @@ const char* Tool::GetToolTypeForSourceType(SourceFile::Type type) {
       return CTool::kCToolRc;
     case SourceFile::SOURCE_RS:
       return RustTool::kRsToolBin;
+    case SourceFile::SOURCE_SWIFT:
+      return CTool::kCToolSwift;
     case SourceFile::SOURCE_UNKNOWN:
     case SourceFile::SOURCE_H:
     case SourceFile::SOURCE_O:

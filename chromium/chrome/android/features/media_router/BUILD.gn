@@ -8,6 +8,7 @@ import("//build/config/locales.gni")
 import("//chrome/common/features.gni")
 
 android_library("java") {
+  resources_package = "org.chromium.chrome.media.router"
   deps = [
     ":java_resources",
     "$google_play_services_package:google_play_services_base_java",
@@ -20,6 +21,7 @@ android_library("java") {
     "//components/browser_ui/media/android:java",
     "//services/media_session/public/cpp/android:media_session_java",
     "//third_party/android_deps:android_support_v7_appcompat_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_deps:androidx_collection_collection_java",
     "//third_party/android_deps:androidx_core_core_java",
     "//third_party/android_deps:androidx_mediarouter_mediarouter_java",
@@ -93,12 +95,17 @@ android_library("test_java") {
     "//base:base_java_test_support",
     "//chrome/android:chrome_java",
     "//chrome/android:chrome_test_util_java",
+    "//chrome/browser/flags:java",
     "//chrome/test/android:chrome_java_test_support",
     "//content/public/android:content_java",
     "//content/public/test/android:content_java_test_support",
     "//net/android:net_java_test_support",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
+    "//third_party/android_deps:androidx_test_runner_java",
     "//third_party/android_support_test_runner:runner_java",
+    "//third_party/hamcrest:hamcrest_java",
     "//third_party/junit",
+    "//ui/android:ui_java_test_support",
   ]
 }
 
@@ -129,6 +136,7 @@ junit_binary("media_router_junit_tests") {
     "//base:base_java",
     "//base:base_java_test_support",
     "//base:base_junit_test_support",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_deps:androidx_mediarouter_mediarouter_java",
   ]
 }
@@ -163,7 +171,7 @@ android_resources("java_resources") {
     "//chrome/android:chrome_app_java_resources",
     "//third_party/android_media:android_media_resources",
   ]
-  custom_package = "org.chromium.chrome.media.router"
+  create_srcjar = false
 }
 
 java_strings_grd("java_strings_grd") {

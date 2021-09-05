@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">ಪಟ್ಟಿಯ ಐಟಂ</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">ಎರಡು ಬೆರಳುಗಳಿಂದ ಬಲಕ್ಕೆ ಸ್ವೈಪ್ ಮಾಡಿ</translation>
+<translation id="1016393160682012902">ಇದರ ಕಾರ್ಯವಿಧಾನವನ್ನು ತಿಳಿದುಕೊಳ್ಳಲು qwerty ಕೀ, ರಿಫ್ರೆಶ್ ಮಾಡಬಹುದಾದ ಬ್ರೇಲ್ ಕೀಯನ್ನು ಒತ್ತಿರಿ ಅಥವಾ ಗೆಸ್ಚರ್ ಅನ್ನು ಸ್ಪರ್ಶಿಸಿ. ನಿರ್ಗಮಿಸಲು control ಜೊತೆಗೆ w ಅಥವಾ escape ಒತ್ತಿರಿ.</translation>
 <translation id="1022586497894531524">ನೀವು ಮೊದಲ ಬಾರಿಗೆ ChromeVox ಮಾತಿನ ಪ್ರತಿಕ್ರಿಯೆಯನ್ನು ಬಳಸುತ್ತಿರುವಿರಾ? ChromeVox ಪ್ರಾರಂಭಿಸುವ ಮೂಲಭೂತ ಅಂಶಗಳ ಕುರಿತು ಈ ತ್ವರಿತ ಟುಟೋರಿಯಲ್ ವಿವರಿಸುತ್ತದೆ.</translation>
 <translation id="1025074108959230262">ಸ್ಟಿಕಿ ಮೋಡ್ ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ</translation>
 <translation id="1031961866430398710">ನಂತರ</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">ಆಂತರಿಕ ಲಿಂಕ್</translation>
 <translation id="4909019435900810068">ಒಂದು ಪದ ಹಿಂದಕ್ಕೆ ಸರಿಸಿ</translation>
 <translation id="4911349081560453449">ಯಾವುದೇ ಹಿಂದಿನ ಚೆಕ್‌ಬಾಕ್ಸ್ ಇಲ್ಲ</translation>
-<translation id="4915087353619183190">ಕಲಿಕೆ ಮೋಡ್ ಪ್ರಾರಂಭಗೊಳ್ಳುತ್ತಿದೆ. ಅದರ ಕಾರ್ಯವಿಧಾನವನ್ನು ತಿಳಿದುಕೊಳ್ಳಲು qwerty ಕೀ, ರಿಫ್ರೆಶ್ ಮಾಡಬಹುದಾದ ಬ್ರೇಲ್ ಕೀಯನ್ನು ಒತ್ತಿರಿ ಅಥವಾ ಸನ್ನೆಯನ್ನು ಸ್ಪರ್ಶಿಸಿ. ನಿರ್ಗಮಿಸಲು w ಅಥವಾ escape ಜೊತೆಗೆ control ಒತ್ತಿರಿ.</translation>
 <translation id="492295894462528572">ಮುನ್ನುಡಿ</translation>
 <translation id="495046168593986294">ಮೇಲಕ್ಕೆ ಸ್ಕ್ರಾಲ್ ಮಾಡಿ</translation>
 <translation id="495170559598752135">ಕ್ರಿಯೆಗಳು</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">ಹಸಿರು</translation>
 <translation id="602001110135236999">ಎಡಕ್ಕೆ ಸ್ಕ್ರಾಲ್ ಮಾಡಿ</translation>
 <translation id="6034000775414344507">ತಿಳಿ ಬೂದು</translation>
+<translation id="6036135911048686884">ಸ್ಪರ್ಶಿಸಿ ಮತ್ತು ಎಕ್ಸ್‌ಪ್ಲೋರ್ ಮಾಡಿ</translation>
 <translation id="6037602951055904232">ಮುಂದಕ್ಕೆ ಪ್ಯಾನ್ ಮಾಡಿ</translation>
 <translation id="6044160928851315051">ಡಾರ್ಕನ್ ಸ್ಕ್ರೀನ್</translation>
 <translation id="6082768461603900813">ಬೇಸಿಕ್ ನ್ಯಾವಿಗೇಶನ್</translation>
@@ -716,7 +717,7 @@
 <translation id="6696967141280706829">ಮುನ್ನುಡಿ</translation>
 <translation id="6697092096875747123">ಹಿಂದಿನ ಕಾಂಬೊ ಬಾಕ್ಸ್</translation>
 <translation id="6702609185760332517">{COUNT,plural, =1{ಆಶ್ಚರ್ಯಸೂಚಕ }one{# ಆಶ್ಚರ್ಯಸೂಚಕಗಳು}other{# ಆಶ್ಚರ್ಯಸೂಚಕಗಳು}}</translation>
-<translation id="6710213216561001401">ಹಿಂದೆ</translation>
+<translation id="6710213216561001401">ಹಿಂದಿನದು</translation>
 <translation id="6714813999819678458">ಹಿಂದಿನ ಹಂತದ 2 ಶಿರೋನಾಮೆ</translation>
 <translation id="6730312624811567147">ಹೋಮ್ ಅಥವಾ ಎಂಡ್‌ಗಾಗಿ ಹುಡುಕಾಟ ಎಡ ಅಥವಾ ಬಲ, ಕಂಟ್ರೋಲ್ ಹೋಮ್ ಅಥವಾ ಎಂಡ್‌ಗಾಗಿ ಹುಡುಕಾಟ ಕಂಟ್ರೋಲ್ ಎಡ ಅಥವಾ ಬಲ, ಪುಟ ಮೇಲೆ ಅಥವಾ ಕೆಳಗೆ ಮಾಡಲು ಹುಡುಕಾಟ ಮೇಲೆ ಅಥವಾ ಕೆಳಗೆ ಬಳಸಿ</translation>
 <translation id="6736510033526053669">ಟ್ಯಾಬ್ ರಚಿಸಲಾಗಿದೆ</translation>
@@ -922,6 +923,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{ಪೌಂಡ್ ಚಿಹ್ನೆಗಳು}one{# ಪೌಂಡ್ ಚಿಹ್ನೆಗಳು}other{# ಪೌಂಡ್ ಚಿಹ್ನೆಗಳು}}</translation>
 <translation id="8378855320830505539">ಪ್ರದೇಶ</translation>
 <translation id="8382679411218029383">ಸ್ವಯಂಪೂರ್ಣಗೊಳಿಸುವಿಕೆ ಇನ್‌ಲೈನ್ ಮತ್ತು ಪಟ್ಟಿ</translation>
+<translation id="8394908167088220973">ಮೀಡಿಯಾ ಪ್ಲೇ/ವಿರಾಮ</translation>
 <translation id="8428213095426709021">ಸೆಟ್ಟಿಂಗ್‌ಗಳು</translation>
 <translation id="8428603554127842284">ಮಟ್ಟ <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -966,6 +968,7 @@
 <translation id="8770473310765924354">ಕೋಷ್ಟಕಗಳಂತಹ, ವ್ಯವಸ್ಥಿತಗೊಳಿಸಿದ ವಿಷಯ ನಿರ್ಗಮಿಸಿ</translation>
 <translation id="8779057862865475116">ಯಾವುದೇ ಹಿಂದಿನ ಲಿಂಕ್ ಇಲ್ಲ</translation>
 <translation id="8796411681063377102">ಮುಂದಿನ ಹಂತ 3 ಶಿರೋನಾಮೆ</translation>
+<translation id="8823311177246872527"><ph name="TOTALPAGES" /> ರಲ್ಲಿ <ph name="CURRENTPAGE" /> ನೇ ಪುಟ</translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">ಮುಖ್ಯ</translation>
 <translation id="8882002077197914455">ಸಾಲಿನ ಶಿರೋನಾಮೆ</translation>

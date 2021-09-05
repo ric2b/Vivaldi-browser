@@ -37,11 +37,14 @@
 #include "components/omnibox/browser/omnibox_log.h"
 #include "components/omnibox/browser/omnibox_navigation_observer.h"
 #include "components/omnibox/browser/omnibox_pedal.h"
+#include "components/omnibox/browser/omnibox_pedal_concepts.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/omnibox_popup_view.h"
 #include "components/omnibox/browser/omnibox_view.h"
 #include "components/omnibox/browser/search_provider.h"
 #include "components/omnibox/browser/suggestion_answer.h"
+#include "components/omnibox/common/omnibox_features.h"
+#include "components/search_engines/omnibox_focus_type.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_service.h"
@@ -70,6 +73,9 @@ namespace {
 // the first action of an editing sequence (see comments in
 // OnAfterPossibleChange()).
 const char kOmniboxUserTextClearedHistogram[] = "Omnibox.UserTextCleared";
+
+const char kOmniboxFocusResultedInNavigation[] =
+    "Omnibox.FocusResultedInNavigation";
 
 enum UserTextClearedType {
   OMNIBOX_USER_TEXT_CLEARED_BY_EDITING = 0,
@@ -139,6 +145,7 @@ OmniboxEditModel::OmniboxEditModel(OmniboxView* view,
       focus_state_(OMNIBOX_FOCUS_NONE),
       user_input_in_progress_(false),
       user_input_since_focus_(true),
+      focus_resulted_in_navigation_(false),
       just_deleted_text_(false),
       has_temporary_text_(false),
       paste_state_(NONE),
@@ -467,14 +474,33 @@ bool OmniboxEditModel::ShouldShowCurrentPageIcon() const {
 
 void OmniboxEditModel::UpdateInput(bool has_selected_text,
                                    bool prevent_inline_autocomplete) {
-  bool changed = SetInputInProgressNoNotify(true);
+  bool changed_to_user_input_in_progress = SetInputInProgressNoNotify(true);
   if (!has_focus()) {
-    if (changed)
+    if (changed_to_user_input_in_progress)
       NotifyObserversInputInProgress(true);
     return;
   }
-  StartAutocomplete(has_selected_text, prevent_inline_autocomplete);
-  if (changed)
+
+  if (!is_keyword_selected() && changed_to_user_input_in_progress &&
+      user_text_.empty()) {
+    // In the case the user enters user-input-in-progress mode by clearing
+    // everything (i.e. via Backspace), ask for ZeroSuggestions instead of the
+    // normal prefix (as-you-type) autocomplete.
+    //
+    // We also check that no keyword is selected, as otherwise that breaks
+    // entering keyword mode via Ctrl+K.
+    //
+    // TODO(tommycli): The difference between a ZeroSuggest request and a normal
+    // prefix autocomplete request is getting fuzzier, and should be fully
+    // encapsulated by the AutocompleteInput::focus_type() member. We should
+    // merge these two calls soon, lest we confuse future developers.
+    StartZeroSuggestRequest(/*user_clobbered_permanent_text=*/true);
+  } else {
+    // Otherwise run the normal prefix (as-you-type) autocomplete.
+    StartAutocomplete(has_selected_text, prevent_inline_autocomplete);
+  }
+
+  if (changed_to_user_input_in_progress)
     NotifyObserversInputInProgress(true);
 }
 
@@ -611,7 +637,7 @@ void OmniboxEditModel::AcceptInput(WindowOpenDisposition disposition,
     input.set_keyword_mode_entry_method(input_.keyword_mode_entry_method());
     input.set_allow_exact_keyword_match(input_.allow_exact_keyword_match());
     input.set_want_asynchronous_matches(input_.want_asynchronous_matches());
-    input.set_from_omnibox_focus(input_.from_omnibox_focus());
+    input.set_focus_type(input_.focus_type());
     input_ = input;
     AutocompleteMatch url_match(
         autocomplete_controller()->history_url_provider()->SuggestExactInput(
@@ -689,6 +715,19 @@ void OmniboxEditModel::EnterKeywordModeForDefaultSearchProvider(
 void OmniboxEditModel::ExecutePedal(const AutocompleteMatch& match,
                                     base::TimeTicks match_selection_timestamp) {
   CHECK(match.pedal);
+
+  // Record the presence of any Pedals in the result set.
+  for (const AutocompleteMatch& match_in_result : result()) {
+    if (match_in_result.pedal) {
+      base::UmaHistogramEnumeration("Omnibox.PedalShown",
+                                    match_in_result.pedal->id(),
+                                    OmniboxPedalId::TOTAL_COUNT);
+    }
+  }
+
+  // Record the use of this Pedal.
+  base::UmaHistogramEnumeration("Omnibox.SuggestionUsed.Pedal",
+                                match.pedal->id(), OmniboxPedalId::TOTAL_COUNT);
   {
     // This block resets omnibox to unedited state and closes popup, which
     // may not seem necessary in cases of navigation but makes sense for
@@ -712,6 +751,18 @@ void OmniboxEditModel::OpenMatch(AutocompleteMatch match,
       now - time_user_first_modified_omnibox_);
   autocomplete_controller()->UpdateMatchDestinationURLWithQueryFormulationTime(
       elapsed_time_since_user_first_modified_omnibox, &match);
+
+  // Save the result of the interaction, but do not record the histogram yet.
+  focus_resulted_in_navigation_ = true;
+
+  // Record the presence of any Pedals in the result set.
+  for (const AutocompleteMatch& match_in_result : result()) {
+    if (match_in_result.pedal) {
+      base::UmaHistogramEnumeration("Omnibox.PedalShown",
+                                    match_in_result.pedal->id(),
+                                    OmniboxPedalId::TOTAL_COUNT);
+    }
+  }
 
   // Matches with |pedal| may be opened normally or executed, but when a match
   // is a dedicated Pedal suggestion, it should always be executed. This only
@@ -748,7 +799,8 @@ void OmniboxEditModel::OpenMatch(AutocompleteMatch match,
   // dropdown is closed or the user used a paste-and-go action.  (In most
   // cases when this happens, the user never modified the omnibox.)
   const bool popup_open = PopupIsOpen();
-  if (input_.from_omnibox_focus() || !popup_open || !pasted_text.empty()) {
+  if (input_.focus_type() != OmniboxFocusType::DEFAULT || !popup_open ||
+      !pasted_text.empty()) {
     const base::TimeDelta default_time_delta =
         base::TimeDelta::FromMilliseconds(-1);
     elapsed_time_since_user_first_modified_omnibox = default_time_delta;
@@ -770,7 +822,8 @@ void OmniboxEditModel::OpenMatch(AutocompleteMatch match,
   fake_single_entry_result.AppendMatches(input_, fake_single_entry_matches);
 
   OmniboxLog log(
-      input_.from_omnibox_focus() ? base::string16() : input_text,
+      input_.focus_type() != OmniboxFocusType::DEFAULT ? base::string16()
+                                                       : input_text,
       just_deleted_text_, input_.type(), is_keyword_selected(),
       keyword_mode_entry_method_, popup_open, dropdown_ignored ? 0 : index,
       disposition, !pasted_text.empty(),
@@ -902,7 +955,7 @@ bool OmniboxEditModel::AcceptKeyword(
   user_text_ = MaybeStripKeyword(user_text_);
 
   if (PopupIsOpen())
-    popup_model()->SetSelectedLineState(OmniboxPopupModel::KEYWORD);
+    popup_model()->SetSelectedLineState(OmniboxPopupModel::KEYWORD_MODE);
   else
     StartAutocomplete(false, true);
 
@@ -961,7 +1014,7 @@ void OmniboxEditModel::ClearKeyword() {
   // difference, as we'll need it below. popup_model() may be nullptr in tests.
   bool was_toggled_into_keyword_mode =
       popup_model() &&
-      popup_model()->selected_line_state() == OmniboxPopupModel::KEYWORD;
+      popup_model()->selected_line_state() == OmniboxPopupModel::KEYWORD_MODE;
 
   bool entry_by_tab = keyword_mode_entry_method_ == OmniboxEventProto::TAB;
 
@@ -1057,6 +1110,7 @@ void OmniboxEditModel::ClearKeyword() {
 void OmniboxEditModel::OnSetFocus(bool control_down) {
   last_omnibox_focus_ = base::TimeTicks::Now();
   user_input_since_focus_ = false;
+  focus_resulted_in_navigation_ = false;
 
   // If the omnibox lost focus while the caret was hidden and then regained
   // focus, OnSetFocus() is called and should restore visibility. Note that
@@ -1072,7 +1126,8 @@ void OmniboxEditModel::OnSetFocus(bool control_down) {
     client_->OnInputStateChanged();
 }
 
-void OmniboxEditModel::ShowOnFocusSuggestionsIfAutocompleteIdle() {
+void OmniboxEditModel::StartZeroSuggestRequest(
+    bool user_clobbered_permanent_text) {
   // Early exit if a query is already in progress or the popup is already open.
   // This is what allows this method to be called multiple times in multiple
   // code locations without harm.
@@ -1084,7 +1139,7 @@ void OmniboxEditModel::ShowOnFocusSuggestionsIfAutocompleteIdle() {
     return;
 
   // Early exit if the user already has a navigation or search query in mind.
-  if (user_input_in_progress_)
+  if (user_input_in_progress_ && !user_clobbered_permanent_text)
     return;
 
   // Send the textfield contents exactly as-is, as otherwise the verbatim
@@ -1093,7 +1148,9 @@ void OmniboxEditModel::ShowOnFocusSuggestionsIfAutocompleteIdle() {
                              client_->GetSchemeClassifier());
   input_.set_current_url(client_->GetURL());
   input_.set_current_title(client_->GetTitle());
-  input_.set_from_omnibox_focus(true);
+  input_.set_focus_type(user_clobbered_permanent_text
+                            ? OmniboxFocusType::DELETED_PERMANENT_TEXT
+                            : OmniboxFocusType::ON_FOCUS);
   autocomplete_controller()->Start(input_);
 }
 
@@ -1116,6 +1173,8 @@ void OmniboxEditModel::OnWillKillFocus() {
 }
 
 void OmniboxEditModel::OnKillFocus() {
+  UMA_HISTOGRAM_BOOLEAN(kOmniboxFocusResultedInNavigation,
+                        focus_resulted_in_navigation_);
   SetFocusState(OMNIBOX_FOCUS_NONE, OMNIBOX_FOCUS_CHANGE_EXPLICIT);
   focus_source_ = OmniboxFocusSource::INVALID;
   last_omnibox_focus_ = base::TimeTicks();
@@ -1411,7 +1470,10 @@ bool OmniboxEditModel::OnAfterPossibleChange(
   // |allow_exact_keyword_match_| will be used by StartAutocomplete() method,
   // which will be called by |view_->UpdatePopup()|; so after that returns we
   // can safely reset this flag.
+  // Entering keyword mode by space is disabled if the keyword button is
+  // enabled, so do not set |allow_exact_keyword_match_| in that case.
   allow_exact_keyword_match_ =
+      !OmniboxFieldTrial::IsKeywordSearchButtonEnabled() &&
       state_changes.text_differs && allow_keyword_ui_change &&
       !state_changes.just_deleted_text && no_selection &&
       CreatedKeywordSearchByInsertingSpaceInMiddle(
@@ -1494,7 +1556,7 @@ const char OmniboxEditModel::kCutOrCopyAllTextHistogram[] =
     "Omnibox.CutOrCopyAllText";
 
 void OmniboxEditModel::SetAccessibilityLabel(const AutocompleteMatch& match) {
-  view_->SetAccessibilityLabel(view_->GetText(), match);
+  view_->SetAccessibilityLabel(view_->GetText(), match, true);
 }
 
 bool OmniboxEditModel::PopupIsOpen() const {
@@ -1537,9 +1599,10 @@ void OmniboxEditModel::GetInfoForCurrentText(AutocompleteMatch* match,
     } else if (popup_model()->selected_line() != OmniboxPopupModel::kNoMatch) {
       const AutocompleteMatch& selected_match =
           result().match_at(popup_model()->selected_line());
-      *match =
-          (popup_model()->selected_line_state() == OmniboxPopupModel::KEYWORD) ?
-              *selected_match.associated_keyword : selected_match;
+      *match = (popup_model()->selected_line_state() ==
+                OmniboxPopupModel::KEYWORD_MODE)
+                   ? *selected_match.associated_keyword
+                   : selected_match;
       found_match_for_text = true;
     }
     if (found_match_for_text && alternate_nav_url &&
@@ -1594,6 +1657,11 @@ bool OmniboxEditModel::ShouldPreventElision() const {
 
 bool OmniboxEditModel::MaybeAcceptKeywordBySpace(
     const base::string16& new_text) {
+  // Entering keyword mode by space is disabled when the keyword button is
+  // enabled, so do not accept keyword.
+  if (OmniboxFieldTrial::IsKeywordSearchButtonEnabled())
+    return false;
+
   size_t keyword_length = new_text.length() - 1;
   return is_keyword_hint_ && (keyword_.length() == keyword_length) &&
          IsSpaceCharForAcceptingKeyword(new_text[keyword_length]) &&

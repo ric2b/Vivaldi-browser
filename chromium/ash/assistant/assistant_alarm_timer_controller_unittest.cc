@@ -9,21 +9,21 @@
 #include <vector>
 
 #include "ash/assistant/assistant_controller_impl.h"
-#include "ash/assistant/assistant_notification_controller.h"
+#include "ash/assistant/assistant_notification_controller_impl.h"
 #include "ash/assistant/model/assistant_alarm_timer_model.h"
 #include "ash/assistant/model/assistant_alarm_timer_model_observer.h"
 #include "ash/assistant/model/assistant_notification_model.h"
 #include "ash/assistant/model/assistant_notification_model_observer.h"
+#include "ash/assistant/test/assistant_ash_test_base.h"
 #include "ash/assistant/util/deep_link_util.h"
-#include "ash/public/mojom/assistant_controller.mojom.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/test/ash_test_base.h"
 #include "base/macros.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
+#include "chromeos/services/assistant/public/cpp/assistant_notification.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -33,15 +33,13 @@ namespace ash {
 
 namespace {
 
-using chromeos::assistant::mojom::AssistantNotification;
-using chromeos::assistant::mojom::AssistantNotificationButton;
-using chromeos::assistant::mojom::AssistantNotificationButtonPtr;
-using chromeos::assistant::mojom::AssistantNotificationPriority;
-using chromeos::assistant::mojom::AssistantNotificationPtr;
+using chromeos::assistant::AssistantNotification;
+using chromeos::assistant::AssistantNotificationButton;
+using chromeos::assistant::AssistantNotificationPriority;
 
 // Constants.
-constexpr char kTimerId[] = "1";
-constexpr char kClientId[] = "assistant/timer1";
+constexpr char kClientId[] = "assistant/timer<timer-id>";
+constexpr char kTimerId[] = "<timer-id>";
 
 // Mocks -----------------------------------------------------------------------
 
@@ -151,21 +149,29 @@ class ExpectedNotification {
     if (notif.message_.has_value())
       os << "\nmessage: '" << notif.message_.value() << "'";
     if (notif.priority_.has_value())
-      os << "\npriority: '" << notif.priority_.value() << "'";
+      os << "\npriority: '" << static_cast<int>(notif.priority_.value()) << "'";
     if (notif.remove_on_click_.has_value())
       os << "\nremove_on_click: '" << notif.remove_on_click_.value() << "'";
+    if (notif.renotify_.has_value())
+      os << "\nrenotify: '" << notif.renotify_.value() << "'";
+    if (notif.title_.has_value())
+      os << "\ntitle: '" << notif.title_.value() << "'";
     return os;
   }
 
-  bool operator==(const AssistantNotificationPtr& ptr) const {
-    return ptr && ptr->action_url == action_url_.value_or(ptr->action_url) &&
-           ptr->client_id == client_id_.value_or(ptr->client_id) &&
-           ptr->is_pinned == is_pinned_.value_or(ptr->is_pinned) &&
-           ptr->message == message_.value_or(ptr->message) &&
-           ptr->priority == priority_.value_or(ptr->priority) &&
-           ptr->remove_on_click ==
-               remove_on_click_.value_or(ptr->remove_on_click) &&
-           ptr->title == title_.value_or(ptr->title);
+  bool operator==(const AssistantNotification& notification) const {
+    return notification.action_url ==
+               action_url_.value_or(notification.action_url) &&
+           notification.client_id ==
+               client_id_.value_or(notification.client_id) &&
+           notification.is_pinned ==
+               is_pinned_.value_or(notification.is_pinned) &&
+           notification.message == message_.value_or(notification.message) &&
+           notification.priority == priority_.value_or(notification.priority) &&
+           notification.remove_on_click ==
+               remove_on_click_.value_or(notification.remove_on_click) &&
+           notification.renotify == renotify_.value_or(notification.renotify) &&
+           notification.title == title_.value_or(notification.title);
   }
 
   ExpectedNotification& WithActionUrl(const GURL& action_url) {
@@ -198,6 +204,11 @@ class ExpectedNotification {
     return *this;
   }
 
+  ExpectedNotification& WithRenotify(bool renotify) {
+    renotify_ = renotify;
+    return *this;
+  }
+
   ExpectedNotification& WithTitle(const std::string& title) {
     title_ = title;
     return *this;
@@ -214,6 +225,7 @@ class ExpectedNotification {
   base::Optional<std::string> message_;
   base::Optional<AssistantNotificationPriority> priority_;
   base::Optional<bool> remove_on_click_;
+  base::Optional<bool> renotify_;
   base::Optional<std::string> title_;
 };
 
@@ -236,12 +248,12 @@ class ExpectedButton {
     return os;
   }
 
-  bool operator==(const AssistantNotificationButtonPtr& ptr) const {
-    return ptr && ptr->action_url == action_url_.value_or(ptr->action_url) &&
-           ptr->label == label_.value_or(ptr->label) &&
-           ptr->remove_notification_on_click ==
+  bool operator==(const AssistantNotificationButton& button) const {
+    return button.action_url == action_url_.value_or(button.action_url) &&
+           button.label == label_.value_or(button.label) &&
+           button.remove_notification_on_click ==
                remove_notification_on_click_.value_or(
-                   ptr->remove_notification_on_click);
+                   button.remove_notification_on_click);
   }
 
   ExpectedButton& WithActionUrl(const GURL& action_url) {
@@ -289,20 +301,20 @@ class ScopedNotificationModelObserver
 
   // AssistantNotificationModelObserver:
   void OnNotificationAdded(const AssistantNotification& notification) override {
-    last_notification_ = notification.Clone();
+    last_notification_ = notification;
   }
 
   void OnNotificationUpdated(
       const AssistantNotification& notification) override {
-    last_notification_ = notification.Clone();
+    last_notification_ = notification;
   }
 
-  const AssistantNotificationPtr& last_notification() const {
+  const AssistantNotification& last_notification() const {
     return last_notification_;
   }
 
  private:
-  AssistantNotificationPtr last_notification_;
+  AssistantNotification last_notification_;
 
   DISALLOW_COPY_AND_ASSIGN(ScopedNotificationModelObserver);
 };
@@ -311,28 +323,45 @@ class ScopedNotificationModelObserver
 
 // AssistantAlarmTimerControllerTest -------------------------------------------
 
-class AssistantAlarmTimerControllerTest : public AshTestBase {
+class AssistantAlarmTimerControllerTest : public AssistantAshTestBase {
  protected:
   AssistantAlarmTimerControllerTest()
-      : AshTestBase(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
+      : AssistantAshTestBase(
+            base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
 
   ~AssistantAlarmTimerControllerTest() override = default;
 
   // AshTestBase:
   void SetUp() override {
-    AshTestBase::SetUp();
-
+    AssistantAshTestBase::SetUp();
     feature_list_.InitAndDisableFeature(
         chromeos::assistant::features::kAssistantTimersV2);
   }
 
-  // Advances the clock by |time_delta|, running any sequenced tasks in the
-  // queue. Note that we don't use |TaskEnvironment::FastForwardBy| because that
-  // API will hang when |time_delta| is sufficiently large, ultimately resulting
-  // in unittest timeout.
-  void AdvanceClock(base::TimeDelta time_delta) {
+  void TearDown() override {
+    controller()->OnTimerStateChanged({});
+    AssistantAshTestBase::TearDown();
+  }
+
+  // Advances the clock by |time_delta| and waits for the next timer update.
+  // NOTE: If |time_delta| is zero, this method is a no-op.
+  void AdvanceClockAndWaitForTimerUpdate(base::TimeDelta time_delta) {
+    if (time_delta.is_zero())
+      return;
+
     task_environment()->AdvanceClock(time_delta);
-    task_environment()->RunUntilIdle();
+
+    MockAssistantAlarmTimerModelObserver observer;
+    controller()->GetModel()->AddObserver(&observer);
+
+    base::RunLoop run_loop;
+    EXPECT_CALL(observer, OnTimerUpdated)
+        .WillOnce(testing::Invoke([&](const AssistantTimer& timer) {
+          run_loop.QuitClosure().Run();
+        }));
+    run_loop.Run();
+
+    controller()->GetModel()->RemoveObserver(&observer);
   }
 
   AssistantAlarmTimerController* controller() {
@@ -391,7 +420,7 @@ TEST_F(AssistantAlarmTimerControllerTest, UpdatedTimersShouldHaveCreationTime) {
   ScheduleTimer(kTimerId).WithCreationTime(creation_time);
 
   // Advance clock.
-  AdvanceClock(base::TimeDelta::FromMinutes(1));
+  AdvanceClockAndWaitForTimerUpdate(base::TimeDelta::FromMinutes(1));
 
   // If unspecified, |creation_time| should carry forward on update.
   EXPECT_CALL(mock, OnTimerUpdated)
@@ -494,7 +523,7 @@ TEST_F(AssistantAlarmTimerControllerTest, TimerNotificationHasExpectedTitleV2) {
     // Run each tick of the clock in the test.
     for (auto& tick : i18n_test_case.ticks) {
       // Advance clock to next tick.
-      AdvanceClock(tick.advance_clock);
+      AdvanceClockAndWaitForTimerUpdate(tick.advance_clock);
 
       // Make assertions about the notification.
       EXPECT_EQ(ExpectedNotification().WithClientId(kClientId).WithTitle(
@@ -550,7 +579,7 @@ TEST_F(AssistantAlarmTimerControllerTest, TimerNotificationHasExpectedMessage) {
     // Run each tick of the clock in the test.
     for (auto& tick : i18n_test_case.ticks) {
       // Advance clock to next tick.
-      AdvanceClock(tick.advance_clock);
+      AdvanceClockAndWaitForTimerUpdate(tick.advance_clock);
 
       // Make assertions about the notification.
       EXPECT_EQ(ExpectedNotification().WithClientId(kClientId).WithMessage(
@@ -695,8 +724,7 @@ TEST_F(AssistantAlarmTimerControllerTest, TimerNotificationHasExpectedButtons) {
   FireTimer{kTimerId};
 
   // We expect the timer notification to have two buttons.
-  ASSERT_NE(nullptr, observer.last_notification().get());
-  ASSERT_EQ(2u, observer.last_notification()->buttons.size());
+  ASSERT_EQ(2u, observer.last_notification().buttons.size());
 
   // We expect a "STOP" button which will remove the timer.
   EXPECT_EQ(ExpectedButton()
@@ -707,7 +735,7 @@ TEST_F(AssistantAlarmTimerControllerTest, TimerNotificationHasExpectedButtons) {
                         kTimerId)
                         .value())
                 .WithRemoveNotificationOnClick(true),
-            observer.last_notification()->buttons.at(0));
+            observer.last_notification().buttons.at(0));
 
   // We expect an "ADD 1 MIN" button which will add time to the timer.
   EXPECT_EQ(
@@ -718,7 +746,7 @@ TEST_F(AssistantAlarmTimerControllerTest, TimerNotificationHasExpectedButtons) {
                              kTimerId, base::TimeDelta::FromMinutes(1))
                              .value())
           .WithRemoveNotificationOnClick(true),
-      observer.last_notification()->buttons.at(1));
+      observer.last_notification().buttons.at(1));
 }
 
 // Tests that a notification is added for a timer and has the expected buttons
@@ -741,8 +769,7 @@ TEST_F(AssistantAlarmTimerControllerTest,
   ScheduleTimer(kTimerId).WithRemainingTime(kTimeRemaining);
 
   // We expect the timer notification to have two buttons.
-  ASSERT_NE(nullptr, observer.last_notification().get());
-  ASSERT_EQ(2u, observer.last_notification()->buttons.size());
+  ASSERT_EQ(2u, observer.last_notification().buttons.size());
 
   // We expect a "PAUSE" button which will pause the timer.
   EXPECT_EQ(
@@ -753,7 +780,7 @@ TEST_F(AssistantAlarmTimerControllerTest,
                   assistant::util::AlarmTimerAction::kPauseTimer, kTimerId)
                   .value())
           .WithRemoveNotificationOnClick(false),
-      observer.last_notification()->buttons.at(0));
+      observer.last_notification().buttons.at(0));
 
   // We expect a "CANCEL" button which will remove the timer.
   EXPECT_EQ(ExpectedButton()
@@ -764,14 +791,13 @@ TEST_F(AssistantAlarmTimerControllerTest,
                         kTimerId)
                         .value())
                 .WithRemoveNotificationOnClick(true),
-            observer.last_notification()->buttons.at(1));
+            observer.last_notification().buttons.at(1));
 
   // Pause the timer.
   PauseTimer(kTimerId).WithRemainingTime(kTimeRemaining);
 
   // We expect the timer notification to have two buttons.
-  ASSERT_NE(nullptr, observer.last_notification().get());
-  ASSERT_EQ(2u, observer.last_notification()->buttons.size());
+  ASSERT_EQ(2u, observer.last_notification().buttons.size());
 
   // We expect a "RESUME" button which will resume the timer.
   EXPECT_EQ(
@@ -782,7 +808,7 @@ TEST_F(AssistantAlarmTimerControllerTest,
                   assistant::util::AlarmTimerAction::kResumeTimer, kTimerId)
                   .value())
           .WithRemoveNotificationOnClick(false),
-      observer.last_notification()->buttons.at(0));
+      observer.last_notification().buttons.at(0));
 
   // We expect a "CANCEL" button which will remove the timer.
   EXPECT_EQ(ExpectedButton()
@@ -793,25 +819,24 @@ TEST_F(AssistantAlarmTimerControllerTest,
                         kTimerId)
                         .value())
                 .WithRemoveNotificationOnClick(true),
-            observer.last_notification()->buttons.at(1));
+            observer.last_notification().buttons.at(1));
 
   // Fire the timer.
   FireTimer{kTimerId};
 
   // We expect the timer notification to have two buttons.
-  ASSERT_NE(nullptr, observer.last_notification().get());
-  ASSERT_EQ(2u, observer.last_notification()->buttons.size());
+  ASSERT_EQ(2u, observer.last_notification().buttons.size());
 
-  // We expect a "CANCEL" button which will remove the timer.
+  // We expect a "STOP" button which will remove the timer.
   EXPECT_EQ(ExpectedButton()
-                .WithLabel(IDS_ASSISTANT_TIMER_NOTIFICATION_CANCEL_BUTTON)
+                .WithLabel(IDS_ASSISTANT_TIMER_NOTIFICATION_STOP_BUTTON)
                 .WithActionUrl(
                     assistant::util::CreateAlarmTimerDeepLink(
                         assistant::util::AlarmTimerAction::kRemoveAlarmOrTimer,
                         kTimerId)
                         .value())
                 .WithRemoveNotificationOnClick(true),
-            observer.last_notification()->buttons.at(0));
+            observer.last_notification().buttons.at(0));
 
   // We expect an "ADD 1 MIN" button which will add time to the timer.
   EXPECT_EQ(
@@ -822,7 +847,7 @@ TEST_F(AssistantAlarmTimerControllerTest,
                              kTimerId, base::TimeDelta::FromMinutes(1))
                              .value())
           .WithRemoveNotificationOnClick(false),
-      observer.last_notification()->buttons.at(1));
+      observer.last_notification().buttons.at(1));
 }
 
 // Tests that a notification is added for a timer and has the expected value to
@@ -867,6 +892,53 @@ TEST_F(AssistantAlarmTimerControllerTest,
       observer.last_notification());
 }
 
+// Tests that a notification is added for a timer and has the expected value to
+// *not* cause renotification.
+// NOTE: This test is only applicable to timers v1.
+TEST_F(AssistantAlarmTimerControllerTest,
+       TimerNotificationHasExpectedRenotify) {
+  ASSERT_FALSE(chromeos::assistant::features::IsTimersV2Enabled());
+
+  // Observe notifications.
+  ScopedNotificationModelObserver observer;
+
+  // Fire a timer.
+  FireTimer{kTimerId};
+
+  // Make assertions about the notification.
+  EXPECT_EQ(ExpectedNotification().WithClientId(kClientId).WithRenotify(false),
+            observer.last_notification());
+}
+
+// Tests that a notification is added for a timer and has the expected value to
+// cause renotification.
+// Note: This test is only applicable to timers v2.
+TEST_F(AssistantAlarmTimerControllerTest,
+       TimerNotificationHasExpectedRenotifyV2) {
+  // Enable timers v2.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      chromeos::assistant::features::kAssistantTimersV2);
+  ASSERT_TRUE(chromeos::assistant::features::IsTimersV2Enabled());
+
+  // Observe notifications.
+  ScopedNotificationModelObserver observer;
+
+  // Schedule a timer.
+  ScheduleTimer{kTimerId};
+
+  // Make assertions about the notification.
+  EXPECT_EQ(ExpectedNotification().WithClientId(kClientId).WithRenotify(false),
+            observer.last_notification());
+
+  // Fire the timer.
+  FireTimer{kTimerId};
+
+  // Make assertions about the notification.
+  EXPECT_EQ(ExpectedNotification().WithClientId(kClientId).WithRenotify(true),
+            observer.last_notification());
+}
+
 // Tests that a notification is added for a timer and has the expected priority.
 // NOTE: This test is only applicable to timers v1.
 TEST_F(AssistantAlarmTimerControllerTest,
@@ -900,7 +972,7 @@ TEST_F(AssistantAlarmTimerControllerTest,
   ScopedNotificationModelObserver notification_model_observer;
 
   // Schedule a timer.
-  ScheduleTimer{kTimerId};
+  ScheduleTimer(kTimerId).WithRemainingTime(base::TimeDelta::FromSeconds(10));
 
   // Make assertions about the notification.
   EXPECT_EQ(ExpectedNotification().WithClientId(kClientId).WithPriority(
@@ -909,7 +981,7 @@ TEST_F(AssistantAlarmTimerControllerTest,
 
   // Advance the clock.
   // NOTE: Six seconds is the threshold for popping up our notification.
-  AdvanceClock(base::TimeDelta::FromSeconds(6));
+  AdvanceClockAndWaitForTimerUpdate(base::TimeDelta::FromSeconds(6));
 
   // Make assertions about the notification.
   EXPECT_EQ(ExpectedNotification().WithClientId(kClientId).WithPriority(

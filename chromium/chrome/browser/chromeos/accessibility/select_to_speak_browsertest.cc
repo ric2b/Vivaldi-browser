@@ -403,10 +403,12 @@ IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, DISABLED_FocusRingMovesWithMouse) {
   EXPECT_EQ(focus_rings.size(), 0u);
 }
 
-IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, ContinuesReadingDuringResize) {
+// TODO(https://crbug.com/1114854): test is flaky.
+IN_PROC_BROWSER_TEST_F(SelectToSpeakTest,
+                       DISABLED_ContinuesReadingDuringResize) {
   ActivateSelectToSpeakInWindowBounds(
       "data:text/html;charset=utf-8,<p>First paragraph</p>"
-      "<div id='resize' style='width:300px; font-size: 10em'>"
+      "<div id='resize' style='width:300px; font-size: 1em'>"
       "<p>Second paragraph is longer than 300 pixels and will wrap when "
       "resized</p></div>");
 

@@ -71,7 +71,7 @@ class SiteDataClearer : public BrowsingDataRemover::Observer {
 
       std::unique_ptr<BrowsingDataFilterBuilder> domain_filter_builder(
           BrowsingDataFilterBuilder::Create(
-              BrowsingDataFilterBuilder::WHITELIST));
+              BrowsingDataFilterBuilder::Mode::kDelete));
       domain_filter_builder->AddRegisterableDomain(domain);
 
       pending_task_count_++;
@@ -96,7 +96,7 @@ class SiteDataClearer : public BrowsingDataRemover::Observer {
     if (remove_mask) {
       std::unique_ptr<BrowsingDataFilterBuilder> origin_filter_builder(
           BrowsingDataFilterBuilder::Create(
-              BrowsingDataFilterBuilder::WHITELIST));
+              BrowsingDataFilterBuilder::Mode::kDelete));
       origin_filter_builder->AddOrigin(origin_);
 
       pending_task_count_++;
@@ -112,7 +112,7 @@ class SiteDataClearer : public BrowsingDataRemover::Observer {
 
  private:
   // BrowsingDataRemover::Observer:
-  void OnBrowsingDataRemoverDone() override {
+  void OnBrowsingDataRemoverDone(uint64_t failed_data_types) override {
     DCHECK(pending_task_count_);
     if (--pending_task_count_)
       return;

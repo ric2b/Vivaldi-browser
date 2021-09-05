@@ -8,6 +8,7 @@ import android.support.test.InstrumentationRegistry;
 
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Rule;
@@ -19,7 +20,7 @@ import org.chromium.base.test.util.CloseableOnMainThread;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.download.DownloadTestRule.CustomMainActivityStart;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.permissions.PermissionTestRule;
@@ -59,13 +60,10 @@ public class AutoDownloadsTest implements CustomMainActivityStart {
     }
 
     private void waitForDownloadDialog(ModalDialogManager manager) {
-        CriteriaHelper.pollUiThread(new Criteria("Dialog not displayed.") {
-            @Override
-            public boolean isSatisfied() {
-                return manager.isShowing()
-                        && manager.getPresenterForTest(ModalDialogType.APP)
-                        == manager.getCurrentPresenterForTest();
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(manager.isShowing(), Matchers.is(true));
+            Criteria.checkThat(manager.getCurrentPresenterForTest(),
+                    Matchers.is(manager.getPresenterForTest(ModalDialogType.APP)));
         });
     }
 

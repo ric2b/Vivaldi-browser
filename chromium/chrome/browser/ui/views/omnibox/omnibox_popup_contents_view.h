@@ -57,16 +57,14 @@ class OmniboxPopupContentsView : public views::View,
   // Returns true if the line specified by |index| is selected.
   virtual bool IsSelectedIndex(size_t index) const;
 
-  // If the selected index has a tab switch button, whether it's "focused" via
-  // the tab key. Invalid if the selected index does not have a tab switch
-  // button.
-  bool IsButtonSelected() const;
-
   // Called by the active result view to inform model (due to mouse event).
   void UnselectButton();
 
   // Gets the OmniboxResultView for match |i|.
   OmniboxResultView* result_view_at(size_t i);
+
+  // Currently selected OmniboxResultView, or nullptr if nothing is selected.
+  OmniboxResultView* GetSelectedResultView();
 
   // Returns whether we're in experimental keyword mode and the input gives
   // sufficient confidence that the user wants keyword mode.
@@ -112,8 +110,8 @@ class OmniboxPopupContentsView : public views::View,
   // the specified point.
   size_t GetIndexForPoint(const gfx::Point& point);
 
-  // Update which result views are visible when the hidden group IDs change.
-  void OnHiddenGroupIdsUpdate();
+  // Update which result views are visible when the group visibility changes.
+  void OnSuggestionGroupVisibilityUpdate();
 
   // Gets the pref service for this view. May return nullptr in tests.
   PrefService* GetPrefService() const;

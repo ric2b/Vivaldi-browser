@@ -9,7 +9,7 @@
 
 #include "base/compiler_specific.h"
 #import "base/mac/scoped_sending_event.h"
-#include "base/message_loop/message_loop_current.h"
+#include "base/task/current_thread.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 #include "components/renderer_context_menu/render_view_context_menu_base.h"
 #include "content/public/browser/render_view_host.h"
@@ -87,6 +87,7 @@ void VivaldiContextMenuMac::Show() {
 
   menu_controller_.reset(
       [[MenuControllerCocoa alloc] initWithModel:menu_model_
+                     delegate:nil
                      useWithPopUpButtonCell:NO]);
 
   // Synthesize an event for the click, as there is no certainty that
@@ -111,7 +112,7 @@ void VivaldiContextMenuMac::Show() {
 
   {
     // Make sure events can be pumped while the menu is up.
-    base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
+    base::CurrentThread::ScopedNestableTaskAllower allow;
 
     // One of the events that could be pumped is |window.close()|.
     // User-initiated event-tracking loops protect against this by

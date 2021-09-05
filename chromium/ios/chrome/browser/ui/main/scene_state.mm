@@ -5,6 +5,10 @@
 #import "ios/chrome/browser/ui/main/scene_state.h"
 
 #import "base/ios/crb_protocol_observers.h"
+#include "base/logging.h"
+#include "base/notreached.h"
+#include "base/strings/sys_string_conversions.h"
+#import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/chrome_overlay_window.h"
 #import "ios/chrome/browser/ui/main/scene_controller.h"
 #import "ios/chrome/browser/ui/util/multi_window_support.h"
@@ -26,11 +30,13 @@
 // Container for this object's observers.
 @property(nonatomic, strong) SceneStateObserverList* observers;
 
+// Agents attached to this scene.
+@property(nonatomic, strong) NSMutableArray<id<SceneAgent>>* agents;
+
 @end
 
 @implementation SceneState
 @synthesize window = _window;
-@synthesize windowID = _windowID;
 
 - (instancetype)initWithAppState:(AppState*)appState {
   self = [super init];
@@ -38,9 +44,7 @@
     _appState = appState;
     _observers = [SceneStateObserverList
         observersWithProtocol:@protocol(SceneStateObserver)];
-    if (@available(iOS 13, *)) {
-      _windowID = UIApplication.sharedApplication.connectedScenes.count - 1;
-    }
+    _agents = [[NSMutableArray alloc] init];
   }
   return self;
 }
@@ -55,15 +59,13 @@
   [self.observers removeObserver:observer];
 }
 
-#pragma mark - Setters & Getters.
-
-- (NSUInteger)windowID {
-  if (IsMultiwindowSupported()) {
-    return _windowID;
-  } else {
-    return 0;
-  }
+- (void)addAgent:(id<SceneAgent>)agent {
+  DCHECK(agent);
+  [self.agents addObject:agent];
+  [agent setSceneState:self];
 }
+
+#pragma mark - Setters & Getters.
 
 - (void)setWindow:(UIWindow*)window {
   if (IsSceneStartupSupported()) {
@@ -127,6 +129,33 @@
 - (void)setPendingUserActivity:(NSUserActivity*)pendingUserActivity {
   _pendingUserActivity = pendingUserActivity;
   [self.observers sceneState:self receivedUserActivity:pendingUserActivity];
+}
+
+#pragma mark - UIBlockerTarget
+
+- (id<UIBlockerManager>)uiBlockerManager {
+  return _appState;
+}
+
+- (void)bringBlockerToFront:(UIScene*)requestingScene API_AVAILABLE(ios(13)) {
+  if (!IsMultipleScenesSupported()) {
+    return;
+  }
+  if (@available(iOS 13, *)) {
+    UISceneActivationRequestOptions* options =
+        [[UISceneActivationRequestOptions alloc] init];
+    options.requestingScene = requestingScene;
+
+    [[UIApplication sharedApplication]
+        requestSceneSessionActivation:self.scene.session
+                         userActivity:nil
+                              options:options
+                         errorHandler:^(NSError* error) {
+                           LOG(ERROR) << base::SysNSStringToUTF8(
+                               error.localizedDescription);
+                           NOTREACHED();
+                         }];
+  }
 }
 
 #pragma mark - debug

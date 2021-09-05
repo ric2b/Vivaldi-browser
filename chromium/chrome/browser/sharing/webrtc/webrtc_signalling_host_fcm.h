@@ -19,21 +19,20 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
-// Handles the signalling part of a WebRTC connection via FCM. The signalling
+// Handles the signaling part of a WebRTC connection via FCM. The signaling
 // messages are sent via the |message_sender| to |device_info| through FCM.
-class WebRtcSignallingHostFCM : public sharing::mojom::SignallingSender {
+class WebRtcSignallingHostFCM : public sharing::mojom::SignalingSender {
  public:
   WebRtcSignallingHostFCM(
-      mojo::PendingReceiver<sharing::mojom::SignallingSender> signalling_sender,
-      mojo::PendingRemote<sharing::mojom::SignallingReceiver>
-          signalling_receiver,
+      mojo::PendingReceiver<sharing::mojom::SignalingSender> signaling_sender,
+      mojo::PendingRemote<sharing::mojom::SignalingReceiver> signaling_receiver,
       SharingMessageSender* message_sender,
       std::unique_ptr<syncer::DeviceInfo> device_info);
   WebRtcSignallingHostFCM(const WebRtcSignallingHostFCM&) = delete;
   WebRtcSignallingHostFCM& operator=(const WebRtcSignallingHostFCM&) = delete;
   ~WebRtcSignallingHostFCM() override;
 
-  // sharing::mojom::SignallingSender:
+  // sharing::mojom::SignalingSender:
   void SendOffer(const std::string& offer, SendOfferCallback callback) override;
   void SendIceCandidates(
       std::vector<sharing::mojom::IceCandidatePtr> ice_candidates) override;
@@ -53,8 +52,8 @@ class WebRtcSignallingHostFCM : public sharing::mojom::SignallingSender {
   SharingMessageSender* message_sender_;
   std::unique_ptr<syncer::DeviceInfo> device_info_;
 
-  mojo::Receiver<sharing::mojom::SignallingSender> signalling_sender_;
-  mojo::Remote<sharing::mojom::SignallingReceiver> signalling_receiver_;
+  mojo::Receiver<sharing::mojom::SignalingSender> signaling_sender_;
+  mojo::Remote<sharing::mojom::SignalingReceiver> signaling_receiver_;
 
   base::WeakPtrFactory<WebRtcSignallingHostFCM> weak_ptr_factory_{this};
 };

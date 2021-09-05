@@ -9,20 +9,20 @@ import android.view.WindowManager;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.CommandLine;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityNavigationController;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvider;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.incognito.IncognitoTabHost;
-import org.chromium.chrome.browser.incognito.IncognitoTabHostRegistry;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
 import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
 import org.chromium.chrome.browser.profiles.OTRProfileID;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tabmodel.IncognitoTabHost;
+import org.chromium.chrome.browser.tabmodel.IncognitoTabHostRegistry;
 
 import javax.inject.Inject;
 
@@ -63,14 +63,7 @@ public class CustomTabIncognitoManager implements NativeInitObserver, Destroyabl
     }
 
     public Profile getProfile() {
-        if (mOTRProfileID == null) {
-            // TODO(https://crbug.com/1023759): This creates a new OffTheRecord
-            // profile for each call to open an incognito CCT.
-            // To be updated for apps which have introduced themselves, are
-            // resurrecting, and prefer to use their previous profile if it
-            // still alive.
-            mOTRProfileID = OTRProfileID.createUnique("CCT:Incognito");
-        }
+        if (mOTRProfileID == null) mOTRProfileID = OTRProfileID.createUnique("CCT:Incognito");
         return Profile.getLastUsedRegularProfile().getOffTheRecordProfile(mOTRProfileID);
     }
 
@@ -92,11 +85,6 @@ public class CustomTabIncognitoManager implements NativeInitObserver, Destroyabl
                     .destroyWhenAppropriate();
             mOTRProfileID = null;
         }
-    }
-
-    // TODO(crbug.com/1023759): Remove this function.
-    public static boolean hasIsolatedProfile() {
-        return true;
     }
 
     private void initializeIncognito() {

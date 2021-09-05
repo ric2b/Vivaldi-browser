@@ -99,10 +99,11 @@ class TabImpl : public Tab,
   // TODO(sky): investigate a better way to not have so many ifdefs.
 #if defined(OS_ANDROID)
   TabImpl(ProfileImpl* profile,
-          const base::android::JavaParamRef<jobject>& java_impl);
+          const base::android::JavaParamRef<jobject>& java_impl,
+          std::unique_ptr<content::WebContents> web_contents);
 #endif
   explicit TabImpl(ProfileImpl* profile,
-                   std::unique_ptr<content::WebContents> = nullptr,
+                   std::unique_ptr<content::WebContents> web_contents,
                    const std::string& guid = std::string());
   ~TabImpl() override;
 
@@ -164,9 +165,9 @@ class TabImpl : public Tab,
   void OnAutofillProviderChanged(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& autofill_provider);
-  void UpdateBrowserControlsState(JNIEnv* env,
-                                  jint raw_new_state,
-                                  jboolean animate);
+  void UpdateBrowserControlsConstraint(JNIEnv* env,
+                                       jint constraint,
+                                       jboolean animate);
 
   base::android::ScopedJavaLocalRef<jstring> GetGuid(JNIEnv* env);
   void CaptureScreenShot(
@@ -192,6 +193,9 @@ class TabImpl : public Tab,
       const base::android::JavaParamRef<jstring>& js_object_name);
   jboolean CanTranslate(JNIEnv* env);
   void ShowTranslateUi(JNIEnv* env);
+  void SetTranslateTargetLanguage(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jstring>& translate_target_lang);
 #endif
 
   ErrorPageDelegate* error_page_delegate() { return error_page_delegate_; }
@@ -199,10 +203,15 @@ class TabImpl : public Tab,
   void AddDataObserver(DataObserver* observer);
   void RemoveDataObserver(DataObserver* observer);
 
+  GoogleAccountsDelegate* google_accounts_delegate() {
+    return google_accounts_delegate_;
+  }
+
   // Tab:
   void SetErrorPageDelegate(ErrorPageDelegate* delegate) override;
   void SetFullscreenDelegate(FullscreenDelegate* delegate) override;
   void SetNewTabDelegate(NewTabDelegate* delegate) override;
+  void SetGoogleAccountsDelegate(GoogleAccountsDelegate* delegate) override;
   void AddObserver(TabObserver* observer) override;
   void RemoveObserver(TabObserver* observer) override;
   NavigationController* GetNavigationController() override;
@@ -218,6 +227,8 @@ class TabImpl : public Tab,
       const std::vector<std::string>& js_origins) override;
   void RemoveWebMessageHostFactory(
       const base::string16& js_object_name) override;
+  std::unique_ptr<FaviconFetcher> CreateFaviconFetcher(
+      FaviconFetcherDelegate* delegate) override;
 #if !defined(OS_ANDROID)
   void AttachToView(views::WebView* web_view) override;
 #endif
@@ -248,12 +259,20 @@ class TabImpl : public Tab,
       const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions)
       override;
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
-                      std::unique_ptr<content::FileSelectListener> listener,
+                      scoped_refptr<content::FileSelectListener> listener,
                       const blink::mojom::FileChooserParams& params) override;
+  void CreateSmsPrompt(content::RenderFrameHost*,
+                       const url::Origin&,
+                       const std::string& one_time_code,
+                       base::OnceClosure on_confirm,
+                       base::OnceClosure on_cancel) override;
   int GetTopControlsHeight() override;
+  int GetTopControlsMinHeight() override;
   int GetBottomControlsHeight() override;
   bool DoBrowserControlsShrinkRendererSize(
-      const content::WebContents* web_contents) override;
+      content::WebContents* web_contents) override;
+  bool OnlyExpandTopControlsAtPageTop() override;
+  bool ShouldAnimateBrowserControlsHeightChanges() override;
   bool EmbedsFullscreenWidget() override;
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,
@@ -299,9 +318,8 @@ class TabImpl : public Tab,
       gfx::Rect* src_rect,
       gfx::Size* output_size);
 
-  void UpdateBrowserControlsStateImpl(content::BrowserControlsState new_state,
-                                      content::BrowserControlsState old_state,
-                                      bool animate);
+  void UpdateBrowserControlsState(content::BrowserControlsState new_state,
+                                  bool animate);
 #endif
 
   // content::WebContentsObserver:
@@ -330,7 +348,7 @@ class TabImpl : public Tab,
   // Returns the FindTabHelper for the page, or null if none exists.
   find_in_page::FindTabHelper* GetFindTabHelper();
 
-  sessions::SessionTabHelperDelegate* GetSessionServiceTabHelperDelegate(
+  static sessions::SessionTabHelperDelegate* GetSessionServiceTabHelperDelegate(
       content::WebContents* web_contents);
 
 #if defined(OS_ANDROID)
@@ -346,6 +364,7 @@ class TabImpl : public Tab,
   ErrorPageDelegate* error_page_delegate_ = nullptr;
   FullscreenDelegate* fullscreen_delegate_ = nullptr;
   NewTabDelegate* new_tab_delegate_ = nullptr;
+  GoogleAccountsDelegate* google_accounts_delegate_ = nullptr;
   ProfileImpl* profile_;
   std::unique_ptr<content::WebContents> web_contents_;
   std::unique_ptr<NavigationControllerImpl> navigation_controller_;
@@ -359,9 +378,14 @@ class TabImpl : public Tab,
   std::unique_ptr<BrowserControlsNavigationStateHandler>
       browser_controls_navigation_state_handler_;
 
-  // Last value supplied to UpdateBrowserControlsState().
-  content::BrowserControlsState current_browser_controls_state_ =
-      content::BROWSER_CONTROLS_STATE_SHOWN;
+  // Last value supplied to UpdateBrowserControlsConstraint(). This *constraint*
+  // can be SHOWN, if for example a modal dialog is forcing the controls to be
+  // visible, HIDDEN, if for example fullscreen is forcing the controls to be
+  // hidden, or BOTH, if either state is viable (e.g. during normal browsing).
+  // When BOTH, the actual current state could be showing or hidden.
+  content::BrowserControlsState
+      current_browser_controls_visibility_constraint_ =
+          content::BROWSER_CONTROLS_STATE_SHOWN;
 
   std::map<std::string, std::unique_ptr<WebMessageHostFactoryProxy>>
       js_name_to_proxy_;

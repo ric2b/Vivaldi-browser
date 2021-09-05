@@ -11,11 +11,15 @@
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/window_properties.h"
 #include "base/feature_list.h"
+#include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/time/time.h"
+#include "chrome/browser/apps/app_service/app_icon_factory.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/ash/launcher/app_service/app_service_app_window_launcher_controller.h"
@@ -26,9 +30,15 @@
 #include "chrome/browser/ui/ash/launcher/arc_app_window_info.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
+#include "chrome/common/chrome_features.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "ui/aura/client/aura_constants.h"
+#include "ui/gfx/image/image_skia.h"
 #include "ui/views/widget/widget.h"
+
+namespace {
+constexpr int kArcAppWindowIconSize = extension_misc::EXTENSION_ICON_MEDIUM;
+}  // namespace
 
 AppServiceAppWindowArcTracker::AppServiceAppWindowArcTracker(
     AppServiceAppWindowLauncherController* app_service_controller)
@@ -147,21 +157,21 @@ void AppServiceAppWindowArcTracker::OnTaskCreated(
   arc_window_candidates_.erase(window);
 }
 
-void AppServiceAppWindowArcTracker::OnTaskDescriptionUpdated(
+void AppServiceAppWindowArcTracker::OnTaskDescriptionChanged(
     int32_t task_id,
     const std::string& label,
-    const std::vector<uint8_t>& icon_png_data) {
+    const arc::mojom::RawIconPngData& icon) {
   auto it = task_id_to_arc_app_window_info_.find(task_id);
   if (it == task_id_to_arc_app_window_info_.end())
     return;
 
-  ArcAppWindowInfo* const info = it->second.get();
-  DCHECK(info);
-  info->SetDescription(label, icon_png_data);
-  AppWindowBase* app_window =
-      app_service_controller_->GetAppWindow(it->second->window());
-  if (app_window)
-    app_window->SetDescription(label, icon_png_data);
+  if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon) ||
+      icon.icon_png_data.has_value()) {
+    apps::ArcRawIconPngDataToImageSkia(
+        icon.Clone(), kArcAppWindowIconSize,
+        base::BindOnce(&AppServiceAppWindowArcTracker::OnIconLoaded,
+                       weak_ptr_factory_.GetWeakPtr(), task_id, label));
+  }
 }
 
 void AppServiceAppWindowArcTracker::OnTaskDestroyed(int task_id) {
@@ -301,7 +311,7 @@ void AppServiceAppWindowArcTracker::AttachControllerToWindow(
   app_service_controller_->AddWindowToShelf(window, shelf_id);
   AppWindowBase* app_window = app_service_controller_->GetAppWindow(window);
   if (app_window)
-    app_window->SetDescription(info->title(), info->icon_data_png());
+    app_window->SetDescription(info->title(), info->icon());
 
   window->SetProperty(ash::kShelfIDKey, shelf_id.Serialize());
   window->SetProperty(ash::kArcPackageNameKey,
@@ -451,4 +461,27 @@ std::vector<int> AppServiceAppWindowArcTracker::GetTaskIdsForApp(
   }
 
   return task_ids;
+}
+
+void AppServiceAppWindowArcTracker::SetDescription(int32_t task_id,
+                                                   const std::string& title,
+                                                   gfx::ImageSkia icon) {
+  auto it = task_id_to_arc_app_window_info_.find(task_id);
+  if (it == task_id_to_arc_app_window_info_.end())
+    return;
+
+  ArcAppWindowInfo* const info = it->second.get();
+  DCHECK(info);
+  info->SetDescription(title, icon);
+  AppWindowBase* app_window =
+      app_service_controller_->GetAppWindow(it->second->window());
+  if (app_window)
+    app_window->SetDescription(title, icon);
+}
+
+void AppServiceAppWindowArcTracker::OnIconLoaded(int32_t task_id,
+                                                 const std::string& title,
+                                                 const gfx::ImageSkia& icon) {
+  gfx::ImageSkia image = icon;
+  SetDescription(task_id, title, image);
 }

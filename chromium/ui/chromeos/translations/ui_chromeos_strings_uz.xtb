@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Qora ko‘zoynak</translation>
 <translation id="115443833402798225">Koreys (Ahnmatae)</translation>
 <translation id="1155759005174418845">Katalan tili</translation>
+<translation id="1172970565351728681">Taxminan <ph name="REMAINING_TIME" /> qoldi</translation>
 <translation id="1173894706177603556">Qayta nomlash</translation>
 <translation id="117624967391683467">“<ph name="FILE_NAME" />” fayli nusxalanmoqda...</translation>
 <translation id="1178581264944972037">Pauza</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">“<ph name="FILENAME" />” nomli fayl allaqachon mavjud. Kerakli amalni tanlang.</translation>
 <translation id="2121825465123208577">O‘lchamini o‘zgartirish</translation>
 <translation id="2136953289241069843">Transliteratsiya (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">“<ph name="PATH" />” ochilmadi: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Yaroqsiz belgi: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Vyetnam klaviaturasi (TCVN)</translation>
 <translation id="2168214441502403371">Fors klaviaturasi</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Egalik huquqi <ph name="DESTINATION_DOMAIN" /> domeniga beriladi.</translation>
 <translation id="3241720467332021590">Irland tili</translation>
 <translation id="3245321423178950146">Notanish ijrochi</translation>
+<translation id="3248185426436836442">Kutilmoqda</translation>
 <translation id="3252266817569339921">Fransuzcha</translation>
 <translation id="3254434849914415189"><ph name="FILE_TYPE" /> fayllari uchun standart ilovani tanlang:</translation>
 <translation id="3264582393905923483">Kontekst</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Yozilgan yili</translation>
 <translation id="3338239663705455570">Slovyan klaviaturasi</translation>
 <translation id="3353984535370177728">Yuklash uchun jildni tanlang</translation>
+<translation id="3356580349448036450">Tayyor</translation>
 <translation id="3399597614303179694">Makedoncha klaviatura</translation>
 <translation id="3414856743105198592">Tashqi xotira qurilmasini formatlash undagi barcha ma’lumotlarni tozalaydi. Davom etasizmi?</translation>
 <translation id="3437801641691368414">Yaratilgan vaqti</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Fayllarni “<ph name="FOLDER_NAME" />” jildiga ko‘chirishga ruxsatingiz yo‘q.</translation>
 <translation id="3786301125658655746">Siz hozir internetsiz rejimdasiz</translation>
 <translation id="3789841737615482174">O‘rnatish</translation>
+<translation id="3793469551756281394">Taxminan <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /> qoldi</translation>
 <translation id="3798449238516105146">Versiya</translation>
 <translation id="3801082500826908679">Farer klaviaturasi</translation>
 <translation id="3809272675881623365">Quyon</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Bu jild Windowsga ulashilgan</translation>
 <translation id="4487088045714738411">Belgiyacha klaviatura</translation>
 <translation id="4522570452068850558">Tafsilotlar</translation>
+<translation id="4542387084127299777">“<ph name="PATH" />” ochilmadi</translation>
 <translation id="4552678318981539154">Ko‘proq joy sotib olish</translation>
 <translation id="4559767610552730302">Boke</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" />-fayl</translation>
@@ -510,6 +514,7 @@ Amal bajarilishini kuting va qurilmani “Fayllar” ilovasida chiqarib oling. A
 <translation id="6629841649550503054">Hammasi <ph name="BEGIN_LINK" />Google Drive’ga<ph name="END_LINK" /> zaxiralandi!</translation>
 <translation id="6643016212128521049">Tozalash</translation>
 <translation id="6650726141019353908">Pushti kapalak</translation>
+<translation id="6657585470893396449">Parol</translation>
 <translation id="6710213216561001401">Avvalgi</translation>
 <translation id="6718273304615422081">Arxivlanmoqda...</translation>
 <translation id="6751256176799620176">1 ta jild tanlandi</translation>
@@ -550,7 +555,6 @@ Amal bajarilishini kuting va qurilmani “Fayllar” ilovasida chiqarib oling. A
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">O‘rnatish amali bajarilmadi.</translation>
 <translation id="7040138676081995583">Quyidagi ilovada ochish...</translation>
-<translation id="7059566040011178088"><ph name="REMAINING_TIME" /> dan kam</translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> ta element tanlandi</translation>
 <translation id="7106346894903675391">Qo‘shimcha joy sotib olish...</translation>
 <translation id="7126604456862387217">“&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;” - &lt;em&gt;Google Diskdan qidirish&lt;/em&gt;</translation>
@@ -661,7 +665,6 @@ Amal bajarilishini kuting va qurilmani “Fayllar” ilovasida chiqarib oling. A
 <translation id="8193175696669055101">Qurilma modeli</translation>
 <translation id="8208580316430297579">Rasmlar</translation>
 <translation id="8223479393428528563">Ushbu fayllar bilan internet yo‘qligida ishlash uchun, internetga ulaning va har bir fayl ustiga sichqonchaning o‘ng tugmasini bosib, <ph name="OFFLINE_CHECKBOX_NAME" /> bandini tanlang.</translation>
-<translation id="8231972167769262174">Taxminan: <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Bekor qilish</translation>
 <translation id="8261506727792406068">O‘chirish</translation>
 <translation id="8269755669432358899">Fayllar holat panelini kichraytirish</translation>
@@ -724,6 +727,7 @@ Amal bajarilishini kuting va qurilmani “Fayllar” ilovasida chiqarib oling. A
 <translation id="9065203028668620118">O‘zgartirish</translation>
 <translation id="9099674669267916096">Sahifalar soni</translation>
 <translation id="9110990317705400362">Biz doim brauzerimizni yanada havfsizroq qilish ustida ishlaymiz. Avval har qanday sayt kengaytma o‘rnatishga ruxsati bo‘lgan edi. Google Chrome‘ning so‘nggi versiyalarida kengaytmalar endi faqat “Kengaytmalar” sahifasidan o‘rnatiladi. <ph name="BEGIN_LINK" />Batafsil...<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Qulfdan yechish</translation>
 <translation id="912419004897138677">Kodek</translation>
 <translation id="9129931661813833980">Jildni mahkamlash</translation>
 <translation id="9130775360844693113">“<ph name="DESTINATION_NAME" />” foydalanuvchilari bu elemntlardan foydalana olishadi.</translation>

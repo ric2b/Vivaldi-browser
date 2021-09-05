@@ -47,7 +47,6 @@
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/javascript_dialog_type.h"
-#include "content/public/common/previews_state.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
 #include "content/public/test/fake_local_frame.h"
@@ -66,6 +65,7 @@
 #include "net/base/load_flags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom.h"
@@ -291,26 +291,26 @@ class RenderDocumentFeatureTest : public testing::Test {
 };
 
 TEST_F(RenderDocumentFeatureTest, FeatureDisabled) {
-  EXPECT_FALSE(CreateNewHostForCrashedFrame());
-  EXPECT_FALSE(CreateNewHostForSameSiteSubframe());
+  EXPECT_FALSE(ShouldCreateNewHostForCrashedFrame());
+  EXPECT_FALSE(ShouldCreateNewHostForSameSiteSubframe());
 }
 
 TEST_F(RenderDocumentFeatureTest, LevelDisabled) {
   SetLevel(RenderDocumentLevel::kDisabled);
-  EXPECT_FALSE(CreateNewHostForCrashedFrame());
-  EXPECT_FALSE(CreateNewHostForSameSiteSubframe());
+  EXPECT_FALSE(ShouldCreateNewHostForCrashedFrame());
+  EXPECT_FALSE(ShouldCreateNewHostForSameSiteSubframe());
 }
 
 TEST_F(RenderDocumentFeatureTest, LevelCrashed) {
   SetLevel(RenderDocumentLevel::kCrashedFrame);
-  EXPECT_TRUE(CreateNewHostForCrashedFrame());
-  EXPECT_FALSE(CreateNewHostForSameSiteSubframe());
+  EXPECT_TRUE(ShouldCreateNewHostForCrashedFrame());
+  EXPECT_FALSE(ShouldCreateNewHostForSameSiteSubframe());
 }
 
 TEST_F(RenderDocumentFeatureTest, LevelSub) {
   SetLevel(RenderDocumentLevel::kSubframe);
-  EXPECT_TRUE(CreateNewHostForCrashedFrame());
-  EXPECT_TRUE(CreateNewHostForSameSiteSubframe());
+  EXPECT_TRUE(ShouldCreateNewHostForCrashedFrame());
+  EXPECT_TRUE(ShouldCreateNewHostForSameSiteSubframe());
 }
 
 class RenderFrameHostManagerTest
@@ -408,8 +408,8 @@ class RenderFrameHostManagerTest
         entry->ConstructCommonNavigationParams(
             *frame_entry, request_body, frame_entry->url(),
             blink::mojom::Referrer::New(referrer.url, referrer.policy),
-            navigate_type, PREVIEWS_UNSPECIFIED, base::TimeTicks::Now(),
-            base::TimeTicks::Now());
+            navigate_type, blink::PreviewsTypes::PREVIEWS_UNSPECIFIED,
+            base::TimeTicks::Now(), base::TimeTicks::Now());
     mojom::CommitNavigationParamsPtr commit_params =
         entry->ConstructCommitNavigationParams(
             *frame_entry, common_params->url, frame_entry->committed_origin(),
@@ -1899,8 +1899,7 @@ TEST_P(RenderFrameHostManagerTestWithSiteIsolation, DetachPendingChild) {
 
   // Detach the first child FrameTreeNode. This should kill the pending host but
   // not yet destroy proxies in |site_instance| since the other child remains.
-  iframe1->current_frame_host()->OnMessageReceived(
-      FrameHostMsg_Detach(iframe1->current_frame_host()->GetRoutingID()));
+  iframe1->current_frame_host()->Detach();
   iframe1 = nullptr;  // Was just destroyed.
 
   EXPECT_TRUE(delete_watcher1.deleted());
@@ -1914,8 +1913,7 @@ TEST_P(RenderFrameHostManagerTestWithSiteIsolation, DetachPendingChild) {
 
   // Detach the second child FrameTreeNode. This should trigger cleanup of
   // RenderFrameProxyHosts in |site_instance|.
-  iframe2->current_frame_host()->OnMessageReceived(
-      FrameHostMsg_Detach(iframe2->current_frame_host()->GetRoutingID()));
+  iframe2->current_frame_host()->Detach();
   iframe2 = nullptr;  // Was just destroyed.
 
   EXPECT_TRUE(delete_watcher1.deleted());
@@ -1977,7 +1975,7 @@ TEST_P(RenderFrameHostManagerTestWithSiteIsolation,
   EXPECT_FALSE(contents2->GetMainFrame()->IsRenderFrameLive());
   EXPECT_EQ(contents1->GetSiteInstance(), contents2->GetSiteInstance());
   EXPECT_EQ((bool)contents1->GetMainFrame()->GetView(),
-            CreateNewHostForCrashedFrame());
+            ShouldCreateNewHostForCrashedFrame());
   EXPECT_FALSE(contents2->GetMainFrame()->GetView());
 
   // |contents1| creates an out of process iframe.
@@ -2856,8 +2854,9 @@ TEST_P(RenderFrameHostManagerTest, NavigateFromDeadRendererToWebUI) {
       entry.ConstructCommonNavigationParams(
           *frame_entry, nullptr, frame_entry->url(),
           blink::mojom::Referrer::New(referrer.url, referrer.policy),
-          mojom::NavigationType::DIFFERENT_DOCUMENT, PREVIEWS_UNSPECIFIED,
-          base::TimeTicks::Now(), base::TimeTicks::Now());
+          mojom::NavigationType::DIFFERENT_DOCUMENT,
+          blink::PreviewsTypes::PREVIEWS_UNSPECIFIED, base::TimeTicks::Now(),
+          base::TimeTicks::Now());
   mojom::CommitNavigationParamsPtr commit_params =
       entry.ConstructCommitNavigationParams(
           *frame_entry, common_params->url, frame_entry->committed_origin(),
@@ -3205,8 +3204,16 @@ TEST_P(RenderFrameHostManagerTestWithSiteIsolation,
   EXPECT_FALSE(proxy_observer.IsLoading(proxy_to_child));
 }
 
-// Tests that a BeginNavigation IPC from a no longer active RFH is ignored.
-TEST_P(RenderFrameHostManagerTest, BeginNavigationIgnoredWhenNotActive) {
+// Tests that a BeginNavigation IPC from a no longer active RFH in pending
+// deletion state is ignored.
+TEST_P(RenderFrameHostManagerTest,
+       BeginNavigationIgnoredWhenInPendingDeletion) {
+  // When a page enters the BackForwardCache, the RenderFrameHost is not
+  // deleted and is in BackForwardCache instead of being in pending deletion.
+  // Disabling to consider this scenario.
+  contents()->GetController().GetBackForwardCache().DisableForTesting(
+      BackForwardCache::TEST_ASSUMES_NO_CACHING);
+
   const GURL kUrl1("http://www.google.com");
   const GURL kUrl2("http://www.chromium.org");
   const GURL kUrl3("http://foo.com");
@@ -3225,10 +3232,66 @@ TEST_P(RenderFrameHostManagerTest, BeginNavigationIgnoredWhenNotActive) {
   navigation_to_kUrl2->Commit();
   EXPECT_NE(initial_rfh, main_test_rfh());
   ASSERT_FALSE(delete_observer.deleted());
+  EXPECT_NE(initial_rfh->lifecycle_state(),
+            RenderFrameHostImpl::LifecycleState::kActive);
   EXPECT_TRUE(initial_rfh->IsPendingDeletion());
 
   // The initial RFH receives a BeginNavigation IPC. The navigation should not
   // start.
+  auto navigation_to_kUrl3 =
+      NavigationSimulator::CreateRendererInitiated(kUrl3, initial_rfh);
+  navigation_to_kUrl3->Start();
+  EXPECT_FALSE(main_test_rfh()->frame_tree_node()->navigation_request());
+}
+
+// Run tests with BackForwardCache.
+class RenderFrameHostManagerTestWithBackForwardCache
+    : public RenderFrameHostManagerTest {
+ public:
+  RenderFrameHostManagerTestWithBackForwardCache() {
+    scoped_feature_list_.InitWithFeaturesAndParameters(
+        {{features::kBackForwardCache,
+          {
+              {"TimeToLiveInBackForwardCacheInSeconds", "3600"},
+              {"service_worker_supported", "true"},
+          }}},
+        /*disabled_features=*/{});
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Tests that a BeginNavigation IPC from a no longer active RFH in
+// BackForwardCache is ignored. This test is a copy of
+// "RenderFrameHostManagerTest.BeginNavigationIgnoredWhenInPendingDeletion" with
+// BackForwardCache consideration.
+TEST_P(RenderFrameHostManagerTestWithBackForwardCache,
+       BeginNavigationIgnoredWhenInBackForwardCache) {
+  const GURL kUrl1("http://www.google.com");
+  const GURL kUrl2("http://www.chromium.org");
+  const GURL kUrl3("http://foo.com");
+
+  contents()->NavigateAndCommit(kUrl1);
+
+  TestRenderFrameHost* initial_rfh = main_test_rfh();
+  RenderViewHostDeletedObserver delete_observer(
+      initial_rfh->GetRenderViewHost());
+
+  // Navigate cross-site but don't simulate the swap out ACK. The initial RFH
+  // should be in BackForwardCache.
+  auto navigation_to_kUrl2 =
+      NavigationSimulatorImpl::CreateBrowserInitiated(kUrl2, contents());
+  navigation_to_kUrl2->set_drop_unload_ack(true);
+  navigation_to_kUrl2->Commit();
+  EXPECT_NE(initial_rfh, main_test_rfh());
+  ASSERT_FALSE(delete_observer.deleted());
+  EXPECT_NE(initial_rfh->lifecycle_state(),
+            RenderFrameHostImpl::LifecycleState::kActive);
+  EXPECT_TRUE(initial_rfh->IsInBackForwardCache());
+
+  // The initial RFH receives a BeginNavigation IPC. The navigation should not
+  // start as initial RFH is not active.
   auto navigation_to_kUrl3 =
       NavigationSimulator::CreateRendererInitiated(kUrl3, initial_rfh);
   navigation_to_kUrl3->Start();
@@ -3277,27 +3340,31 @@ TEST_P(RenderFrameHostManagerTest,
   NavigationSimulator::NavigateAndCommitFromBrowser(contents(), kFooUrl);
   scoped_refptr<SiteInstanceImpl> initial_instance =
       main_test_rfh()->GetSiteInstance();
+  SiteInfo foo_site_info = SiteInstanceImpl::ComputeSiteInfo(
+      initial_instance->GetIsolationContext(), kFooUrl);
   if (AreDefaultSiteInstancesEnabled()) {
     EXPECT_TRUE(initial_instance->IsDefaultSiteInstance());
   } else {
     EXPECT_FALSE(initial_instance->IsDefaultSiteInstance());
     EXPECT_EQ(kFooUrl, initial_instance->original_url());
-    EXPECT_EQ(kFooUrl, initial_instance->GetSiteURL());
+    EXPECT_EQ(foo_site_info, initial_instance->GetSiteInfo());
   }
 
   // Simulate a browser-initiated navigation to an app URL, which should swap
   // processes and create a new SiteInstance in a new BrowsingInstance.
-  // This new SiteInstance should have correct |original_url()| and site URL.
-  // The site URL should include both the |original_url()|'s site and the
-  // translated URL's site.
+  // This new SiteInstance should have correct |original_url()| and a SiteInfo
+  // that's based on it.
   NavigationSimulator::NavigateAndCommitFromBrowser(contents(), kOriginalUrl);
   EXPECT_NE(initial_instance.get(), main_test_rfh()->GetSiteInstance());
   EXPECT_FALSE(initial_instance->IsRelatedSiteInstance(
       main_test_rfh()->GetSiteInstance()));
   EXPECT_EQ(kOriginalUrl, main_test_rfh()->GetSiteInstance()->original_url());
-  GURL expected_site_url(kTranslatedUrl.spec() + "#" + kOriginalUrl.spec());
-  EXPECT_EQ(expected_site_url,
-            main_test_rfh()->GetSiteInstance()->GetSiteURL());
+
+  SiteInfo expected_site_info = SiteInstanceImpl::ComputeSiteInfo(
+      main_test_rfh()->GetSiteInstance()->GetIsolationContext(), kOriginalUrl);
+  EXPECT_EQ(expected_site_info,
+            main_test_rfh()->GetSiteInstance()->GetSiteInfo());
+  EXPECT_NE(foo_site_info, main_test_rfh()->GetSiteInstance()->GetSiteInfo());
 
   SetBrowserClientForTesting(regular_client);
 }
@@ -3635,5 +3702,7 @@ INSTANTIATE_TEST_SUITE_P(All,
 INSTANTIATE_TEST_SUITE_P(All,
                          RenderFrameHostManagerAdTaggingSignalTest,
                          testing::ValuesIn(RenderDocumentFeatureLevelValues()));
-
+INSTANTIATE_TEST_SUITE_P(All,
+                         RenderFrameHostManagerTestWithBackForwardCache,
+                         testing::ValuesIn(RenderDocumentFeatureLevelValues()));
 }  // namespace content

@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">不明な名前</translation>
 <translation id="1089439967362294234">パスワードを変更</translation>
 <translation id="1110994991967754504"><ph name="PERMISSION_NAME" /> の権限を選択します</translation>
-<translation id="1152921474424827756"><ph name="URL" />の<ph name="BEGIN_LINK" />キャッシュコピー<ph name="END_LINK" />にアクセスします</translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" />により途中で接続が切断されました。</translation>
 <translation id="1161325031994447685">Wi-Fiに再度接続する</translation>
 <translation id="1175364870820465910">印刷... (&amp;P)</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">このサイトには有害なプログラムが含まれています</translation>
 <translation id="1916770123977586577">更新後の設定をこのサイトに適用するには、このページを再読み込みしてください</translation>
 <translation id="1919345977826869612">広告</translation>
-<translation id="194030505837763158"><ph name="LINK" />に移動します</translation>
 <translation id="1974060860693918893">詳細</translation>
-<translation id="2030481566774242610">もしかして: <ph name="LINK" />？</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />プロキシーとファイアウォールを確認する<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">音声</translation>
 <translation id="2119505898009119320">発行先: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -101,6 +98,7 @@
 <translation id="4235360514405112390">有効</translation>
 <translation id="4250431568374086873">このサイトへの接続は完全には保護されていません</translation>
 <translation id="4265872034478892965">管理者によって許可</translation>
+<translation id="4305666528087210886">ファイルにアクセスできませんでした</translation>
 <translation id="4312866146174492540">ブロック（デフォルト）</translation>
 <translation id="4356973930735388585">このサイトを利用すると、悪意のあるユーザーによって危険なプログラム（写真、パスワード、メッセージ、クレジット カード番号などの情報を盗み取るか削除するプログラム）がお使いのパソコンにインストールされる可能性があります。</translation>
 <translation id="4408413947728134509">Cookie <ph name="NUM_COOKIES" /></translation>
@@ -128,7 +126,6 @@
 <translation id="5287240709317226393">Cookie を表示</translation>
 <translation id="5355557959165512791"><ph name="SITE" />は証明書が失効しているため、現在アクセスできません。通常、ネットワークエラーやネットワークへの攻撃は一時的なものです。しばらくするとページにアクセスできるようになります。</translation>
 <translation id="5386426401304769735">このサイトの証明書チェーンには SHA-1 を使って署名された証明書が含まれています。</translation>
-<translation id="5431657950005405462">ファイルが見つかりませんでした</translation>
 <translation id="5452270690849572955">この<ph name="HOST_NAME" />ページが見つかりません</translation>
 <translation id="5457113250005438886">無効</translation>
 <translation id="5492298309214877701">このサイトは企業、団体、または学校のイントラネット上にありますが、外部のウェブサイトと同じURLが使用されています。
@@ -174,7 +171,6 @@
 <translation id="6897140037006041989">ユーザーエージェント</translation>
 <translation id="7053983685419859001">ブロック</translation>
 <translation id="7079718277001814089">このサイトには悪意あるソフトウェアが含まれています</translation>
-<translation id="7090678807593890770"><ph name="LINK" /> を Google で検索してください</translation>
 <translation id="7108819624672055576">拡張機能によって許可</translation>
 <translation id="7111012039238467737">（有効）</translation>
 <translation id="7113310725918019676"><ph name="DOMAIN" />からの<ph name="BLOCKED_TYPE" />を許可</translation>
@@ -198,7 +194,6 @@
 <translation id="7716424297397655342">このサイトをキャッシュから読み込むことができません</translation>
 <translation id="7758069387465995638">ファイアウォールまたはウイルス対策ソフトウェアによって接続がブロックされた可能性があります。</translation>
 <translation id="7800304661137206267">この接続は <ph name="CIPHER" /> で暗号化されており、メッセージ認証には <ph name="MAC" />、鍵交換メカニズムには <ph name="KX" /> が使用されています。</translation>
-<translation id="7802523362929240268">正規のサイトです</translation>
 <translation id="7834399512844817676"><ph name="SITE" />では通常、暗号化して情報を保護しています。今回、Vivaldiから<ph name="SITE" />への接続試行時に、このウェブサイトからいつもとは異なる誤った認証情報が返されました。悪意のあるユーザーが<ph name="SITE" />になりすまそうとしているか、Wi-Fiログイン画面で接続が中断された可能性があります。データのやり取りが行われる前にVivaldiによって接続が停止されたため、情報は引き続き保護されています。</translation>
 <translation id="7878562273885520351">パスワードが不正利用される可能性があります</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
@@ -230,6 +225,7 @@
 <translation id="9011424611726486705">サイトの設定を開きます</translation>
 <translation id="9025348182339809926">（無効）</translation>
 <translation id="9039213469156557790">加えて、このページには安全でない他のリソースが含まれています。このリソースは受信中に他のユーザーから見られる可能性があります。また、悪意のあるユーザーによって改変されページの動作が変わる可能性もあります。</translation>
+<translation id="9062620674789239642">移動、編集または削除された可能性があります。</translation>
 <translation id="9069693763241529744">拡張機能によってブロック</translation>
 <translation id="9169664750068251925">このサイトでは常にブロック</translation>
 <translation id="9180553614777056266">広告ブロッカー</translation>

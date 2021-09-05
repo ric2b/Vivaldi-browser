@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Sąrašo elementas</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Perbraukite dviem pirštais dešinėn</translation>
+<translation id="1016393160682012902">Paspauskite QWERTY klavišą, atnaujinamą Brailio rašto klavišą arba liečiamąjį gestą, kad sužinotumėte, kaip tai veikia. Paspauskite „Control“ ir w arba „Escape“, kad išeitumėte.</translation>
 <translation id="1022586497894531524">Ar „ChromeVox“ ekrano skaitymo balsu funkciją naudojate pirmą kartą? Šioje trumpoje mokymo programoje pateikiama pagrindinė informacija, kaip pradėti naudoti „ChromeVox“.</translation>
 <translation id="1025074108959230262">Fiksuojamasis režimas neleidžiamas</translation>
 <translation id="1031961866430398710">tada</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Vidinė nuoroda</translation>
 <translation id="4909019435900810068">Perkelti atgal per vieną žodį</translation>
 <translation id="4911349081560453449">Nėra ankstesnio žymimojo laukelio</translation>
-<translation id="4915087353619183190">Paleidžiamas mokomasis režimas. Paspauskite QWERTY klavišą, atnaujinamą Brailio rašto klavišą arba liečiamąjį gestą, kad sužinotumėte, kaip tai veikia. Paspauskite „Control“ ir w arba „Escape“, kad išeitumėte.</translation>
 <translation id="492295894462528572">Pratarmė</translation>
 <translation id="495046168593986294">Slinkti į viršų</translation>
 <translation id="495170559598752135">Veiksmai</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Žalia</translation>
 <translation id="602001110135236999">Slinkti kairėn</translation>
 <translation id="6034000775414344507">Šviesiai pilka</translation>
+<translation id="6036135911048686884">Palieskite „Naršyti“.</translation>
 <translation id="6037602951055904232">Stumti pirmyn</translation>
 <translation id="6044160928851315051">Patamsinti ekraną</translation>
 <translation id="6082768461603900813">Pagrindinės naršymo funkcijos</translation>
@@ -716,7 +717,7 @@
 <translation id="6696967141280706829">Įvadas</translation>
 <translation id="6697092096875747123">Ankstesnis išskleidžiamasis sąrašas</translation>
 <translation id="6702609185760332517">{COUNT,plural, =1{šauktukas}one{# šauktukas}few{# šauktukai}many{# šauktuko}other{# šauktukų}}</translation>
-<translation id="6710213216561001401">Ankstesnis</translation>
+<translation id="6710213216561001401">Ankstesnė</translation>
 <translation id="6714813999819678458">Ankstesnė 2 lygio antraštė</translation>
 <translation id="6730312624811567147">Naudokite paieškos klavišą ir rodyklę į kairę arba į dešinę, norėdami atlikti klavišo „Home“ ar „End“ funkcijas; „Search Control“ ir rodyklę į kairę arba į dešinę, norėdami atlikti klavišo „Control Home“ ar „End“ funkcijas; paieškos klavišą ir rodyklę į viršų arba į apačią, norėdami atlikti klavišo „Page Up“ ar „Page Down“ funkcijas</translation>
 <translation id="6736510033526053669">skirtukas sukurtas</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{grotelių ženklas}one{# grotelių ženklas}few{# grotelių ženklai}many{# pound signs}other{# grotelių ženklas}}</translation>
 <translation id="8378855320830505539">Regionas</translation>
 <translation id="8382679411218029383">Automatinis eilutės ir sąrašo užbaigimas</translation>
+<translation id="8394908167088220973">Leisti / pristabdyti mediją</translation>
 <translation id="8428213095426709021">Nustatymai</translation>
 <translation id="8428603554127842284"><ph name="DEPTH" /> lygis</translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">išeiti iš struktūrinio turinio, pvz., lentelių</translation>
 <translation id="8779057862865475116">Nėra ankstesnės nuorodos</translation>
 <translation id="8796411681063377102">Kita 3 lygio antraštė</translation>
+<translation id="8823311177246872527"><ph name="CURRENTPAGE" /> psl. iš <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8882002077197914455">Eilutės antraštė</translation>

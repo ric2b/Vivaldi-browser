@@ -37,6 +37,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/browser/extension_file_task_runner.h"
+#include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
@@ -536,7 +537,11 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
   }
 
 #if defined(OS_CHROMEOS) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  if (!base::FeatureList::IsEnabled(chromeos::features::kHelpAppV2)) {
+  // TODO(b/159863346): Delete this entirely around M88 when it has has a chance
+  // to be cleaned up.
+  if (extensions::ExtensionPrefs::Get(profile_)
+          ->ShouldInstallObsoleteComponentExtension(
+              extension_misc::kGeniusAppId)) {
     // Since this is a v2 Chrome app it has a background page.
     AddWithNameAndDescription(
         IDR_GENIUS_APP_MANIFEST,
@@ -693,23 +698,25 @@ void ComponentLoader::AddWithNameAndDescriptionFromDir(
 }
 
 void ComponentLoader::AddChromeOsSpeechSynthesisExtensions() {
-  if (Exists(extension_misc::kGoogleSpeechSynthesisExtensionId) ||
-      Exists(extension_misc::kEspeakSpeechSynthesisExtensionId))
-    return;
+  if (!Exists(extension_misc::kGoogleSpeechSynthesisExtensionId)) {
+    AddComponentFromDir(
+        base::FilePath(extension_misc::kGoogleSpeechSynthesisExtensionPath),
+        extension_misc::kGoogleSpeechSynthesisExtensionId,
+        base::BindRepeating(
+            &ComponentLoader::FinishLoadSpeechSynthesisExtension,
+            weak_factory_.GetWeakPtr(),
+            extension_misc::kGoogleSpeechSynthesisExtensionId));
+  }
 
-  AddComponentFromDir(
-      base::FilePath(extension_misc::kGoogleSpeechSynthesisExtensionPath),
-      extension_misc::kGoogleSpeechSynthesisExtensionId,
-      base::BindRepeating(&ComponentLoader::FinishLoadSpeechSynthesisExtension,
-                          weak_factory_.GetWeakPtr(),
-                          extension_misc::kGoogleSpeechSynthesisExtensionId));
-
-  AddComponentFromDir(
-      base::FilePath(extension_misc::kEspeakSpeechSynthesisExtensionPath),
-      extension_misc::kEspeakSpeechSynthesisExtensionId,
-      base::BindRepeating(&ComponentLoader::FinishLoadSpeechSynthesisExtension,
-                          weak_factory_.GetWeakPtr(),
-                          extension_misc::kEspeakSpeechSynthesisExtensionId));
+  if (!Exists(extension_misc::kEspeakSpeechSynthesisExtensionId)) {
+    AddComponentFromDir(
+        base::FilePath(extension_misc::kEspeakSpeechSynthesisExtensionPath),
+        extension_misc::kEspeakSpeechSynthesisExtensionId,
+        base::BindRepeating(
+            &ComponentLoader::FinishLoadSpeechSynthesisExtension,
+            weak_factory_.GetWeakPtr(),
+            extension_misc::kEspeakSpeechSynthesisExtensionId));
+  }
 }
 
 void ComponentLoader::FinishAddComponentFromDir(

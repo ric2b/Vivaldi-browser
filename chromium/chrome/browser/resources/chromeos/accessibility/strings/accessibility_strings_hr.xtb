@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Stavka popisa</translation>
 <translation id="1013742170491673792">prtrž</translation>
 <translation id="1014370462248694370">Prelazak dvama prstima udesno</translation>
+<translation id="1016393160682012902">Pritisnite tipku qwerty tipkovnice, tipku brajevog retka s mogućnošću osvježavanja ili pokret dodira da biste saznali njihove funkcije. Pritisnite tipku Control i "w" ili Esc za zatvaranje.</translation>
 <translation id="1022586497894531524">Prvi put upotrebljavate govorne povratne informacije ChromeVox? Ovaj će vam brzi vodič pokazati osnovne upute za početak upotrebe ChromeVoxa.</translation>
 <translation id="1025074108959230262">Ljepljiv način onemogućen</translation>
 <translation id="1031961866430398710">pa</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Interna veza</translation>
 <translation id="4909019435900810068">Premjesti jednu riječ unatrag</translation>
 <translation id="4911349081560453449">Nema prethodnog potvrdnog okvira</translation>
-<translation id="4915087353619183190">Pokretanje načina vodiča. Pritisnite tipku qwerty tipkovnice, tipku brajevog retka s mogućnošću osvježavanja ili pokret dodira da biste saznali njezinu funkciju. Pritisnite tipku Control i "w" ili Esc za zatvaranje.</translation>
 <translation id="492295894462528572">Predgovor</translation>
 <translation id="495046168593986294">Pomakni prema gore</translation>
 <translation id="495170559598752135">Radnje</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Zelena</translation>
 <translation id="602001110135236999">Pomicanje ulijevo</translation>
 <translation id="6034000775414344507">Svijetlosiva</translation>
+<translation id="6036135911048686884">Istražite dodirom</translation>
 <translation id="6037602951055904232">Pomiči se prema naprijed</translation>
 <translation id="6044160928851315051">Zatamni zaslon</translation>
 <translation id="6082768461603900813">Osnovno kretanje</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{znak funte}one{# znak funte}few{# znaka funte}other{# znakova funte}}</translation>
 <translation id="8378855320830505539">Regija</translation>
 <translation id="8382679411218029383">Automatsko dovršavanje retka i popisa</translation>
+<translation id="8394908167088220973">Reproduciraj/pauziraj Medije</translation>
 <translation id="8428213095426709021">Postavke</translation>
 <translation id="8428603554127842284">razina <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">trizb</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">napuštanje strukturiranog sadržaja, na primjer, tablica</translation>
 <translation id="8779057862865475116">Nema prethodne veze</translation>
 <translation id="8796411681063377102">Sljedeći naslov razine 3</translation>
+<translation id="8823311177246872527">Str. <ph name="CURRENTPAGE" /> od <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">natp</translation>
 <translation id="8851136666856101339">glav</translation>
 <translation id="8882002077197914455">Zaglavlje retka</translation>

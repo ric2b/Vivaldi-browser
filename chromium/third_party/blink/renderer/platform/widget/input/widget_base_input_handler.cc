@@ -25,10 +25,7 @@
 #include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
-#include "third_party/blink/public/web/web_document.h"
-#include "third_party/blink/public/web/web_frame_widget.h"
-#include "third_party/blink/public/web/web_local_frame.h"
-#include "third_party/blink/public/web/web_node.h"
+#include "third_party/blink/renderer/platform/widget/input/ime_event_guard.h"
 #include "third_party/blink/renderer/platform/widget/widget_base.h"
 #include "third_party/blink/renderer/platform/widget/widget_base_client.h"
 #include "ui/latency/latency_info.h"
@@ -204,57 +201,62 @@ class WidgetBaseInputHandler::HandlingState {
  public:
   HandlingState(base::WeakPtr<WidgetBaseInputHandler> input_handler_param,
                 bool is_touch_start_or_move)
-      : touch_start_or_move(is_touch_start_or_move),
-        input_handler(std::move(input_handler_param)) {
-    previous_was_handling_input = input_handler->handling_input_event_;
-    previous_state = input_handler->handling_input_state_;
-    input_handler->handling_input_event_ = true;
-    input_handler->handling_input_state_ = this;
+      : touch_start_or_move_(is_touch_start_or_move),
+        input_handler_(std::move(input_handler_param)) {
+    previous_was_handling_input_ = input_handler_->handling_input_event_;
+    previous_state_ = input_handler_->handling_input_state_;
+    input_handler_->handling_input_event_ = true;
+    input_handler_->handling_input_state_ = this;
   }
 
   ~HandlingState() {
     // Unwinding the HandlingState on the stack might result in an
     // input_handler_ that got destroyed. i.e. via a nested event loop.
-    if (!input_handler)
+    if (!input_handler_)
       return;
-    input_handler->handling_input_event_ = previous_was_handling_input;
-    DCHECK_EQ(input_handler->handling_input_state_, this);
-    input_handler->handling_input_state_ = previous_state;
-
-#if defined(OS_ANDROID)
-    if (show_virtual_keyboard)
-      input_handler->ShowVirtualKeyboard();
-    else
-      input_handler->UpdateTextInputState();
-#endif
+    input_handler_->handling_input_event_ = previous_was_handling_input_;
+    DCHECK_EQ(input_handler_->handling_input_state_, this);
+    input_handler_->handling_input_state_ = previous_state_;
   }
 
+  std::unique_ptr<InputHandlerProxy::DidOverscrollParams>& event_overscroll() {
+    return event_overscroll_;
+  }
+  void set_event_overscroll(
+      std::unique_ptr<InputHandlerProxy::DidOverscrollParams> params) {
+    event_overscroll_ = std::move(params);
+  }
+
+  base::Optional<WebTouchAction>& touch_action() { return touch_action_; }
+
+  std::vector<WidgetBaseInputHandler::InjectScrollGestureParams>&
+  injected_scroll_params() {
+    return injected_scroll_params_;
+  }
+
+  bool touch_start_or_move() { return touch_start_or_move_; }
+
+ private:
   // Used to intercept overscroll notifications while an event is being
   // handled. If the event causes overscroll, the overscroll metadata can be
   // bundled in the event ack, saving an IPC.  Note that we must continue
   // supporting overscroll IPC notifications due to fling animation updates.
-  std::unique_ptr<InputHandlerProxy::DidOverscrollParams> event_overscroll;
+  std::unique_ptr<InputHandlerProxy::DidOverscrollParams> event_overscroll_;
 
-  base::Optional<WebTouchAction> touch_action;
+  base::Optional<WebTouchAction> touch_action_;
 
   // Used to hold a sequence of parameters corresponding to scroll gesture
   // events that should be injected once the current input event is done
   // being processed.
   std::vector<WidgetBaseInputHandler::InjectScrollGestureParams>
-      injected_scroll_params;
+      injected_scroll_params_;
 
   // Whether the event we are handling is a touch start or move.
-  bool touch_start_or_move;
+  bool touch_start_or_move_;
 
-#if defined(OS_ANDROID)
-  // Whether to show the virtual keyboard or not at the end of processing.
-  bool show_virtual_keyboard = false;
-#endif
-
- private:
-  HandlingState* previous_state;
-  bool previous_was_handling_input;
-  base::WeakPtr<WidgetBaseInputHandler> input_handler;
+  HandlingState* previous_state_;
+  bool previous_was_handling_input_;
+  base::WeakPtr<WidgetBaseInputHandler> input_handler_;
 };
 
 WidgetBaseInputHandler::WidgetBaseInputHandler(WidgetBase* widget)
@@ -304,6 +306,10 @@ void WidgetBaseInputHandler::HandleInputEvent(
       weak_ptr_factory_.GetWeakPtr();
   HandlingState handling_state(weak_self, IsTouchStartOrMove(input_event));
 
+#if defined(OS_ANDROID)
+  ImeEventGuard guard(widget_->GetWeakPtr());
+#endif
+
   base::TimeTicks start_time;
   if (base::TimeTicks::IsHighResolution())
     start_time = base::TimeTicks::Now();
@@ -331,8 +337,7 @@ void WidgetBaseInputHandler::HandleInputEvent(
   swap_latency_info.AddLatencyNumber(
       ui::LatencyComponentType::INPUT_EVENT_LATENCY_RENDERER_MAIN_COMPONENT);
   cc::LatencyInfoSwapPromiseMonitor swap_promise_monitor(
-      &swap_latency_info, widget_->LayerTreeHost()->GetSwapPromiseManager(),
-      nullptr);
+      &swap_latency_info, widget_->LayerTreeHost()->GetSwapPromiseManager());
   auto scoped_event_metrics_monitor =
       widget_->LayerTreeHost()->GetScopedEventMetricsMonitor(
           cc::EventMetrics::Create(input_event.GetTypeAsUiEventType(),
@@ -416,8 +421,8 @@ void WidgetBaseInputHandler::HandleInputEvent(
     if (!weak_self) {
       if (callback) {
         std::move(callback).Run(GetAckResult(processed), swap_latency_info,
-                                std::move(handling_state.event_overscroll),
-                                handling_state.touch_action);
+                                std::move(handling_state.event_overscroll()),
+                                std::move(handling_state.touch_action()));
       }
       return;
     }
@@ -443,9 +448,9 @@ void WidgetBaseInputHandler::HandleInputEvent(
   // scroll gestures back into blink, e.g., a mousedown on a scrollbar. We
   // do this here so that we can attribute latency information from the mouse as
   // a scroll interaction, instead of just classifying as mouse input.
-  if (handling_state.injected_scroll_params.size()) {
+  if (handling_state.injected_scroll_params().size()) {
     HandleInjectedScrollGestures(
-        std::move(handling_state.injected_scroll_params), input_event,
+        std::move(handling_state.injected_scroll_params()), input_event,
         coalesced_event.latency_info());
   }
 
@@ -459,12 +464,12 @@ void WidgetBaseInputHandler::HandleInputEvent(
     if (gesture_event.SourceDevice() == WebGestureDevice::kTouchpad ||
         gesture_event.SourceDevice() == WebGestureDevice::kTouchscreen) {
       gfx::Vector2dF latest_overscroll_delta =
-          handling_state.event_overscroll
-              ? handling_state.event_overscroll->latest_overscroll_delta
+          handling_state.event_overscroll()
+              ? handling_state.event_overscroll()->latest_overscroll_delta
               : gfx::Vector2dF();
       cc::OverscrollBehavior overscroll_behavior =
-          handling_state.event_overscroll
-              ? handling_state.event_overscroll->overscroll_behavior
+          handling_state.event_overscroll()
+              ? handling_state.event_overscroll()->overscroll_behavior
               : cc::OverscrollBehavior();
       widget_->client()->ObserveGestureEventAndResult(
           gesture_event, latest_overscroll_delta, overscroll_behavior,
@@ -474,10 +479,10 @@ void WidgetBaseInputHandler::HandleInputEvent(
 
   if (callback) {
     std::move(callback).Run(GetAckResult(processed), swap_latency_info,
-                            std::move(handling_state.event_overscroll),
-                            handling_state.touch_action);
+                            std::move(handling_state.event_overscroll()),
+                            std::move(handling_state.touch_action()));
   } else {
-    DCHECK(!handling_state.event_overscroll)
+    DCHECK(!handling_state.event_overscroll())
         << "Unexpected overscroll for un-acked event";
   }
 
@@ -486,7 +491,7 @@ void WidgetBaseInputHandler::HandleInputEvent(
   if ((processed != WebInputEventResult::kNotHandled &&
        input_event.GetType() == WebInputEvent::Type::kTouchEnd) ||
       show_virtual_keyboard_for_mouse) {
-    ShowVirtualKeyboard();
+    widget_->ShowVirtualKeyboard();
   }
 
   if (!prevent_default &&
@@ -506,7 +511,7 @@ void WidgetBaseInputHandler::HandleInputEvent(
 
   // Ensure all injected scrolls were handled or queue up - any remaining
   // injected scrolls at this point would not be processed.
-  DCHECK(handling_state.injected_scroll_params.empty());
+  DCHECK(handling_state.injected_scroll_params().empty());
 }
 
 bool WidgetBaseInputHandler::DidOverscrollFromBlink(
@@ -529,7 +534,7 @@ bool WidgetBaseInputHandler::DidOverscrollFromBlink(
   params->current_fling_velocity = velocity;
   params->causal_event_viewport_point = position;
   params->overscroll_behavior = behavior;
-  handling_input_state_->event_overscroll = std::move(params);
+  handling_input_state_->set_event_overscroll(std::move(params));
   return false;
 }
 
@@ -554,7 +559,7 @@ void WidgetBaseInputHandler::InjectGestureScrollEvent(
   if (handling_input_state_) {
     InjectScrollGestureParams params{device, delta, granularity,
                                      scrollable_area_element_id, injected_type};
-    handling_input_state_->injected_scroll_params.push_back(params);
+    handling_input_state_->injected_scroll_params().push_back(params);
   } else {
     base::TimeTicks now = base::TimeTicks::Now();
     std::unique_ptr<WebGestureEvent> gesture_event =
@@ -568,7 +573,7 @@ void WidgetBaseInputHandler::InjectGestureScrollEvent(
     std::unique_ptr<WebCoalescedInputEvent> web_scoped_gesture_event =
         std::make_unique<WebCoalescedInputEvent>(std::move(gesture_event),
                                                  ui::LatencyInfo());
-    widget_->client()->QueueSyntheticEvent(std::move(web_scoped_gesture_event));
+    widget_->QueueSyntheticEvent(std::move(web_scoped_gesture_event));
   }
 }
 
@@ -640,7 +645,7 @@ void WidgetBaseInputHandler::HandleInjectedScrollGestures(
     {
       cc::LatencyInfoSwapPromiseMonitor swap_promise_monitor(
           &scrollbar_latency_info,
-          widget_->LayerTreeHost()->GetSwapPromiseManager(), nullptr);
+          widget_->LayerTreeHost()->GetSwapPromiseManager());
       auto scoped_event_metrics_monitor =
           widget_->LayerTreeHost()->GetScopedEventMetricsMonitor(
               cc::EventMetrics::Create(gesture_event->GetTypeAsUiEventType(),
@@ -664,28 +669,10 @@ bool WidgetBaseInputHandler::ProcessTouchAction(WebTouchAction touch_action) {
     return false;
   // Ignore setTouchAction calls that result from synthetic touch events (eg.
   // when blink is emulating touch with mouse).
-  if (!handling_input_state_->touch_start_or_move)
+  if (!handling_input_state_->touch_start_or_move())
     return false;
-  handling_input_state_->touch_action = touch_action;
+  handling_input_state_->touch_action() = touch_action;
   return true;
-}
-
-void WidgetBaseInputHandler::ShowVirtualKeyboard() {
-#if defined(OS_ANDROID)
-  if (handling_input_state_) {
-    handling_input_state_->show_virtual_keyboard = true;
-    return;
-  }
-#endif
-  widget_->ShowVirtualKeyboard();
-}
-
-void WidgetBaseInputHandler::UpdateTextInputState() {
-#if defined(OS_ANDROID)
-  if (handling_input_state_)
-    return;
-#endif
-  widget_->UpdateTextInputState();
 }
 
 }  // namespace blink

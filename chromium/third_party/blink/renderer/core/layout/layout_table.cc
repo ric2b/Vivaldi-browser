@@ -60,7 +60,6 @@ LayoutTable::LayoutTable(Element* element)
       needs_adjust_collapsed_border_joints_(false),
       needs_invalidate_collapsed_borders_for_all_cells_(false),
       collapsed_outer_borders_valid_(false),
-      should_paint_all_collapsed_borders_(false),
       is_any_column_ever_collapsed_(false),
       has_col_elements_(false),
       needs_section_recalc_(false),
@@ -389,9 +388,6 @@ void LayoutTable::UpdateLogicalWidth() {
         std::min(available_content_logical_width, max_width).Floor()));
   }
 
-  if (HasOverrideLogicalWidth())
-    SetLogicalWidth(std::max(LogicalWidth(), OverrideLogicalWidth()));
-
   // Ensure we aren't bigger than our max-width style.
   const Length& style_max_logical_width = StyleRef().LogicalMaxWidth();
   if ((style_max_logical_width.IsSpecified() &&
@@ -437,6 +433,8 @@ void LayoutTable::UpdateLogicalWidth() {
   // FIXME: When we convert to sub-pixel layout for tables we can remove the int
   // conversion. http://crbug.com/241198
   DCHECK_GE(LogicalWidth().Floor(), preferred_logical_widths.min_size.Floor());
+  if (HasOverrideLogicalWidth())
+    SetLogicalWidth(OverrideLogicalWidth());
 }
 
 // This method takes a ComputedStyle's logical width, min-width, or max-width
@@ -976,9 +974,7 @@ void LayoutTable::ComputeVisualOverflow(bool) {
   LayoutRect previous_visual_overflow_rect = VisualOverflowRect();
   ClearVisualOverflow();
   AddVisualOverflowFromChildren();
-
   AddVisualEffectOverflow();
-  AddVisualOverflowFromTheme();
 
   if (VisualOverflowRect() != previous_visual_overflow_rect) {
     InvalidateIntersectionObserverCachedRects();
@@ -1677,13 +1673,11 @@ void LayoutTable::EnsureIsReadyForPaintInvalidation() {
   collapsed_borders_valid_ = true;
   has_collapsed_borders_ = false;
   needs_adjust_collapsed_border_joints_ = false;
-  should_paint_all_collapsed_borders_ = false;
   if (!ShouldCollapseBorders())
     return;
 
   CollapsedBorderValue first_border;
   for (auto* section = TopSection(); section; section = SectionBelow(section)) {
-    bool section_may_be_composited = section->IsPaintInvalidationContainer();
     for (auto* row = section->FirstRow(); row; row = row->NextRow()) {
       for (auto* cell = row->FirstCell(); cell; cell = cell->NextCell()) {
         DCHECK_EQ(cell->Table(), this);
@@ -1708,18 +1702,6 @@ void LayoutTable::EnsureIsReadyForPaintInvalidation() {
             break;
           }
         }
-      }
-
-      // Collapsed borders should always be painted on the table's backing.
-      // If any row is not on the same composited layer as the table, the table
-      // should paint all collapsed borders.
-      if (has_collapsed_borders_ &&
-          (section_may_be_composited || row->IsPaintInvalidationContainer())) {
-        // Pass the row's paint invalidation flag to the table in case that the
-        // flag was set for collapsed borders.
-        if (row->ShouldDoFullPaintInvalidation())
-          SetShouldDoFullPaintInvalidation(PaintInvalidationReason::kStyle);
-        should_paint_all_collapsed_borders_ = true;
       }
     }
   }

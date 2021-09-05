@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">منتخب کریں</translation>
 <translation id="1859234291848436338">تحریر کا ڈائریکشن</translation>
 <translation id="1860796786778352021">اطلاع بند</translation>
+<translation id="186476001994626254">ویب اسمارٹ پیسٹ مواد</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" /> %</translation>
 <translation id="1901303067676059328">&amp;سبھی کو منتخب کریں</translation>
+<translation id="19085484004813472">یہ نئی خصوصیت ہے</translation>
 <translation id="2006524834898217237">یہ یقینی بنائیں کہ آپ کا آلہ انٹرنیٹ سے منسلک ہے۔</translation>
 <translation id="208586643495776849">براہ کرم دوبارہ کوشش کریں</translation>
 <translation id="2090963878406559571">‏<ph name="ORIGIN" /> سے اپنے Android فون پر نمبر بھیجنے کے لیے، ترتیبات میں دونوں آلات کے لیے <ph name="TROUBLESHOOT_LINK" />۔</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">ترتیبات کا نظم کریں</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{1 گھنٹے میں}other{# گھنٹے میں}}</translation>
 <translation id="2583543531130364912">اپنی ٹچ اسکرین کو کیلیبریٹ کریں</translation>
+<translation id="2586657967955657006">کلپ بورڈ</translation>
 <translation id="2666092431469916601">سرفہرست</translation>
 <translation id="2701330563083355633"><ph name="DEVICE_NAME" /> سے اشتراک کردہ</translation>
 <translation id="271033894570825754">نیا</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />، <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">فولڈر کھولیں</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{1 سال پہلے}other{# سال پہلے}}</translation>
+<translation id="2878511608894704031">سبھی کو حذف کریں</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{1 دن میں}other{# دنوں میں}}</translation>
 <translation id="2931838996092594335">کلک کریں</translation>
 <translation id="2981684127883932071">تجاویز پیش کی جا رہی ہیں</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">بولنا شروع کریں</translation>
 <translation id="430191667033048642"><ph name="MOVED_APP_NAME" /> کو فولڈر<ph name="FOLDER_NAME" /> میں منتقل کر دیا گیا۔</translation>
 <translation id="4316910396681052118">سبھی ایپس</translation>
+<translation id="4491109536499578614">تصویر</translation>
 <translation id="4588090240171750605">دائیں سکرول کریں</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />، ستارہ کی درجہ بندی <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />، ایپ کی تجویز</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{1 دن اور }other{# دن اور }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{1 سال میں}other{# سال میں}}</translation>
+<translation id="588258955323874662">پوری اسکرین</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 سیکنڈ باقی}other{# سیکنڈ باقی}}</translation>
 <translation id="5941711191222866238">چھوٹا کریں</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 گھنٹہ}other{# گھنٹے}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">‏Google اسسٹنٹ</translation>
 <translation id="6430678249303439055">اس ایپ سے تمام اطلاعات کو مسدود کریں</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{1 سیکنڈ پہلے}other{# سیکنڈ پہلے}}</translation>
+<translation id="6503257047630241175">‏RTF مواد</translation>
 <translation id="6539092367496845964">کچھ غلط ہو گیا۔ بعد میں دوبارہ کوشش کریں۔</translation>
 <translation id="654149438358937226">تمام اطلاعات مسدود کریں</translation>
 <translation id="6567071839949112727">اینسیسٹر پر کلک کریں</translation>

@@ -171,12 +171,9 @@ class FrameData {
   base::TimeDelta GetTotalCpuUsage() const;
 
   // Records that the sticky user activation bit has been set on the frame.
-  // Cannot be unset.  Also records the page foreground duration at that time.
-  void SetReceivedUserActivation(base::TimeDelta foreground_duration);
-
-  // Get the unactivated duration for this frame.
-  base::TimeDelta pre_activation_foreground_duration() const {
-    return pre_activation_foreground_duration_;
+  // Cannot be unset.
+  void set_received_user_activation() {
+    user_activation_status_ = UserActivationStatus::kReceivedActivation;
   }
 
   // Updates the max frame depth of this frames tree given the newly seen child
@@ -216,6 +213,10 @@ class FrameData {
     return first_eligible_to_paint_;
   }
 
+  base::Optional<base::TimeDelta> earliest_first_contentful_paint() const {
+    return earliest_first_contentful_paint_;
+  }
+
   size_t bytes() const { return bytes_; }
 
   size_t network_bytes() const { return network_bytes_; }
@@ -238,20 +239,12 @@ class FrameData {
 
   gfx::Size frame_size() const { return frame_size_; }
 
+  bool is_display_none() const { return is_display_none_; }
+
   MediaStatus media_status() const { return media_status_; }
 
   void set_media_status(MediaStatus media_status) {
     media_status_ = media_status;
-  }
-
-  void set_timing(page_load_metrics::mojom::PageLoadTimingPtr timing) {
-    timing_ = std::move(timing);
-  }
-
-  base::Optional<base::TimeDelta> FirstContentfulPaint() const {
-    if (!timing_ || timing_->paint_timing.is_null())
-      return base::nullopt;
-    return timing_->paint_timing->first_contentful_paint;
   }
 
   void set_creative_origin_status(OriginStatus creative_origin_status) {
@@ -259,6 +252,10 @@ class FrameData {
   }
 
   void SetFirstEligibleToPaint(base::Optional<base::TimeDelta> time_stamp);
+
+  // Returns whether a new FCP is set.
+  bool SetEarliestFirstContentfulPaint(
+      base::Optional<base::TimeDelta> time_stamp);
 
   HeavyAdStatus heavy_ad_status() const { return heavy_ad_status_; }
 
@@ -290,9 +287,6 @@ class FrameData {
   // tracking information for.
   const FrameTreeNodeId root_frame_tree_node_id_;
 
-  // The most recently updated timing received for this frame.
-  page_load_metrics::mojom::PageLoadTimingPtr timing_;
-
   // Number of resources loaded by the frame (both complete and incomplete).
   int num_resources_ = 0;
 
@@ -309,9 +303,6 @@ class FrameData {
   base::TimeDelta cpu_by_activation_period_
       [static_cast<size_t>(UserActivationStatus::kMaxValue) + 1] = {
           base::TimeDelta(), base::TimeDelta()};
-
-  // Duration of time the page spent in the foreground before activation.
-  base::TimeDelta pre_activation_foreground_duration_;
 
   // The cpu time spent in the current window.
   base::TimeDelta cpu_total_for_current_window_;
@@ -356,6 +347,10 @@ class FrameData {
   // render-throttled and there hasn't been a first paint. Note that this
   // timestamp and the implied throttling status are best-effort.
   base::Optional<base::TimeDelta> first_eligible_to_paint_;
+
+  // The smallest FCP seen for any any frame in this ad frame tree, if a
+  // frame has painted.
+  base::Optional<base::TimeDelta> earliest_first_contentful_paint_;
 
   // Indicates whether or not this frame met the criteria for the heavy ad
   // intervention.

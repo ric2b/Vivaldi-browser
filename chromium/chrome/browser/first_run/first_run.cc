@@ -45,8 +45,8 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/installer/util/master_preferences.h"
-#include "chrome/installer/util/master_preferences_constants.h"
+#include "chrome/installer/util/initial_preferences.h"
+#include "chrome/installer/util/initial_preferences_constants.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
@@ -94,12 +94,12 @@ class ImportEndedObserver : public importer::ImporterProgressObserver {
   void ImportItemEnded(importer::ImportItem item) override {}
   void ImportEnded() override {
     ended_ = true;
-    if (!callback_for_import_end_.is_null())
-      callback_for_import_end_.Run();
+    if (callback_for_import_end_)
+      std::move(callback_for_import_end_).Run();
   }
 
-  void set_callback_for_import_end(const base::Closure& callback) {
-    callback_for_import_end_ = callback;
+  void set_callback_for_import_end(base::OnceClosure callback) {
+    callback_for_import_end_ = std::move(callback);
   }
 
   bool ended() const {
@@ -110,7 +110,7 @@ class ImportEndedObserver : public importer::ImporterProgressObserver {
   // Set if the import has ended.
   bool ended_;
 
-  base::Closure callback_for_import_end_;
+  base::OnceClosure callback_for_import_end_;
 
   DISALLOW_COPY_AND_ASSIGN(ImportEndedObserver);
 };
@@ -139,7 +139,6 @@ void ImportFromSourceProfile(const importer::SourceProfile& source_profile,
     base::RunLoop loop;
     observer.set_callback_for_import_end(loop.QuitClosure());
     loop.Run();
-    observer.set_callback_for_import_end(base::Closure());
   }
 }
 
@@ -190,7 +189,7 @@ void ConvertStringVectorToGURLVector(
   std::transform(src.begin(), src.end(), ret->begin(), &UrlFromString);
 }
 
-base::FilePath& GetMasterPrefsPathForTesting() {
+base::FilePath& GetInitialPrefsPathForTesting() {
   static base::NoDestructor<base::FilePath> s;
   return *s;
 }
@@ -233,8 +232,8 @@ base::Time ReadFirstRunSentinelCreationTime() {
 namespace first_run {
 namespace internal {
 
-void SetupMasterPrefsFromInstallPrefs(
-    const installer::MasterPreferences& install_prefs,
+void SetupInitialPrefsFromInstallPrefs(
+    const installer::InitialPreferences& install_prefs,
     MasterPrefs* out_prefs) {
   ConvertStringVectorToGURLVector(
       install_prefs.GetFirstRunTabs(), &out_prefs->new_tabs);
@@ -271,7 +270,7 @@ bool CreateSentinel() {
 
 // -- Platform-specific functions --
 
-#if !defined(OS_LINUX) && !defined(OS_BSD)
+#if !defined(OS_LINUX) && !defined(OS_CHROMEOS) && !defined(OS_BSD)
 bool IsOrganicFirstRun() {
   std::string brand;
   google_brand::GetBrand(&brand);
@@ -315,7 +314,7 @@ bool IsChromeFirstRun() {
   return g_first_run == internal::FIRST_RUN_TRUE;
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 bool IsFirstRunSuppressed(const base::CommandLine& command_line) {
   return command_line.HasSwitch(switches::kNoFirstRun);
 }
@@ -373,57 +372,58 @@ bool ShouldDoPersonalDataManagerFirstRun() {
   return retval;
 }
 
-void SetMasterPrefsPathForTesting(const base::FilePath& master_prefs) {
-  GetMasterPrefsPathForTesting() = master_prefs;
+void SetInitialPrefsPathForTesting(const base::FilePath& initial_prefs) {
+  GetInitialPrefsPathForTesting() = initial_prefs;
 }
 
-std::unique_ptr<installer::MasterPreferences> LoadMasterPrefs() {
-  base::FilePath master_prefs_path;
-  if (!GetMasterPrefsPathForTesting().empty())
-    master_prefs_path = GetMasterPrefsPathForTesting();
+std::unique_ptr<installer::InitialPreferences> LoadInitialPrefs() {
+  base::FilePath initial_prefs_path;
+  if (!GetInitialPrefsPathForTesting().empty())
+    initial_prefs_path = GetInitialPrefsPathForTesting();
   else
-    master_prefs_path = base::FilePath(first_run::internal::MasterPrefsPath());
+    initial_prefs_path =
+        base::FilePath(first_run::internal::InitialPrefsPath());
 
-  if (master_prefs_path.empty())
+  if (initial_prefs_path.empty())
     return nullptr;
-  auto install_prefs =
-      std::make_unique<installer::MasterPreferences>(master_prefs_path);
-  if (!install_prefs->read_from_file())
+  auto initial_prefs =
+      std::make_unique<installer::InitialPreferences>(initial_prefs_path);
+  if (!initial_prefs->read_from_file())
     return nullptr;
-  return install_prefs;
+  return initial_prefs;
 }
 
-ProcessMasterPreferencesResult ProcessMasterPreferences(
+ProcessInitialPreferencesResult ProcessInitialPreferences(
     const base::FilePath& user_data_dir,
-    std::unique_ptr<installer::MasterPreferences> install_prefs,
+    std::unique_ptr<installer::InitialPreferences> initial_prefs,
     MasterPrefs* out_prefs) {
   DCHECK(!user_data_dir.empty());
 
-  if (install_prefs.get()) {
-    if (!internal::ShowPostInstallEULAIfNeeded(install_prefs.get()))
+  if (initial_prefs.get()) {
+    if (!internal::ShowPostInstallEULAIfNeeded(initial_prefs.get()))
       return EULA_EXIT_NOW;
 
-    std::unique_ptr<base::DictionaryValue> master_dictionary =
-        install_prefs->master_dictionary().CreateDeepCopy();
+    std::unique_ptr<base::DictionaryValue> initial_dictionary =
+        initial_prefs->master_dictionary().CreateDeepCopy();
     // The distribution dictionary (and any prefs below it) are never registered
-    // for use in Chrome's PrefService. Strip them from the master dictionary
+    // for use in Chrome's PrefService. Strip them from the initial dictionary
     // before mapping it to prefs.
-    master_dictionary->RemoveWithoutPathExpansion(
+    initial_dictionary->RemoveWithoutPathExpansion(
         installer::master_preferences::kDistroDict, nullptr);
 
     if (!chrome_prefs::InitializePrefsFromMasterPrefs(
             profiles::GetDefaultProfileDir(user_data_dir),
-            std::move(master_dictionary))) {
-      DLOG(ERROR) << "Failed to initialize from master_preferences.";
+            std::move(initial_dictionary))) {
+      DLOG(ERROR) << "Failed to initialize from initial preferences.";
     }
 
     base::DictionaryValue* extensions = 0;
-    if (install_prefs->GetExtensionsBlock(&extensions)) {
-      DVLOG(1) << "Extensions block found in master preferences";
+    if (initial_prefs->GetExtensionsBlock(&extensions)) {
+      DVLOG(1) << "Extensions block found in initial preferences";
       extensions::ExtensionUpdater::UpdateImmediatelyForFirstRun();
     }
 
-    internal::SetupMasterPrefsFromInstallPrefs(*install_prefs, out_prefs);
+    internal::SetupInitialPrefsFromInstallPrefs(*initial_prefs, out_prefs);
   }
 
   return FIRST_RUN_PROCEED;
@@ -437,8 +437,8 @@ void AutoImport(
   // Use |profile|'s PrefService to determine what to import. It will reflect in
   // order:
   //  1) Policies.
-  //  2) Master preferences (used to initialize user prefs in
-  //     ProcessMasterPreferences()).
+  //  2) Initial preferences (used to initialize user prefs in
+  //     ProcessInitialPreferences()).
   //  3) Recommended policies.
   //  4) Registered default.
   PrefService* prefs = profile->GetPrefs();

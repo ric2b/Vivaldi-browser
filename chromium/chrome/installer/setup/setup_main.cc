@@ -79,14 +79,14 @@
 #include "chrome/installer/util/google_update_settings.h"
 #include "chrome/installer/util/helper.h"
 #include "chrome/installer/util/html_dialog.h"
+#include "chrome/installer/util/initial_preferences.h"
+#include "chrome/installer/util/initial_preferences_constants.h"
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/installation_state.h"
 #include "chrome/installer/util/installer_util_strings.h"
 #include "chrome/installer/util/l10n_string_util.h"
 #include "chrome/installer/util/logging_installer.h"
 #include "chrome/installer/util/lzma_util.h"
-#include "chrome/installer/util/master_preferences.h"
-#include "chrome/installer/util/master_preferences_constants.h"
 #include "chrome/installer/util/self_cleaning_temp_dir.h"
 #include "chrome/installer/util/shell_util.h"
 #include "chrome/installer/util/util_constants.h"
@@ -476,6 +476,7 @@ installer::InstallStatus RenameChromeExecutables(
   // TODO(grt): Clean this up; https://crbug.com/577816.
   HKEY reg_root = installer_state->root_key();
   const base::string16 clients_key = install_static::GetClientsKeyPath();
+
   install_list->AddDeleteRegValueWorkItem(reg_root, clients_key,
                                           KEY_WOW64_32KEY,
                                           google_update::kRegOldVersionField);
@@ -485,6 +486,22 @@ installer::InstallStatus RenameChromeExecutables(
   install_list->AddDeleteRegValueWorkItem(reg_root, clients_key,
                                           KEY_WOW64_32KEY,
                                           google_update::kRegRenameCmdField);
+
+  // If a channel was specified by policy, update the "channel" registry value
+  // with it so that the browser knows which channel to use, otherwise delete
+  // whatever value that key holds.
+  const auto& install_details = install_static::InstallDetails::Get();
+  if (install_details.channel_origin() ==
+      install_static::ChannelOrigin::kPolicy) {
+    install_list->AddSetRegValueWorkItem(reg_root, clients_key, KEY_WOW64_32KEY,
+                                         google_update::kRegChannelField,
+                                         install_details.channel(), true);
+  } else {
+    install_list->AddDeleteRegValueWorkItem(reg_root, clients_key,
+                                            KEY_WOW64_32KEY,
+                                            google_update::kRegChannelField);
+  }
+
   // old_chrome.exe is still in use in most cases, so ignore failures here.
   install_list->AddDeleteTreeWorkItem(chrome_old_exe, temp_path.path())
       ->set_best_effort(true);
@@ -625,7 +642,7 @@ installer::InstallStatus UninstallProducts(InstallationState& original_state,
   install_status = UninstallProduct(modify_params, remove_all, force, cmd_line);
 
   installer::CleanUpInstallationDirectoryAfterUninstall(
-      original_state, installer_state, setup_exe, &install_status);
+      installer_state.target_path(), setup_exe, &install_status);
 
   // The app and vendor dirs may now be empty. Make a last-ditch attempt to
   // delete them.
@@ -690,7 +707,7 @@ installer::InstallStatus InstallProducts(InstallationState& original_state,
   if (cmd_line.HasSwitch(installer::switches::kInstallerData)) {
     base::FilePath prefs_path(
         cmd_line.GetSwitchValuePath(installer::switches::kInstallerData));
-    if (!base::DeleteFile(prefs_path, false)) {
+    if (!base::DeleteFile(prefs_path)) {
       LOG(ERROR) << "Failed deleting master preferences file "
                  << prefs_path.value()
                  << ", scheduling for deletion after reboot.";

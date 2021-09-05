@@ -17,6 +17,9 @@
 # much always the same as the Ninja target name, since GYP target names are not
 # hierarchical).
 #
+# TODO(crbug.com/816629): Remove the need for this file altogether :). Also,
+# see below.
+#
 # The "label" field specifies the matching GN label for the given ninja
 # target.
 #
@@ -48,7 +51,7 @@
 #  "unknown"
 #  : (the default), which indicates that we don't know what the command line
 #    needs to be (this is a fatal error).
-#
+
 # The optional "executable" field can be used to override the name
 # of the binary to run. If the field is not specified, the binary
 # name will be assumed to be the same as the ninja build target name.
@@ -78,6 +81,10 @@
   "All_syzygy": {
     "label": "//:All_syzygy",
     "type": "additional_compile_target",
+  },
+  "absl_hardening_tests": {
+    "label": "//third_party/abseil-cpp:absl_hardening_tests",
+    "type": "console_test_launcher",
   },
   "accessibility_unittests": {
     "label": "//ui/accessibility:accessibility_unittests",
@@ -152,7 +159,7 @@
       "--test-launcher-jobs=1",
       "--test-launcher-retry-limit=0",
     ],
-    "label": "//chrome/test:angle_perftests",
+    "label": "//third_party/angle/src/tests:angle_perftests",
     "script": "//testing/scripts/run_performance_tests.py",
     "type": "script",
   },
@@ -305,10 +312,6 @@
     "type": "windowed_test_launcher",
     "executable": "browser_tests",
   },
-  "cacheinvalidation_unittests": {
-    "label": "//third_party/cacheinvalidation:cacheinvalidation_unittests",
-    "type": "console_test_launcher",
-  },
   "captured_sites_interactive_tests": {
     "label": "//chrome/test:captured_sites_interactive_tests",
     "type": "windowed_test_launcher",
@@ -413,7 +416,7 @@
   },
   "chrome_elf_unittests": {
     "label": "//chrome/chrome_elf:chrome_elf_unittests",
-    "type": "raw",
+    "type": "console_test_launcher",
   },
   "chrome_java_test_pagecontroller_junit_tests": {
     "label": "//chrome/test/android:chrome_java_test_pagecontroller_junit_tests",
@@ -436,10 +439,6 @@
   "chrome_junit_tests": {
     "label": "//chrome/android:chrome_junit_tests",
     "type": "junit_test",
-  },
-  "chrome_modern_public_smoke_test": {
-    "label": "//chrome/android:chrome_modern_public_smoke_test",
-    "type": "console_test_launcher",
   },
   "chrome_modern_public_bundle_smoke_test": {
     "label": "//chrome/android:chrome_modern_public_bundle_smoke_test",
@@ -507,6 +506,10 @@
     "label": "//chrome/test/chromedriver:chromedriver_py_tests",
     "script": "//testing/xvfb.py",
     "type": "script",
+  },
+  "chromedriver_webview_shell_apk": {
+    "label": "//chrome/test/chromedriver/test/webview_shell:chromedriver_webview_shell_apk",
+    "type": "additional_compile_target",
   },
   "webdriver_wpt_tests": {
     "label": "//:webdriver_wpt_tests",
@@ -684,7 +687,7 @@
   },
   "cronet_unittests_ios": {
     "label": "//components/cronet/ios:cronet_unittests_ios",
-    "type": "raw",
+    "type": "console_test_launcher",
   },
   "cros_browser_sanity_test": {
     "args": [
@@ -709,7 +712,7 @@
       "--test-launcher-jobs=1",
       "--test-launcher-retry-limit=0",
     ],
-    "label": "//chrome/test:dawn_perf_tests",
+    "label": "//third_party/dawn/src/tests:dawn_perf_tests",
     "script": "//testing/scripts/run_performance_tests.py",
     "type": "script",
   },
@@ -719,7 +722,7 @@
   },
   "delayloads_unittests": {
     "label": "//chrome/test:delayloads_unittests",
-    "type": "raw",
+    "type": "console_test_launcher",
   },
   "device_junit_tests": {
     "label": "//device:device_junit_tests",
@@ -752,6 +755,10 @@
     "label": "//testing:empty_main",
     "type": "additional_compile_target",
   },
+  "errorprone_plugin_tests": {
+    "label": "//tools/android/errorprone_plugin:errorprone_plugin_tests",
+    "type": "additional_compile_target",
+  },
   "events_unittests": {
     "label": "//ui/events:events_unittests",
     "type": "windowed_test_launcher",
@@ -763,6 +770,14 @@
   "extensions_browsertests": {
     "label": "//extensions:extensions_browsertests",
     "type": "windowed_test_launcher",
+  },
+  "extension_docserver_python_unittests": {
+    "args": [
+      "../../chrome/common/extensions/docs/server2/run_all_unittests.py",
+    ],
+    "label": "//chrome/common/extensions/docs/server2:extension_docserver_python_unittests",
+    "script": "//testing/scripts/run_isolated_script_test.py",
+    "type": "script",
   },
   "extensions_unittests": {
     "label": "//extensions:extensions_unittests",
@@ -1247,9 +1262,9 @@
       "--script",
       "../../chrome/android/monochrome/scripts/monochrome_apk_checker.py",
       "--chrome-apk",
-      "apks/ChromeModernPublic.apk",
+      "apks/ChromePublic.apk",
       "--chrome-pathmap",
-      "apks/ChromeModernPublic.apk.pathmap.txt",
+      "apks/ChromePublic.apk.pathmap.txt",
       "--system-webview-apk",
       "apks/SystemWebView.apk",
       "--system-webview-pathmap",
@@ -1338,6 +1353,14 @@
   },
   "paint_preview_junit_tests": {
     "label": "//components/paint_preview/player/android:paint_preview_junit_tests",
+    "type": "junit_test",
+  },
+  "password_check_junit_tests": {
+    "label": "//chrome/browser/password_check/android:password_check_junit_tests",
+    "type": "junit_test",
+  },
+  "password_manager_junit_tests": {
+    "label": "//chrome/browser/password_manager/android:password_manager_junit_tests",
     "type": "junit_test",
   },
   "pdf_fuzzers": {
@@ -1433,7 +1456,7 @@
   },
   "profile_provider_unittest": {
     "label": "//chrome/browser/metrics/perf:profile_provider_unittest",
-    "type": "raw",
+    "type": "console_test_launcher",
   },
   "remoting/client:client": {
     "label": "//remoting/client:client",
@@ -1502,8 +1525,8 @@
     "label": "//sandbox/win:sbox_validation_tests",
     "type": "console_test_launcher",
   },
-  "service_junit_tests": {
-    "label": "//services:service_junit_tests",
+  "services_junit_tests": {
+    "label": "//services:services_junit_tests",
     "type": "junit_test",
   },
   "service_manager_unittests": {
@@ -1537,6 +1560,14 @@
   "sql_unittests": {
     "label": "//sql:sql_unittests",
     "type": "console_test_launcher",
+  },
+  "standalone_angle_unittests": {
+    "args": [
+      "standalone_angle_unittests",
+    ],
+    "label": "//third_party/angle/src/tests:standalone_angle_unittests",
+    "type": "script",
+    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
   },
   "storage_unittests": {
     "label": "//storage:storage_unittests",
@@ -1775,10 +1806,6 @@
   "vr_pixeltests": {
     "label": "//chrome/browser/vr:vr_pixeltests",
     "type": "console_test_launcher",
-  },
-  "vr_testapp": {
-    "label": "//chrome/browser/vr/testapp:vr_testapp",
-    "type": "additional_compile_target",
   },
   "vrcore_fps_test": {
     "args": [

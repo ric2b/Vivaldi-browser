@@ -40,7 +40,6 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/previews_state.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -73,6 +72,7 @@
 #include "net/test/url_request/url_request_failed_job.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
+#include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
 #include "url/gurl.h"
 #include "url/url_util.h"
@@ -334,11 +334,19 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, BrowserInitiatedNavigations) {
     EXPECT_FALSE(observer.last_initiator_routing_id());
   }
 
-  // The RenderFrameHost should not have changed.
-  EXPECT_EQ(initial_rfh, static_cast<WebContentsImpl*>(shell()->web_contents())
-                             ->GetFrameTree()
-                             ->root()
-                             ->current_frame_host());
+  RenderFrameHost* second_rfh =
+      static_cast<WebContentsImpl*>(shell()->web_contents())
+          ->GetFrameTree()
+          ->root()
+          ->current_frame_host();
+
+  if (CanSameSiteMainFrameNavigationsChangeRenderFrameHosts()) {
+    // If same-site ProactivelySwapBrowsingInstance or main-frame RenderDocument
+    // is enabled, the navigation will result in a new RFH.
+    EXPECT_NE(initial_rfh, second_rfh);
+  } else {
+    EXPECT_EQ(initial_rfh, second_rfh);
+  }
 
   // Perform a cross-site navigation.
   {
@@ -352,10 +360,10 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, BrowserInitiatedNavigations) {
   }
 
   // The RenderFrameHost should have changed.
-  EXPECT_NE(initial_rfh, static_cast<WebContentsImpl*>(shell()->web_contents())
-                             ->GetFrameTree()
-                             ->root()
-                             ->current_frame_host());
+  EXPECT_NE(second_rfh, static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root()
+                            ->current_frame_host());
 }
 
 // Ensure that renderer initiated same-site navigations work.
@@ -378,6 +386,9 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
           ->root()
           ->current_frame_host();
 
+  auto initial_rfh_routing_id = GlobalFrameRoutingId(
+      initial_rfh->GetProcess()->GetID(), initial_rfh->GetRoutingID());
+
   // Simulate clicking on a same-site link.
   {
     TestNavigationObserver observer(shell()->web_contents());
@@ -394,16 +405,34 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
     RenderFrameHost* main_rfh = shell()->web_contents()->GetMainFrame();
     EXPECT_EQ(main_rfh->GetLastCommittedOrigin(),
               observer.last_initiator_origin());
-    EXPECT_EQ(GlobalFrameRoutingId(main_rfh->GetProcess()->GetID(),
-                                   main_rfh->GetRoutingID()),
-              observer.last_initiator_routing_id());
+
+    if (CanSameSiteMainFrameNavigationsChangeRenderFrameHosts()) {
+      // If same-site ProactivelySwapBrowsingInstance or main-frame
+      // RenderDocument is enabled, the navigation will result in a new RFH, so
+      // we need to compare with |initial_rfh|.
+      EXPECT_NE(main_rfh, initial_rfh);
+      EXPECT_EQ(initial_rfh_routing_id, observer.last_initiator_routing_id());
+    } else {
+      EXPECT_EQ(main_rfh, initial_rfh);
+      EXPECT_EQ(GlobalFrameRoutingId(main_rfh->GetProcess()->GetID(),
+                                     main_rfh->GetRoutingID()),
+                observer.last_initiator_routing_id());
+    }
   }
 
-  // The RenderFrameHost should not have changed.
-  EXPECT_EQ(initial_rfh, static_cast<WebContentsImpl*>(shell()->web_contents())
-                             ->GetFrameTree()
-                             ->root()
-                             ->current_frame_host());
+  RenderFrameHost* second_rfh =
+      static_cast<WebContentsImpl*>(shell()->web_contents())
+          ->GetFrameTree()
+          ->root()
+          ->current_frame_host();
+
+  if (CanSameSiteMainFrameNavigationsChangeRenderFrameHosts()) {
+    // If same-site ProactivelySwapBrowsingInstance or main-frame RenderDocument
+    // is enabled, the navigation will result in a new RFH.
+    EXPECT_NE(initial_rfh, second_rfh);
+  } else {
+    EXPECT_EQ(initial_rfh, second_rfh);
+  }
 }
 
 // Ensure that renderer initiated cross-site navigations work.
@@ -450,10 +479,10 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
     EXPECT_EQ(initiator_routing_id, observer.last_initiator_routing_id());
   }
 
-  // The RenderFrameHost should not have changed unless site-per-process is
-  // enabled.
+  // The RenderFrameHost should not have changed unless site-per-process or
+  // proactive BrowsingInstance swap is enabled.
   if (AreAllSitesIsolatedForTesting() ||
-      IsProactivelySwapBrowsingInstanceEnabled()) {
+      CanCrossSiteNavigationsProactivelySwapBrowsingInstances()) {
     EXPECT_NE(initial_rfh,
               static_cast<WebContentsImpl*>(shell()->web_contents())
                   ->GetFrameTree()
@@ -1547,14 +1576,14 @@ class PreviewsStateContentBrowserClient : public ContentBrowserClient {
   explicit PreviewsStateContentBrowserClient(const GURL& main_frame_url)
       : main_frame_url_(main_frame_url),
         main_frame_url_seen_(false),
-        previews_state_(PREVIEWS_OFF),
+        previews_state_(blink::PreviewsTypes::PREVIEWS_OFF),
         determine_allowed_previews_called_(false),
         determine_committed_previews_called_(false) {}
 
   ~PreviewsStateContentBrowserClient() override {}
 
-  content::PreviewsState DetermineAllowedPreviews(
-      content::PreviewsState initial_state,
+  blink::PreviewsState DetermineAllowedPreviews(
+      blink::PreviewsState initial_state,
       content::NavigationHandle* navigation_handle,
       const GURL& current_navigation_url) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -1566,8 +1595,8 @@ class PreviewsStateContentBrowserClient : public ContentBrowserClient {
     return previews_state_;
   }
 
-  content::PreviewsState DetermineCommittedPreviews(
-      content::PreviewsState initial_state,
+  blink::PreviewsState DetermineCommittedPreviews(
+      blink::PreviewsState initial_state,
       content::NavigationHandle* navigation_handle,
       const net::HttpResponseHeaders* response_headers) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -1581,7 +1610,7 @@ class PreviewsStateContentBrowserClient : public ContentBrowserClient {
     content::SetBrowserClientForTesting(this);
   }
 
-  void Reset(PreviewsState previews_state) {
+  void Reset(blink::PreviewsState previews_state) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     main_frame_url_seen_ = false;
     previews_state_ = previews_state;
@@ -1599,7 +1628,7 @@ class PreviewsStateContentBrowserClient : public ContentBrowserClient {
   const GURL main_frame_url_;
 
   bool main_frame_url_seen_;
-  PreviewsState previews_state_;
+  blink::PreviewsState previews_state_;
   bool determine_allowed_previews_called_;
   bool determine_committed_previews_called_;
 
@@ -1624,7 +1653,9 @@ class PreviewsStateBrowserTest : public ContentBrowserTest {
     client_->SetClient();
   }
 
-  void Reset(PreviewsState previews_state) { client_->Reset(previews_state); }
+  void Reset(blink::PreviewsState previews_state) {
+    client_->Reset(previews_state);
+  }
 
   void CheckResourcesRequested() { client_->CheckResourcesRequested(); }
 
@@ -2165,7 +2196,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, BlockedSrcDocBrowserInitiated) {
                                              GURL(url));
     shell()->LoadURLForFrame(GURL(url), "child-name-0",
                              ui::PAGE_TRANSITION_FORWARD_BACK);
-    WaitForLoadStop(shell()->web_contents());
+    EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
     EXPECT_TRUE(handle_observer.has_committed());
     EXPECT_FALSE(handle_observer.is_error());
     EXPECT_EQ(net::OK, handle_observer.net_error_code());
@@ -2214,7 +2245,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, BlockedSrcDocRendererInitiated) {
     // browsers like Firefox aren't allowing this.
     EXPECT_TRUE(ExecJs(subframe, JsReplace("location.href = $1", url)));
     start_observer.Wait();
-    WaitForLoadStop(shell()->web_contents());
+    EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
     EXPECT_TRUE(handle_observer.has_committed());
     EXPECT_FALSE(handle_observer.is_error());
@@ -3125,6 +3156,7 @@ class NavigationUrlRewriteBrowserTest : public NavigationBaseBrowserTest {
 
     void RegisterNonNetworkNavigationURLLoaderFactories(
         int frame_tree_node_id,
+        base::UkmSourceId ukm_source_id,
         NonNetworkURLLoaderFactoryMap* factories) override {
       auto url_loader_factory = std::make_unique<FakeNetworkURLLoaderFactory>(
           "HTTP/1.1 200 OK\nContent-Type: text/html\n\n", "This is a test",
@@ -3335,7 +3367,7 @@ IN_PROC_BROWSER_TEST_F(DocumentPolicyBrowserTest,
 }
 
 // Test that scroll restoration works as expected with
-// Document-Policy: no-force-load-at-top
+// Document-Policy: force-load-at-top=?0
 IN_PROC_BROWSER_TEST_F(DocumentPolicyBrowserTest,
                        ScrollRestorationEnabledByDocumentPolicy) {
   net::test_server::ControllableHttpResponse response(embedded_test_server(),
@@ -3346,7 +3378,7 @@ IN_PROC_BROWSER_TEST_F(DocumentPolicyBrowserTest,
   RenderFrameSubmissionObserver frame_observer(main_contents);
   TestNavigationManager navigation_manager(main_contents, url);
 
-  // Load the document with document policy no-force-load-at-top
+  // Load the document with document policy force-load-at-top set to false.
   shell()->LoadURL(url);
   EXPECT_TRUE(navigation_manager.WaitForRequestStart());
   navigation_manager.ResumeNavigation();
@@ -3354,7 +3386,7 @@ IN_PROC_BROWSER_TEST_F(DocumentPolicyBrowserTest,
   response.Send(
       "HTTP/1.1 200 OK\r\n"
       "Content-Type: text/html; charset=utf-8\r\n"
-      "Document-Policy: no-force-load-at-top\r\n"
+      "Document-Policy: force-load-at-top=?0\r\n"
       "\r\n"
       "<p style='position: absolute; top: 10000px;'>Some text</p>");
   response.Done();
@@ -3430,7 +3462,7 @@ IN_PROC_BROWSER_TEST_F(DocumentPolicyBrowserTest,
 }
 
 // Test that element fragment anchor scrolling works as expected with
-// Document-Policy: no-force-load-at-top
+// Document-Policy: force-load-at-top=?0
 IN_PROC_BROWSER_TEST_F(DocumentPolicyBrowserTest,
                        FragmentAnchorEnabledByDocumentPolicy) {
   net::test_server::ControllableHttpResponse response(embedded_test_server(),
@@ -3454,7 +3486,7 @@ IN_PROC_BROWSER_TEST_F(DocumentPolicyBrowserTest,
   response.Send(
       "HTTP/1.1 200 OK\r\n"
       "Content-Type: text/html; charset=utf-8\r\n"
-      "Document-Policy: no-force-load-at-top\r\n"
+      "Document-Policy: force-load-at-top=?0\r\n"
       "\r\n"
       "<p id='text' style='position: absolute; top: 10000px;'>Some text</p>");
   response.Done();

@@ -6,7 +6,7 @@
     "description": "Thumbnail capture support api.",
     "types": [
       {
-        "id": "CaptureUrlParams",
+        "id": "CaptureBookmarkParams",
         "type": "object",
         "description": "A structure containing parameters for the captureUrl call.",
         "properties": {
@@ -17,22 +17,6 @@
           "url": {
             "type": "string",
             "description": "url to load and generate thumbnail for."
-          },
-          "width": {
-            "type": "integer",
-            "description": "Width of viewport hosting the loaded page."
-          },
-          "height": {
-            "type": "integer",
-            "description": "Height of viewport hosting the loaded page."
-          },
-          "scaledWidth": {
-            "type": "integer",
-            "description": "Scaled width of the thumbnail."
-          },
-          "scaledHeight": {
-            "type": "integer",
-            "description": "Scaled height of the thumbnail."
           }
         }
       },
@@ -206,7 +190,7 @@
           {
             "name": "tabId",
             "type": "integer",
-            "description": "The tab id to capture."
+            "description": "The tab id to capture. 0 to capture the current active tab."
           },
           {
             "name": "params",
@@ -231,13 +215,13 @@
         ]
       },
       {
-        "name": "captureUrl",
+        "name": "captureBookmark",
         "type": "function",
         "description": "Loads a url then captures the contents of it and attached it to a bookmark.",
         "parameters": [
           {
             "name": "params",
-            "$ref": "CaptureUrlParams"
+            "$ref": "CaptureBookmarkParams"
           },
           {
             "type": "function",

@@ -24,6 +24,7 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/origin_util.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/url_util.h"
@@ -179,6 +180,12 @@ bool DoesManifestContainRequiredIcon(const blink::Manifest& manifest,
   return false;
 }
 
+bool ShouldRejectDisplayMode(blink::mojom::DisplayMode display_mode) {
+  return !(display_mode == blink::mojom::DisplayMode::kStandalone ||
+           display_mode == blink::mojom::DisplayMode::kFullscreen ||
+           display_mode == blink::mojom::DisplayMode::kMinimalUi);
+}
+
 // Returns true if |params| specifies a full PWA check.
 bool IsParamsForPwaCheck(const InstallableParams& params) {
   return params.valid_manifest && params.has_worker &&
@@ -293,6 +300,7 @@ bool InstallableManager::IsOriginConsideredSecure(const GURL& url) {
 void InstallableManager::GetData(const InstallableParams& params,
                                  InstallableCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK(callback);
 
   if (IsParamsForPwaCheck(params))
     has_pwa_check_ = true;
@@ -310,6 +318,7 @@ void InstallableManager::GetData(const InstallableParams& params,
 void InstallableManager::GetAllErrors(
     base::OnceCallback<void(std::vector<content::InstallabilityError>
                                 installability_errors)> callback) {
+  DCHECK(callback);
   InstallableParams params;
   params.check_eligibility = true;
   params.valid_manifest = true;
@@ -324,6 +333,7 @@ void InstallableManager::GetAllErrors(
 
 void InstallableManager::GetPrimaryIcon(
     base::OnceCallback<void(const SkBitmap*)> callback) {
+  DCHECK(callback);
   InstallableParams params;
   params.valid_primary_icon = true;
   GetData(params,
@@ -459,13 +469,17 @@ bool InstallableManager::IsComplete(const InstallableParams& params) const {
          (!params.valid_splash_icon || IsIconFetchComplete(IconUsage::kSplash));
 }
 
-void InstallableManager::Reset() {
+void InstallableManager::Reset(base::Optional<InstallableStatusCode> error) {
+  DCHECK(!error || error.value() != NO_ERROR_DETECTED);
   // Prevent any outstanding callbacks to or from this object from being called.
   weak_factory_.InvalidateWeakPtrs();
   icons_.clear();
 
   // If we have paused tasks, we are waiting for a service worker.
-  task_queue_.Reset();
+  if (error)
+    task_queue_.ResetWithError(error.value());
+  else
+    task_queue_.Reset();
   has_pwa_check_ = false;
 
   eligibility_ = std::make_unique<EligiblityProperty>();
@@ -649,12 +663,26 @@ bool InstallableManager::IsManifestValidForWebApp(
     is_valid = false;
   }
 
-  if (check_webapp_manifest_display &&
-      manifest.display != blink::mojom::DisplayMode::kStandalone &&
-      manifest.display != blink::mojom::DisplayMode::kFullscreen &&
-      manifest.display != blink::mojom::DisplayMode::kMinimalUi) {
-    valid_manifest_->errors.push_back(MANIFEST_DISPLAY_NOT_SUPPORTED);
-    is_valid = false;
+  if (check_webapp_manifest_display) {
+    blink::mojom::DisplayMode display_mode_to_evaluate = manifest.display;
+    InstallableStatusCode manifest_error = MANIFEST_DISPLAY_NOT_SUPPORTED;
+
+    if (base::FeatureList::IsEnabled(
+            features::kWebAppManifestDisplayOverride)) {
+      // Unsupported values are ignored when we parse the manifest, and
+      // consequently aren't in the manifest.display_override array.
+      // If this array is not empty, the first value will "win", so validate
+      // this value is installable.
+      if (!manifest.display_override.empty()) {
+        display_mode_to_evaluate = manifest.display_override[0];
+        manifest_error = MANIFEST_DISPLAY_OVERRIDE_NOT_SUPPORTED;
+      }
+    }
+
+    if (ShouldRejectDisplayMode(display_mode_to_evaluate)) {
+      valid_manifest_->errors.push_back(manifest_error);
+      is_valid = false;
+    }
   }
 
   if (!DoesManifestContainRequiredIcon(manifest, prefer_maskable_icon)) {
@@ -828,7 +856,7 @@ void InstallableManager::DidFinishNavigation(
     content::NavigationHandle* handle) {
   if (handle->IsInMainFrame() && handle->HasCommitted() &&
       !handle->IsSameDocument()) {
-    Reset();
+    Reset(USER_NAVIGATED);
   }
 }
 
@@ -836,7 +864,7 @@ void InstallableManager::DidUpdateWebManifestURL(
     content::RenderFrameHost* rfh,
     const base::Optional<GURL>& manifest_url) {
   // A change in the manifest URL invalidates our entire internal state.
-  Reset();
+  Reset(MANIFEST_URL_CHANGED);
 }
 
 void InstallableManager::WebContentsDestroyed() {

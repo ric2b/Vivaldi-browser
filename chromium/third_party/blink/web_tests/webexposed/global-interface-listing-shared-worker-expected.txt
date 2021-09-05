@@ -15,6 +15,22 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter onabort
 [Worker]     method constructor
 [Worker]     setter onabort
+[Worker] interface AudioDecoder
+[Worker]     attribute @@toStringTag
+[Worker]     getter decodeQueueSize
+[Worker]     getter state
+[Worker]     method close
+[Worker]     method configure
+[Worker]     method constructor
+[Worker]     method decode
+[Worker]     method flush
+[Worker]     method reset
+[Worker] interface AudioFrame
+[Worker]     attribute @@toStringTag
+[Worker]     getter buffer
+[Worker]     getter timestamp
+[Worker]     method close
+[Worker]     method constructor
 [Worker] interface BackgroundFetchManager
 [Worker]     attribute @@toStringTag
 [Worker]     method constructor
@@ -359,6 +375,12 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter readable
 [Worker]     getter writable
 [Worker]     method constructor
+[Worker] interface EncodedAudioChunk
+[Worker]     attribute @@toStringTag
+[Worker]     getter data
+[Worker]     getter timestamp
+[Worker]     getter type
+[Worker]     method constructor
 [Worker] interface ErrorEvent : Event
 [Worker]     attribute @@toStringTag
 [Worker]     getter colno
@@ -467,14 +489,16 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method readAsDataURL
 [Worker]     method readAsText
 [Worker] interface FileSystemDirectoryHandle : FileSystemHandle
-[Worker]     static method getSystemDirectory
 [Worker]     attribute @@toStringTag
+[Worker]     method @@asyncIterator
 [Worker]     method constructor
-[Worker]     method getDirectory
-[Worker]     method getEntries
-[Worker]     method getFile
+[Worker]     method entries
+[Worker]     method getDirectoryHandle
+[Worker]     method getFileHandle
+[Worker]     method keys
 [Worker]     method removeEntry
 [Worker]     method resolve
+[Worker]     method values
 [Worker] interface FileSystemFileHandle : FileSystemHandle
 [Worker]     attribute @@toStringTag
 [Worker]     method constructor
@@ -482,8 +506,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method getFile
 [Worker] interface FileSystemHandle
 [Worker]     attribute @@toStringTag
-[Worker]     getter isDirectory
-[Worker]     getter isFile
+[Worker]     getter kind
 [Worker]     getter name
 [Worker]     method constructor
 [Worker]     method isSameEntry
@@ -637,6 +660,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method openCursor
 [Worker]     method openKeyCursor
 [Worker]     method put
+[Worker]     method putAllValues
 [Worker]     setter name
 [Worker] interface IDBObservation
 [Worker]     attribute @@toStringTag
@@ -723,10 +747,12 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter complete
 [Worker]     getter frameCount
 [Worker]     getter repetitionCount
+[Worker]     getter tracks
 [Worker]     getter type
 [Worker]     method constructor
 [Worker]     method decode
 [Worker]     method decodeMetadata
+[Worker]     method selectTrack
 [Worker] interface Lock
 [Worker]     attribute @@toStringTag
 [Worker]     getter mode
@@ -824,7 +850,10 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     attribute @@toStringTag
 [Worker]     method close
 [Worker]     method constructor
+[Worker]     method flush
+[Worker]     method getLength
 [Worker]     method read
+[Worker]     method setLength
 [Worker]     method write
 [Worker] interface NativeIOManager
 [Worker]     attribute @@toStringTag
@@ -930,6 +959,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method closePath
 [Worker]     method commit
 [Worker]     method constructor
+[Worker]     method createConicGradient
 [Worker]     method createImageData
 [Worker]     method createLinearGradient
 [Worker]     method createPattern
@@ -1100,6 +1130,13 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method request
 [Worker]     method requestAll
 [Worker]     method revoke
+[Worker] interface Plane
+[Worker]     attribute @@toStringTag
+[Worker]     getter length
+[Worker]     getter rows
+[Worker]     getter stride
+[Worker]     method constructor
+[Worker]     method readInto
 [Worker] interface Profiler
 [Worker]     attribute @@toStringTag
 [Worker]     getter sampleInterval
@@ -1180,6 +1217,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method takeRecords
 [Worker] interface Request
 [Worker]     attribute @@toStringTag
+[Worker]     getter body
 [Worker]     getter bodyUsed
 [Worker]     getter cache
 [Worker]     getter credentials
@@ -1270,11 +1308,14 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     attribute PERSISTENT
 [Worker]     attribute TEMPORARY
 [Worker]     method constructor
-[Worker] interface StorageManager
+[Worker] interface StorageManager : EventTarget
 [Worker]     attribute @@toStringTag
+[Worker]     getter onquotachange
 [Worker]     method constructor
 [Worker]     method estimate
+[Worker]     method getDirectory
 [Worker]     method persisted
+[Worker]     setter onquotachange
 [Worker] interface SubtleCrypto
 [Worker]     attribute @@toStringTag
 [Worker]     method constructor
@@ -1349,11 +1390,12 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter readable
 [Worker]     getter writable
 [Worker]     method constructor
-[Worker] interface TrustedTypePolicyFactory
+[Worker] interface TrustedTypePolicyFactory : EventTarget
 [Worker]     attribute @@toStringTag
 [Worker]     getter defaultPolicy
 [Worker]     getter emptyHTML
 [Worker]     getter emptyScript
+[Worker]     getter onbeforecreatepolicy
 [Worker]     method constructor
 [Worker]     method createPolicy
 [Worker]     method getAttributeType
@@ -1362,6 +1404,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method isHTML
 [Worker]     method isScript
 [Worker]     method isScriptURL
+[Worker]     setter onbeforecreatepolicy
 [Worker] interface URL
 [Worker]     static method createObjectURL
 [Worker]     static method revokeObjectURL
@@ -1412,6 +1455,24 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter hasBeenActive
 [Worker]     getter isActive
 [Worker]     method constructor
+[Worker] interface VideoFrame
+[Worker]     attribute @@toStringTag
+[Worker]     getter codedHeight
+[Worker]     getter codedWidth
+[Worker]     getter cropHeight
+[Worker]     getter cropLeft
+[Worker]     getter cropTop
+[Worker]     getter cropWidth
+[Worker]     getter displayHeight
+[Worker]     getter displayWidth
+[Worker]     getter duration
+[Worker]     getter format
+[Worker]     getter planes
+[Worker]     getter timestamp
+[Worker]     method clone
+[Worker]     method constructor
+[Worker]     method createImageBitmap
+[Worker]     method destroy
 [Worker] interface WebGL2ComputeRenderingContext
 [Worker]     attribute @@toStringTag
 [Worker]     attribute ACTIVE_ATOMIC_COUNTER_BUFFERS
@@ -3639,7 +3700,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method constructor
 [Worker]     method createImageBitmap
 [Worker]     method fetch
-[Worker]     method getOriginPrivateDirectory
 [Worker]     method importScripts
 [Worker]     method queueMicrotask
 [Worker]     method setInterval

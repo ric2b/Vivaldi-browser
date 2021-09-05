@@ -42,53 +42,19 @@ ChromeVoxNextE2ETest = class extends ChromeVoxE2ETest {
     return [];
   }
 
-  /**
-   * Gets the desktop from the automation API and Launches a new tab with
-   * the given document, and runs |callback| when a load complete fires.
-   * Arranges to call |testDone()| after |callback| returns.
-   * NOTE: Callbacks creatd instide |opt_callback| must be wrapped with
-   * |this.newCallback| if passed to asynchonous calls.  Otherwise, the test
-   * will be finished prematurely.
-   * @param {function() : void} doc Snippet wrapped inside of a function.
-   * @param {function(chrome.automation.AutomationNode)} callback
-   *     Called once the document is ready.
-   * @param {{url: (boolean=), isAsync: (boolean=)}} opt_params
-   *           url Optional url to wait for. Defaults to undefined.
-   *           isAsync True if the callback is async.
-   */
-  runWithLoadedTree(doc, callback, opt_params) {
-    opt_params = opt_params || {};
-    callback = this.newCallback(callback, opt_params.isAsync);
-    chrome.automation.getDesktop(function(r) {
-      const url = opt_params.url || TestUtils.createUrlForDoc(doc);
-      const listener = function(evt) {
-        if (evt.target.root.url != url) {
-          return;
-        }
+  /** @override */
+  runWithLoadedTree(doc, callback, opt_params = {}) {
+    if (opt_params.returnPage === undefined) {
+      opt_params.returnPage = true;
+    }
 
-        if (!evt.target.root.docLoaded) {
-          return;
-        }
+    callback = this.newCallback(callback);
+    const wrappedCallback = (node) => {
+      CommandHandler.onCommand('nextObject');
+      callback(node);
+    };
 
-        r.removeEventListener('focus', listener, true);
-        r.removeEventListener('loadComplete', listener, true);
-        CommandHandler.onCommand('nextObject');
-        callback && callback(evt.target);
-        callback = null;
-      };
-      r.addEventListener('focus', listener, true);
-      r.addEventListener('loadComplete', listener, true);
-      const createParams = {active: true, url};
-      chrome.tabs.create(createParams);
-    }.bind(this));
-  }
-
-  listenOnce(node, eventType, callback, capture) {
-    const innerCallback = this.newCallback(function() {
-      node.removeEventListener(eventType, innerCallback, capture);
-      callback.apply(this, arguments);
-    });
-    node.addEventListener(eventType, innerCallback, capture);
+    super.runWithLoadedTree(doc, wrappedCallback, opt_params);
   }
 
   /**

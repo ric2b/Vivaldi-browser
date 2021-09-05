@@ -37,17 +37,15 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Matchers;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.browser.sync.SyncTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ActivityUtils;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
-import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
-import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
-import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.DisableAnimationsTestRule;
@@ -67,7 +65,8 @@ public class SigninFragmentTest {
     public final SyncTestRule mSyncTestRule = new SyncTestRule();
 
     @Rule
-    public final ChromeRenderTestRule mRenderTestRule = new ChromeRenderTestRule();
+    public final ChromeRenderTestRule mRenderTestRule =
+            ChromeRenderTestRule.Builder.withPublicCorpus().build();
 
     private SigninActivity mSigninActivity;
 
@@ -86,7 +85,7 @@ public class SigninFragmentTest {
     public void testSigninFragmentNewAccount() throws IOException {
         mSigninActivity = ActivityUtils.waitForActivity(
                 InstrumentationRegistry.getInstrumentation(), SigninActivity.class, () -> {
-                    SigninActivityLauncher.get().launchActivityForPromoAddAccountFlow(
+                    SigninActivityLauncherImpl.get().launchActivityForPromoAddAccountFlow(
                             mSyncTestRule.getActivity(), SigninAccessPoint.BOOKMARK_MANAGER);
                 });
         mRenderTestRule.render(mSigninActivity.findViewById(R.id.fragment_container),
@@ -97,11 +96,11 @@ public class SigninFragmentTest {
     @LargeTest
     @Feature("RenderTest")
     public void testSigninFragmentNotDefaultAccountWithPrimaryAccount() throws IOException {
-        Account account = mSyncTestRule.setUpTestAccount();
-        SigninTestUtil.addTestAccount("test.second.account@gmail.com");
+        Account account = mSyncTestRule.addTestAccount();
+        mSyncTestRule.addAccount("test.second.account@gmail.com");
         mSigninActivity = ActivityUtils.waitForActivity(
                 InstrumentationRegistry.getInstrumentation(), SigninActivity.class, () -> {
-                    SigninActivityLauncher.get().launchActivityForPromoChooseAccountFlow(
+                    SigninActivityLauncherImpl.get().launchActivityForPromoChooseAccountFlow(
                             mSyncTestRule.getActivity(), SigninAccessPoint.BOOKMARK_MANAGER,
                             account.name);
                 });
@@ -113,12 +112,12 @@ public class SigninFragmentTest {
     @LargeTest
     @Feature("RenderTest")
     public void testSigninFragmentNotDefaultAccountWithSecondaryAccount() throws IOException {
-        mSyncTestRule.setUpTestAccount();
+        mSyncTestRule.addTestAccount();
         String secondAccountName = "test.second.account@gmail.com";
-        SigninTestUtil.addTestAccount(secondAccountName);
+        mSyncTestRule.addAccount(secondAccountName);
         mSigninActivity = ActivityUtils.waitForActivity(
                 InstrumentationRegistry.getInstrumentation(), SigninActivity.class, () -> {
-                    SigninActivityLauncher.get().launchActivityForPromoChooseAccountFlow(
+                    SigninActivityLauncherImpl.get().launchActivityForPromoChooseAccountFlow(
                             mSyncTestRule.getActivity(), SigninAccessPoint.BOOKMARK_MANAGER,
                             secondAccountName);
                 });
@@ -130,10 +129,10 @@ public class SigninFragmentTest {
     @LargeTest
     @Feature("RenderTest")
     public void testSigninFragmentDefaultAccount() throws IOException {
-        Account account = mSyncTestRule.setUpTestAccount();
+        Account account = mSyncTestRule.addTestAccount();
         mSigninActivity = ActivityUtils.waitForActivity(
                 InstrumentationRegistry.getInstrumentation(), SigninActivity.class, () -> {
-                    SigninActivityLauncher.get().launchActivityForPromoDefaultFlow(
+                    SigninActivityLauncherImpl.get().launchActivityForPromoDefaultFlow(
                             mSyncTestRule.getActivity(), SigninAccessPoint.BOOKMARK_MANAGER,
                             account.name);
                 });
@@ -144,29 +143,26 @@ public class SigninFragmentTest {
     @Test
     @LargeTest
     public void testClickingSettingsDoesNotSetFirstSetupComplete() {
-        Account account = mSyncTestRule.setUpTestAccount();
+        Account account = mSyncTestRule.addTestAccount();
         mSigninActivity = ActivityUtils.waitForActivity(
                 InstrumentationRegistry.getInstrumentation(), SigninActivity.class, () -> {
-                    SigninActivityLauncher.get().launchActivityForPromoDefaultFlow(
+                    SigninActivityLauncherImpl.get().launchActivityForPromoDefaultFlow(
                             mSyncTestRule.getActivity(), SigninAccessPoint.SETTINGS, account.name);
                 });
         onView(withText(account.name)).check(matches(isDisplayed()));
         onView(withId(R.id.signin_details_description)).perform(clickOnClickableSpan());
         // Wait for sign in process to finish.
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return IdentityServicesProvider.get()
-                        .getSigninManager()
-                        .getIdentityManager()
-                        .hasPrimaryAccount();
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            return IdentityServicesProvider.get()
+                    .getSigninManager(Profile.getLastUsedRegularProfile())
+                    .getIdentityManager()
+                    .hasPrimaryAccount();
         }, CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
-        // TODO(https://crbug.com/1041815): Usage of ChromeSigninController should be removed later
-        Assert.assertTrue(ChromeSigninController.get().isSignedIn());
         Assert.assertTrue(SyncTestUtil.isSyncRequested());
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> { Assert.assertFalse(ProfileSyncService.get().isFirstSetupComplete()); });
+        // Close the SettingsActivity.
+        onView(withId(R.id.cancel_button)).perform(click());
     }
 
     @Test
@@ -174,7 +170,7 @@ public class SigninFragmentTest {
     public void testSigninFragmentWithDefaultFlow() {
         mSigninActivity = ActivityUtils.waitForActivity(
                 InstrumentationRegistry.getInstrumentation(), SigninActivity.class, () -> {
-                    SigninActivityLauncher.get().launchActivity(
+                    SigninActivityLauncherImpl.get().launchActivity(
                             mSyncTestRule.getActivity(), SigninAccessPoint.SETTINGS);
                 });
         onView(withId(R.id.positive_button)).check(matches(withText(R.string.signin_add_account)));
@@ -184,12 +180,12 @@ public class SigninFragmentTest {
     @Test
     @MediumTest
     public void testSelectNonDefaultAccountInAccountPickerDialog() {
-        Account defaultAccount = mSyncTestRule.setUpTestAccount();
+        Account defaultAccount = mSyncTestRule.addTestAccount();
         String nonDefaultAccountName = "test.account.nondefault@gmail.com";
-        SigninTestUtil.addTestAccount(nonDefaultAccountName);
+        mSyncTestRule.addAccount(nonDefaultAccountName);
         mSigninActivity = ActivityUtils.waitForActivity(
                 InstrumentationRegistry.getInstrumentation(), SigninActivity.class, () -> {
-                    SigninActivityLauncher.get().launchActivityForPromoDefaultFlow(
+                    SigninActivityLauncherImpl.get().launchActivityForPromoDefaultFlow(
                             mSyncTestRule.getActivity(), SigninAccessPoint.BOOKMARK_MANAGER,
                             defaultAccount.name);
                 });

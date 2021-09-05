@@ -46,7 +46,7 @@ void SetupAccessibilityDisplayOptionsNotifier() {
                 gfx::Animation::UpdatePrefersReducedMotion();
                 for (WebContentsImpl* wc :
                      WebContentsImpl::GetAllWebContents()) {
-                  wc->GetRenderViewHost()->OnWebkitPreferencesChanged();
+                  wc->OnWebPreferencesChanged();
                 }
               }];
 }

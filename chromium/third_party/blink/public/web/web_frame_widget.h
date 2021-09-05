@@ -54,6 +54,7 @@ class WebFrameWidget : public WebWidget {
  public:
   // Makes a WebFrameWidget that wraps a pre-existing WebWidget from the
   // RenderView/WebView, for a new local main frame.
+  // Main frames can be nested in cases like Portals or GuestViews.
   BLINK_EXPORT static WebFrameWidget* CreateForMainFrame(
       WebWidgetClient*,
       WebLocalFrame* main_frame,
@@ -63,7 +64,8 @@ class WebFrameWidget : public WebWidget {
           frame_widget,
       CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>
           widget_host,
-      CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase> widget);
+      CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase> widget,
+      bool is_for_nested_main_frame = false);
   // Makes a WebFrameWidget that wraps a WebLocalFrame that is not a main frame,
   // providing a WebWidget to interact with the child local root frame.
   BLINK_EXPORT static WebFrameWidget* CreateForChildLocalRoot(
@@ -99,19 +101,19 @@ class WebFrameWidget : public WebWidget {
       const gfx::PointF& point_in_viewport,
       const gfx::PointF& screen_point,
       WebDragOperationsMask operations_allowed,
-      int modifiers) = 0;
+      uint32_t key_modifiers) = 0;
   virtual void DragTargetDragOver(
       const gfx::PointF& point_in_viewport,
       const gfx::PointF& screen_point,
       WebDragOperationsMask operations_allowed,
-      uint32_t modifiers,
+      uint32_t key_modifiers,
       base::OnceCallback<void(blink::WebDragOperation)> callback) = 0;
   virtual void DragTargetDragLeave(const gfx::PointF& point_in_viewport,
                                    const gfx::PointF& screen_point) = 0;
   virtual void DragTargetDrop(const WebDragData&,
                               const gfx::PointF& point_in_viewport,
                               const gfx::PointF& screen_point,
-                              int modifiers) = 0;
+                              uint32_t key_modifiers) = 0;
 
   // Notifies the WebFrameWidget that a drag has terminated.
   virtual void DragSourceEndedAt(const gfx::PointF& point_in_viewport,
@@ -179,6 +181,30 @@ class WebFrameWidget : public WebWidget {
 
   // Clear any active edit commands that are pending.
   virtual void ClearEditCommands() = 0;
+
+  // If the widget is currently handling a paste.
+  virtual bool IsPasting() = 0;
+
+  // If the widget is currently selecting a range.
+  virtual bool HandlingSelectRange() = 0;
+
+  // If fullscreen has been granted.
+  virtual bool IsFullscreenGranted() = 0;
+
+  // Returns true if a pinch gesture is currently active in main frame.
+  virtual bool PinchGestureActiveInMainFrame() = 0;
+
+  // Returns page scale in main frame..
+  virtual float PageScaleInMainFrame() = 0;
+
+  // Override the zoom level for testing.
+  virtual void SetZoomLevelForTesting(double zoom_level) = 0;
+
+  // Remove the override for zoom level.
+  virtual void ResetZoomLevelForTesting() = 0;
+
+  // Override the device scale factor for testing.
+  virtual void SetDeviceScaleFactorForTesting(float factor) = 0;
 
  private:
   // This private constructor and the class/friend declaration ensures that

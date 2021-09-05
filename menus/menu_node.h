@@ -61,6 +61,9 @@ class Menu_Node : public ui::TreeNode<Menu_Node> {
   void SetAction(std::string action) { action_ = action; }
   const std::string& action() const { return action_; }
 
+  void SetParameter(std::string parameter) { parameter_ = parameter; }
+  const std::string& parameter() const { return parameter_; }
+
   void SetRole(std::string role) { role_ = role; }
   const std::string& role() const { return role_; }
 
@@ -114,6 +117,7 @@ class Menu_Node : public ui::TreeNode<Menu_Node> {
   std::string title_;
   std::string role_;
   std::string action_;
+  std::string parameter_;
   std::string radio_group_;
   std::string container_mode_;
   std::string container_edge_;

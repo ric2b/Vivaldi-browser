@@ -19,6 +19,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "gn/args.h"
 #include "gn/build_settings.h"
 #include "gn/builder.h"
@@ -39,6 +40,60 @@
 #include <iostream>
 
 namespace {
+
+// This is the template of the script used to build the target. It invokes
+// ninja (supporting --ninja-executable parameter), parsing ninja's output
+// using a regular expression looking for relative path to the source root
+// from root_build_dir that are at the start of a path and converting them
+// to absolute paths (use str.replace(rel_root_src, abs_root_src) would be
+// simpler but would fail if rel_root_src is present multiple time in the
+// path).
+const char kBuildScriptTemplate[] = R"(
+import re
+import os
+import subprocess
+import sys
+
+rel_root_src = '%s'
+abs_root_src = os.path.abspath(rel_root_src) + '/'
+
+build_target = '%s'
+ninja_binary = '%s'
+ninja_params = [ '-C', '.' ]
+
+%s
+
+if build_target:
+  ninja_params.append(build_target)
+  print('Compile "' + build_target + '" via ninja')
+else:
+  print('Compile "all" via ninja')
+
+process = subprocess.Popen(
+    [ ninja_binary ] + ninja_params,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    universal_newlines=True,
+    encoding='utf-8',
+    env=environ)
+
+pattern = re.compile('(?<!/)' + re.escape(rel_root_src))
+
+for line in iter(process.stdout.readline, ''):
+  while True:
+    match = pattern.search(line)
+    if not match:
+      break
+    span = match.span()
+    print(line[:span[0]], end='')
+    print(abs_root_src, end='')
+    line = line[span[1]:]
+  print(line, flush=True, end='')
+
+process.wait()
+
+sys.exit(process.returncode)
+)";
 
 enum TargetOsType {
   WRITER_TARGET_OS_IOS,
@@ -84,39 +139,31 @@ std::string GetNinjaExecutable(const std::string& ninja_executable) {
   return ninja_executable.empty() ? "ninja" : ninja_executable;
 }
 
+std::string ComputeScriptEnviron(base::Environment* environment) {
+  std::stringstream buffer;
+  buffer << "environ = {}";
+  for (const auto& variable : kSafeEnvironmentVariables) {
+    buffer << "\nenviron['" << variable.name << "'] = ";
+    if (variable.capture_at_generation) {
+      std::string value;
+      environment->GetVar(variable.name, &value);
+      buffer << "'" << value << "'";
+    } else {
+      buffer << "os.environ.get('" << variable.name << "', '')";
+    }
+  }
+  return buffer.str();
+}
+
 std::string GetBuildScript(const std::string& target_name,
                            const std::string& ninja_executable,
-                           const std::string& ninja_extra_args,
+                           const std::string& root_src_dir,
                            base::Environment* environment) {
-  std::stringstream script;
-  script << "echo note: \"Compile and copy " << target_name << " via ninja\"\n"
-         << "exec ";
-
-  // Launch ninja with a sanitized environment (Xcode sets many environment
-  // variable overridding settings, including the SDK, thus breaking hermetic
-  // build).
-  script << "env -i ";
-  for (const auto& variable : kSafeEnvironmentVariables) {
-    script << variable.name << "=\"";
-
-    std::string value;
-    if (variable.capture_at_generation)
-      environment->GetVar(variable.name, &value);
-
-    if (!value.empty())
-      script << value;
-    else
-      script << "$" << variable.name;
-    script << "\" ";
-  }
-
-  script << GetNinjaExecutable(ninja_executable) << " -C .";
-  if (!ninja_extra_args.empty())
-    script << " " << ninja_extra_args;
-  if (!target_name.empty())
-    script << " " << target_name;
-  script << "\nexit 1\n";
-  return script.str();
+  std::string environ_script = ComputeScriptEnviron(environment);
+  std::string ninja = GetNinjaExecutable(ninja_executable);
+  return base::StringPrintf(kBuildScriptTemplate, root_src_dir.c_str(),
+                            target_name.c_str(), ninja.c_str(),
+                            environ_script.c_str());
 }
 
 bool IsApplicationTarget(const Target* target) {
@@ -663,10 +710,11 @@ bool XcodeProject::AddSourcesFromBuilder(const Builder& builder, Err* err) {
 bool XcodeProject::AddTargetsFromBuilder(const Builder& builder, Err* err) {
   std::unique_ptr<base::Environment> env(base::Environment::Create());
 
-  project_.AddAggregateTarget(
-      "All",
-      GetBuildScript(options_.root_target_name, options_.ninja_executable,
-                     options_.ninja_extra_args, env.get()));
+  const std::string root_src_dir =
+      RebasePath("//", build_settings_->build_dir());
+  project_.AddAggregateTarget("All", GetBuildScript(options_.root_target_name,
+                                                    options_.ninja_executable,
+                                                    root_src_dir, env.get()));
 
   const std::optional<std::vector<const Target*>> targets =
       GetTargetsFromBuilder(builder, err);
@@ -728,6 +776,12 @@ bool XcodeProject::AddTargetsFromBuilder(const Builder& builder, Err* err) {
 bool XcodeProject::AddCXTestSourceFilesForTestModuleTargets(
     const std::map<const Target*, PBXNativeTarget*>& bundle_targets,
     Err* err) {
+  // With the New Build System, the hack of calling clang with --help to get
+  // Xcode to see and parse the file without building them no longer work so
+  // disable it for the moment. See https://crbug.com/1103230 for details.
+  if (options_.build_system == XcodeBuildSystem::kNew)
+    return true;
+
   const SourceDir source_dir("//");
 
   // Needs to search for xctest files under the application targets, and this
@@ -898,14 +952,15 @@ PBXNativeTarget* XcodeProject::AddBinaryTarget(const Target* target,
     output_dir = RebasePath(output_dir, build_settings_->build_dir());
   }
 
+  const std::string root_src_dir =
+      RebasePath("//", build_settings_->build_dir());
   return project_.AddNativeTarget(
       target->label().name(), "compiled.mach-o.executable",
       target->output_name().empty() ? target->label().name()
                                     : target->output_name(),
-      "com.apple.product-type.tool",
-      output_dir,
+      "com.apple.product-type.tool", output_dir,
       GetBuildScript(target->label().name(), options_.ninja_executable,
-                     options_.ninja_extra_args, env));
+                     root_src_dir, env));
 }
 
 PBXNativeTarget* XcodeProject::AddBundleTarget(const Target* target,
@@ -933,12 +988,13 @@ PBXNativeTarget* XcodeProject::AddBundleTarget(const Target* target,
           .GetBundleDir(target->settings())
           .value(),
       build_settings_->build_dir());
+  const std::string root_src_dir =
+      RebasePath("//", build_settings_->build_dir());
   return project_.AddNativeTarget(
       pbxtarget_name, std::string(), target_output_name,
-      target->bundle_data().product_type(),
-      output_dir,
-      GetBuildScript(pbxtarget_name, options_.ninja_executable,
-                     options_.ninja_extra_args, env),
+      target->bundle_data().product_type(), output_dir,
+      GetBuildScript(pbxtarget_name, options_.ninja_executable, root_src_dir,
+                     env),
       xcode_extra_attributes);
 }
 

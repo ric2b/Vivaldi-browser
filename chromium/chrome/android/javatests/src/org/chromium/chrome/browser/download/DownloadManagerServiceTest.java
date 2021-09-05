@@ -17,22 +17,20 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.download.DownloadManagerServiceTest.MockDownloadNotifier.MethodID;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
+import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.components.offline_items_collection.OfflineItem.Progress;
 import org.chromium.components.offline_items_collection.OfflineItemProgressUnit;
 import org.chromium.components.offline_items_collection.PendingState;
-import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.ConnectionType;
@@ -48,12 +46,10 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 /**
  * Test for DownloadManagerService.
  */
-@RunWith(BaseJUnit4ClassRunner.class)
+@RunWith(ChromeJUnit4ClassRunner.class)
 public class DownloadManagerServiceTest {
     @Rule
     public final ChromeBrowserTestRule mBrowserTestRule = new ChromeBrowserTestRule();
-    @Rule
-    public TestRule mProcessor = new Features.InstrumentationProcessor();
     private static final int UPDATE_DELAY_FOR_TEST = 1;
     private static final int DELAY_BETWEEN_CALLS = 10;
     private static final int LONG_UPDATE_DELAY_FOR_TEST = 500;
@@ -100,13 +96,9 @@ public class DownloadManagerServiceTest {
         }
 
         public void waitTillExpectedCallsComplete() {
-            CriteriaHelper.pollInstrumentationThread(
-                    new Criteria("Failed while waiting for all calls to complete.") {
-                        @Override
-                        public boolean isSatisfied() {
-                            return mExpectedCalls.isEmpty();
-                        }
-                    });
+            CriteriaHelper.pollInstrumentationThread(() -> {
+                return mExpectedCalls.isEmpty();
+            }, "Failed while waiting for all calls to complete.");
         }
 
         public MockDownloadNotifier andThen(@MethodID int method, Object param) {
@@ -444,12 +436,7 @@ public class DownloadManagerServiceTest {
         int resumableIdCount = mService.mAutoResumableDownloadIds.size();
         mService.onConnectionTypeChanged(ConnectionType.CONNECTION_WIFI);
         Assert.assertEquals(resumableIdCount - 1, mService.mAutoResumableDownloadIds.size());
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return mService.mResumed;
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> mService.mResumed);
     }
 
     @Test

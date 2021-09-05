@@ -156,7 +156,7 @@
 <translation id="3440761377721825626">Spør om ein nettstad ønskjer å bruka programtillegg for å nå maskina di</translation>
 <translation id="345693547134384690">Opna &amp;bildet i ei ny fane</translation>
 <translation id="3494769164076977169">Spør om ein nettstad prøver å lasta ned filer automatisk etter den første (tilrådd)</translation>
-<translation id="3505030558724226696">Tilbakekall einingstilgangen</translation>
+<translation id="3505030558724226696">Attendekall einingstilgangen</translation>
 <translation id="3511307672085573050">Kopier len&amp;kjeadressa</translation>
 <translation id="3523642406908660543">Spør om ein nettstad ønskjer å bruka programtillegg for å nå maskina di (tilrådd)</translation>
 <translation id="354068948465830244">Denne kan lesa og endra nettsidedata</translation>
@@ -269,7 +269,7 @@
 <translation id="5425042808445046667">Hald fram med nedlastinga</translation>
 <translation id="5427459444770871191">Roter me&amp;d klokka</translation>
 <translation id="5431318178759467895">Farge</translation>
-<translation id="5483785310822538350">Tilbakekall fil- og einingstilgangane</translation>
+<translation id="5483785310822538350">Attendekall fil- og einingstilgangane</translation>
 <translation id="5485102783864353244">Legg til app</translation>
 <translation id="5486561344817861625">Simuler nettlesaromstart</translation>
 <translation id="5487521232677179737">Tøm data</translation>
@@ -345,7 +345,6 @@
 <translation id="6639554308659482635">SQLite-minne</translation>
 <translation id="6686817083349815241">Lagra passordet ditt</translation>
 <translation id="6691936601825168937">&amp;Framover</translation>
-<translation id="6723354935081862304">Skriv til Google Docs og andre skylagringsmål. <ph name="BEGIN_LINK" />Logg på<ph name="END_LINK" /> for å skriva til Google Cloud Print.</translation>
 <translation id="6798954102094737107">Programtillegg: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Ta vare på endringane</translation>
 <translation id="6817174620439930047">Spør om ein nettstad ønskjer å bruka systemeksklusive meldingar for å nå MIDI-einingar (tilrådd)</translation>
@@ -355,7 +354,7 @@
 <translation id="6886871292305414135">Opna lenkja i ei ny &amp;fane</translation>
 <translation id="6892812721183419409">Opna lenkja som <ph name="USER" /></translation>
 <translation id="6900284862687837908">Bakgrunnsapp: <ph name="BACKGROUND_APP_URL" /></translation>
-<translation id="6904344821472985372">Tilbakekall filtilgangen</translation>
+<translation id="6904344821472985372">Attendekall filtilgangen</translation>
 <translation id="6916590542764765824">Utvidingsstyring</translation>
 <translation id="6945221475159498467">Vel</translation>
 <translation id="6955446738988643816">Inspeksjonsmeny</translation>

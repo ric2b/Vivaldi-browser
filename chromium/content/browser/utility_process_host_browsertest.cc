@@ -18,7 +18,7 @@
 #include "content/public/test/test_service.mojom.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
-#if defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_MAC) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include <sys/wait.h>
 #endif
 
@@ -69,7 +69,7 @@ class UtilityProcessHostBrowserTest : public BrowserChildProcessObserver,
 #if defined(OS_WIN)
     if (elevated)
       host->SetSandboxType(
-          service_manager::SandboxType::kNoSandboxAndElevatedPrivileges);
+          sandbox::policy::SandboxType::kNoSandboxAndElevatedPrivileges);
 #endif
     EXPECT_TRUE(host->Start());
 
@@ -126,7 +126,7 @@ class UtilityProcessHostBrowserTest : public BrowserChildProcessObserver,
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
 #if defined(OS_WIN)
     EXPECT_EQ(EXCEPTION_BREAKPOINT, DWORD{info.exit_code});
-#elif defined(OS_MACOSX) || defined(OS_LINUX)
+#elif defined(OS_MAC) || defined(OS_LINUX) || defined(OS_CHROMEOS)
     EXPECT_TRUE(WIFSIGNALED(info.exit_code));
     EXPECT_EQ(SIGTRAP, WTERMSIG(info.exit_code));
 #endif

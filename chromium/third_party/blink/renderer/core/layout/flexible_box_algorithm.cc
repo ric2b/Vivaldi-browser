@@ -160,13 +160,12 @@ LayoutUnit FlexItem::MarginBoxAscent() const {
   }
 
   DCHECK(layout_result);
-  base::Optional<LayoutUnit> baseline =
-      NGBoxFragment(
-          algorithm->StyleRef().GetWritingMode(),
-          algorithm->StyleRef().Direction(),
-          To<NGPhysicalBoxFragment>(layout_result->PhysicalFragment()))
-          .Baseline();
-  return baseline.value_or(cross_axis_size) + FlowAwareMarginBefore();
+  return FlowAwareMarginBefore() +
+         NGBoxFragment(
+             algorithm->StyleRef().GetWritingMode(),
+             algorithm->StyleRef().Direction(),
+             To<NGPhysicalBoxFragment>(layout_result->PhysicalFragment()))
+             .BaselineOrSynthesize();
 }
 
 LayoutUnit FlexItem::AvailableAlignmentSpace() const {
@@ -586,8 +585,6 @@ void FlexLine::ComputeLineItemsPosition(LayoutUnit main_axis_start_offset,
 LayoutUnit FlexLayoutAlgorithm::GapBetweenItems(
     const ComputedStyle& style,
     LogicalSize percent_resolution_sizes) {
-  if (!RuntimeEnabledFeatures::FlexGapsEnabled())
-    return LayoutUnit();
   DCHECK_GE(percent_resolution_sizes.inline_size, 0);
   if (IsColumnFlow(style)) {
     if (const base::Optional<Length>& row_gap = style.RowGap()) {
@@ -607,8 +604,6 @@ LayoutUnit FlexLayoutAlgorithm::GapBetweenItems(
 LayoutUnit FlexLayoutAlgorithm::GapBetweenLines(
     const ComputedStyle& style,
     LogicalSize percent_resolution_sizes) {
-  if (!RuntimeEnabledFeatures::FlexGapsEnabled())
-    return LayoutUnit();
   DCHECK_GE(percent_resolution_sizes.inline_size, 0);
   if (!IsColumnFlow(style)) {
     if (const base::Optional<Length>& row_gap = style.RowGap()) {
@@ -751,6 +746,9 @@ bool FlexLayoutAlgorithm::ShouldApplyMinSizeAutoForChild(
                                          : child.StyleRef().MinHeight();
   bool main_axis_is_childs_block_axis =
       IsHorizontalFlow() != child.StyleRef().IsHorizontalWritingMode();
+  // TODO(dgrogan) Move this closer to ng_flex_layout_algorithm.cc:616.
+  if (child.IsTable() && !main_axis_is_childs_block_axis)
+    return true;
   bool intrinsic_in_childs_block_axis =
       main_axis_is_childs_block_axis &&
       (min.IsMinContent() || min.IsMaxContent() || min.IsMinIntrinsic() ||

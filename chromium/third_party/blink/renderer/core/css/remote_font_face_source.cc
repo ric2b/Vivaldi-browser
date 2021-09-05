@@ -124,7 +124,8 @@ RemoteFontFaceSource::DisplayPeriod RemoteFontFaceSource::ComputePeriod()
 
       if (GetDocument()->GetFontPreloadManager().RenderingHasBegun()) {
         if (FinishedFromMemoryCache() ||
-            finished_before_document_rendering_begin_)
+            finished_before_document_rendering_begin_ ||
+            !has_been_requested_while_pending_)
           return kSwapPeriod;
         return kFailurePeriod;
       }
@@ -152,6 +153,7 @@ RemoteFontFaceSource::RemoteFontFaceSource(CSSFontFace* css_font_face,
       phase_(kNoLimitExceeded),
       is_intervention_triggered_(ShouldTriggerWebFontsIntervention()),
       finished_before_document_rendering_begin_(false),
+      has_been_requested_while_pending_(false),
       finished_before_lcp_limit_(false) {
   DCHECK(face_);
   period_ = ComputePeriod();
@@ -188,15 +190,15 @@ void RemoteFontFaceSource::NotifyFinished(Resource* resource) {
     return;
   // Prevent promise rejection while shutting down the document.
   // See crbug.com/960290
-  if (execution_context->IsDocument() &&
-      To<LocalDOMWindow>(execution_context)->document()->IsDetached()) {
+  auto* window = DynamicTo<LocalDOMWindow>(execution_context);
+  if (window && window->document()->IsDetached())
     return;
-  }
 
   FontResource* font = ToFontResource(resource);
   histograms_.RecordRemoteFont(font);
 
   custom_font_data_ = font->GetCustomFontData();
+  url_ = resource->Url().GetString();
 
   // FIXME: Provide more useful message such as OTS rejection reason.
   // See crbug.com/97467
@@ -294,7 +296,7 @@ FontDisplay RemoteFontFaceSource::GetFontDisplayWithFeaturePolicyCheck(
     ReportOptions report_option) const {
   ExecutionContext* context = font_selector->GetExecutionContext();
   if (display != kFontDisplayFallback && display != kFontDisplayOptional &&
-      context && context->IsDocument() &&
+      context && context->IsWindow() &&
       !context->IsFeatureEnabled(
           mojom::blink::DocumentPolicyFeature::kFontDisplay, report_option)) {
     return kFontDisplayOptional;
@@ -357,6 +359,7 @@ RemoteFontFaceSource::CreateLoadingFallbackFontData(
   scoped_refptr<CSSCustomFontData> css_font_data = CSSCustomFontData::Create(
       this, period_ == kBlockPeriod ? CSSCustomFontData::kInvisibleFallback
                                     : CSSCustomFontData::kVisibleFallback);
+  has_been_requested_while_pending_ = true;
   return SimpleFontData::Create(temporary_font->PlatformData(), css_font_data);
 }
 

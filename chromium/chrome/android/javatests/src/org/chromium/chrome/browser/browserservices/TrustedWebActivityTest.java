@@ -23,6 +23,7 @@ import androidx.browser.customtabs.TrustedWebUtils;
 import androidx.browser.trusted.TrustedWebActivityIntentBuilder;
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -39,12 +40,14 @@ import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabBrowserControlsConstraintsHelper;
 import org.chromium.chrome.browser.tab.TabThemeColorHelper;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ChromeTabUtils;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.ThemeTestUtils;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
@@ -116,6 +119,7 @@ public class TrustedWebActivityTest {
 
     @Test
     @MediumTest
+    @DisableFeatures(ChromeFeatureList.TRUSTED_WEB_ACTIVITY_QUALITY_ENFORCEMENT_FORCED)
     public void leavesTwa_VerificationFailure() throws TimeoutException {
         Intent intent = createTrustedWebActivityIntent(mTestPage);
         createSession(intent, PACKAGE_NAME);
@@ -160,7 +164,7 @@ public class TrustedWebActivityTest {
         final String pageWithThemeColor = mEmbeddedTestServerRule.getServer().getURL(
                 "/chrome/test/data/android/theme_color_test.html");
         final String pageWithoutThemeColor =
-                mEmbeddedTestServerRule.getServer().getURL("/chrome/test/data/simple.html");
+                mEmbeddedTestServerRule.getServer().getURL("/chrome/test/data/android/about.html");
 
         // Navigate to page with a theme color so that we can later wait for the status bar color to
         // change back to the intent color.
@@ -246,9 +250,10 @@ public class TrustedWebActivityTest {
         spoofVerification(PACKAGE_NAME, pageWithCertError);
         ChromeTabUtils.loadUrlOnUiThread(tab, pageWithCertError);
 
-        CriteriaHelper.pollUiThread(Criteria.equals(BrowserControlsState.SHOWN,
-                                            () -> getBrowserControlConstraints(tab)),
-                10000, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    getBrowserControlConstraints(tab), Matchers.is(BrowserControlsState.SHOWN));
+        }, 10000, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
     }
 
     public void addTrustedOriginToIntent(Intent intent, String trustedOrigin) {

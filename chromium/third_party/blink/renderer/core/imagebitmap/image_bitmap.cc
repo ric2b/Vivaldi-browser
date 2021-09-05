@@ -6,20 +6,23 @@
 
 #include <memory>
 #include <utility>
-
 #include "base/memory/scoped_refptr.h"
 #include "base/numerics/checked_math.h"
 #include "base/numerics/clamped_math.h"
 #include "base/single_thread_task_runner.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
+#include "gpu/config/gpu_feature_info.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/html/canvas/image_data.h"
 #include "third_party/blink/renderer/core/html/media/html_video_element.h"
 #include "third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.h"
+#include "third_party/blink/renderer/platform/bindings/enumeration_base.h"
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_color_params.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
+#include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
@@ -110,7 +113,7 @@ ImageBitmap::ParsedOptions ParseOptions(const ImageBitmapOptions* options,
     } else {
       NOTREACHED()
           << "Invalid ImageBitmap creation attribute colorSpaceConversion: "
-          << options->colorSpaceConversion();
+          << IDLEnumAsString(options->colorSpaceConversion());
     }
   }
 
@@ -182,9 +185,7 @@ bool DstBufferSizeHasOverflow(const ImageBitmap::ParsedOptions& options) {
 }
 
 SkImageInfo GetSkImageInfo(const scoped_refptr<Image>& input) {
-  auto image = input->PaintImageForCurrentFrame().GetSkImage();
-  return SkImageInfo::Make(image->width(), image->height(), image->colorType(),
-                           image->alphaType(), image->refColorSpace());
+  return input->PaintImageForCurrentFrame().GetSkImageInfo();
 }
 
 // This function results in a readback due to using SkImage::readPixels().
@@ -196,8 +197,8 @@ Vector<uint8_t> CopyImageData(const scoped_refptr<StaticBitmapImage>& input,
                               const unsigned y = 0) {
   if (info.isEmpty())
     return {};
-  sk_sp<SkImage> sk_image = input->PaintImageForCurrentFrame().GetSkImage();
-  if (sk_image->bounds().isEmpty())
+  PaintImage paint_image = input->PaintImageForCurrentFrame();
+  if (paint_image.GetSkImageInfo().isEmpty())
     return {};
 
   wtf_size_t byte_length =
@@ -205,7 +206,7 @@ Vector<uint8_t> CopyImageData(const scoped_refptr<StaticBitmapImage>& input,
   Vector<uint8_t> dst_buffer(byte_length);
 
   bool read_pixels_successful =
-      sk_image->readPixels(info, dst_buffer.data(), info.minRowBytes(), x, y);
+      paint_image.readPixels(info, dst_buffer.data(), info.minRowBytes(), x, y);
   DCHECK(read_pixels_successful);
   if (!read_pixels_successful)
     return {};
@@ -249,6 +250,35 @@ std::unique_ptr<CanvasResourceProvider> CreateProvider(
       size, kLow_SkFilterQuality, color_params);
 }
 
+std::unique_ptr<CanvasResourceProvider> CreateProviderForVideoElement(
+    HTMLVideoElement* video,
+    const ImageBitmapOptions* options) {
+  // TODO(crbug.com/1098445): ImageBitmap resize test case failed when
+  // quality equals to "low" and "medium". Need further investigate to
+  // enable gpu backed imageBitmap with resize options.
+  if (!SharedGpuContext::ContextProviderWrapper() ||
+      SharedGpuContext::ContextProviderWrapper()
+          ->ContextProvider()
+          ->GetGpuFeatureInfo()
+          .IsWorkaroundEnabled(DISABLE_IMAGEBITMAP_FROM_VIDEO_USING_GPU) ||
+      options->hasResizeWidth() || options->hasResizeHeight()) {
+    return CanvasResourceProvider::CreateBitmapProvider(
+        IntSize(video->videoWidth(), video->videoHeight()),
+        kLow_SkFilterQuality, CanvasColorParams());
+  }
+
+  uint32_t shared_image_usage_flags = gpu::SHARED_IMAGE_USAGE_DISPLAY;
+
+  return CanvasResourceProvider::CreateSharedImageProvider(
+      IntSize(video->videoWidth(), video->videoHeight()),
+      SharedGpuContext::ContextProviderWrapper(), kLow_SkFilterQuality,
+      CanvasColorParams(CanvasColorSpace::kSRGB,
+                        CanvasColorParams::GetNativeCanvasPixelFormat(),
+                        kNonOpaque),  // Default canvas settings
+      false,  // Origin of GL texture is bottom left on screen
+      RasterMode::kGPU, shared_image_usage_flags);
+}
+
 scoped_refptr<StaticBitmapImage> FlipImageVertically(
     scoped_refptr<StaticBitmapImage> input,
     const ImageBitmap::ParsedOptions& parsed_options) {
@@ -264,8 +294,8 @@ scoped_refptr<StaticBitmapImage> FlipImageVertically(
     if (info.isEmpty())
       return nullptr;
 
-    sk_sp<SkImage> sk_image = input->PaintImageForCurrentFrame().GetSkImage();
-    if (sk_image->bounds().isEmpty())
+    PaintImage paint_image = input->PaintImageForCurrentFrame();
+    if (paint_image.GetSkImageInfo().isEmpty())
       return nullptr;
 
     sk_sp<SkData> image_pixels = TryAllocateSkData(info.computeMinByteSize());
@@ -276,7 +306,7 @@ scoped_refptr<StaticBitmapImage> FlipImageVertically(
         static_cast<uint8_t*>(image_pixels->writable_data());
     size_t image_row_bytes = static_cast<size_t>(info.minRowBytes64());
     bool read_successful =
-        sk_image->readPixels(info, writable_pixels, image_row_bytes, 0, 0);
+        paint_image.readPixels(info, writable_pixels, image_row_bytes, 0, 0);
     DCHECK(read_successful);
 
     for (int i = 0; i < info.height() / 2; i++) {
@@ -321,10 +351,10 @@ scoped_refptr<StaticBitmapImage> GetImageWithAlphaDisposition(
   SkAlphaType alpha_type = (alpha_disposition == kPremultiplyAlpha)
                                ? kPremul_SkAlphaType
                                : kUnpremul_SkAlphaType;
-  sk_sp<SkImage> skia_image = image->PaintImageForCurrentFrame().GetSkImage();
-  if (!skia_image)
+  PaintImage paint_image = image->PaintImageForCurrentFrame();
+  if (!paint_image)
     return nullptr;
-  if (skia_image->alphaType() == alpha_type)
+  if (paint_image.GetAlphaType() == alpha_type)
     return std::move(image);
 
   SkImageInfo info = GetSkImageInfo(image.get()).makeAlphaType(alpha_type);
@@ -346,7 +376,7 @@ scoped_refptr<StaticBitmapImage> GetImageWithAlphaDisposition(
 
   // To unpremul, read back the pixels.
 
-  if (skia_image->bounds().isEmpty())
+  if (paint_image.GetSkImageInfo().isEmpty())
     return nullptr;
 
   sk_sp<SkData> dst_pixels = TryAllocateSkData(info.computeMinByteSize());
@@ -356,7 +386,7 @@ scoped_refptr<StaticBitmapImage> GetImageWithAlphaDisposition(
   uint8_t* writable_pixels = static_cast<uint8_t*>(dst_pixels->writable_data());
   size_t image_row_bytes = static_cast<size_t>(info.minRowBytes64());
   bool read_successful =
-      skia_image->readPixels(info, writable_pixels, image_row_bytes, 0, 0);
+      paint_image.readPixels(info, writable_pixels, image_row_bytes, 0, 0);
   DCHECK(read_successful);
   return StaticBitmapImage::Create(std::move(dst_pixels), info,
                                    image->CurrentFrameOrientation());
@@ -489,29 +519,21 @@ static scoped_refptr<StaticBitmapImage> CropImageAndApplyColorSpaceConversion(
   scoped_refptr<StaticBitmapImage> result = image;
   if (src_rect != img_rect) {
     auto paint_image = result->PaintImageForCurrentFrame();
-    if (result->IsTextureBacked()) {
-      auto image_info = paint_image.GetSkImage()->imageInfo().makeWH(
-          src_rect.Width(), src_rect.Height());
-      auto resource_provider =
-          CreateProvider(image->ContextProviderWrapper(), image_info, result,
-                         true /* fallback_to_software*/);
-      if (!resource_provider)
-        return nullptr;
-      cc::PaintFlags paint;
-      resource_provider->Canvas()->drawImageRect(
-          paint_image,
-          SkRect::MakeXYWH(src_rect.X(), src_rect.Y(), src_rect.Width(),
-                           src_rect.Height()),
-          SkRect::MakeWH(src_rect.Width(), src_rect.Height()), &paint,
-          SkCanvas::kStrict_SrcRectConstraint);
-      result = resource_provider->Snapshot(image->CurrentFrameOrientation());
-    } else {
-      result = UnacceleratedStaticBitmapImage::Create(
-          cc::PaintImageBuilder::WithCopy(std::move(paint_image))
-              .make_subset(src_rect)
-              .TakePaintImage(),
-          image->CurrentFrameOrientation());
-    }
+    auto image_info = paint_image.GetSkImageInfo().makeWH(src_rect.Width(),
+                                                          src_rect.Height());
+    auto resource_provider =
+        CreateProvider(image->ContextProviderWrapper(), image_info, result,
+                       true /* fallback_to_software*/);
+    if (!resource_provider)
+      return nullptr;
+    cc::PaintFlags paint;
+    resource_provider->Canvas()->drawImageRect(
+        paint_image,
+        SkRect::MakeXYWH(src_rect.X(), src_rect.Y(), src_rect.Width(),
+                         src_rect.Height()),
+        SkRect::MakeWH(src_rect.Width(), src_rect.Height()), &paint,
+        SkCanvas::kStrict_SrcRectConstraint);
+    result = resource_provider->Snapshot(image->CurrentFrameOrientation());
   }
 
   // down-scaling has higher priority than other tasks, up-scaling has lower.
@@ -586,7 +608,7 @@ ImageBitmap::ImageBitmap(ImageElementBase* image,
   ParsedOptions parsed_options =
       ParseOptions(options, crop_rect, image->BitmapSourceSize());
   parsed_options.source_is_unpremul =
-      (input->PaintImageForCurrentFrame().GetSkImage()->alphaType() ==
+      (input->PaintImageForCurrentFrame().GetAlphaType() ==
        kUnpremul_SkAlphaType);
   if (DstBufferSizeHasOverflow(parsed_options))
     return;
@@ -655,12 +677,8 @@ ImageBitmap::ImageBitmap(HTMLVideoElement* video,
   if (DstBufferSizeHasOverflow(parsed_options))
     return;
 
-  // TODO(fserb): this shouldn't be software?
   std::unique_ptr<CanvasResourceProvider> resource_provider =
-      CanvasResourceProvider::CreateBitmapProvider(
-          IntSize(video->videoWidth(), video->videoHeight()),
-          kLow_SkFilterQuality,
-          CanvasColorParams());  // TODO: set color space here to avoid clamping
+      CreateProviderForVideoElement(video, options);
 
   if (!resource_provider)
     return;
@@ -842,7 +860,7 @@ ImageBitmap::ImageBitmap(ImageBitmap* bitmap,
   ParsedOptions parsed_options =
       ParseOptions(options, crop_rect, input->Size());
   parsed_options.source_is_unpremul =
-      (input->PaintImageForCurrentFrame().GetSkImage()->alphaType() ==
+      (input->PaintImageForCurrentFrame().GetAlphaType() ==
        kUnpremul_SkAlphaType);
   if (DstBufferSizeHasOverflow(parsed_options))
     return;
@@ -863,7 +881,7 @@ ImageBitmap::ImageBitmap(scoped_refptr<StaticBitmapImage> image,
   ParsedOptions parsed_options =
       ParseOptions(options, crop_rect, image->Size());
   parsed_options.source_is_unpremul =
-      (image->PaintImageForCurrentFrame().GetSkImage()->alphaType() ==
+      (image->PaintImageForCurrentFrame().GetAlphaType() ==
        kUnpremul_SkAlphaType);
   if (DstBufferSizeHasOverflow(parsed_options))
     return;

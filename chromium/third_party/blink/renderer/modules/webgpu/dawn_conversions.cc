@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/unsigned_long_enforce_range_sequence_or_gpu_origin_3d_dict.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_programmable_stage_descriptor.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_texture_copy_view.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_texture_data_layout.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_device.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_shader_module.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_texture.h"
@@ -280,10 +281,15 @@ WGPUTextureFormat AsDawnEnum<WGPUTextureFormat>(
 template <>
 WGPUTextureDimension AsDawnEnum<WGPUTextureDimension>(
     const WTF::String& webgpu_enum) {
+  if (webgpu_enum == "1d") {
+    return WGPUTextureDimension_1D;
+  }
   if (webgpu_enum == "2d") {
     return WGPUTextureDimension_2D;
   }
-  // TODO(crbug.com/dawn/129): Implement "1d" and "3d".
+  if (webgpu_enum == "3d") {
+    return WGPUTextureDimension_3D;
+  }
   NOTREACHED();
   return WGPUTextureDimension_Force32;
 }
@@ -293,6 +299,9 @@ WGPUTextureViewDimension AsDawnEnum<WGPUTextureViewDimension>(
     const WTF::String& webgpu_enum) {
   if (webgpu_enum.IsNull()) {
     return WGPUTextureViewDimension_Undefined;
+  }
+  if (webgpu_enum == "1d") {
+    return WGPUTextureViewDimension_1D;
   }
   if (webgpu_enum == "2d") {
     return WGPUTextureViewDimension_2D;
@@ -306,7 +315,9 @@ WGPUTextureViewDimension AsDawnEnum<WGPUTextureViewDimension>(
   if (webgpu_enum == "cube-array") {
     return WGPUTextureViewDimension_CubeArray;
   }
-  // TODO(crbug.com/dawn/129): Implement "1d" and "3d".
+  if (webgpu_enum == "3d") {
+    return WGPUTextureViewDimension_3D;
+  }
   NOTREACHED();
   return WGPUTextureViewDimension_Force32;
 }
@@ -756,22 +767,23 @@ WGPUTextureCopyView AsDawnType(const GPUTextureCopyView* webgpu_view,
   DCHECK(webgpu_view);
   DCHECK(webgpu_view->texture());
 
-  WGPUTextureCopyView dawn_view;
-  dawn_view.nextInChain = nullptr;
+  WGPUTextureCopyView dawn_view = {};
   dawn_view.texture = webgpu_view->texture()->GetHandle();
   dawn_view.mipLevel = webgpu_view->mipLevel();
   dawn_view.origin = AsDawnType(&webgpu_view->origin());
 
-  if (webgpu_view->hasArrayLayer()) {
-    device->AddConsoleWarning(
-        "GPUTextureCopyView.arrayLayer deprecated: use .origin.z");
-    dawn_view.arrayLayer = webgpu_view->arrayLayer();
-  } else {
-    dawn_view.arrayLayer = dawn_view.origin.z;
-    dawn_view.origin.z = 0;
-  }
-
   return dawn_view;
+}
+
+WGPUTextureDataLayout AsDawnType(const GPUTextureDataLayout* webgpu_layout) {
+  DCHECK(webgpu_layout);
+
+  WGPUTextureDataLayout dawn_layout = {};
+  dawn_layout.offset = webgpu_layout->offset();
+  dawn_layout.bytesPerRow = webgpu_layout->bytesPerRow();
+  dawn_layout.rowsPerImage = webgpu_layout->rowsPerImage();
+
+  return dawn_layout;
 }
 
 OwnedProgrammableStageDescriptor AsDawnType(

@@ -182,8 +182,102 @@ base::Optional<int> AXPlatformNodeBase::GetIndexInParent() {
     if (parent->ChildAtIndex(i) == current)
       return i;
   }
+
+  // If the parent has a modal dialog, it doesn't count other children.
+  if (parent->delegate_ && parent->delegate_->HasModalDialog())
+    return base::nullopt;
+
   NOTREACHED()
       << "Unable to find the child in the list of its parent's children.";
+  return base::nullopt;
+}
+
+base::stack<gfx::NativeViewAccessible> AXPlatformNodeBase::GetAncestors() {
+  base::stack<gfx::NativeViewAccessible> ancestors;
+  gfx::NativeViewAccessible current_node = GetNativeViewAccessible();
+  while (current_node) {
+    ancestors.push(current_node);
+    current_node = FromNativeViewAccessible(current_node)->GetParent();
+  }
+
+  return ancestors;
+}
+
+base::Optional<int> AXPlatformNodeBase::CompareTo(AXPlatformNodeBase& other) {
+  // We define two node's relative positions in the following way:
+  // 1. this->CompareTo(other) == 0:
+  //  - |this| and |other| are the same node.
+  // 2. this->CompareTo(other) < 0:
+  //  - |this| is an ancestor of |other|.
+  //  - |this|'s first uncommon ancestor comes before |other|'s first uncommon
+  //    ancestor. The first uncommon ancestor is defined as the immediate child
+  //    of the lowest common anestor of the two nodes. The first uncommon
+  //    ancestor of |this| and |other| share the same parent (i.e. lowest common
+  //    ancestor), so we can just compare the first uncommon ancestors' child
+  //    indices to determine their relative positions.
+  // 3. this->CompareTo(other) == nullopt:
+  //  - |this| and |other| are not comparable. E.g. they do not have a common
+  //    ancestor.
+  //
+  // Another way to look at the nodes' relative positions/logical orders is that
+  // they are equivalent to pre-order traversal of the tree. If we pre-order
+  // traverse from the root, the node that we visited earlier is always going to
+  // be before (logically less) the node we visit later.
+
+  if (this == &other)
+    return base::Optional<int>(0);
+
+  // Compute the ancestor stacks of both positions and traverse them from the
+  // top most ancestor down, so we can discover the first uncommon ancestors.
+  // The first uncommon ancestor is the immediate child of the lowest common
+  // ancestor.
+  gfx::NativeViewAccessible common_ancestor = nullptr;
+  base::stack<gfx::NativeViewAccessible> our_ancestors = GetAncestors();
+  base::stack<gfx::NativeViewAccessible> other_ancestors = other.GetAncestors();
+
+  // Start at the root and traverse down. Keep going until the |this|'s ancestor
+  // chain and |other|'s ancestor chain disagree. The last node before they
+  // disagree is the lowest common ancestor.
+  while (!our_ancestors.empty() && !other_ancestors.empty() &&
+         our_ancestors.top() == other_ancestors.top()) {
+    common_ancestor = our_ancestors.top();
+    our_ancestors.pop();
+    other_ancestors.pop();
+  }
+
+  // Nodes do not have a common ancestor, they are not comparable.
+  if (!common_ancestor)
+    return base::nullopt;
+
+  // Compute the logical order when the common ancestor is |this| or |other|.
+  auto* common_ancestor_platform_node =
+      FromNativeViewAccessible(common_ancestor);
+  if (common_ancestor_platform_node == this)
+    return base::Optional<int>(-1);
+  if (common_ancestor_platform_node == &other)
+    return base::Optional<int>(1);
+
+  // Compute the logical order of |this| and |other| by using their first
+  // uncommon ancestors.
+  if (!our_ancestors.empty() && !other_ancestors.empty()) {
+    base::Optional<int> this_index_in_parent =
+        FromNativeViewAccessible(our_ancestors.top())->GetIndexInParent();
+    base::Optional<int> other_index_in_parent =
+        FromNativeViewAccessible(other_ancestors.top())->GetIndexInParent();
+
+    if (!this_index_in_parent || !other_index_in_parent)
+      return base::nullopt;
+
+    int this_uncommon_ancestor_index = this_index_in_parent.value();
+    int other_uncommon_ancestor_index = other_index_in_parent.value();
+    DCHECK_NE(this_uncommon_ancestor_index, other_uncommon_ancestor_index)
+        << "Deepest uncommon ancestors should truly be uncommon, i.e. not "
+           "the same.";
+
+    return base::Optional<int>(this_uncommon_ancestor_index -
+                               other_uncommon_ancestor_index);
+  }
+
   return base::nullopt;
 }
 
@@ -214,7 +308,7 @@ void AXPlatformNodeBase::NotifyAccessibilityEvent(ax::mojom::Event event_type) {
   }
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 void AXPlatformNodeBase::AnnounceText(const base::string16& text) {}
 #endif
 
@@ -499,43 +593,6 @@ bool AXPlatformNodeBase::IsDocument() const {
   return ui::IsDocument(GetData().role);
 }
 
-bool AXPlatformNodeBase::IsTextOnlyObject() const {
-  return ui::IsText(GetData().role);
-}
-
-bool AXPlatformNodeBase::IsTextField() const {
-  return GetData().IsTextField();
-}
-
-bool AXPlatformNodeBase::IsPlainTextField() const {
-  return GetData().IsPlainTextField();
-}
-
-bool AXPlatformNodeBase::IsRichTextField() const {
-  return GetData().IsRichTextField();
-}
-
-base::string16 AXPlatformNodeBase::GetHypertext() const {
-  if (!delegate_)
-    return base::string16();
-
-  // Hypertext of platform leaves, which internally are composite objects, are
-  // represented with the inner text of the internal composite object. These
-  // don't exist on non-web content.
-  if (IsChildOfLeaf())
-    return GetInnerText();
-
-  if (hypertext_.needs_update)
-    UpdateComputedHypertext();
-  return hypertext_.hypertext;
-}
-
-base::string16 AXPlatformNodeBase::GetInnerText() const {
-  if (!delegate_)
-    return base::string16();
-  return delegate_->GetInnerText();
-}
-
 bool AXPlatformNodeBase::IsSelectionItemSupported() const {
   switch (GetData().role) {
     // An ARIA 1.1+ role of "cell", or a role of "row" inside
@@ -578,6 +635,43 @@ bool AXPlatformNodeBase::IsSelectionItemSupported() const {
     default:
       return false;
   }
+}
+
+bool AXPlatformNodeBase::IsTextField() const {
+  return GetData().IsTextField();
+}
+
+bool AXPlatformNodeBase::IsPlainTextField() const {
+  return GetData().IsPlainTextField();
+}
+
+bool AXPlatformNodeBase::IsRichTextField() const {
+  return GetData().IsRichTextField();
+}
+
+bool AXPlatformNodeBase::IsText() const {
+  return delegate_ && delegate_->IsText();
+}
+
+base::string16 AXPlatformNodeBase::GetHypertext() const {
+  if (!delegate_)
+    return base::string16();
+
+  // Hypertext of platform leaves, which internally are composite objects, are
+  // represented with the inner text of the internal composite object. These
+  // don't exist on non-web content.
+  if (IsChildOfLeaf())
+    return GetInnerText();
+
+  if (hypertext_.needs_update)
+    UpdateComputedHypertext();
+  return hypertext_.hypertext;
+}
+
+base::string16 AXPlatformNodeBase::GetInnerText() const {
+  if (!delegate_)
+    return base::string16();
+  return delegate_->GetInnerText();
 }
 
 base::string16 AXPlatformNodeBase::GetRangeValueText() const {
@@ -1156,6 +1250,27 @@ void AXPlatformNodeBase::ComputeAttributes(PlatformAttributeList* attributes) {
     AddAttributeToList("src", src, attributes);
   }
 
+  if (GetData().HasIntAttribute(ax::mojom::IntAttribute::kTextAlign)) {
+    auto text_align = static_cast<ax::mojom::TextAlign>(
+        GetData().GetIntAttribute(ax::mojom::IntAttribute::kTextAlign));
+    switch (text_align) {
+      case ax::mojom::TextAlign::kNone:
+        break;
+      case ax::mojom::TextAlign::kLeft:
+        AddAttributeToList("text-align", "left", attributes);
+        break;
+      case ax::mojom::TextAlign::kRight:
+        AddAttributeToList("text-align", "right", attributes);
+        break;
+      case ax::mojom::TextAlign::kCenter:
+        AddAttributeToList("text-align", "center", attributes);
+        break;
+      case ax::mojom::TextAlign::kJustify:
+        AddAttributeToList("text-align", "justify", attributes);
+        break;
+    }
+  }
+
   // Text fields need to report the attribute "text-model:a1" to instruct
   // screen readers to use IAccessible2 APIs to handle text editing in this
   // object (as opposed to treating it like a native Windows text box).
@@ -1246,7 +1361,7 @@ void AXPlatformNodeBase::UpdateComputedHypertext() const {
     // Similar to Firefox, we don't expose text-only objects in IA2 and ATK
     // hypertext with the embedded object character. We copy all of their text
     // instead.
-    if (child_iter->IsTextOnlyObject()) {
+    if (child_iter->IsText()) {
       hypertext_.hypertext += child_iter->GetNameAsString16();
     } else {
       int32_t char_offset = static_cast<int32_t>(hypertext_.hypertext.size());
@@ -1384,12 +1499,12 @@ int32_t AXPlatformNodeBase::GetHypertextOffsetFromChild(
   // Handle the case when we are dealing with a text-only child.
   // Text-only children should not be present at tree roots and so no
   // cross-tree traversal is necessary.
-  if (child->IsTextOnlyObject()) {
+  if (child->IsText()) {
     int32_t hypertext_offset = 0;
     for (auto child_iter = AXPlatformNodeChildrenBegin();
          child_iter != AXPlatformNodeChildrenEnd() && child_iter.get() != child;
          ++child_iter) {
-      if (child_iter->IsTextOnlyObject()) {
+      if (child_iter->IsText()) {
         hypertext_offset +=
             static_cast<int32_t>(child_iter->GetHypertext().size());
       } else {
@@ -1473,7 +1588,7 @@ int AXPlatformNodeBase::GetHypertextOffsetFromEndpoint(
   if (!common_parent)
     return -1;
 
-  DCHECK(!(common_parent->IsTextOnlyObject()));
+  DCHECK(!(common_parent->IsText()));
 
   // Case 2. Is the selection endpoint inside a descendant of this object?
   //
@@ -1485,7 +1600,7 @@ int AXPlatformNodeBase::GetHypertextOffsetFromEndpoint(
         GetHypertextOffsetFromDescendant(endpoint_object);
     auto* parent = static_cast<AXPlatformNodeBase*>(
         FromNativeViewAccessible(endpoint_object->GetParent()));
-    if (parent == this && endpoint_object->IsTextOnlyObject()) {
+    if (parent == this && endpoint_object->IsText()) {
       // Due to a historical design decision, the hypertext of the immediate
       // parents of text objects includes all their text. We therefore need to
       // adjust the hypertext offset in the parent by adding any text offset.
@@ -1688,10 +1803,10 @@ void AXPlatformNodeBase::ComputeHypertextRemovedAndInserted(
   *old_len = 0;
   *new_len = 0;
 
-  // Do not compute for static text objects, otherwise redundant text change
+  // Do not compute for text objects, otherwise redundant text change
   // announcements will occur in live regions, as the parent hypertext also
   // changes.
-  if (GetData().role == ax::mojom::Role::kStaticText)
+  if (IsText())
     return;
 
   const base::string16& old_text = old_hypertext.hypertext;
@@ -1849,7 +1964,7 @@ std::string AXPlatformNodeBase::GetInvalidValue() const {
   if (static_cast<ax::mojom::InvalidState>(
           target->GetIntAttribute(ax::mojom::IntAttribute::kInvalidState)) ==
           ax::mojom::InvalidState::kNone &&
-      target->IsTextOnlyObject() && target->GetParent()) {
+      target->IsText() && target->GetParent()) {
     // Text nodes need to reflect the invalid state of their parent object,
     // otherwise spelling and grammar errors communicated through aria-invalid
     // won't be reflected in text attributes.
@@ -1976,21 +2091,21 @@ ui::TextAttributeList AXPlatformNodeBase::ComputeTextAttributes() const {
     attributes.push_back(std::make_pair("language", language));
   }
 
-  auto text_direction = static_cast<ax::mojom::TextDirection>(
+  auto text_direction = static_cast<ax::mojom::WritingDirection>(
       GetIntAttribute(ax::mojom::IntAttribute::kTextDirection));
   switch (text_direction) {
-    case ax::mojom::TextDirection::kNone:
+    case ax::mojom::WritingDirection::kNone:
       break;
-    case ax::mojom::TextDirection::kLtr:
+    case ax::mojom::WritingDirection::kLtr:
       attributes.push_back(std::make_pair("writing-mode", "lr"));
       break;
-    case ax::mojom::TextDirection::kRtl:
+    case ax::mojom::WritingDirection::kRtl:
       attributes.push_back(std::make_pair("writing-mode", "rl"));
       break;
-    case ax::mojom::TextDirection::kTtb:
+    case ax::mojom::WritingDirection::kTtb:
       attributes.push_back(std::make_pair("writing-mode", "tb"));
       break;
-    case ax::mojom::TextDirection::kBtt:
+    case ax::mojom::WritingDirection::kBtt:
       // Not listed in the IA2 Spec.
       attributes.push_back(std::make_pair("writing-mode", "bt"));
       break;

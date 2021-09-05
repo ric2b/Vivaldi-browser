@@ -33,7 +33,6 @@
 #include "chrome/browser/predictors/autocomplete_action_predictor_factory.h"
 #include "chrome/browser/predictors/loading_predictor.h"
 #include "chrome/browser/predictors/loading_predictor_factory.h"
-#include "chrome/browser/prerender/prerender_field_trial.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/search/search.h"
@@ -53,7 +52,6 @@
 #include "chrome/common/url_constants.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/favicon/core/favicon_service.h"
-#include "components/feature_engagement/buildflags.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_result.h"
 #include "components/omnibox/browser/location_bar_model.h"
@@ -61,6 +59,7 @@
 #include "components/omnibox/browser/search_provider.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/prefs/pref_service.h"
+#include "components/prerender/browser/prerender_field_trial.h"
 #include "components/search/search.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/template_url_service.h"
@@ -78,11 +77,6 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "url/gurl.h"
-
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-#include "chrome/browser/feature_engagement/new_tab/new_tab_tracker.h"
-#include "chrome/browser/feature_engagement/new_tab/new_tab_tracker_factory.h"
-#endif
 
 using predictors::AutocompleteActionPredictor;
 
@@ -383,20 +377,6 @@ void ChromeOmniboxClient::OnRevert() {
 }
 
 void ChromeOmniboxClient::OnURLOpenedFromOmnibox(OmniboxLog* log) {
-// The new tab tracker tracks when a user starts a session in the same
-// tab as a previous one. If ShouldDisplayURL() is true, that's a good
-// signal that the previous page was part of some other session.
-// We could go further to try to analyze the difference between the previous
-// and current URLs, but users edit URLs rarely enough that this is a
-// reasonable approximation.
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-  if (controller_->GetLocationBarModel()->ShouldDisplayURL()) {
-    feature_engagement::NewTabTrackerFactory::GetInstance()
-        ->GetForProfile(profile_)
-        ->OnOmniboxNavigation();
-  }
-#endif
-
   predictors::AutocompleteActionPredictorFactory::GetForProfile(profile_)
       ->OnOmniboxOpenedUrl(*log);
 }
@@ -420,14 +400,8 @@ void ChromeOmniboxClient::PromptPageTranslation() {
     ChromeTranslateClient* translate_client =
         ChromeTranslateClient::FromWebContents(contents);
     if (translate_client) {
-      const translate::LanguageState& state =
-          translate_client->GetLanguageState();
-      // Here we pass triggered_from_menu as true because that is meant to
-      // capture whether the user explicitly requested the translation.
-      translate_client->ShowTranslateUI(
-          translate::TRANSLATE_STEP_BEFORE_TRANSLATE, state.original_language(),
-          state.AutoTranslateTo(), translate::TranslateErrors::NONE,
-          /*triggered_from_menu=*/true);
+      DCHECK_NE(nullptr, translate_client->GetTranslateManager());
+      translate_client->GetTranslateManager()->InitiateManualTranslation(true);
     }
   }
 }

@@ -11,6 +11,7 @@ import android.view.View;
 import androidx.preference.Preference;
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -139,7 +140,8 @@ public class HomepagePolicyIntegrationTest {
         destroyAndRestartActivity();
 
         Assert.assertEquals("Start up homepage should be the same as the policy setting", TEST_URL,
-                mActivityTestRule.getActivity().getActivityTab().getUrlString());
+                ChromeTabUtils.getUrlStringOnUiThread(
+                        mActivityTestRule.getActivity().getActivityTab()));
     }
 
     @Test
@@ -151,7 +153,8 @@ public class HomepagePolicyIntegrationTest {
                 .fullyLoadUrl(anotherUrl);
 
         Assert.assertNotEquals("Did not switch to a different URL", TEST_URL,
-                mActivityTestRule.getActivity().getActivityTab().getUrlString());
+                ChromeTabUtils.getUrlStringOnUiThread(
+                        mActivityTestRule.getActivity().getActivityTab()));
 
         ChromeTabUtils.waitForTabPageLoaded(
                 mActivityTestRule.getActivity().getActivityTab(), TEST_URL, () -> {
@@ -172,7 +175,8 @@ public class HomepagePolicyIntegrationTest {
                 });
 
         Assert.assertEquals("After clicking HomeButton, URL should be back to Homepage", TEST_URL,
-                mActivityTestRule.getActivity().getActivityTab().getUrlString());
+                ChromeTabUtils.getUrlStringOnUiThread(
+                        mActivityTestRule.getActivity().getActivityTab()));
     }
 
     @Test
@@ -217,17 +221,15 @@ public class HomepagePolicyIntegrationTest {
                 () -> { activity.getTabModelSelector().closeAllTabs(); });
 
         activity.finish();
-        CriteriaHelper.pollUiThread(new Criteria("Activity should be destroyed, current state: "
-                + ApplicationStatus.getStateForActivity(activity)) {
-            @Override
-            public boolean isSatisfied() {
-                return ApplicationStatus.getStateForActivity(activity) == ActivityState.DESTROYED;
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(ApplicationStatus.getStateForActivity(activity),
+                    Matchers.is(ActivityState.DESTROYED));
         });
 
         // Start a new ChromeActivity.
         mActivityTestRule.startActivityCompletely(intent);
         Assert.assertEquals("Start up page is not homepage", HomepageManager.getHomepageUri(),
-                mActivityTestRule.getActivity().getActivityTab().getUrlString());
+                ChromeTabUtils.getUrlStringOnUiThread(
+                        mActivityTestRule.getActivity().getActivityTab()));
     }
 }

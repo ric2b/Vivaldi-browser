@@ -14,8 +14,14 @@
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_local.h"
 #include "build/build_config.h"
+#include "build/lacros_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/multiprocess_func_list.h"
+
+#if defined(OS_WIN)
+#include "base/win/base_win_buildflags.h"
+#include "base/win/windows_version.h"
+#endif
 
 namespace {
 
@@ -27,7 +33,7 @@ constexpr int kExpectedStillRunningExitCode = 0;
 
 constexpr int kDummyExitCode = 42;
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 // Fake port provider that returns the calling process's
 // task port, ignoring its argument.
 class FakePortProvider : public base::PortProvider {
@@ -158,7 +164,7 @@ TEST_F(ProcessTest, CreationTimeOtherProcess) {
       // Time::Now() is a combination of system clock and
       // QueryPerformanceCounter(). Tolerate 100 ms for the clock mismatch.
       TimeDelta::FromMilliseconds(100);
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
       // On Mac, process creation time should be very precise.
       TimeDelta::FromMilliseconds(0);
 #else
@@ -304,7 +310,7 @@ TEST_F(ProcessTest, SetProcessBackgrounded) {
     return;
   Process process(SpawnChild("SimpleChildProcess"));
   int old_priority = process.GetPriority();
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   // On the Mac, backgrounding a process requires a port to that process.
   // In the browser it's available through the MachBroker class, which is not
   // part of base. Additionally, there is an indefinite amount of time between
@@ -339,7 +345,7 @@ TEST_F(ProcessTest, SetProcessBackgroundedSelf) {
   EXPECT_TRUE(process.IsProcessBackgrounded());
   EXPECT_TRUE(process.SetProcessBackgrounded(false));
   EXPECT_FALSE(process.IsProcessBackgrounded());
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
   FakePortProvider provider;
   EXPECT_TRUE(process.SetProcessBackgrounded(&provider, true));
   EXPECT_TRUE(process.IsProcessBackgrounded(&provider));
@@ -363,7 +369,7 @@ TEST_F(ProcessTest, CurrentProcessIsRunning) {
       base::TimeDelta(), nullptr));
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 // On Mac OSX, we can detect whether a non-child process is running.
 TEST_F(ProcessTest, PredefinedProcessIsRunning) {
   // Process 1 is the /sbin/launchd, it should be always running.
@@ -385,6 +391,22 @@ TEST_F(ProcessTest, MAYBE_HeapCorruption) {
   EXPECT_EXIT(base::debug::win::TerminateWithHeapCorruption(),
               ::testing::ExitedWithCode(STATUS_HEAP_CORRUPTION), "");
 }
+
+#if BUILDFLAG(WIN_ENABLE_CFG_GUARDS)
+#define MAYBE_ControlFlowViolation ControlFlowViolation
+#else
+#define MAYBE_ControlFlowViolation DISABLED_ControlFlowViolation
+#endif
+TEST_F(ProcessTest, MAYBE_ControlFlowViolation) {
+  // CFG is only supported on Windows 8.1 or greater.
+  if (base::win::GetVersion() < base::win::Version::WIN8_1)
+    return;
+  // CFG causes ntdll!RtlFailFast2 to be called resulting in uncatchable
+  // 0xC0000409 (STATUS_STACK_BUFFER_OVERRUN) exception.
+  EXPECT_EXIT(base::debug::win::TerminateWithControlFlowViolation(),
+              ::testing::ExitedWithCode(STATUS_STACK_BUFFER_OVERRUN), "");
+}
+
 #endif  // OS_WIN
 
 TEST_F(ProcessTest, ChildProcessIsRunning) {
@@ -396,7 +418,7 @@ TEST_F(ProcessTest, ChildProcessIsRunning) {
       base::TimeDelta(), nullptr));
 }
 
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
 
 // Tests that the function IsProcessBackgroundedCGroup() can parse the contents
 // of the /proc/<pid>/cgroup file successfully.
@@ -410,6 +432,6 @@ TEST_F(ProcessTest, TestIsProcessBackgroundedCGroup) {
   EXPECT_TRUE(IsProcessBackgroundedCGroup(kBackgrounded));
 }
 
-#endif  // defined(OS_CHROMEOS)
+#endif  // defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
 
 }  // namespace base

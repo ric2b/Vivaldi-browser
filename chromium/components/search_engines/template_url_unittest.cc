@@ -736,18 +736,19 @@ TEST_F(TemplateURLTest, ReplaceInputType) {
 TEST_F(TemplateURLTest, ReplaceOmniboxFocusType) {
   struct TestData {
     const base::string16 search_term;
-    TemplateURLRef::SearchTermsArgs::OmniboxFocusType omnibox_focus_type;
+    OmniboxFocusType focus_type;
     const std::string url;
     const std::string expected_result;
   } test_data[] = {
-      {ASCIIToUTF16("foo"),
-       TemplateURLRef::SearchTermsArgs::OmniboxFocusType::DEFAULT,
+      {ASCIIToUTF16("foo"), OmniboxFocusType::DEFAULT,
        "{google:baseURL}?{searchTerms}&{google:omniboxFocusType}",
        "http://www.google.com/?foo&"},
-      {ASCIIToUTF16("foo"),
-       TemplateURLRef::SearchTermsArgs::OmniboxFocusType::ON_FOCUS,
+      {ASCIIToUTF16("foo"), OmniboxFocusType::ON_FOCUS,
        "{google:baseURL}?{searchTerms}&{google:omniboxFocusType}",
        "http://www.google.com/?foo&oft=1&"},
+      {ASCIIToUTF16("foo"), OmniboxFocusType::DELETED_PERMANENT_TEXT,
+       "{google:baseURL}?{searchTerms}&{google:omniboxFocusType}",
+       "http://www.google.com/?foo&oft=2&"},
   };
   TemplateURLData data;
   data.input_encodings.push_back("UTF-8");
@@ -757,7 +758,7 @@ TEST_F(TemplateURLTest, ReplaceOmniboxFocusType) {
     EXPECT_TRUE(url.url_ref().IsValid(search_terms_data_));
     ASSERT_TRUE(url.url_ref().SupportsReplacement(search_terms_data_));
     TemplateURLRef::SearchTermsArgs search_terms_args(test_data[i].search_term);
-    search_terms_args.omnibox_focus_type = test_data[i].omnibox_focus_type;
+    search_terms_args.focus_type = test_data[i].focus_type;
     GURL result(url.url_ref().ReplaceSearchTerms(search_terms_args,
                                                  search_terms_data_));
     ASSERT_TRUE(result.is_valid());
@@ -1807,14 +1808,19 @@ TEST_F(TemplateURLTest, ContextualSearchParameters) {
 TEST_F(TemplateURLTest, GenerateKeyword) {
   ASSERT_EQ(ASCIIToUTF16("foo"),
             TemplateURL::GenerateKeyword(GURL("http://foo")));
-  // www. should be stripped.
-  ASSERT_EQ(ASCIIToUTF16("foo"),
+  ASSERT_EQ(ASCIIToUTF16("foo."),
+            TemplateURL::GenerateKeyword(GURL("http://foo.")));
+  // www. should be stripped for a public hostname but not a private/intranet
+  // hostname.
+  ASSERT_EQ(ASCIIToUTF16("google.com"),
+            TemplateURL::GenerateKeyword(GURL("http://www.google.com")));
+  ASSERT_EQ(ASCIIToUTF16("www.foo"),
             TemplateURL::GenerateKeyword(GURL("http://www.foo")));
   // Make sure we don't get a trailing '/'.
   ASSERT_EQ(ASCIIToUTF16("blah"),
             TemplateURL::GenerateKeyword(GURL("http://blah/")));
   // Don't generate the empty string.
-  ASSERT_EQ(ASCIIToUTF16("www"),
+  ASSERT_EQ(ASCIIToUTF16("www."),
             TemplateURL::GenerateKeyword(GURL("http://www.")));
   ASSERT_EQ(
       base::UTF8ToUTF16("\xd0\xb0\xd0\xb1\xd0\xb2"),

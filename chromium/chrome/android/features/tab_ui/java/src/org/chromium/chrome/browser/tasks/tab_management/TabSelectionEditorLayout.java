@@ -11,6 +11,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
+import android.view.accessibility.AccessibilityEvent;
 import android.widget.PopupWindow;
 
 import androidx.annotation.NonNull;
@@ -33,6 +34,7 @@ class TabSelectionEditorLayout extends SelectableListLayout<Integer> {
     private ViewTreeObserver.OnGlobalLayoutListener mParentLayoutListener;
     private @Nullable Rect mPositionRect;
     private boolean mIsInitialized;
+    private Runnable mEditorHideController;
 
     // TODO(meiliang): inflates R.layout.tab_selection_editor_layout in
     // TabSelectionEditorCoordinator.
@@ -40,6 +42,16 @@ class TabSelectionEditorLayout extends SelectableListLayout<Integer> {
         super(context, attrs);
         mWindow = new PopupWindow(
                 this, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+
+        if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
+            // TODO(crbug.com/1124919): Remove PopupWindow usage, the focusable PopupWindow messes
+            // up the TalkBack. Focusable PopupWindow always focuses the first item in the content
+            // view and announces the first item twice under Talkback mode.
+            mWindow.setFocusable(true);
+            mWindow.setOnDismissListener(() -> {
+                if (mEditorHideController != null) mEditorHideController.run();
+            });
+        }
     }
 
     /**
@@ -69,12 +81,21 @@ class TabSelectionEditorLayout extends SelectableListLayout<Integer> {
         assert mIsInitialized;
         if (mPositionRect == null) {
             mWindow.showAtLocation(mParentView, Gravity.CENTER, 0, 0);
+            if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
+                // TODO(crbug.com/1124919): The following line forces Talkback to announce the
+                // content description of this view. Remove after PopupWindow usage is removed.
+                sendAccessibilityEvent(AccessibilityEvent.TYPE_ANNOUNCEMENT);
+            }
             return;
         }
         mWindow.setWidth(mPositionRect.width());
         mWindow.setHeight(mPositionRect.height());
         mWindow.showAtLocation(
                 mParentView, Gravity.NO_GRAVITY, mPositionRect.left, mPositionRect.top);
+        if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
+            // TODO(crbug.com/1124919): Remove after PopupWindow usage is removed.
+            sendAccessibilityEvent(AccessibilityEvent.TYPE_ANNOUNCEMENT);
+        }
     }
 
     /**
@@ -132,5 +153,11 @@ class TabSelectionEditorLayout extends SelectableListLayout<Integer> {
     @VisibleForTesting
     Rect getPositionRectForTesting() {
         return mPositionRect;
+    }
+
+    void setEditorHideController(Runnable hideController) {
+        if (!TabUiFeatureUtilities.isLaunchPolishEnabled()) return;
+
+        mEditorHideController = hideController;
     }
 }

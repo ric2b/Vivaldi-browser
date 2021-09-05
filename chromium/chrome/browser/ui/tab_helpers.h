@@ -18,12 +18,12 @@ class BrowserTabStripModelDelegate;
 }
 
 namespace prerender {
-class PrerenderContents;
+class ChromePrerenderContentsDelegate;
 }
 
 namespace thin_webview {
 namespace android {
-class ThinWebView;
+class ChromeThinWebViewInitializer;
 }
 }  // namespace thin_webview
 
@@ -56,11 +56,11 @@ class TabHelpers {
 
   // Prerendering loads pages that have arbitrary external content; it needs
   // the full set of tab helpers to deal with it.
-  friend class prerender::PrerenderContents;
+  friend class prerender::ChromePrerenderContentsDelegate;
 
   // ThinWebView is used to host WebContents on non-tab UIs in Android. Most
   // clients of ThinWebView will need a major subset of the tab helpers.
-  friend class thin_webview::android::ThinWebView;
+  friend class thin_webview::android::ChromeThinWebViewInitializer;
 
   // FYI: Do NOT add any more friends here. The functions above are the ONLY
   // ones that need to call AttachTabHelpers; if you think you do, re-read the

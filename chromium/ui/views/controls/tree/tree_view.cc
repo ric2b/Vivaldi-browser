@@ -84,7 +84,7 @@ TreeView::TreeView()
       drawing_provider_(std::make_unique<TreeViewDrawingProvider>()) {
   // Always focusable, even on Mac (consistent with NSOutlineView).
   SetFocusBehavior(FocusBehavior::ALWAYS);
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   constexpr bool kUseMdIcons = true;
 #else
   constexpr bool kUseMdIcons = false;
@@ -890,7 +890,7 @@ std::unique_ptr<AXVirtualView> TreeView::CreateAndSetAccessibilityView(
   ui::AXNodeData& node_data = ax_view->GetCustomData();
   node_data.role = ax::mojom::Role::kTreeItem;
   if (base::i18n::IsRTL())
-    node_data.SetTextDirection(ax::mojom::TextDirection::kRtl);
+    node_data.SetTextDirection(ax::mojom::WritingDirection::kRtl);
 
   base::RepeatingCallback<void(ui::AXNodeData*)> selected_callback =
       base::BindRepeating(&TreeView::PopulateAccessibilityData,

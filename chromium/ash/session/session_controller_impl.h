@@ -42,7 +42,7 @@ class ASH_EXPORT SessionControllerImpl : public SessionController {
   ~SessionControllerImpl() override;
 
   base::TimeDelta session_length_limit() const { return session_length_limit_; }
-  base::TimeTicks session_start_time() const { return session_start_time_; }
+  base::Time session_start_time() const { return session_start_time_; }
 
   // Returns the number of signed in users. If 0 is returned, there is either
   // no session in progress or no active user.
@@ -63,9 +63,6 @@ class ASH_EXPORT SessionControllerImpl : public SessionController {
 
   // Returns true if the screen can be locked.
   bool CanLockScreen() const;
-
-  // Returns true if the screen is currently locked.
-  bool IsScreenLocked() const;
 
   // Returns true if the screen should be locked automatically when the screen
   // is turned off or the system is suspended.
@@ -174,9 +171,6 @@ class ASH_EXPORT SessionControllerImpl : public SessionController {
   // the active user profile prefs. Returns null early during startup.
   PrefService* GetActivePrefService() const;
 
-  void AddObserver(SessionObserver* observer);
-  void RemoveObserver(SessionObserver* observer);
-
   // Returns the ash notion of login status.
   // NOTE: Prefer GetSessionState() in new code because the concept of
   // SessionState more closes matches the state in chrome.
@@ -194,7 +188,7 @@ class ASH_EXPORT SessionControllerImpl : public SessionController {
   void RunUnlockAnimation(RunUnlockAnimationCallback callback) override;
   void NotifyChromeTerminating() override;
   void SetSessionLengthLimit(base::TimeDelta length_limit,
-                             base::TimeTicks start_time) override;
+                             base::Time start_time) override;
   void CanSwitchActiveUser(CanSwitchActiveUserCallback callback) override;
   void ShowMultiprofilesIntroDialog(
       ShowMultiprofilesIntroDialogCallback callback) override;
@@ -208,6 +202,9 @@ class ASH_EXPORT SessionControllerImpl : public SessionController {
   void RemoveSessionActivationObserverForAccountId(
       const AccountId& account_id,
       SessionActivationObserver* observer) override;
+  void AddObserver(SessionObserver* observer) override;
+  void RemoveObserver(SessionObserver* observer) override;
+  bool IsScreenLocked() const override;
 
   // Test helpers.
   void ClearUserSessionsForTest();
@@ -293,7 +290,7 @@ class ASH_EXPORT SessionControllerImpl : public SessionController {
   // The session start time, set at login or on the first user activity; set to
   // null if there is no session length limit. This value is also stored in a
   // pref in case of a crash during the session.
-  base::TimeTicks session_start_time_;
+  base::Time session_start_time_;
 
   // Set to true if the active user's pref is received before the signin prefs.
   // This is so that we can guarantee that observers are notified with

@@ -38,7 +38,7 @@
 #include "components/variations/service/variations_service.h"
 #include "components/variations/synthetic_trials_active_group_id_provider.h"
 #include "components/variations/variations_crash_keys.h"
-#include "components/variations/variations_http_header_provider.h"
+#include "components/variations/variations_ids_provider.h"
 #include "ios/chrome/browser/application_context_impl.h"
 #include "ios/chrome/browser/browser_state/browser_state_keyed_service_factories.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -49,6 +49,7 @@
 #include "ios/chrome/browser/install_time_util.h"
 #include "ios/chrome/browser/metrics/ios_expired_histograms_array.h"
 #include "ios/chrome/browser/open_from_clipboard/create_clipboard_recent_content.h"
+#include "ios/chrome/browser/policy/browser_policy_connector_ios.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "ios/chrome/browser/translate/translate_service_ios.h"
@@ -77,6 +78,8 @@
 #endif
 
 namespace {
+
+#if BUILDFLAG(USE_ALLOCATOR_SHIM)
 // Do not install allocator shim on iOS 13.4 due to high crash volume on this
 // particular version of OS. TODO(crbug.com/1108219): Remove this workaround
 // when/if the bug gets fixed.
@@ -84,6 +87,8 @@ bool ShouldInstallAllocatorShim() {
   return !base::ios::IsRunningOnOrLater(13, 4, 0) ||
          base::ios::IsRunningOnOrLater(13, 5, 0);
 }
+#endif
+
 }  // namespace
 
 IOSChromeMainParts::IOSChromeMainParts(
@@ -248,6 +253,14 @@ void IOSChromeMainParts::PreMainMessageLoopRun() {
     variations_service->PerformPreMainMessageLoopStartup();
   }
 
+  // Initialize Chrome Browser Cloud Management.
+  auto* policy_connector = application_context_->GetBrowserPolicyConnector();
+  if (policy_connector) {
+    policy_connector->chrome_browser_cloud_management_controller()->Init(
+        application_context_->GetLocalState(),
+        application_context_->GetSharedURLLoaderFactory());
+  }
+
   if (base::FeatureList::IsEnabled(
           safe_browsing::kSafeBrowsingAvailableOnIOS)) {
     // Ensure that Safe Browsing is initialized.
@@ -303,7 +316,7 @@ void IOSChromeMainParts::SetupFieldTrials() {
 void IOSChromeMainParts::SetupMetrics() {
   metrics::MetricsService* metrics = application_context_->GetMetricsService();
   metrics->synthetic_trial_registry()->AddSyntheticTrialObserver(
-      variations::VariationsHttpHeaderProvider::GetInstance());
+      variations::VariationsIdsProvider::GetInstance());
   metrics->synthetic_trial_registry()->AddSyntheticTrialObserver(
       variations::SyntheticTrialsActiveGroupIdProvider::GetInstance());
   // Now that field trials have been created, initializes metrics recording.

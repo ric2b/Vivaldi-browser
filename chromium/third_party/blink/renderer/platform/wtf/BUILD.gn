@@ -5,7 +5,6 @@
 assert(!is_ios)
 
 import("//build/config/compiler/compiler.gni")
-import("//build/config/jumbo.gni")
 import("//testing/test.gni")
 import("//third_party/blink/renderer/config.gni")
 
@@ -33,7 +32,7 @@ config("wtf_config") {
   }
 }
 
-jumbo_component("wtf") {
+component("wtf") {
   sources = [
     "allocator/allocator.cc",
     "allocator/allocator.h",
@@ -207,6 +206,7 @@ jumbo_component("wtf") {
   public_deps = [
     "//base",
     "//base/third_party/double_conversion",
+    "//components/crash/core/common:crash_key",
     "//third_party/icu",
   ]
 
@@ -220,12 +220,12 @@ jumbo_component("wtf") {
 
     # Inject Visual Studio debug visualizers for our types into all targets
     # that reference this.
-    all_dependent_configs = [ "//tools/win/DebugVisualizers:webkit" ]
+    all_dependent_configs = [ "//tools/win/DebugVisualizers:blink" ]
     inputs = [
-      # webkit.natvis listed as an input here instead of in
-      # //tools/win/DebugVisualizers:webkit to prevent unnecessary size increase
+      # blink.natvis listed as an input here instead of in
+      # //tools/win/DebugVisualizers:blink to prevent unnecessary size increase
       # in generated build files.
-      "//tools/win/DebugVisualizers/webkit.natvis",
+      "//tools/win/DebugVisualizers/blink.natvis",
     ]
   }
 
@@ -234,7 +234,7 @@ jumbo_component("wtf") {
   }
 
   if (is_mac) {
-    libs = [
+    frameworks = [
       "CoreFoundation.framework",
       "Foundation.framework",
     ]
@@ -255,7 +255,7 @@ test("wtf_unittests") {
   deps = [ ":wtf_unittests_sources" ]
 }
 
-jumbo_source_set("wtf_unittests_sources") {
+source_set("wtf_unittests_sources") {
   visibility = []  # Allow re-assignment of list.
   visibility = [ "*" ]
   testonly = true
@@ -288,6 +288,7 @@ jumbo_source_set("wtf_unittests_sources") {
     "scoped_logger_test.cc",
     "shared_buffer_test.cc",
     "testing/run_all_tests.cc",
+    "text/atomic_string_table_test.cc",
     "text/atomic_string_test.cc",
     "text/case_map_test.cc",
     "text/integer_to_string_conversion_test.cc",

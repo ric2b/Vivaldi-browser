@@ -8,9 +8,9 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/task/current_thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -19,6 +19,7 @@
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/test/local_policy_test_server_mixin.h"
+#include "chrome/browser/chromeos/login/test/oobe_base_test.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/chromeos/login/test/session_manager_state_waiter.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
@@ -65,16 +66,13 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/test_extension_registry_observer.h"
+#include "extensions/test/test_background_page_ready_observer.h"
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
-#include "net/base/test_completion_callback.h"
 #include "net/cert/cert_database.h"
 #include "net/cert/nss_cert_database.h"
 #include "net/cert/test_root_certs.h"
 #include "net/cert/x509_util_nss.h"
 #include "net/test/cert_test_util.h"
-#include "net/test/test_data_directory.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -167,38 +165,6 @@ class CertDatabaseChangedObserver : public net::CertDatabase::Observer {
   base::RunLoop run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(CertDatabaseChangedObserver);
-};
-
-// Observer that allows waiting until the background page of the specified
-// extension/app loads.
-// TODO(https://crbug.com/991464): Extract this into a more generic helper class
-// for using in other tests.
-class ExtensionBackgroundPageReadyObserver final {
- public:
-  explicit ExtensionBackgroundPageReadyObserver(const std::string& extension_id)
-      : extension_id_(extension_id),
-        notification_observer_(
-            extensions::NOTIFICATION_EXTENSION_BACKGROUND_PAGE_READY,
-            base::Bind(
-                &ExtensionBackgroundPageReadyObserver::IsNotificationRelevant,
-                base::Unretained(this))) {}
-
-  void Wait() { notification_observer_.Wait(); }
-
- private:
-  // Callback which is used for |WindowedNotificationObserver| for checking
-  // whether the condition being awaited is met.
-  bool IsNotificationRelevant(
-      const content::NotificationSource& source,
-      const content::NotificationDetails& details) const {
-    return content::Source<const extensions::Extension>(source)->id() ==
-           extension_id_;
-  }
-
-  const std::string extension_id_;
-  content::WindowedNotificationObserver notification_observer_;
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionBackgroundPageReadyObserver);
 };
 
 // Retrieves the path to the directory containing certificates designated for
@@ -298,7 +264,7 @@ class UserPolicyCertsHelper {
     policy::PolicyMap policy;
     policy.Set(key::kOpenNetworkConfiguration, policy::POLICY_LEVEL_MANDATORY,
                policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-               std::make_unique<base::Value>(onc_policy_data), nullptr);
+               base::Value(onc_policy_data), nullptr);
     provider_.UpdateChromePolicy(policy);
     // Note that this relies on the implementation detail that the notification
     // is sent even if the trust roots effectively remain the same.
@@ -437,7 +403,11 @@ class PolicyProvidedCertsRegularUserTest
     : public InProcessBrowserTest,
       public ::testing::WithParamInterface<bool> {
  protected:
-  PolicyProvidedCertsRegularUserTest() {
+  PolicyProvidedCertsRegularUserTest() = default;
+
+  void SetUpOnMainThread() override {
+    InProcessBrowserTest::SetUpOnMainThread();
+
     // Use the same testing slot as private and public slot for testing.
     test_nss_cert_db_ = std::make_unique<net::NSSCertDatabase>(
         crypto::ScopedPK11Slot(
@@ -751,7 +721,7 @@ class PolicyProvidedClientCertsTest
     policy::PolicyMap policy;
     policy.Set(key::kOpenNetworkConfiguration, policy::POLICY_LEVEL_MANDATORY,
                policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-               std::make_unique<base::Value>(user_policy_blob), nullptr);
+               base::Value(user_policy_blob), nullptr);
     provider_.UpdateChromePolicy(policy);
 
     cert_database_changed_observer.Wait();
@@ -836,10 +806,10 @@ class PolicyProvidedCertsForSigninExtensionTest
     signin_profile_ = GetInitialProfile();
     ASSERT_TRUE(chromeos::ProfileHelper::IsSigninProfile(signin_profile_));
 
-    ExtensionBackgroundPageReadyObserver extension_1_observer(
-        kSigninScreenExtension1);
-    ExtensionBackgroundPageReadyObserver extension_2_observer(
-        kSigninScreenExtension2);
+    extensions::ExtensionBackgroundPageReadyObserver extension_1_observer(
+        signin_profile_, kSigninScreenExtension1);
+    extensions::ExtensionBackgroundPageReadyObserver extension_2_observer(
+        signin_profile_, kSigninScreenExtension2);
 
     AddExtensionForForceInstallation(kSigninScreenExtension1,
                                      kSigninScreenExtension1UpdateManifestPath);
@@ -912,7 +882,8 @@ class PolicyProvidedCertsForSigninExtensionTest
 // caches), the test is able to catch that.
 IN_PROC_BROWSER_TEST_P(PolicyProvidedCertsForSigninExtensionTest,
                        ActiveOnlyInSelectedExtension) {
-  chromeos::OobeScreenWaiter(chromeos::GaiaView::kScreenId).Wait();
+  chromeos::OobeScreenWaiter(chromeos::OobeBaseTest::GetFirstSigninScreen())
+      .Wait();
   content::StoragePartition* signin_profile_default_partition =
       content::BrowserContext::GetDefaultStoragePartition(signin_profile_);
 

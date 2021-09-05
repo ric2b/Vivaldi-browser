@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Element seznama</translation>
 <translation id="1013742170491673792">iskel</translation>
 <translation id="1014370462248694370">Z dvema prstoma povlecite v desno</translation>
+<translation id="1016393160682012902">Pritisnite tipko na tipkovnici qwerty, tipko na zaslonu braille, ki omogoča osveževanje, ali potezo dotika, če želite izvedeti njeno funkcijo. Pritisnite tipko Control in tipko W ali Escape, če želite zapreti način.</translation>
 <translation id="1022586497894531524">Ali prvič uporabljate glasovni odziv ChromeVoxa? V tej kratki vadnici so pojasnjene osnove, ki jih morate vedeti, če želite začeti uporabljati ChromeVox.</translation>
 <translation id="1025074108959230262">Način zaklepanja je onemogočen</translation>
 <translation id="1031961866430398710">nato</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Notranja povezava</translation>
 <translation id="4909019435900810068">Premik nazaj za eno besedo</translation>
 <translation id="4911349081560453449">Ni prejšnjega potrditvenega polja</translation>
-<translation id="4915087353619183190">Začenjanje načina učenja. Pritisnite tipko na tipkovnici qwerty, tipko na zaslonu braille, ki omogoča osveževanje, ali potezo dotika, če želite izvedeti njeno funkcijo. Pritisnite tipko Control in tipko W ali Escape, če želite zapreti način.</translation>
 <translation id="492295894462528572">Predgovor</translation>
 <translation id="495046168593986294">Pomik navzgor</translation>
 <translation id="495170559598752135">Dejanja</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Zelena</translation>
 <translation id="602001110135236999">Pomik levo</translation>
 <translation id="6034000775414344507">Svetlo siva</translation>
+<translation id="6036135911048686884">Raziskovanje z dotikom</translation>
 <translation id="6037602951055904232">Panoramsko premikanje naprej</translation>
 <translation id="6044160928851315051">Zatemnitev zaslona</translation>
 <translation id="6082768461603900813">Osnovno pomikanje</translation>
@@ -716,7 +717,7 @@
 <translation id="6696967141280706829">Predgovor</translation>
 <translation id="6697092096875747123">Prejšnje kombinirano polje</translation>
 <translation id="6702609185760332517">{COUNT,plural, =1{klicaj}one{# klicaj}two{# klicaja}few{# klicaji}other{# klicajev}}</translation>
-<translation id="6710213216561001401">Nazaj</translation>
+<translation id="6710213216561001401">Prejšnji</translation>
 <translation id="6714813999819678458">Prejšnji naslov na ravni 2</translation>
 <translation id="6730312624811567147">Uporabite tipko za iskanje in levo ali desno za tipko Home ali End, tipko za iskanje, tipko Control in levo ali desno za tipko Control in Home ali End, tipko za iskanje in gor ali dol za tipko Page Up ali Down</translation>
 <translation id="6736510033526053669">zavihek ustvarjen</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{lojtra}one{# lojtra}two{# lojtri}few{# lojtre}other{# lojter}}</translation>
 <translation id="8378855320830505539">Območje</translation>
 <translation id="8382679411218029383">Samodokončanje v vrstici in s seznama</translation>
+<translation id="8394908167088220973">Ustavitev/začasna ustavitev</translation>
 <translation id="8428213095426709021">Nastavitve</translation>
 <translation id="8428603554127842284">raven <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">menvrst</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">zapiranje strukturirane vsebine, na primer tabele</translation>
 <translation id="8779057862865475116">Ni prejšnje povezave</translation>
 <translation id="8796411681063377102">Naslednji naslov na ravni 3</translation>
+<translation id="8823311177246872527"><ph name="CURRENTPAGE" />. stran od <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">psc</translation>
 <translation id="8851136666856101339">glavn</translation>
 <translation id="8882002077197914455">Glava vrstice</translation>

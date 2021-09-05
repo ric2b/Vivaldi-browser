@@ -278,7 +278,11 @@ TEST_F(WebUIDataSourceTest, SetCspValues) {
             url_data_source->GetContentSecurityPolicy(
                 network::mojom::CSPDirectiveName::ChildSrc));
   EXPECT_EQ("", url_data_source->GetContentSecurityPolicy(
+                    network::mojom::CSPDirectiveName::ConnectSrc));
+  EXPECT_EQ("", url_data_source->GetContentSecurityPolicy(
                     network::mojom::CSPDirectiveName::DefaultSrc));
+  EXPECT_EQ("", url_data_source->GetContentSecurityPolicy(
+                    network::mojom::CSPDirectiveName::FrameSrc));
   EXPECT_EQ("", url_data_source->GetContentSecurityPolicy(
                     network::mojom::CSPDirectiveName::ImgSrc));
   EXPECT_EQ("", url_data_source->GetContentSecurityPolicy(
@@ -291,8 +295,12 @@ TEST_F(WebUIDataSourceTest, SetCspValues) {
                 network::mojom::CSPDirectiveName::ScriptSrc));
   EXPECT_EQ("", url_data_source->GetContentSecurityPolicy(
                     network::mojom::CSPDirectiveName::StyleSrc));
-  EXPECT_EQ("", url_data_source->GetContentSecurityPolicy(
-                    network::mojom::CSPDirectiveName::ConnectSrc));
+  EXPECT_EQ("require-trusted-types-for 'script';",
+            url_data_source->GetContentSecurityPolicy(
+                network::mojom::CSPDirectiveName::RequireTrustedTypesFor));
+  EXPECT_EQ("trusted-types;",
+            url_data_source->GetContentSecurityPolicy(
+                network::mojom::CSPDirectiveName::TrustedTypes));
 
   // Override each directive and test it updates the underlying URLDataSource.
   source()->OverrideContentSecurityPolicy(
@@ -302,10 +310,23 @@ TEST_F(WebUIDataSourceTest, SetCspValues) {
                 network::mojom::CSPDirectiveName::ChildSrc));
 
   source()->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ConnectSrc,
+      "connect-src 'self' 'unsafe-inline';");
+  EXPECT_EQ("connect-src 'self' 'unsafe-inline';",
+            url_data_source->GetContentSecurityPolicy(
+                network::mojom::CSPDirectiveName::ConnectSrc));
+
+  source()->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::DefaultSrc, "default-src 'self';");
   EXPECT_EQ("default-src 'self';",
             url_data_source->GetContentSecurityPolicy(
                 network::mojom::CSPDirectiveName::DefaultSrc));
+
+  source()->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::FrameSrc, "frame-src 'self';");
+  EXPECT_EQ("frame-src 'self';",
+            url_data_source->GetContentSecurityPolicy(
+                network::mojom::CSPDirectiveName::FrameSrc));
 
   source()->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ImgSrc, "img-src 'self' blob:;");
@@ -340,11 +361,21 @@ TEST_F(WebUIDataSourceTest, SetCspValues) {
                 network::mojom::CSPDirectiveName::StyleSrc));
 
   source()->OverrideContentSecurityPolicy(
-      network::mojom::CSPDirectiveName::ConnectSrc,
-      "connect-src 'self' 'unsafe-inline';");
-  EXPECT_EQ("connect-src 'self' 'unsafe-inline';",
+      network::mojom::CSPDirectiveName::RequireTrustedTypesFor,
+      "require-trusted-types-for 'wasm';");
+  EXPECT_EQ("require-trusted-types-for 'wasm';",
             url_data_source->GetContentSecurityPolicy(
-                network::mojom::CSPDirectiveName::ConnectSrc));
+                network::mojom::CSPDirectiveName::RequireTrustedTypesFor));
+  source()->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::TrustedTypes, "trusted-types test;");
+  EXPECT_EQ("trusted-types test;",
+            url_data_source->GetContentSecurityPolicy(
+                network::mojom::CSPDirectiveName::TrustedTypes));
+  source()->DisableTrustedTypesCSP();
+  EXPECT_EQ("", url_data_source->GetContentSecurityPolicy(
+                    network::mojom::CSPDirectiveName::RequireTrustedTypesFor));
+  EXPECT_EQ("", url_data_source->GetContentSecurityPolicy(
+                    network::mojom::CSPDirectiveName::TrustedTypes));
 }
 
 }  // namespace content

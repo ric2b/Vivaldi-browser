@@ -24,19 +24,20 @@ namespace {
 arc::mojom::WebAppInfoPtr GetWebAppInfo() {
   return arc::mojom::WebAppInfo::New("Fake App Title",
                                      "https://www.google.com/index.html",
-                                     "https://www.google.com/", 10000);
+                                     "https://www.google.com/", 0xFFAABBCC);
 }
 
 constexpr int kGeneratedIconSize = 128;
 
-const std::vector<uint8_t> GetIconBytes() {
+arc::mojom::RawIconPngDataPtr GetIconBytes() {
   auto fake_app_instance =
       std::make_unique<arc::FakeAppInstance>(/*app_host=*/nullptr);
-  std::string png_data_as_string;
-  EXPECT_TRUE(fake_app_instance->GenerateIconResponse(
-      kGeneratedIconSize, /*app_icon=*/true, &png_data_as_string));
-  return std::vector<uint8_t>(png_data_as_string.begin(),
-                              png_data_as_string.end());
+  arc::mojom::RawIconPngDataPtr icon = fake_app_instance->GenerateIconResponse(
+      kGeneratedIconSize, /*app_icon=*/true);
+  EXPECT_TRUE(icon);
+  if (icon)
+    EXPECT_TRUE(icon->icon_png_data.has_value());
+  return icon;
 }
 
 }  // namespace
@@ -115,13 +116,13 @@ TEST_F(ApkWebAppInstallerTest, IconDecodeCallsWebAppInstallManager) {
             apk_web_app_installer.web_app_info().app_url);
   EXPECT_EQ(GURL("https://www.google.com/"),
             apk_web_app_installer.web_app_info().scope);
-  EXPECT_EQ(10000,
-            static_cast<int32_t>(
+  EXPECT_EQ(0xFFAABBCC,
+            static_cast<uint32_t>(
                 apk_web_app_installer.web_app_info().theme_color.value()));
 
-  EXPECT_EQ(1u, apk_web_app_installer.web_app_info().icon_bitmaps.size());
+  EXPECT_EQ(1u, apk_web_app_installer.web_app_info().icon_bitmaps_any.size());
   EXPECT_FALSE(apk_web_app_installer.web_app_info()
-                   .icon_bitmaps.at(kGeneratedIconSize)
+                   .icon_bitmaps_any.at(kGeneratedIconSize)
                    .drawsNothing());
 }
 

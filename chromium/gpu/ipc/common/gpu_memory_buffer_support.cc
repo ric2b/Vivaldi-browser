@@ -8,10 +8,11 @@
 #include "base/notreached.h"
 #include "build/build_config.h"
 #include "gpu/ipc/common/gpu_memory_buffer_impl_shared_memory.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/buffer_usage_util.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "gpu/ipc/common/gpu_memory_buffer_impl_io_surface.h"
 #endif
 
@@ -38,12 +39,20 @@
 #include "gpu/ipc/common/gpu_memory_buffer_impl_android_hardware_buffer.h"
 #endif
 
+#if defined(USE_X11)
+#include "ui/base/ui_base_features.h"
+#endif
+
 namespace gpu {
 
 GpuMemoryBufferSupport::GpuMemoryBufferSupport() {
 #if defined(USE_OZONE)
-  client_native_pixmap_factory_ = ui::CreateClientNativePixmapFactoryOzone();
-#elif defined(OS_LINUX)
+  if (features::IsUsingOzonePlatform()) {
+    client_native_pixmap_factory_ = ui::CreateClientNativePixmapFactoryOzone();
+    return;
+  }
+#endif
+#if defined(OS_LINUX)
   client_native_pixmap_factory_.reset(
       gfx::CreateClientNativePixmapFactoryDmabuf());
 #endif
@@ -53,7 +62,7 @@ GpuMemoryBufferSupport::~GpuMemoryBufferSupport() {}
 
 gfx::GpuMemoryBufferType
 GpuMemoryBufferSupport::GetNativeGpuMemoryBufferType() {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   return gfx::IO_SURFACE_BUFFER;
 #elif defined(OS_ANDROID)
   return gfx::ANDROID_HARDWARE_BUFFER;
@@ -71,7 +80,7 @@ bool GpuMemoryBufferSupport::IsNativeGpuMemoryBufferConfigurationSupported(
     gfx::BufferUsage usage) {
   DCHECK_NE(gfx::SHARED_MEMORY_BUFFER, GetNativeGpuMemoryBufferType());
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   switch (usage) {
     case gfx::BufferUsage::GPU_READ:
     case gfx::BufferUsage::SCANOUT:
@@ -112,10 +121,13 @@ bool GpuMemoryBufferSupport::IsNativeGpuMemoryBufferConfigurationSupported(
   }
   NOTREACHED();
   return false;
-#elif defined(USE_OZONE)
-  return ui::OzonePlatform::GetInstance()->IsNativePixmapConfigSupported(format,
-                                                                         usage);
-#elif defined(USE_X11)
+#elif defined(USE_OZONE) || defined(USE_X11)
+#if defined(USE_OZONE)
+  if (features::IsUsingOzonePlatform()) {
+    return ui::OzonePlatform::GetInstance()->IsNativePixmapConfigSupported(
+        format, usage);
+  }
+#endif
   // On X11, GPU memory buffer support can only be determined after GPU
   // initialization.
   // viz::HostGpuMemoryBufferManager::IsNativeGpuMemoryBufferConfiguration()
@@ -151,10 +163,10 @@ bool GpuMemoryBufferSupport::IsConfigurationSupportedForTest(
   if (type == GetNativeGpuMemoryBufferType()) {
 #if defined(USE_X11)
     // On X11, we require GPUInfo to determine configuration support.
-    return false;
-#else
-    return IsNativeGpuMemoryBufferConfigurationSupported(format, usage);
+    if (!features::IsUsingOzonePlatform())
+      return false;
 #endif
+    return IsNativeGpuMemoryBufferConfigurationSupported(format, usage);
   }
 
   if (type == gfx::SHARED_MEMORY_BUFFER) {
@@ -177,7 +189,7 @@ GpuMemoryBufferSupport::CreateGpuMemoryBufferImplFromHandle(
     case gfx::SHARED_MEMORY_BUFFER:
       return GpuMemoryBufferImplSharedMemory::CreateFromHandle(
           std::move(handle), size, format, usage, std::move(callback));
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     case gfx::IO_SURFACE_BUFFER:
       return GpuMemoryBufferImplIOSurface::CreateFromHandle(
           std::move(handle), size, format, usage, std::move(callback));

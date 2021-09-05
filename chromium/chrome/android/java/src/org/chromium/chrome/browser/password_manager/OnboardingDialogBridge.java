@@ -12,7 +12,7 @@ import android.content.Context;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -37,7 +37,7 @@ public class OnboardingDialogBridge {
         // TODO(crbug.com/983445): Get rid of this in favor of passing in direct dependencies.
         ChromeActivity activity = (ChromeActivity) windowAndroid.getActivity().get();
         mOnboardingDialog = new PasswordManagerDialogCoordinator(activity.getModalDialogManager(),
-                activity.findViewById(android.R.id.content), activity.getFullscreenManager(),
+                activity.findViewById(android.R.id.content), activity.getBrowserControlsManager(),
                 activity.getControlContainerHeightResource());
         mContext = new WeakReference<>(activity);
     }

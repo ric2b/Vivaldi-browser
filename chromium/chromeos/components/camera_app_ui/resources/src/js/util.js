@@ -3,9 +3,10 @@
 // found in the LICENSE file.
 
 import {browserProxy} from './browser_proxy/browser_proxy.js';
+import {ErrorLevel, ErrorType, reportError} from './error.js';
 import * as state from './state.js';
 import * as tooltip from './tooltip.js';
-import {Facing, Resolution} from './type.js';
+import {Facing} from './type.js';
 
 /**
  * Gets the clockwise rotation and flip that can orient a photo to its upright
@@ -89,7 +90,7 @@ function dropPhotoOrientation(blob) {
 /**
  * Orients a photo to the upright orientation.
  * @param {!Blob} blob Photo as a blob.
- * @param {function(Blob)} onSuccess Success callback with the result photo as
+ * @param {function(!Blob)} onSuccess Success callback with the result photo as
  *     a blob.
  * @param {function()} onFailure Failure callback.
  */
@@ -158,7 +159,7 @@ export function orientPhoto(blob, onSuccess, onFailure) {
 
 /**
  * Cancels animating the element by removing 'animate' class.
- * @param {HTMLElement} element Element for canceling animation.
+ * @param {!HTMLElement} element Element for canceling animation.
  * @return {!Promise} Promise resolved when ongoing animation is canceled and
  *     next animation can be safely applied.
  */
@@ -204,7 +205,7 @@ function waitAnimationCompleted(element) {
 
 /**
  * Animates the element once by applying 'animate' class.
- * @param {HTMLElement} element Element to be animated.
+ * @param {!HTMLElement} element Element to be animated.
  * @param {function()=} callback Callback called on completion.
  */
 export function animateOnce(element, callback) {
@@ -221,7 +222,7 @@ export function animateOnce(element, callback) {
 
 /**
  * Returns a shortcut string, such as Ctrl-Alt-A.
- * @param {Event} event Keyboard event.
+ * @param {!Event} event Keyboard event.
  * @return {string} Shortcut identifier.
  */
 export function getShortcutIdentifier(event) {
@@ -258,22 +259,10 @@ export function getShortcutIdentifier(event) {
 
 /**
  * Makes the element unfocusable by mouse.
- * @param {HTMLElement} element Element to be unfocusable.
+ * @param {!HTMLElement} element Element to be unfocusable.
  */
 export function makeUnfocusableByMouse(element) {
   element.addEventListener('mousedown', (event) => event.preventDefault());
-}
-
-/**
- * Checks if the window is maximized or fullscreen.
- * @return {boolean} True if maximized or fullscreen, false otherwise.
- */
-export function isWindowFullSize() {
-  // App-window's isFullscreen, isMaximized state and window's outer-size may
-  // not be updated immediately during resizing. Use if app-window's outerBounds
-  // width matches screen width here as workarounds.
-  return chrome.app.window.current().outerBounds.width >= screen.width ||
-      chrome.app.window.current().outerBounds.height >= screen.height;
 }
 
 /**
@@ -317,7 +306,7 @@ export function setupI18nElements(rootElement) {
  * Reads blob into Image.
  * @param {!Blob} blob
  * @return {!Promise<!HTMLImageElement>}
- * @throws {Error}
+ * @throws {!Error}
  */
 export function blobToImage(blob) {
   return new Promise((resolve, reject) => {
@@ -347,37 +336,48 @@ export function getDefaultFacing() {
  *     ratio of input picture.
  * @return {!Promise<!Blob>} Promise for the result.
  */
-export function scalePicture(url, isVideo, width, height = undefined) {
+export async function scalePicture(url, isVideo, width, height = undefined) {
   const element = document.createElement(isVideo ? 'video' : 'img');
   if (isVideo) {
     element.preload = 'auto';
   }
+  await new Promise((resolve, reject) => {
+    element.addEventListener(isVideo ? 'canplay' : 'load', resolve);
+    element.addEventListener('error', reject);
+    element.src = url;
+  });
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  if (height === undefined) {
+    const ratio = isVideo ? element.videoHeight / element.videoWidth :
+                            element.height / element.width;
+    height = Math.round(width * ratio);
+  }
+  canvas.width = width;
+  canvas.height = height;
+  context.drawImage(element, 0, 0, width, height);
+
+  /**
+   * @type {!Uint8ClampedArray} A one-dimensional pixels array in RGBA order.
+   */
+  const data = context.getImageData(0, 0, width, height).data;
+  if (data.every((byte) => byte === 0)) {
+    reportError(
+        ErrorType.BROKEN_THUMBNAIL, ErrorLevel.ERROR,
+        new Error('The thumbnail content is broken.'));
+    // Do not throw an error here. A black thumbnail is still better than no
+    // thumbnail to let user open the corresponding picutre in gallery.
+  }
+
   return new Promise((resolve, reject) => {
-           element.addEventListener(isVideo ? 'canplay' : 'load', resolve);
-           element.addEventListener('error', reject);
-           element.src = url;
-         })
-      .then(() => {
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        if (height === undefined) {
-          const ratio = isVideo ? element.videoHeight / element.videoWidth :
-                                  element.height / element.width;
-          height = Math.round(width * ratio);
-        }
-        canvas.width = width;
-        canvas.height = height;
-        context.drawImage(element, 0, 0, width, height);
-        return new Promise((resolve, reject) => {
-          canvas.toBlob((blob) => {
-            if (blob) {
-              resolve(blob);
-            } else {
-              reject(new Error('Failed to create thumbnail.'));
-            }
-          }, 'image/jpeg');
-        });
-      });
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+      } else {
+        reject(new Error('Failed to create thumbnail.'));
+      }
+    }, 'image/jpeg');
+  });
 }
 
 /**
@@ -391,58 +391,8 @@ export function toggleChecked(element, checked) {
 }
 
 /**
- * Sets CCA window inner bound to size which can fit in current screen.
- * @return {!Promise} Promise which is resolved when size change actually
- *     happen or is resolved immediately when there is no need to change.
- */
-export function fitWindow() {
-  const appWindow = chrome.app.window.current();
-
-  /**
-   * Get a preferred window size which can fit in current screen.
-   * @return {Resolution} Preferred window size.
-   */
-  const getPreferredWindowSize = () => {
-    const inner = appWindow.innerBounds;
-    const outer = appWindow.outerBounds;
-
-    const predefinedWidth = inner.minWidth;
-    const availableWidth = screen.availWidth;
-
-    const topBarHeight = outer.height - inner.height;
-    const fixedRatioMaxWidth =
-        Math.floor((screen.availHeight - topBarHeight) * 16 / 9);
-
-    let preferredWidth =
-        Math.min(predefinedWidth, availableWidth, fixedRatioMaxWidth);
-    preferredWidth -= preferredWidth % 16;
-    const preferredHeight = preferredWidth * 9 / 16;
-
-    return new Resolution(preferredWidth, preferredHeight);
-  };
-
-  const {width, height} = getPreferredWindowSize();
-
-  return new Promise((resolve) => {
-    const inner = appWindow.innerBounds;
-    if (inner.width === width && inner.height === height) {
-      resolve();
-      return;
-    }
-
-    const listener = () => {
-      appWindow.onBoundsChanged.removeListener(listener);
-      resolve();
-    };
-    appWindow.onBoundsChanged.addListener(listener);
-
-    Object.assign(inner, {width, height, minWidth: width, minHeight: height});
-  });
-}
-
-/**
  * Binds on/off of specified state with different aria label on an element.
- * @param {!{element: !Element, state: state.State, onLabel: string,
+ * @param {{element: !Element, state: !state.State, onLabel: string,
  *     offLabel: string}} params
  */
 export function bindElementAriaLabelWithState(

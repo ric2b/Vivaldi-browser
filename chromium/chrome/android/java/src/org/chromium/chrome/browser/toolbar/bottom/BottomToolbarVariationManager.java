@@ -19,6 +19,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
  * The variation manager helps figure out the current variation and the visibility of buttons on
@@ -84,6 +85,8 @@ public class BottomToolbarVariationManager {
      *         in portrait mode in the current variation.
      */
     public static boolean isMenuButtonOnBottom() {
+        if (ChromeApplication.isVivaldi() && !VivaldiUtils.isTopToolbarOn())
+            return true;
         // If we don't have variations that put menu on bottom in the future,
         // then this method can be removed.
         return false;

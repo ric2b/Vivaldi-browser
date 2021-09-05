@@ -78,8 +78,7 @@ class WEBVIEW_EXPORT WebDialogView : public ClientView,
   // client frame view.
   WebDialogView(content::BrowserContext* context,
                 ui::WebDialogDelegate* delegate,
-                std::unique_ptr<WebContentsHandler> handler,
-                bool use_dialog_frame = false);
+                std::unique_ptr<WebContentsHandler> handler);
   ~WebDialogView() override;
 
   content::WebContents* web_contents();
@@ -90,7 +89,7 @@ class WEBVIEW_EXPORT WebDialogView : public ClientView,
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   void ViewHierarchyChanged(
       const ViewHierarchyChangedDetails& details) override;
-  bool CanClose() override;
+  views::CloseRequestResult OnWindowCloseRequested() override;
 
   // WidgetDelegate:
   bool OnCloseRequested(Widget::ClosedReason close_reason) override;
@@ -102,7 +101,8 @@ class WEBVIEW_EXPORT WebDialogView : public ClientView,
   void WindowClosing() override;
   View* GetContentsView() override;
   ClientView* CreateClientView(Widget* widget) override;
-  NonClientFrameView* CreateNonClientFrameView(Widget* widget) override;
+  std::unique_ptr<NonClientFrameView> CreateNonClientFrameView(
+      Widget* widget) override;
   View* GetInitiallyFocusedView() override;
   bool ShouldShowWindowTitle() const override;
   bool ShouldShowCloseButton() const override;
@@ -192,9 +192,6 @@ class WEBVIEW_EXPORT WebDialogView : public ClientView,
 
   // Handler for unhandled key events from renderer.
   UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
-
-  // Whether to use dialog frame view for non client frame view.
-  bool use_dialog_frame_ = false;
 
   bool disable_url_load_for_test_ = false;
 

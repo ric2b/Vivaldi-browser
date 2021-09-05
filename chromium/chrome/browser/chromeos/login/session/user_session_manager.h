@@ -329,6 +329,10 @@ class UserSessionManager
 
   UserContext* mutable_user_context_for_testing() { return &user_context_; }
 
+  bool token_handle_backfill_tried_for_testing() {
+    return token_handle_backfill_tried_for_testing_;
+  }
+
   // Shows U2F notification if necessary.
   void MaybeShowU2FNotification();
 
@@ -516,23 +520,6 @@ class UserSessionManager
   void SetAttemptRestartClosureInTests(
       const base::RepeatingClosure& attempt_restart_closure);
 
-  // The user pods display type for histogram.
-  enum UserPodsDisplay {
-    // User pods enabling or disabling is possible either via local settings or
-    // via domain policy. The former method only applies to regular devices,
-    // whereas the latter is for enterprise-managed devices. Therefore, we have
-    // four possible combiations.
-    USER_PODS_DISPLAY_ENABLED_REGULAR = 0,
-    USER_PODS_DISPLAY_ENABLED_MANAGED = 1,
-    USER_PODS_DISPLAY_DISABLED_REGULAR = 2,
-    USER_PODS_DISPLAY_DISABLED_MANAGED = 3,
-    // Maximum histogram value.
-    NUM_USER_PODS_DISPLAY = 4
-  };
-
-  // Sends metrics for user pods display when existing user has logged in.
-  void SendUserPodsMetrics();
-
   void NotifyEasyUnlockKeyOpsFinished();
 
   UserSessionManagerDelegate* delegate_;
@@ -644,6 +631,8 @@ class UserSessionManager
   std::unique_ptr<ReleaseNotesNotification> release_notes_notification_;
 
   std::unique_ptr<TurnSyncOnHelper> turn_sync_on_helper_;
+
+  bool token_handle_backfill_tried_for_testing_ = false;
 
   base::WeakPtrFactory<UserSessionManager> weak_factory_{this};
 

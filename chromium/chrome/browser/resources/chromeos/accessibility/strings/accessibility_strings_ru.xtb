@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Пункт списка</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Проведите двумя пальцами вправо</translation>
+<translation id="1016393160682012902">Нажмите клавишу или коснитесь изображения жеста, чтобы узнать, какую функцию они выполняют. Вы можете использовать как стандартную, так и брайлевскую клавиатуру. Чтобы выйти, нажмите Control + W или клавишу Escape.</translation>
 <translation id="1022586497894531524">Впервые используете ChromeVox для озвучивания текста на экране? Благодаря нашему руководству вы быстро научитесь работать с этим сервисом.</translation>
 <translation id="1025074108959230262">Режим залипания отключен</translation>
 <translation id="1031961866430398710">затем</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Внутренняя ссылка.</translation>
 <translation id="4909019435900810068">Перейти на слово назад</translation>
 <translation id="4911349081560453449">Предыдущего флажка нет</translation>
-<translation id="4915087353619183190">Запускается режим обучения. Нажмите клавишу или коснитесь изображения жеста, чтобы узнать, какую функцию они выполняют. Вы можете использовать как стандартную, так и брайлевскую клавиатуру. Для выхода нажмите Ctrl + W или клавишу Esc.</translation>
 <translation id="492295894462528572">Предисловие</translation>
 <translation id="495046168593986294">Прокрутить вверх</translation>
 <translation id="495170559598752135">Действия</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Зеленый</translation>
 <translation id="602001110135236999">Влево</translation>
 <translation id="6034000775414344507">Светло-серый</translation>
+<translation id="6036135911048686884">Озвучивание при нажатии</translation>
 <translation id="6037602951055904232">Перейти вперед</translation>
 <translation id="6044160928851315051">Затемнить экран</translation>
 <translation id="6082768461603900813">Навигация</translation>
@@ -922,6 +923,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{решетка}one{# решетка}few{# решетки}many{# решеток}other{# pound signs}}</translation>
 <translation id="8378855320830505539">Регион</translation>
 <translation id="8382679411218029383">Строка и список автозаполнения</translation>
+<translation id="8394908167088220973">Воспроизведение/пауза</translation>
 <translation id="8428213095426709021">Настройки</translation>
 <translation id="8428603554127842284">Уровень <ph name="DEPTH" />.</translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -966,6 +968,7 @@
 <translation id="8770473310765924354">Закончить ввод структурированного содержания, например таблицы</translation>
 <translation id="8779057862865475116">Предыдущей ссылки нет</translation>
 <translation id="8796411681063377102">Перейти к следующему заголовку третьего уровня</translation>
+<translation id="8823311177246872527">Страница <ph name="CURRENTPAGE" /> из <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8882002077197914455">Заголовок строки</translation>

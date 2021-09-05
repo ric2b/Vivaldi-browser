@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <set>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -28,11 +29,14 @@
 #include "cc/input/input_handler.h"
 #include "cc/input/scrollbar_animation_controller.h"
 #include "cc/input/scrollbar_controller.h"
+#include "cc/input/threaded_input_handler.h"
 #include "cc/layers/layer_collections.h"
+#include "cc/metrics/average_lag_tracking_manager.h"
 #include "cc/metrics/dropped_frame_counter.h"
 #include "cc/metrics/event_metrics.h"
 #include "cc/metrics/events_metrics_manager.h"
 #include "cc/metrics/frame_sequence_tracker_collection.h"
+#include "cc/metrics/total_frame_counter.h"
 #include "cc/paint/discardable_image_map.h"
 #include "cc/paint/paint_worklet_job.h"
 #include "cc/resources/ui_resource_client.h"
@@ -84,6 +88,7 @@ class BrowserControlsOffsetManager;
 class CompositorFrameReportingController;
 class DebugRectHistory;
 class EvictionTilePriorityQueue;
+class DroppedFrameCounter;
 class ImageAnimationController;
 class LCDTextMetricsReporter;
 class LayerImpl;
@@ -274,6 +279,8 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
 
   LayerTreeHostImpl& operator=(const LayerTreeHostImpl&) = delete;
 
+  ThreadedInputHandler& GetInputHandler();
+
   // InputHandler implementation
   void BindToClient(InputHandlerClient* client) override;
   InputHandler::ScrollStatus ScrollBegin(ScrollState* scroll_state,
@@ -298,7 +305,7 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
       const gfx::Point& viewport_point) override;
   void MouseLeave() override;
 
-  // Returns frame_element_id from the layer hit by the given point.
+  // Returns visible_frame_element_id from the layer hit by the given point.
   // If the hit test failed, an invalid element ID is returned.
   ElementId FindFrameElementIdAtPoint(
       const gfx::PointF& viewport_point) override;
@@ -343,9 +350,11 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
                                            float bottom_ratio) override;
   float CurrentTopControlsShownRatio() const override;
   float CurrentBottomControlsShownRatio() const override;
+  gfx::ScrollOffset ViewportScrollOffset() const override;
   void DidChangeBrowserControlsPosition() override;
   void DidObserveScrollDelay(base::TimeDelta scroll_delay,
                              base::TimeTicks scroll_timestamp);
+  bool OnlyExpandTopControlsAtPageTop() const override;
   bool HaveRootScrollNode() const override;
   void SetNeedsCommit() override;
 
@@ -384,6 +393,28 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   void DidAnimateScrollOffset();
   void SetFullViewportDamage();
   void SetViewportDamage(const gfx::Rect& damage_rect);
+  void SetEnableFrameRateThrottling(bool enable_frame_rate_throttling);
+
+  // Interface for ThreadedInputHandler
+  bool HasAnimatedScrollbars() const;
+  void SetNeedsCommitInputChanges();
+  void DidUpdateScrollAnimationCurve();
+  void AccumulateScrollDeltaForTracing(const gfx::Vector2dF& delta);
+  void DidStartPinchZoom();
+  void DidEndPinchZoom();
+  void DidUpdatePinchZoom();
+  void DidStartScroll();
+  void DidSetRootScrollOffsetForSynchronousInputHandler();
+  FrameSequenceTrackerCollection& frame_trackers() { return frame_trackers_; }
+  ImplThreadPhase GetCompositorThreadPhase() const;
+  std::unordered_map<ElementId,
+                     std::unique_ptr<ScrollbarAnimationController>,
+                     ElementIdHash>&
+  get_scrollbar_animation_controllers() {
+    return scrollbar_animation_controllers_;
+  }
+  void DidScrollContent(bool animated);
+  float DeviceScaleFactor() const;
 
   // Updates registered ElementIds present in |changed_list|. Call this after
   // changing the property trees for the |changed_list| trees.
@@ -475,14 +506,15 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   void ResetTreesForTesting();
 
   void set_force_smooth_wheel_scrolling_for_testing(bool enabled) {
-    force_smooth_wheel_scrolling_for_testing_ = enabled;
+    input_handler_.set_force_smooth_wheel_scrolling_for_testing(enabled);
   }
 
   size_t SourceAnimationFrameNumberForTesting() const;
 
   void RegisterScrollbarAnimationController(ElementId scroll_element_id,
                                             float initial_opacity);
-  void DidUnregisterScrollbarLayer(ElementId scroll_element_id);
+  void DidUnregisterScrollbarLayer(ElementId scroll_element_id,
+                                   ScrollbarOrientation orientation);
   ScrollbarAnimationController* ScrollbarAnimationControllerForElementId(
       ElementId scroll_element_id) const;
   void FlashAllScrollbars(bool did_scroll);
@@ -504,6 +536,7 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   void SetIsLikelyToRequireADraw(bool is_likely_to_require_a_draw) override;
   gfx::ColorSpace GetRasterColorSpace(
       gfx::ContentColorUsage content_color_usage) const override;
+  float GetSDRWhiteLevel() const override;
   void RequestImplSideInvalidationForCheckerImagedTiles() override;
   size_t GetFrameIndexForImage(const PaintImage& paint_image,
                                WhichTree tree) const override;
@@ -564,7 +597,10 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
                                        int* max_msaa_samples,
                                        bool* supports_disable_msaa);
   bool use_gpu_rasterization() const { return use_gpu_rasterization_; }
-  bool use_oop_rasterization() const { return use_oop_rasterization_; }
+  bool can_use_oop_rasterization() const { return can_use_oop_rasterization_; }
+  bool use_oop_rasterization() const {
+    return use_gpu_rasterization_ && can_use_oop_rasterization_;
+  }
 
   GpuRasterizationStatus gpu_rasterization_status() const {
     return gpu_rasterization_status_;
@@ -622,30 +658,15 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   ScrollNode* CurrentlyScrollingNode();
   const ScrollNode* CurrentlyScrollingNode() const;
 
-  bool scroll_affects_scroll_handler() const {
-    return settings_.enable_synchronized_scrolling &&
-           scroll_affects_scroll_handler_;
-  }
   void QueueSwapPromiseForMainThreadScrollUpdate(
       std::unique_ptr<SwapPromise> swap_promise);
 
-  // Returns true if there is an active scroll in progress.  "Active" here
-  // means that it's been latched (i.e. we have a CurrentlyScrollingNode()) but
-  // also that some ScrollUpdates have been received and their delta consumed
-  // for scrolling. These can differ significantly e.g. the page allows the
-  // touchstart but preventDefaults all the touchmoves. In that case, we latch
-  // and have a CurrentlyScrollingNode() but will never receive a ScrollUpdate.
-  //
-  // "Precision" means it's a non-animated scroll like a touchscreen or
-  // high-precision touchpad. The latter distinction is important for things
-  // like scheduling decisions which might schedule a wheel and a touch
-  // scrolling differently due to user perception.
+  // See comment in equivalent ThreadedInputHandler method for what this means.
   bool IsActivelyPrecisionScrolling() const;
+  bool ScrollAffectsScrollHandler() const;
 
   virtual void SetVisible(bool visible);
   bool visible() const { return visible_; }
-
-  bool IsAnimatingForSnap() const;
 
   void SetNeedsOneBeginImplFrame();
   void SetNeedsRedraw();
@@ -654,7 +675,10 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
 
   const gfx::Transform& DrawTransform() const;
 
-  std::unique_ptr<ScrollAndScaleSet> ProcessScrollDeltas();
+  // During commit, processes and returns changes in the compositor since the
+  // last commit.
+  std::unique_ptr<CompositorCommitData> ProcessCompositorDeltas();
+
   DroppedFrameCounter* dropped_frame_counter() {
     return &dropped_frame_counter_;
   }
@@ -675,31 +699,9 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   }
 
   MutatorHost* mutator_host() const { return mutator_host_.get(); }
-  ScrollbarController* scrollbar_controller_for_testing() const {
-    return scrollbar_controller_.get();
-  }
 
   void SetDebugState(const LayerTreeDebugState& new_debug_state);
   const LayerTreeDebugState& debug_state() const { return debug_state_; }
-
-  gfx::Vector2dF accumulated_root_overscroll() const {
-    return accumulated_root_overscroll_;
-  }
-
-  bool pinch_gesture_active() const {
-    return pinch_gesture_active_ || external_pinch_gesture_active_;
-  }
-  // Used to set the pinch gesture active state when the pinch gesture is
-  // handled on another layer tree. In a page with OOPIFs, only the main
-  // frame's layer tree directly handles pinch events. But layer trees for
-  // sub-frames need to know when pinch gestures are active so they can
-  // throttle the re-rastering. This function allows setting this flag on
-  // OOPIF layer trees using information sent (initially) from the main-frame.
-  void set_external_pinch_gesture_active(bool external_pinch_gesture_active) {
-    external_pinch_gesture_active_ = external_pinch_gesture_active;
-    // Only one of the flags should ever be true at any given time.
-    DCHECK(!pinch_gesture_active_ || !external_pinch_gesture_active_);
-  }
 
   void SetTreePriority(TreePriority priority);
   TreePriority GetTreePriority() const;
@@ -732,28 +734,12 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
 
   virtual bool IsUIResourceOpaque(UIResourceId uid) const;
 
-  // This method gets the scroll offset for a regular scroller, or the combined
-  // visual and layout offsets of the viewport.
-  gfx::ScrollOffset GetVisualScrollOffset(const ScrollNode& scroll_node) const;
-
   bool GetSnapFlingInfoAndSetAnimatingSnapTarget(
       const gfx::Vector2dF& natural_displacement_in_viewport,
       gfx::Vector2dF* out_initial_position,
       gfx::Vector2dF* out_target_position) override;
 
   void ScrollEndForSnapFling(bool did_finish) override;
-
-  // Returns the amount of delta that can be applied to scroll_node, taking
-  // page scale into account.
-  gfx::Vector2dF ComputeScrollDelta(const ScrollNode& scroll_node,
-                                    const gfx::Vector2dF& delta);
-
-  // Resolves a delta in the given granularity for the |scroll_node| into
-  // physical pixels to scroll.
-  gfx::Vector2dF ResolveScrollGranularityToPixels(
-      const ScrollNode& scroll_node,
-      const gfx::Vector2dF& scroll_delta,
-      ui::ScrollGranularity granularity);
 
   void ScheduleMicroBenchmark(std::unique_ptr<MicroBenchmarkImpl> benchmark);
 
@@ -792,23 +778,12 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
 
   bool prepare_tiles_needed() const { return tile_priorities_dirty_; }
 
-  gfx::Vector2dF ScrollSingleNode(const ScrollNode& scroll_node,
-                                  const gfx::Vector2dF& delta,
-                                  const gfx::Point& viewport_point,
-                                  bool is_direct_manipulation,
-                                  ScrollTree* scroll_tree);
-
   base::SingleThreadTaskRunner* GetTaskRunner() const {
     DCHECK(task_runner_provider_);
     return task_runner_provider_->HasImplThread()
                ? task_runner_provider_->ImplThreadTaskRunner()
                : task_runner_provider_->MainThreadTaskRunner();
   }
-
-  // Return all ScrollNode indices that have an associated layer with a non-fast
-  // region that intersects the point.
-  base::flat_set<int> NonFastScrollableNodes(
-      const gfx::PointF& device_viewport_point) const;
 
   // Returns true if a scroll offset animation is created and false if we scroll
   // by the desired amount without an animation.
@@ -833,9 +808,6 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   std::unique_ptr<MutatorEvents> TakeMutatorEvents();
 
   void ClearCaches();
-
-  bool CanConsumeDelta(const ScrollState& scroll_state,
-                       const ScrollNode& scroll_node);
 
   void UpdateImageDecodingHints(
       base::flat_map<PaintImage::Id, PaintImage::DecodingMode>
@@ -868,6 +840,8 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   }
 
   bool can_use_msaa() const { return can_use_msaa_; }
+
+  Viewport& viewport() const { return *viewport_.get(); }
 
  protected:
   LayerTreeHostImpl(
@@ -902,38 +876,8 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
       compositor_frame_reporting_controller_;
 
  private:
-  void CollectScrollDeltas(ScrollAndScaleSet* scroll_info);
-  void CollectScrollbarUpdates(ScrollAndScaleSet* scroll_info) const;
-
-  // Returns the ScrollNode we should use to scroll, accounting for viewport
-  // scroll chaining rules.
-  ScrollNode* GetNodeToScroll(ScrollNode* node) const;
-
-  // Determines whether the given scroll node can scroll on the compositor
-  // thread or if there are any reasons it must be scrolled on the main thread
-  // or not at all. Note: in general, this is not sufficient to determine if a
-  // scroll can occur on the compositor thread. If hit testing to a scroll
-  // node, the caller must also check whether the hit point intersects a
-  // non-fast-scrolling-region of any ancestor scrolling layers. Can be removed
-  // after scroll unification https://crbug.com/476553.
-  InputHandler::ScrollStatus TryScroll(const ScrollTree& scroll_tree,
-                                       ScrollNode* scroll_node) const;
-
-  // Transforms viewport start point and scroll delta to local start point and
-  // local delta, respectively. If the transformation of either the start or end
-  // point of a scroll is clipped, the function returns false.
-  bool CalculateLocalScrollDeltaAndStartPoint(
-      const ScrollNode& scroll_node,
-      const gfx::PointF& viewport_point,
-      const gfx::Vector2dF& viewport_delta,
-      const ScrollTree& scroll_tree,
-      gfx::Vector2dF* out_local_scroll_delta,
-      gfx::PointF* out_local_start_point = nullptr);
-  gfx::Vector2dF ScrollNodeWithViewportSpaceDelta(
-      const ScrollNode& scroll_node,
-      const gfx::PointF& viewport_point,
-      const gfx::Vector2dF& viewport_delta,
-      ScrollTree* scroll_tree);
+  void CollectScrollbarUpdatesForCommit(
+      CompositorCommitData* commit_data) const;
   bool ScrollAnimationCreateInternal(const ScrollNode& scroll_node,
                                      const gfx::Vector2dF& delta,
                                      base::TimeDelta delayed_by,
@@ -968,55 +912,6 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   bool UpdateGpuRasterizationStatus();
   void UpdateTreeResourcesForGpuRasterizationIfNeeded();
 
-  Viewport& viewport() const { return *viewport_.get(); }
-
-  bool IsTouchDraggingScrollbar(
-      LayerImpl* first_scrolling_layer_or_drawn_scrollbar,
-      ui::ScrollInputType type);
-
-  // |layer| is returned from a regular hit test, and
-  // |first_scrolling_layer_or_drawn_scrollbar| is returned from a hit test
-  // performed only on scrollers and scrollbars. Initial scroll hit testing can
-  // be unreliable if the latter is not the direct scroll ancestor of the
-  // former. In this case, we will fall back to main thread scrolling because
-  // the compositor thread doesn't know which layer to scroll. This happens when
-  // a layer covers a scroller that doesn't scroll the former, or a scroller is
-  // masked by a mask layer for mask image, clip-path, rounded border, etc.
-  //
-  // Note, position: fixed layers use the inner viewport as their ScrollNode
-  // (since they don't scroll with the outer viewport), however, scrolls from
-  // the fixed layer still chain to the outer viewport. It's also possible for a
-  // node to have the inner viewport as its ancestor without going through the
-  // outer viewport; however, it may still scroll using the viewport(). Hence,
-  // this method must use the same scroll chaining logic we use in ApplyScroll.
-  bool IsInitialScrollHitTestReliable(
-      LayerImpl* layer,
-      LayerImpl* first_scrolling_layer_or_drawn_scrollbar) const;
-
-  // Given a starting node (determined by hit-test), walks up the scroll tree
-  // looking for the first node that can consume scroll from the given
-  // scroll_state and returns the first such node. If none is found, or if
-  // starting_node is nullptr, returns nullptr;
-  ScrollNode* FindNodeToLatch(ScrollState* scroll_state,
-                              ScrollNode* starting_node,
-                              ui::ScrollInputType type);
-
-  // Called during ScrollBegin once a scroller was successfully latched to
-  // (i.e.  it can and will consume scroll delta on the compositor thread). The
-  // latched scroller is now available in CurrentlyScrollingNode().
-  // TODO(bokan): There's some debate about the name of this method. We should
-  // get consensus on terminology to use and apply it consistently.
-  // https://crrev.com/c/1981336/9/cc/trees/layer_tree_host_impl.cc#4520
-  void DidLatchToScroller(const ScrollState& scroll_state,
-                          ui::ScrollInputType type);
-
-  // Applies the scroll_state to the currently latched scroller. See comment in
-  // InputHandler::ScrollUpdate declaration for the meaning of |delayed_by|.
-  void ScrollLatchedScroller(ScrollState* scroll_state,
-                             base::TimeDelta delayed_by);
-
-  bool ShouldAnimateScroll(const ScrollState& scroll_state) const;
-
   bool AnimatePageScale(base::TimeTicks monotonic_time);
   bool AnimateScrollbars(base::TimeTicks monotonic_time);
   bool AnimateBrowserControls(base::TimeTicks monotonic_time);
@@ -1032,38 +927,6 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   // must be called if this helper function is called.  Returns DRAW_SUCCESS if
   // the frame should be drawn.
   DrawResult CalculateRenderPasses(FrameData* frame);
-
-  void ClearCurrentlyScrollingNode();
-
-  // Performs a hit test to determine the ScrollNode to use when scrolling at
-  // |viewport_point|. If no layer is hit, this falls back to the inner
-  // viewport scroll node. Returns:
-  // - If |hit_test_sucessful| is false, hit testing has failed and the
-  //   compositor cannot determine the correct scroll node (e.g. see comments in
-  //   IsInitialScrollHitTestReliable). |scroll_node| is always nullptr in this
-  //   case.
-  // - If |hit_test_successful| is true, returns the ScrollNode to use in
-  //   |scroll_node|. This can be nullptr if no layer was hit and there are no
-  //   viewport nodes (e.g. OOPIF, UI compositor).
-  struct ScrollHitTestResult {
-    ScrollNode* scroll_node;
-    bool hit_test_successful;
-  };
-  ScrollHitTestResult HitTestScrollNode(
-      const gfx::PointF& device_viewport_point) const;
-
-  // Similar to above but includes complicated logic to determine whether the
-  // ScrollNode is able to be scrolled on the compositor or requires main
-  // thread scrolling. If main thread scrolling is required
-  // |scroll_on_main_thread| is set to true and the reason is given in
-  // |main_thread_scrolling_reason| to on of the enum values in
-  // main_thread_scrolling_reason.h. Can be removed after scroll unification
-  // https://crbug.com/476553.
-  ScrollNode* FindScrollNodeForCompositedScrolling(
-      const gfx::PointF& device_viewport_point,
-      LayerImpl* layer_hit_by_point,
-      bool* scroll_on_main_thread,
-      uint32_t* main_thread_scrolling_reason) const;
 
   void StartScrollbarFadeRecursive(LayerImpl* layer);
   void SetManagedMemoryPolicy(const ManagedMemoryPolicy& policy);
@@ -1087,29 +950,10 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
 
   void NotifySwapPromiseMonitorsOfSetNeedsRedraw();
 
-  void UpdateRootLayerStateForSynchronousInputHandler();
-
-  bool ScrollAnimationUpdateTarget(const ScrollNode& scroll_node,
-                                   const gfx::Vector2dF& scroll_delta,
-                                   base::TimeDelta delayed_by);
-
-  // Creates an animation curve and returns true if we need to update the
-  // scroll position to a snap point. Otherwise returns false.
-  bool SnapAtScrollEnd();
-
+ private:
   void SetContextVisibility(bool is_visible);
   void ImageDecodeFinished(int request_id, bool decode_succeeded);
 
-  // This function keeps track of sources of scrolls that are handled in the
-  // compositor side. The information gets shared by the main thread as part of
-  // the begin_main_frame_state. Finally Use counters are updated in the main
-  // thread side to keep track of the frequency of scrolling with different
-  // sources per page load. TODO(crbug.com/691886): Use GRC API to plumb the
-  // scroll source info for Use Counters.
-  void UpdateScrollSourceInfo(const ScrollState& scroll_state,
-                              ui::ScrollInputType type);
-
-  bool IsScrolledBy(LayerImpl* child, ScrollNode* ancestor);
   void ShowScrollbarsForImplScroll(ElementId element_id);
 
   // Copy any opacity values already in the active tree to the pending
@@ -1126,6 +970,17 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
       base::MemoryPressureListener::MemoryPressureLevel level);
 
   void AllocateLocalSurfaceId();
+
+  // Log the AverageLag events from the frame identified by |frame_token| and
+  // the information in |details|.
+  void LogAverageLagEvents(uint32_t frame_token,
+                           const viz::FrameTimingDetails& details);
+
+  // TODO(bokan): Temporary, keep multiple pointers to the input_handler_ while
+  // we decouple this into clean interfaces. Once we're done LTHI should only
+  // talk to InputDelegateForCompositor.
+  InputDelegateForCompositor* input_delegate_;
+  ThreadedInputHandler input_handler_;
 
   const LayerTreeSettings settings_;
 
@@ -1172,7 +1027,7 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
 
   bool need_update_gpu_rasterization_status_ = false;
   bool use_gpu_rasterization_ = false;
-  bool use_oop_rasterization_ = false;
+  bool can_use_oop_rasterization_ = false;
   GpuRasterizationStatus gpu_rasterization_status_ =
       GpuRasterizationStatus::OFF_DEVICE;
   std::unique_ptr<RasterBufferProvider> raster_buffer_provider_;
@@ -1192,34 +1047,13 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   // by the next sync from the main thread.
   std::unique_ptr<LayerTreeImpl> recycle_tree_;
 
-  InputHandlerClient* input_handler_client_ = nullptr;
-
-  // This is used to tell the scheduler there are active scroll handlers on the
-  // page so we should prioritize latency during a scroll to try to keep
-  // scroll-linked effects up to data.
-  // TODO(bokan): This is quite old and scheduling has become much more
-  // sophisticated since so it's not clear how much value it's still providing.
-  bool scroll_affects_scroll_handler_ = false;
-
-  ElementId scroll_element_id_mouse_currently_over_;
-  ElementId scroll_element_id_mouse_currently_captured_;
-
   // Tracks, for debugging purposes, the amount of scroll received (not
   // necessarily applied) in this compositor frame. This will be reset each
   // time a CompositorFrame is generated.
   gfx::Vector2dF scroll_accumulated_this_frame_;
 
-  // Tracks the last scroll update/begin state received. Used to infer the most
-  // recent scroll type and direction.
-  base::Optional<ScrollState> last_scroll_begin_state_;
-  base::Optional<ScrollState> last_scroll_update_state_;
-
   std::vector<std::unique_ptr<SwapPromise>>
       swap_promises_for_main_thread_scroll_update_;
-
-  // An object to implement the ScrollElasticityHelper interface and
-  // hold all state related to elasticity. May be NULL if never requested.
-  std::unique_ptr<ScrollElasticityHelper> scroll_elasticity_helper_;
 
   bool tile_priorities_dirty_ = false;
 
@@ -1229,36 +1063,14 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
 
   TileManager tile_manager_;
 
-  gfx::Vector2dF accumulated_root_overscroll_;
-
-  // Unconsumed scroll delta sent to the main thread for firing overscroll DOM
-  // events. Resets after each commit.
-  gfx::Vector2dF overscroll_delta_for_main_thread_;
-
-  // True iff some of the delta has been consumed for the current scroll
-  // sequence on the specific axis.
-  bool did_scroll_x_for_scroll_gesture_;
-  bool did_scroll_y_for_scroll_gesture_;
-
-  // This value is used to allow the compositor to throttle re-rastering during
-  // pinch gestures, when the page scale factor may be changing frequently. It
-  // is set in one of two ways:
-  // i) In a layer tree serving the root of the frame/compositor tree, it is
-  // directly set during processing of GesturePinch events on the impl thread
-  // (only the root layer tree has access to these).
-  // ii) In a layer tree serving a sub-frame in the frame/compositor tree, it
-  // is set from the main thread during the commit process, using information
-  // sent from the root layer tree via IPC messaging.
-  bool pinch_gesture_active_ = false;
-  bool external_pinch_gesture_active_ = false;
-  bool pinch_gesture_end_should_clear_scrolling_node_ = false;
-
   std::unique_ptr<BrowserControlsOffsetManager>
       browser_controls_offset_manager_;
 
   std::unique_ptr<PageScaleAnimation> page_scale_animation_;
 
   DroppedFrameCounter dropped_frame_counter_;
+  TotalFrameCounter total_frame_counter_;
+
   std::unique_ptr<MemoryHistory> memory_history_;
   std::unique_ptr<DebugRectHistory> debug_rect_history_;
 
@@ -1321,28 +1133,10 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   std::unique_ptr<PendingTreeRasterDurationHistogramTimer>
       pending_tree_raster_duration_timer_;
 
-  // If a scroll snap is being animated, then the value of this will be the
-  // element id(s) of the target(s). Otherwise, the ids will be invalid.
-  // At the end of a scroll animation, the target should be set as the scroll
-  // node's snap target.
-  TargetSnapAreaElementIds scroll_animating_snap_target_ids_;
-
-  // A set of elements that scroll-snapped to a new target since the last
-  // begin main frame. The snap target ids of these elements will be sent to
-  // the main thread in the next begin main frame.
-  base::flat_set<ElementId> updated_snapped_elements_;
-
   // These completion states to be transfered to the main thread when we
   // begin main frame. The pair represents a request id and the completion (ie
   // success) state.
   std::vector<std::pair<int, bool>> completed_image_decode_requests_;
-
-  // These are used to transfer usage of different types of scrolling to the
-  // main thread.
-  bool has_scrolled_by_wheel_ = false;
-  bool has_scrolled_by_touch_ = false;
-  bool has_scrolled_by_precisiontouchpad_ = false;
-  bool has_pinch_zoomed_ = false;
 
   ImplThreadPhase impl_thread_phase_ = ImplThreadPhase::IDLE;
 
@@ -1373,36 +1167,7 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
 
   const PaintImage::GeneratorClientId paint_image_generator_client_id_;
 
-  // Manages composited scrollbar hit testing.
-  std::unique_ptr<ScrollbarController> scrollbar_controller_;
-
   FrameSequenceTrackerCollection frame_trackers_;
-
-  // Set to true when a scroll gesture being handled on the compositor has
-  // ended. i.e. When a GSE has arrived and any ongoing scroll animation has
-  // ended.
-  bool scroll_gesture_did_end_;
-
-  // Set in ScrollBegin and outlives the currently scrolling node so it can be
-  // used to send the scrollend and overscroll DOM events from the main thread
-  // when scrolling occurs on the compositor thread. This value is cleared at
-  // the first commit after a GSE.
-  ElementId last_latched_scroller_;
-
-  // The source device type that started the scroll gesture. Only set between a
-  // ScrollBegin and ScrollEnd.
-  base::Optional<ui::ScrollInputType> latched_scroll_type_;
-
-  // Scroll animation can finish either before or after GSE arrival.
-  // deferred_scroll_end_ is set when the GSE has arrvied before scroll
-  // animation completion. ScrollEnd will get called once the animation is
-  // over.
-  bool deferred_scroll_end_ = false;
-
-  // TODO(bokan): Mac doesn't yet have smooth scrolling for wheel; however, to
-  // allow consistency in tests we use this bit to override that decision.
-  // https://crbug.com/574283.
-  bool force_smooth_wheel_scrolling_for_testing_ = false;
 
   // PaintWorklet painting is controlled from the LayerTreeHostImpl, dispatched
   // to the worklet thread via |paint_worklet_painter_|.
@@ -1424,6 +1189,8 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   // invalidating PaintWorklets as the property values change.
   AnimatedPaintWorkletTracker paint_worklet_tracker_;
 
+  AverageLagTrackingManager lag_tracking_manager_;
+
   // Helper for de-jelly logic.
   DeJellyState de_jelly_state_;
 
@@ -1433,6 +1200,8 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
 
   FrameRateEstimator frame_rate_estimator_;
   bool has_observed_first_scroll_delay_ = false;
+
+  bool enable_frame_rate_throttling_ = false;
 
   // Must be the last member to ensure this is destroyed first in the
   // destruction order and invalidates all weak pointers.

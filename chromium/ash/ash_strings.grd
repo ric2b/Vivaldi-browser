@@ -213,6 +213,9 @@ This file contains the strings for ash.
       <message name="IDS_ASH_QUICK_SETTINGS_BUBBLE_CAST_SETTINGS_ACCESSIBLE_DESCRIPTION" desc="The accessible description for cast settings accessed through the cast feature pod.">
         Cast Settings
       </message>
+      <message name="IDS_ASH_QUICK_SETTINGS_BUBBLE_DARK_THEME_SETTINGS_ACCESSIBLE_DESCRIPTION" desc="The accessible description for dark theme settings accessed through the dark theme feature pod.">
+        Dark Theme Settings
+      </message>
       <message name="IDS_ASH_QUICK_SETTINGS_BUBBLE_IME_SETTINGS_ACCESSIBLE_DESCRIPTION" desc="The accessible description for IME settings accessed through the IME feature pod.">
         IME Settings
       </message>
@@ -326,6 +329,45 @@ This file contains the strings for ash.
       </message>
       <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_DESKTOP" desc="The label used in the tray popup to tell the user we are casting the desktop.">
         Casting screen to <ph name="RECEIVER_NAME">$1<ex>Living Room</ex></ph>
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_DARK_MODE_BUTTON_LABEL" desc="The shorter label used for the button in the status tray to toggle the Dark Mode feature. [CHAR_LIMIT=14]">
+        Dark Mode
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_DARK_MODE_TOGGLE_TOOLTIP" desc="The tooltip text used for the button in the status tray to toggle the Dark Mode feature on or off.">
+        Toggle Dark Mode. <ph name="STATE_TEXT">$1<ex>Dark Mode is on.</ex></ph>
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_DARK_MODE_ENABLED_STATE_TOOLTIP" desc="The tooltip text indicating the Dark Mode feature is on.">
+        Dark Mode is on.
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_DARK_MODE_DISABLED_STATE_TOOLTIP" desc="The tooltip text indicating the Dark Mode feature is off.">
+        Dark Mode is off.
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_DARK_MODE_SETTINGS_TOOLTIP" desc="The tooltip text used for the button in the status tray to show the Dark Mode feature settings.">
+        Show dark mode settings
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_DARK_MODE_OFF_STATE" desc="Button label for the Dark Mode feature." meaning="Dark Mode feature is off. [CHAR_LIMIT=14]">
+        Off
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_DARK_MODE_ON_STATE" desc="Button label for the Dark Mode feature." meaning="Dark Mode feature is on. [CHAR_LIMIT=14]">
+        On
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_TITLE" desc="The title for the dark theme detailed view.">
+        Dark Theme
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_COLOR_MODE" desc="The title for the dark theme detailed view.">
+        Color mode
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_MODE_THEMED_TITLE" desc="The title for the dark theme detailed view.">
+        Themed (default)
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_MODE_THEMED_DESCRIPTION" desc="The description for the neutral color mode.">
+        The themed color mode uses colors extracted from your wallpaper to lightly colorize the interface.
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_MODE_NEUTRAL_TITLE" desc="The title for the dark theme detailed view.">
+        Neutral
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_MODE_NEUTRAL_DESCRIPTION" desc="The description for the neutral color mode.">
+        The neutral color mode does not use wallpaper extracted colors, replacing them by a set of neutrally toned light or dark hues.
       </message>
       <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_DESKTOP_ACCESSIBILITY_STOP" desc="Stop button accessibility label used in the tray popup to tell the user to stop a cast to the desktop.">
         Stop casting screen to <ph name="RECEIVER_NAME">$1<ex>Living Room</ex></ph>
@@ -510,6 +552,10 @@ This file contains the strings for ash.
         Menu moved to the bottom-right corner of the screen.
       </message>
 
+      <message name="IDS_ASH_STATUS_TRAY_CAPTURE_MODE_BUTTON_LABEL" desc="The label text for the button in the status tray to trigger capture mode.">
+        Screen capture
+      </message>
+
       <message name="IDS_ASH_STATUS_TRAY_MIC_GAIN" desc="The accessible text for the toggle mic muted button in the tray audio settings">
         Toggle Mic. <ph name="STATE_TEXT">$1<ex>Mic is muted</ex></ph>
       </message>
@@ -589,19 +635,19 @@ This file contains the strings for ash.
         Input methods
       </message>
       <message name="IDS_ASH_STATUS_TRAY_IME_SETTINGS" desc="The label used for IME settings entry.">
-        Customize languages and input...
+        Input settings
       </message>
       <message name="IDS_ASH_STATUS_TRAY_IME_MANAGED" desc="Tooltip for the icon displayed when input methods are managed by enterprise policy">
         Input methods are configured by your administrator.
       </message>
       <message name="IDS_ASH_STATUS_TRAY_IME_EMOJI" desc="The label used for IME emoji entry.">
-        Emoji palette
+        Emojis
       </message>
       <message name="IDS_ASH_STATUS_TRAY_IME_HANDWRITING" desc="The label used for IME handwriting entry.">
-        Handwriting input
+        Handwriting
       </message>
       <message name="IDS_ASH_STATUS_TRAY_IME_VOICE" desc="The label used for IME voice entry.">
-        Voice input
+        Voice
       </message>
 
       <message name="IDS_ASH_STATUS_TRAY_LOCALE_CHANGE_TITLE" desc="The title used for locale change notifications in the system tray.">
@@ -890,6 +936,17 @@ This file contains the strings for ash.
         Previous menu
       </message>
 
+      <!-- Holding space tray-->
+      <message name="IDS_ASH_HOLDING_SPACE_PINNED_TITLE" desc="Title of the pinned files area in the holding space bubble.">
+        Pinned
+      </message>
+      <message name="IDS_ASH_HOLDING_SPACE_RECENT_DOWNLOADS_TITLE" desc="Title of the recent downloads area in the holding space bubble.">
+        Recent downloads
+      </message>
+      <message name="IDS_ASH_HOLDING_SPACE_SCREENSHOTS_TITLE" desc="Title of the screenshots area in the holding space bubble.">
+        Screenshots
+      </message>
+
       <message name="IDS_ASH_STYLUS_TOOLS_CAPTURE_REGION_ACTION" desc="Title of the capture region action in the stylus tools (a pop-up panel next to the status tray). This causes a partial screenshot to be taken (the user selects an area of the screen to take a screenshot of).">
         Capture region
       </message>
@@ -901,6 +958,9 @@ This file contains the strings for ash.
       </message>
       <message name="IDS_ASH_STYLUS_TOOLS_CREATE_NOTE_ACTION" desc="Title of the capture screen action in the stylus tools (a pop-up panel next to the status tray). Clicking this opens up an application that the user can quickly jot a note down in.">
         Create note
+      </message>
+      <message name="IDS_ASH_STYLUS_TOOLS_ENTER_CAPTURE_MODE_ACTION" desc="Title of the enter capture mode action in the stylus tools (a pop-up panel next to the status tray). This enters capture mode, which allows users to take screenshots and record video. Capture mode has an UI for users to modify what gets screenshotted or recorded.">
+        Screen capture
       </message>
       <message name="IDS_ASH_STYLUS_TOOLS_LASER_POINTER_MODE" desc="Title of the laser pointer in the palette (a pop-up panel next to the status tray). Clicking this turns the mouse into a laser pointer. Additionally, the palette tray is closed.">
         Laser pointer
@@ -991,6 +1051,10 @@ This file contains the strings for ash.
 
       <message name="IDS_ASH_STATUS_AREA_OVERFLOW_BUTTON_COLLAPSE" desc="The accessible name for the overflow button in the status area to expand width of the status area.">
         Collapse status area
+      </message>
+
+      <message name="IDS_ASH_STATUS_AREA_STOP_RECORDING_BUTTON_ACCESSIBLE_NAME" desc="The accessible name for the capture mode recording button in the system tray.">
+        Stop screen recording
       </message>
 
       <!-- Overview Mode -->
@@ -1412,6 +1476,9 @@ This file contains the strings for ash.
       </message>
       <message name="IDS_ASH_STATUS_TRAY_DISPLAY_REMOVED" desc="The text of the notification to show when a display is disconnected from the device.">
         Removed display <ph name="DISPLAY_NAME">$1</ph>
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_DISPLAY_ADDED" desc="The text of the notification to show that a display is connected to the device.">
+        <ph name="DISPLAY_NAME">$1</ph> connected
       </message>
       <message name="IDS_ASH_STATUS_TRAY_DISPLAY_MIRRORING_NO_INTERNAL" desc="The label used in the tray to show that the current status is mirroring and the device doesn't have the internal display.">
         Mirroring
@@ -1918,14 +1985,28 @@ This file contains the strings for ash.
       <message name="IDS_ASH_LOGIN_POD_PASSWORD_PIN_PLACEHOLDER" desc="Text to display as placeholder in the password field when both password and pin are allowed.">
         PIN or password
       </message>
+      <message name="IDS_ASH_LOGIN_POD_PASSWORD_PIN_INPUT_ACCESSIBLE_NAME" desc="The accessible name of the pin input field used for PIN Auto-submit">
+        Enter your PIN
+      </message>
+      <message name="IDS_ASH_LOGIN_PIN_INPUT_DIGITS_REMAINING" desc="Screen reader message telling the user how many digits are remaining for the PIN input field. [ICU Syntax]">
+        {NUM_DIGITS, plural,
+         =1 {One digit remaining}
+         other {# digits remaining}}
+      </message>
+      <message name="IDS_ASH_LOGIN_SWITCH_TO_PASSWORD" desc="Text to display on the button that is used for switching between PIN and password authentication">
+        Switch to password
+      </message>
+      <message name="IDS_ASH_LOGIN_SWITCH_TO_PIN" desc="Text to display on the button that is used for switching between PIN and password authentication">
+        Switch to PIN
+      </message>
       <message name="IDS_ASH_LOGIN_POD_PASSWORD_TAP_PLACEHOLDER" desc="Text to display as placeholder in the password field when the user can click/tap their profile picture to unlock.">
         Tap your profile image
       </message>
       <message name="IDS_ASH_LOGIN_ERROR_AUTHENTICATING" desc="Couldn't sign in because password is invalid">
-        Sorry, your password couldn't be verified. Please try again.
+        Your PIN or password couldn't be verified. Try again.
       </message>
       <message name="IDS_ASH_LOGIN_ERROR_AUTHENTICATING_2ND_TIME" desc="Couldn't sign in because password is invalid for the 2nd time">
-        Sorry, your password still couldn't be verified. Note: if you changed your password recently, your new password will be applied once you sign out, please use the old password here.
+        Your PIN or password still couldn't be verified. Note: If you recently changed your password, use your old password. Your new password will be applied once you sign out.
       </message>
       <message name="IDS_ASH_LOGIN_ERROR_CAPS_LOCK_HINT" desc="A hint text for the login and lock screens that Caps Lock is on">
         Caps Lock is on.
@@ -2098,11 +2179,20 @@ This file contains the strings for ash.
       <message name="IDS_ASH_LOGIN_PARENT_ACCESS_TITLE_ERROR" desc="Title of the parent access input dialog after incorrect code was entered.">
         Incorrect parent code
       </message>
+      <message name="IDS_ASH_LOGIN_PARENT_ACCESS_GENERIC_TITLE" desc="Title of the parent access input dialog that allows to add user or reauthenticate with a code.">
+        Enter parent code
+      </message>
       <message name="IDS_ASH_LOGIN_PARENT_ACCESS_DESCRIPTION" desc="Description shown on the parent access input dialog. Explains what code should be used to unlock the device.">
         To unlock the device, enter your Family Link parent access code
       </message>
       <message name="IDS_ASH_LOGIN_PARENT_ACCESS_GENERIC_DESCRIPTION" desc="Description shown on the parent access input dialog. Explains what code should be used to unlock the device.">
         Enter Family Link parent access code.
+      </message>
+      <message name="IDS_ASH_LOGIN_PARENT_ACCESS_DESCRIPTION_ADD_USER" desc="Title of the parent access input dialog that allows to add user with a code.">
+        To add a person, enter your Family Link parent access code
+      </message>
+      <message name="IDS_ASH_LOGIN_PARENT_ACCESS_DESCRIPTION_REAUTH" desc="Title of the parent access input dialog that allows to reauthenticate with a code.">
+        To sign in, enter your Family Link parent access code
       </message>
       <message name="IDS_ASH_LOGIN_PIN_REQUEST_HELP" desc="Label of a button shown on the pin request input dialog.">
         Need help?
@@ -2118,6 +2208,9 @@ This file contains the strings for ash.
       </message>
       <message name="IDS_ASH_LOGIN_SIGN_IN_REQUIRED_MESSAGE" desc="Message shown in the login screen when online sign-in is required.">
         Sign in required
+      </message>
+      <message name="IDS_ASH_LOCK_SCREEN_VERIFY_ACCOUNT_MESSAGE" desc="Message shown in the lock screen when online sign-in is required.">
+        Verify account
       </message>
       <message name="IDS_ASH_LOGIN_SMART_CARD_SIGN_IN_MESSAGE" desc="Label for the button shown in the user pod that starts signing in via a smart card.">
         Sign in with smart card
@@ -2364,6 +2457,30 @@ This file contains the strings for ash.
       <message name="IDS_ASH_ASSISTANT_CHIP_WHATS_THE_WEATHER" desc="Message shown on suggestion chip in Assistant UI to initiate a query for the current weather.">
         What's the weather?
       </message>
+      <message name="IDS_ASH_ASSISTANT_ONBOARDING_SUGGESTION_CONVERSION" desc="Message shown in an onboarding suggestion in Assistant UI to initiate a conversion query.">
+        5K in miles
+      </message>
+      <message name="IDS_ASH_ASSISTANT_ONBOARDING_SUGGESTION_KNOWLEDGE" desc="Message shown in an onboarding suggestion in Assistant UI to initiate a knowledge query.">
+        Population in Nigeria
+      </message>
+      <message name="IDS_ASH_ASSISTANT_ONBOARDING_SUGGESTION_KNOWLEDGE_EDU" desc="Message shown to EDU users in an onboarding suggestion in Assistant UI to initiate a knowledge query.">
+        How far is Venus
+      </message>
+      <message name="IDS_ASH_ASSISTANT_ONBOARDING_SUGGESTION_LANGUAGE" desc="Message shown in an onboarding suggestion in Assistant UI to initiate a personality query.">
+        "Hello" in Chinese
+      </message>
+      <message name="IDS_ASH_ASSISTANT_ONBOARDING_SUGGESTION_MATH" desc="Message shown in an onboarding suggestion in Assistant UI to initiate a math query.">
+        Square root of 71
+      </message>
+      <message name="IDS_ASH_ASSISTANT_ONBOARDING_SUGGESTION_PERSONALITY" desc="Message shown in an onboarding suggestion in Assistant UI to initiate a personality query.">
+        Tell me a joke
+      </message>
+      <message name="IDS_ASH_ASSISTANT_ONBOARDING_SUGGESTION_PRODUCTIVITY" desc="Message shown in an onboarding suggestion in Assistant UI to initiate a productivity query.">
+        Set timer
+      </message>
+      <message name="IDS_ASH_ASSISTANT_ONBOARDING_SUGGESTION_TECHNICAL" desc="Message shown in an onboarding suggestion in Assistant UI to initiate a technical query.">
+        Take a screenshot
+      </message>
       <message name="IDS_ASSISTANT_TIMER_NOTIFICATION_TITLE" desc="Title for Assistant timer notification.">
         Time's up
       </message>
@@ -2545,6 +2662,42 @@ Here are some things you can try to get started.
       <!-- Ambient Mode-->
       <message name="IDS_ASH_AMBIENT_MODE_WEATHER_TEMPERATURE_IN_FAHRENHEIT" desc="Text of the weather temperature in Fahrenheit.">
         <ph name="TEMPERATURE_F">$1<ex>81</ex></ph>° F
+      </message>
+      <message name="IDS_ASH_AMBIENT_MODE_WEATHER_TEMPERATURE_IN_CELSIUS" desc="Text of the weather temperature in Celsius.">
+        <ph name="TEMPERATURE_C">$1<ex>25</ex></ph>° C
+      </message>
+
+      <!-- Capture Mode -->
+      <message name="IDS_ASH_SCREEN_CAPTURE_DISPLAY_SOURCE" desc="The name that is the display source of the screen capture notification.">
+        Screen capture
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_SCREENSHOT_TITLE" desc="The title of the notificaton which shows after a screenshot is taken.">
+        Screenshot taken and saved to clipboard
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_RECORDING_TITLE" desc="The titile of the notification which shows after a screen recording is taken.">
+        Screen recording taken
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_MESSAGE" desc="The message shows in the screenshot or screen recording notification.">
+        Show in folder
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_BUTTON_SHARE" desc="The share button label for the screen capture notifiction.">
+        Share
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_BUTTON_EDIT" desc="The edit button label for the screen catpure notification.">
+        Edit
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_BUTTON_FLOAT_ON_TOP" desc="The float-on-top button label for the screen capture notification.">
+        Float on top
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_BUTTON_DELETE" desc="The delete button label for the screen capture notificaiton.">
+        Delete
+      </message>
+      <!-- Switch Between TABLET/LAPTOP MODE-->
+      <message name="IDS_ASH_SWITCH_TO_TABLET_MODE" desc="Alert of switching to tablet mode.">
+        Switch to tablet mode
+      </message>
+      <message name="IDS_ASH_SWITCH_TO_LAPTOP_MODE" desc="Alert of switching to laptop mode.">
+        Switch to laptop mode
       </message>
     </messages>
   </release>

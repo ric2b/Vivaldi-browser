@@ -19,6 +19,7 @@
 #include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/tests/gl_manager.h"
 #include "gpu/command_buffer/tests/gl_test_utils.h"
+#include "gpu/config/gpu_test_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/libyuv/include/libyuv.h"
@@ -76,18 +77,17 @@ class GpuMemoryBufferTestEGL : public testing::Test,
                                public gpu::GpuCommandBufferTestEGL {
  public:
   GpuMemoryBufferTestEGL()
-      : egl_gles2_initialized_(false),
-        native_pixmap_factory_(gfx::CreateClientNativePixmapFactoryDmabuf()) {}
+      : native_pixmap_factory_(gfx::CreateClientNativePixmapFactoryDmabuf()) {}
 
  protected:
   void SetUp() override {
-    egl_gles2_initialized_ = InitializeEGLGLES2(kImageWidth, kImageHeight);
+    egl_initialized_ = InitializeEGL(kImageWidth, kImageHeight);
     gl_.set_use_native_pixmap_memory_buffers(true);
   }
 
   void TearDown() override { RestoreGLDefault(); }
 
-  bool egl_gles2_initialized_;
+  bool egl_initialized_{false};
   std::unique_ptr<gfx::ClientNativePixmapFactory> native_pixmap_factory_;
 };
 #endif  // defined(OS_LINUX)
@@ -247,6 +247,14 @@ TEST_P(GpuMemoryBufferTest, MapUnmap) {
 
 // An end to end test that tests the whole GpuMemoryBuffer lifecycle.
 TEST_P(GpuMemoryBufferTest, Lifecycle) {
+  // TODO(jonahr): Test fails on Mac with ANGLE/passthrough
+  // (crbug.com/1100970)
+  gpu::GPUTestBotConfig bot_config;
+  if (bot_config.LoadCurrentConfig(nullptr) &&
+      bot_config.Matches("mac passthrough")) {
+    return;
+  }
+
   const gfx::BufferFormat buffer_format = GetParam();
 
   if (buffer_format == gfx::BufferFormat::R_8 &&
@@ -360,7 +368,7 @@ TEST_P(GpuMemoryBufferTest, Lifecycle) {
 // It can be the case when vaapi is setup in a media service hosted in a
 // dedicated process, i.e. not the gpu process.
 TEST_F(GpuMemoryBufferTestEGL, GLCreateImageCHROMIUMFromNativePixmap) {
-  SKIP_TEST_IF(!egl_gles2_initialized_);
+  SKIP_TEST_IF(!egl_initialized_);
 
   // This extension is required for glCreateImageCHROMIUM on Linux.
   SKIP_TEST_IF(!HasEGLExtension("EGL_EXT_image_dma_buf_import"));

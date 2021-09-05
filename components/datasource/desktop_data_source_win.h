@@ -12,9 +12,9 @@ class DesktopWallpaperDataClassHandlerWin : public VivaldiDataClassHandler {
   DesktopWallpaperDataClassHandlerWin();
   ~DesktopWallpaperDataClassHandlerWin() override;
 
-  void GetData(
-      const std::string& data_id,
-      content::URLDataSource::GotDataCallback callback) override;
+  void GetData(Profile* profile,
+               const std::string& data_id,
+               content::URLDataSource::GotDataCallback callback) override;
 
  private:
   void GetDataOnFileThread(std::wstring file_path,

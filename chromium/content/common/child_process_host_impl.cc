@@ -38,7 +38,7 @@
 
 #if defined(OS_LINUX)
 #include "base/linux_util.h"
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 #include "base/mac/foundation_util.h"
 #include "content/common/mac_helpers.h"
 #endif  // OS_LINUX
@@ -82,7 +82,7 @@ base::FilePath ChildProcessHost::GetChildPath(int flags) {
   if (child_path.empty())
     base::PathService::Get(CHILD_PROCESS_EXE, &child_path);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   std::string child_base_name = child_path.BaseName().value();
 
   if (flags != CHILD_NORMAL && base::mac::AmIBundled()) {
@@ -331,5 +331,11 @@ void ChildProcessHostImpl::OnChannelError() {
 void ChildProcessHostImpl::OnBadMessageReceived(const IPC::Message& message) {
   delegate_->OnBadMessageReceived(message);
 }
+
+#if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
+void ChildProcessHostImpl::DumpProfilingData(base::OnceClosure callback) {
+  child_process_->WriteClangProfilingProfile(std::move(callback));
+}
+#endif
 
 }  // namespace content

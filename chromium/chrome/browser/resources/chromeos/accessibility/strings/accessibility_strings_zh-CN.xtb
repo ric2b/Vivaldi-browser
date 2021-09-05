@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">列表项</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">向右滑动两根手指</translation>
+<translation id="1016393160682012902">如需了解该模式的功能，请按 qwerty 键或可刷新的盲文键，也可以使用触摸手势。按 Ctrl + W 键或按 Esc 键即可退出。</translation>
 <translation id="1022586497894531524">您是初次使用 ChromeVox 语音反馈功能吗？此教程将提供基本的操作说明，协助您开始使用 ChromeVox。</translation>
 <translation id="1025074108959230262">已停用粘滞模式</translation>
 <translation id="1031961866430398710">再按</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">内部链接</translation>
 <translation id="4909019435900810068">后移 1 个字</translation>
 <translation id="4911349081560453449">没有上一个复选框</translation>
-<translation id="4915087353619183190">正在启动学习模式。要了解该模式的功能，请按 qwerty 键或可刷新的盲文键，也可以使用触摸手势。按 Ctrl+W 键或按 Esc 键即可退出。</translation>
 <translation id="492295894462528572">前言</translation>
 <translation id="495046168593986294">向上滚动</translation>
 <translation id="495170559598752135">操作</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">绿色</translation>
 <translation id="602001110135236999">向左滚动</translation>
 <translation id="6034000775414344507">浅灰色</translation>
+<translation id="6036135911048686884">触摸浏览</translation>
 <translation id="6037602951055904232">向前平移</translation>
 <translation id="6044160928851315051">调暗屏幕</translation>
 <translation id="6082768461603900813">基本导航操作</translation>
@@ -716,7 +717,7 @@
 <translation id="6696967141280706829">序言</translation>
 <translation id="6697092096875747123">上一个组合框</translation>
 <translation id="6702609185760332517">{COUNT,plural, =1{1 个感叹号}other{# 个感叹号}}</translation>
-<translation id="6710213216561001401">上一个</translation>
+<translation id="6710213216561001401">上一项</translation>
 <translation id="6714813999819678458">上一个2级标题</translation>
 <translation id="6730312624811567147">使用搜索键+向左箭头键或搜索键+向右箭头键代替 Home 键或 End 键，使用搜索键+Ctrl+向左箭头键或搜索键+Ctrl+向右箭头键代替 Ctrl+Home 或 Ctrl+End，使用搜索键+向上箭头键或搜索键+向下箭头键代替 PageUp 键或 PageDown 键</translation>
 <translation id="6736510033526053669">已打开标签页</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{1个井号}other{#个井号}}</translation>
 <translation id="8378855320830505539">区域</translation>
 <translation id="8382679411218029383">自动填充内嵌和列表</translation>
+<translation id="8394908167088220973">媒体播放/暂停</translation>
 <translation id="8428213095426709021">设置</translation>
 <translation id="8428603554127842284"><ph name="DEPTH" />级</translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">退出结构化内容，如表格</translation>
 <translation id="8779057862865475116">没有上一个链接</translation>
 <translation id="8796411681063377102">下一个3级标题</translation>
+<translation id="8823311177246872527">第 <ph name="CURRENTPAGE" /> 页，共 <ph name="TOTALPAGES" /> 页</translation>
 <translation id="8825828890761629845">横幅</translation>
 <translation id="8851136666856101339">主体内容</translation>
 <translation id="8882002077197914455">行标题</translation>

@@ -25,6 +25,7 @@
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/ct_verifier.h"
 #include "net/cert/multi_log_ct_verifier.h"
+#include "net/cert/sct_auditing_delegate.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/host_resolver_manager.h"
@@ -192,6 +193,8 @@ void URLRequestContextBuilder::SetHttpNetworkSessionComponents(
   session_context->cert_transparency_verifier =
       request_context->cert_transparency_verifier();
   session_context->ct_policy_enforcer = request_context->ct_policy_enforcer();
+  session_context->sct_auditing_delegate =
+      request_context->sct_auditing_delegate();
   session_context->proxy_resolution_service =
       request_context->proxy_resolution_service();
   session_context->proxy_delegate = request_context->proxy_delegate();
@@ -257,6 +260,11 @@ void URLRequestContextBuilder::set_ct_verifier(
 void URLRequestContextBuilder::set_ct_policy_enforcer(
     std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer) {
   ct_policy_enforcer_ = std::move(ct_policy_enforcer);
+}
+
+void URLRequestContextBuilder::set_sct_auditing_delegate(
+    std::unique_ptr<SCTAuditingDelegate> sct_auditing_delegate) {
+  sct_auditing_delegate_ = std::move(sct_auditing_delegate);
 }
 
 void URLRequestContextBuilder::set_quic_context(
@@ -473,6 +481,10 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
         std::make_unique<DefaultCTPolicyEnforcer>());
   }
 
+  if (sct_auditing_delegate_) {
+    storage->set_sct_auditing_delegate(std::move(sct_auditing_delegate_));
+  }
+
   if (quic_context_) {
     storage->set_quic_context(std::move(quic_context_));
   } else {
@@ -485,7 +497,7 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
   }
 
   if (!proxy_resolution_service_) {
-#if !defined(OS_LINUX) && !defined(OS_ANDROID)
+#if !defined(OS_LINUX) && !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
     // TODO(willchan): Switch to using this code when
     // ConfiguredProxyResolutionService::CreateSystemProxyConfigService()'s
     // signature doesn't suck.
@@ -494,7 +506,7 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
           ConfiguredProxyResolutionService::CreateSystemProxyConfigService(
               base::ThreadTaskRunnerHandle::Get().get());
     }
-#endif  // !defined(OS_LINUX) && !defined(OS_ANDROID)
+#endif  // !defined(OS_LINUX) && !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
     proxy_resolution_service_ = CreateProxyResolutionService(
         std::move(proxy_config_service_), context.get(),
         context->host_resolver(), context->network_delegate(),

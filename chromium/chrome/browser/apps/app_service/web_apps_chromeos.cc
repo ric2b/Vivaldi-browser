@@ -43,6 +43,7 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -125,6 +126,7 @@ void WebAppsChromeOs::LaunchAppWithIntent(
 }
 
 void WebAppsChromeOs::Uninstall(const std::string& app_id,
+                                apps::mojom::UninstallSource uninstall_source,
                                 bool clear_site_data,
                                 bool report_abuse) {
   const web_app::WebApp* web_app = GetWebApp(app_id);
@@ -136,6 +138,8 @@ void WebAppsChromeOs::Uninstall(const std::string& app_id,
   DCHECK(provider()->install_finalizer().CanUserUninstallExternalApp(app_id));
 
   auto origin = url::Origin::Create(web_app->launch_url());
+  // TODO(crbug.com/1104696): Update web_app::InstallFinalizer to accommodate
+  // when install_source == apps::mojom::UninstallSource::kMigration.
   provider()->install_finalizer().UninstallExternalAppByUser(app_id,
                                                              base::DoNothing());
   web_app = nullptr;
@@ -206,7 +210,7 @@ void WebAppsChromeOs::GetMenuModel(const std::string& app_id,
   if (!is_system_web_app) {
     CreateOpenNewSubmenu(
         menu_type,
-        web_app->display_mode() == web_app::DisplayMode::kStandalone
+        web_app->user_display_mode() == web_app::DisplayMode::kStandalone
             ? IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW
             : IDS_APP_LIST_CONTEXT_MENU_NEW_TAB,
         &menu_items);
@@ -383,23 +387,24 @@ IconEffects WebAppsChromeOs::GetIconEffects(const web_app::WebApp* web_app,
                                             bool paused,
                                             bool is_disabled) {
   IconEffects icon_effects = IconEffects::kNone;
-  icon_effects =
-      static_cast<IconEffects>(icon_effects | IconEffects::kResizeAndPad);
+  if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
+    icon_effects |= web_app->is_generated_icon()
+                        ? IconEffects::kCrOsStandardMask
+                        : IconEffects::kCrOsStandardIcon;
+  } else {
+    icon_effects |= IconEffects::kResizeAndPad;
+  }
   if (extensions::util::ShouldApplyChromeBadgeToWebApp(profile(),
                                                        web_app->app_id())) {
-    icon_effects =
-        static_cast<IconEffects>(icon_effects | IconEffects::kChromeBadge);
+    icon_effects |= IconEffects::kChromeBadge;
   }
-  icon_effects = static_cast<IconEffects>(icon_effects |
-                                          WebAppsBase::GetIconEffects(web_app));
+  icon_effects |= WebAppsBase::GetIconEffects(web_app);
   if (paused) {
-    icon_effects =
-        static_cast<IconEffects>(icon_effects | IconEffects::kPaused);
+    icon_effects |= IconEffects::kPaused;
   }
 
   if (is_disabled) {
-    icon_effects =
-        static_cast<IconEffects>(icon_effects | IconEffects::kBlocked);
+    icon_effects |= IconEffects::kBlocked;
   }
 
   return icon_effects;

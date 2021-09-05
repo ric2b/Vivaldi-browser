@@ -157,21 +157,6 @@ void CodecImage::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
                               uint64_t process_tracing_id,
                               const std::string& dump_name) {}
 
-void CodecImage::NotifyPromotionHint(bool promotion_hint,
-                                     int display_x,
-                                     int display_y,
-                                     int display_width,
-                                     int display_height) {
-  // TODO(crbug.com/1004859): Add back early skip due to suspecting affecting
-  // video smoothness.
-  if (promotion_hint && !is_texture_owner_backed_)
-    return;
-
-  NotifyOverlayPromotion(
-      promotion_hint,
-      gfx::Rect(display_x, display_y, display_width, display_height));
-}
-
 void CodecImage::ReleaseResources() {
   ReleaseCodecBuffer();
 }
@@ -201,11 +186,11 @@ bool CodecImage::RenderToFrontBuffer() {
   return output_buffer_renderer_->RenderToFrontBuffer();
 }
 
-bool CodecImage::RenderToTextureOwnerBackBuffer(BlockingMode blocking_mode) {
+bool CodecImage::RenderToTextureOwnerBackBuffer() {
   if (!output_buffer_renderer_)
     return false;
 
-  return output_buffer_renderer_->RenderToTextureOwnerBackBuffer(blocking_mode);
+  return output_buffer_renderer_->RenderToTextureOwnerBackBuffer();
 }
 
 bool CodecImage::RenderToTextureOwnerFrontBuffer(BindingsMode bindings_mode) {
@@ -236,10 +221,6 @@ CodecImage::GetAHardwareBuffer() {
 
   RenderToTextureOwnerFrontBuffer(BindingsMode::kDontRestoreIfBound);
   return output_buffer_renderer_->texture_owner()->GetAHardwareBuffer();
-}
-
-gfx::Rect CodecImage::GetCropRect() {
-  return gfx::Rect();
 }
 
 bool CodecImage::HasMutableState() const {

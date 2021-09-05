@@ -1,4 +1,3 @@
-import("//build/config/jumbo.gni")
 
 source_set("extraparts") {
   sources = [
@@ -62,7 +61,6 @@ source_set("extraparts") {
   ]
   if (!is_android) {
     deps += [
-      "//vivaldi/components/datasource",
       "//vivaldi/extensions",
       "//vivaldi/extensions/api:apis",
       "//vivaldi/extensions/schema",

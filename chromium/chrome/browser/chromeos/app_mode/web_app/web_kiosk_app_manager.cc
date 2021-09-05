@@ -100,6 +100,7 @@ void WebKioskAppManager::AddAppForTesting(const AccountId& account_id,
   apps_.push_back(std::make_unique<WebKioskAppData>(
       this, app_id, account_id, install_url, /*title*/ std::string(),
       /*icon_url*/ GURL()));
+  NotifyKioskAppsChanged();
 }
 
 void WebKioskAppManager::InitSession(Browser* browser) {
@@ -147,8 +148,6 @@ void WebKioskAppManager::UpdateAppsFromPolicy() {
 
     auto old_it = old_apps.find(app_id);
     if (old_it != old_apps.end()) {
-      // TODO(apotapchuk): Data fetcher will be created, will use it to
-      // update previously not loaded data.
       apps_.push_back(std::move(old_it->second));
       old_apps.erase(old_it);
     } else {

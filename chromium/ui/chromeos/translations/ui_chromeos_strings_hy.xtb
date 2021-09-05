@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Արևային ակնոց</translation>
 <translation id="115443833402798225">Հանգուլ Անմատա</translation>
 <translation id="1155759005174418845">Կատալոնական</translation>
+<translation id="1172970565351728681">Մնացել է մոտ <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Վերանվանել</translation>
 <translation id="117624967391683467"><ph name="FILE_NAME" /> ֆայլը պատճենվում է…</translation>
 <translation id="1178581264944972037">Դադար</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">«<ph name="FILENAME" />» անունով ֆայլ արդեն առկա է: Ի՞նչ եք ցանկանում անել:</translation>
 <translation id="2121825465123208577">Չափափոխել</translation>
 <translation id="2136953289241069843">Տառադարձություն (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Չհաջողվեց բացել «<ph name="PATH" />» ֆայլը։ <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Անվավեր գրանշան՝ <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Վիետնամերենի ստեղնաշար (TCVN)</translation>
 <translation id="2168214441502403371">Պարսկերենի ստեղնաշար</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Սեփականության իրավունքը կփոխանցվի <ph name="DESTINATION_DOMAIN" /> տիրույթին։</translation>
 <translation id="3241720467332021590">Իռլանդերեն</translation>
 <translation id="3245321423178950146">Անհայտ կատարող</translation>
+<translation id="3248185426436836442">Ընթացքում է</translation>
 <translation id="3252266817569339921">Ֆրանսիական</translation>
 <translation id="3254434849914415189">Ընտրեք կանխադրված հավելված <ph name="FILE_TYPE" /> ֆայլերի համար:</translation>
 <translation id="3264582393905923483">Համատեքստ</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Ձայնագրության տարեթիվը</translation>
 <translation id="3338239663705455570">Սլովեներենի ստեղնաշար</translation>
 <translation id="3353984535370177728">Ընտրեք պանակ՝ վերբեռնելու համար</translation>
+<translation id="3356580349448036450">Ավարտված է</translation>
 <translation id="3399597614303179694">Մակեդոներեն ստեղնաշար</translation>
 <translation id="3414856743105198592">Հեռացվելի կրիչի ձևաչափումը կջնջի բոլոր տվյալները: Ցանկանո՞ւմ եք շարունակել:</translation>
 <translation id="3437801641691368414">Ստեղծման ժամը</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Դուք այս ֆայլերը «<ph name="FOLDER_NAME" />» պանակ տեղափոխելու թույլտվություն չունեք։</translation>
 <translation id="3786301125658655746">Դուք միացած չեք ցանցին</translation>
 <translation id="3789841737615482174">Տեղադրել</translation>
+<translation id="3793469551756281394">Մնացել է մոտ <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /></translation>
 <translation id="3798449238516105146">Տարբերակ</translation>
 <translation id="3801082500826908679">ֆարյորերեն</translation>
 <translation id="3809272675881623365">Ճագար</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Այս պանակը հասանելի է Windows-ին</translation>
 <translation id="4487088045714738411">Բելգիական ստեղնաշար</translation>
 <translation id="4522570452068850558">Մանրամասներ</translation>
+<translation id="4542387084127299777">Չհաջողվեց բացել «<ph name="PATH" />» ֆայլը</translation>
 <translation id="4552678318981539154">Գնեք լրացուցիչ պահեստ</translation>
 <translation id="4559767610552730302">Բոկե</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> ֆայլ</translation>
@@ -377,7 +381,7 @@
 <translation id="5163869187418756376">Համօգտագործումը չհաջողվեց: Ստուգեք ձեր կապակցումը և փորձեք ավելի ուշ:</translation>
 <translation id="516592729076796170">ԱՄՆ ծրագրավորող Դվորակ</translation>
 <translation id="5167131699331641907">Նիդեռլանդական ստեղնաշար</translation>
-<translation id="5170477580121653719">Ազատ տարածքը Google Drive-ի վրա` <ph name="SPACE_AVAILABLE" />:</translation>
+<translation id="5170477580121653719">Ազատ տարածքը Google Drive-ի վրա՝ <ph name="SPACE_AVAILABLE" />:</translation>
 <translation id="5177526793333269655">Մանրապատկերի տեսք</translation>
 <translation id="5194713942430106590">Սեղմեք՝ սյունակներն ըստ աճման կարգի տեսակավորելու համար։</translation>
 <translation id="5218183485292899140">Շվեյցարական (ֆրանսիական)</translation>
@@ -510,6 +514,7 @@
 <translation id="6629841649550503054">Բոլոր ֆայլերը կրկնօրինակվեցին <ph name="BEGIN_LINK" />Google Drive-ում<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Մաքրել</translation>
 <translation id="6650726141019353908">Վարդագույն թիթեռ</translation>
+<translation id="6657585470893396449">Գաղտնաբառ</translation>
 <translation id="6710213216561001401">Նախորդը</translation>
 <translation id="6718273304615422081">Արխիվացում…</translation>
 <translation id="6751256176799620176">Ընտրված է 1 պանակ</translation>
@@ -550,7 +555,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Տեղադրումը չհաջողվեց:</translation>
 <translation id="7040138676081995583">Բացել հավելվածով…</translation>
-<translation id="7059566040011178088"><ph name="REMAINING_TIME" />ից քիչ</translation>
 <translation id="7100897339030255923">Ընտրված է <ph name="COUNT" /> տարր</translation>
 <translation id="7106346894903675391">Գնել լրացուցիչ պահեստ…</translation>
 <translation id="7126604456862387217">«&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;» - &lt;em&gt;որոնել Drive-ում&lt;/em&gt;</translation>
@@ -661,7 +665,6 @@
 <translation id="8193175696669055101">Սարքի մոդելը</translation>
 <translation id="8208580316430297579">Արվեստի գործ</translation>
 <translation id="8223479393428528563">Այս ֆայլերը անցանց ռեժիմում օգտագործելու համար, նորից կապակցվեք համացանցին, ֆայլերի վրա աջ սեղմումով ընտրեք <ph name="OFFLINE_CHECKBOX_NAME" /> ընտրանքը:</translation>
-<translation id="8231972167769262174">Մոտ <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Ընդհատել</translation>
 <translation id="8261506727792406068">Ջնջել</translation>
 <translation id="8269755669432358899">Ծալել ֆայլերի մասին կարծիք հայտնելու վահանակները</translation>
@@ -724,6 +727,7 @@
 <translation id="9065203028668620118">Փոփոխել</translation>
 <translation id="9099674669267916096">Էջերի քանակը</translation>
 <translation id="9110990317705400362">Մենք մշտապես փորձում ենք ձեր զննարկումն ավելի ապահով դարձնել: Նախկինում ցանկացած վեբկայք կարող էր առաջարկել ձեզ ընդլայնում ավելացնել ձեր դիտարկիչին: Google Chrome-ի վերջին տարբերակներում Chrome-ը ձեզանից հստակորեն պետք է հրաման ստանա, եթե դուք ցանկանաք տեղադրել որևէ ընդլայնում՝ ավելացնելով դրանք Ընդլայնումների էջի միջոցով: <ph name="BEGIN_LINK" />Իմանալ ավելին<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Ապակողպել</translation>
 <translation id="912419004897138677">Կոդեկ</translation>
 <translation id="9129931661813833980">Ամրացնել պանակը</translation>
 <translation id="9130775360844693113">«<ph name="DESTINATION_NAME" />»-ի անդամներին այս տարրերը հասանելի կդառնան։</translation>

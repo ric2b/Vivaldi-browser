@@ -939,8 +939,12 @@ void ComputeInitialRenderSurfaceList(LayerTreeImpl* layer_tree_impl,
     bool skip_layer = !is_root && (skip_draw_properties_computation ||
                                    skip_for_invertibility);
 
-    layer->set_raster_even_if_not_drawn(skip_for_invertibility &&
-                                        !skip_draw_properties_computation);
+    // Raster layers that are animated but currently have a non-invertible
+    // matrix, or layers that have a will-change transform hint and might
+    // animate to not be backface visible soon.
+    layer->set_raster_even_if_not_drawn(
+        (skip_for_invertibility && !skip_draw_properties_computation) ||
+        layer->has_will_change_transform_hint());
     if (skip_layer)
       continue;
 
@@ -1154,6 +1158,7 @@ void ComputeDrawPropertiesOfVisibleLayers(const LayerImplList* layer_list,
     if (!only_draws_visible_content) {
       drawable_bounds = gfx::Rect(layer->bounds());
     }
+
     gfx::Rect visible_bounds_in_target_space =
         MathUtil::MapEnclosingClippedRect(
             layer->draw_properties().target_space_transform, drawable_bounds);
@@ -1400,22 +1405,7 @@ void CalculateDrawProperties(
   // trying to update property trees whenever these values change, we
   // update property trees before using them.
 
-  // We should never be setting a non-unit page scale factor on an oopif
-  // subframe ... if we attempt this log it and fail.
-  // TODO(wjmaclean): Remove as part of conditions for closing the bug.
-  // https://crbug.com/845097
   PropertyTrees* property_trees = layer_tree_impl->property_trees();
-  if (layer_tree_impl->current_page_scale_factor() !=
-          property_trees->transform_tree.page_scale_factor() &&
-      !layer_tree_impl->PageScaleTransformNode()) {
-    LOG(ERROR) << "Setting PageScale on subframe: new psf = "
-               << layer_tree_impl->page_scale_factor() << ", old psf = "
-               << property_trees->transform_tree.page_scale_factor()
-               << ", in_oopif = "
-               << layer_tree_impl->settings().is_layer_tree_for_subframe;
-    NOTREACHED();
-  }
-
   UpdatePageScaleFactor(property_trees,
                         layer_tree_impl->PageScaleTransformNode(),
                         layer_tree_impl->current_page_scale_factor());

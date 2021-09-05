@@ -115,6 +115,9 @@ class AX_EXPORT AXPlatformNodeDelegate {
   // Get the child of a node given a 0-based index.
   virtual gfx::NativeViewAccessible ChildAtIndex(int index) = 0;
 
+  // Returns true if it has a modal dialog.
+  virtual bool HasModalDialog() const = 0;
+
   // Gets the first child of a node, or nullptr if no children exist.
   virtual gfx::NativeViewAccessible GetFirstChild() = 0;
 
@@ -141,6 +144,11 @@ class AX_EXPORT AXPlatformNodeDelegate {
   // children should not be exposed to any platform's native accessibility
   // layer.
   virtual bool IsLeaf() const = 0;
+
+  // Returns true if this is a top-level browser window that doesn't have a
+  // parent accessible node, or its parent is the application accessible node on
+  // platforms that have one.
+  virtual bool IsToplevelBrowserWindow() = 0;
 
   // If this object is exposed to the platform's accessibility layer, returns
   // this object. Otherwise, returns the platform leaf under which this object
@@ -251,6 +259,9 @@ class AX_EXPORT AXPlatformNodeDelegate {
 
   // Get whether this node is a minimized window.
   virtual bool IsMinimized() const = 0;
+
+  // See AXNode::IsText().
+  virtual bool IsText() const = 0;
 
   // Get whether this node is in web content.
   virtual bool IsWebContent() const = 0;

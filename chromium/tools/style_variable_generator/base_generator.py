@@ -73,9 +73,16 @@ class BaseGenerator:
     globals to render their output.
     '''
 
+    @staticmethod
+    def GetName():
+        return None
+
     def __init__(self):
         self.out_file_path = None
-        self.in_files = []
+        # A map of input filepaths to their context object.
+        self.in_file_to_context = dict()
+
+        # If specified, only generates the given mode.
         self.generate_single_mode = None
 
         # The mode that colors will fallback to when not specified in a
@@ -91,8 +98,19 @@ class BaseGenerator:
             VariableType.OPACITY: ModeVariables(self._default_mode),
         }
 
+        # A dictionary of variable names to objects containing information about
+        # how the generator should run for that variable. All variables must
+        # populate this dictionary and as such, its keys can be used as a list
+        # of all variable names,
+        self.context_map = dict()
 
-    def AddColor(self, name, value_obj):
+    def _SetVariableContext(self, name, context):
+        if name in self.context_map:
+            raise ValueError('Variable name "%s" is reused' % name)
+        self.context_map[name] = context or {}
+
+    def AddColor(self, name, value_obj, context=None):
+        self._SetVariableContext(name, context)
         try:
             if isinstance(value_obj, unicode):
                 self.model[VariableType.COLOR].Add(self._default_mode, name,
@@ -106,26 +124,37 @@ class BaseGenerator:
             raise ValueError('Error parsing color "%s": %s' % (value_obj, err))
 
     def AddJSONFileToModel(self, path):
-        self.in_files.append(path)
-        with open(path, 'r') as f:
-            self.AddJSONToModel(f.read())
+        try:
+            with open(path, 'r') as f:
+                return self.AddJSONToModel(f.read(), path)
+        except ValueError as err:
+            raise ValueError('\n%s:\n    %s' % (path, err))
 
-    def AddJSONToModel(self, json_string):
+    def AddJSONToModel(self, json_string, in_file=None):
+        '''Adds a |json_string| with variable definitions to the model.
+
+        See *test.json5 files for a defacto format reference.
+
+        |in_file| is used to populate a file-to-context map.
+        '''
         # TODO(calamity): Add allow_duplicate_keys=False once pyjson5 is
         # rolled.
         data = json5.loads(json_string,
                            object_pairs_hook=collections.OrderedDict)
+        # Use the generator's name to get the generator-specific context from
+        # the input.
+        generator_context = data.get('options', {}).get(self.GetName(), None)
+        self.in_file_to_context[in_file] = generator_context
 
-        try:
-            for name, value in data['colors'].items():
-                if not re.match('^[a-z0-9_]+$', name):
-                    raise ValueError(
-                        '%s is not a valid variable name (lower case, 0-9, _)'
-                        % name)
+        for name, value in data['colors'].items():
+            if not re.match('^[a-z0-9_]+$', name):
+                raise ValueError(
+                    '%s is not a valid variable name (lower case, 0-9, _)' %
+                    name)
 
-                self.AddColor(name, value)
-        except ValueError as err:
-            raise ValueError('\n%s:\n    %s' % (path, err))
+            self.AddColor(name, value, generator_context)
+
+        return generator_context
 
     def ApplyTemplate(self, style_generator, path_to_template, params):
         loader_root_dir = path_overrides.GetFileSystemLoaderRootDirectory()
@@ -155,7 +184,7 @@ class BaseGenerator:
                 if value.var:
                     CheckColorInDefaultMode(value.var)
                 if value.rgb_var:
-                    CheckColorInDefaultMode(value.rgb_var[:-4])
+                    CheckColorInDefaultMode(value.RGBVarToVar())
 
         # TODO(calamity): Check for circular references.
 

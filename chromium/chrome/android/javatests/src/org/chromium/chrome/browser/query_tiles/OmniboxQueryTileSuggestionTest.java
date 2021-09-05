@@ -45,6 +45,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.chrome.test.util.browser.Features;
@@ -235,30 +236,29 @@ public class OmniboxQueryTileSuggestionTest {
     }
 
     private String getTabUrl() {
-        return mActivityTestRule.getActivity().getActivityTab().getUrl().getValidSpecOrEmpty();
+        return ChromeTabUtils.getUrlOnUiThread(mActivityTestRule.getActivity().getActivityTab())
+                .getValidSpecOrEmpty();
     }
 
     private void waitForOmniboxQueryTileSuggestion(boolean visible) {
-        CriteriaHelper.pollUiThread(new Criteria(
-                "The omnibox query tile suggestion didn't match the expected visibility: "
-                + visible) {
-            @Override
-            public boolean isSatisfied() {
-                View view = mActivityTestRule.getActivity().findViewById(R.id.omnibox_query_tiles);
-                boolean isVisible = view != null && view.getVisibility() == View.VISIBLE;
-                return isVisible == visible;
+        CriteriaHelper.pollUiThread(() -> {
+            View view = mActivityTestRule.getActivity().findViewById(R.id.omnibox_query_tiles);
+            if (visible) {
+                Criteria.checkThat(view, Matchers.notNullValue());
+                Criteria.checkThat(view.getVisibility(), Matchers.is(View.VISIBLE));
+            } else {
+                if (view == null) return;
+                Criteria.checkThat(view.getVisibility(), Matchers.not(View.VISIBLE));
             }
         });
     }
 
     private void waitForSearchResultsPage() {
-        CriteriaHelper.pollUiThread(
-                new Criteria("The SRP was never loaded. " + mTab.getUrl().getValidSpecOrEmpty()) {
-                    @Override
-                    public boolean isSatisfied() {
-                        return mTab.getUrl().getValidSpecOrEmpty().contains(SEARCH_URL_PATTERN);
-                    }
-                });
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat("The SRP was never loaded.",
+                    ChromeTabUtils.getUrlOnUiThread(mTab).getValidSpecOrEmpty(),
+                    Matchers.containsString(SEARCH_URL_PATTERN));
+        });
     }
 
     private void loadNative() {

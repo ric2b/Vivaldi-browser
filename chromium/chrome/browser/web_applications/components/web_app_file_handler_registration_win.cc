@@ -196,7 +196,7 @@ void RegisterFileHandlersWithOsTask(
 
   // Create a hard link to the chrome pwa launcher app. Delete any pre-existing
   // version of the file first.
-  base::DeleteFile(app_specific_launcher_path, /*recursive=*/false);
+  base::DeleteFile(app_specific_launcher_path);
   if (!base::CreateWinHardLink(app_specific_launcher_path, pwa_launcher_path) &&
       !base::CopyFile(pwa_launcher_path, app_specific_launcher_path)) {
     DPLOG(ERROR) << "Unable to copy the generic PWA launcher";
@@ -204,7 +204,6 @@ void RegisterFileHandlersWithOsTask(
     return;
   }
   base::CommandLine app_specific_launcher_command(app_specific_launcher_path);
-  app_specific_launcher_command.AppendArg("%1");
   app_specific_launcher_command.AppendSwitchPath(switches::kProfileDirectory,
                                                  profile_path.BaseName());
   app_specific_launcher_command.AppendSwitchASCII(switches::kAppId, app_id);
@@ -227,17 +226,15 @@ void ReRegisterFileHandlersWithOs(
     const std::set<base::string16>& file_extensions,
     const base::string16& prog_id,
     const base::string16& app_name_extension) {
-  auto deleteFile = [](const base::FilePath& path, bool recursive) {
-    bool result = base::DeleteFile(path, recursive);
-    if (!result)
+  auto delete_file_callback = [](const base::FilePath& path) {
+    if (!base::DeleteFile(path))
       RecordRegistration(RegistrationResult::kFailToDeleteExistingRegistration);
   };
   base::ThreadPool::PostTask(
       FROM_HERE,
       {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::BindOnce(deleteFile,
-                     ShellUtil::GetApplicationPathForProgId(prog_id),
-                     /*recursively=*/false));
+      base::BindOnce(delete_file_callback,
+                     ShellUtil::GetApplicationPathForProgId(prog_id)));
   bool result = ShellUtil::DeleteFileAssociations(prog_id);
   if (!result) {
     RecordRegistration(

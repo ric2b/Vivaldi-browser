@@ -53,10 +53,13 @@ enum class DefaultAppName {
   kSlides = 35,
   kWebStore = 36,
   kYouTube = 37,
+  kYouTubeMusic = 38,
+  // This is our test SWA. It's only installed in tests.
+  kMockSystemApp = 39,
 
   // Add any new values above this one, and update kMaxValue to the highest
   // enumerator value.
-  kMaxValue = kYouTube,
+  kMaxValue = kMockSystemApp,
 };
 
 void RecordDefaultAppLaunch(DefaultAppName default_app_name,
@@ -127,6 +130,15 @@ void RecordDefaultAppLaunch(DefaultAppName default_app_name,
       base::UmaHistogramEnumeration("Apps.DefaultAppLaunch.FromArc",
                                     default_app_name);
       break;
+    case apps::mojom::LaunchSource::kFromSharesheet:
+      base::UmaHistogramEnumeration("Apps.DefaultAppLaunch.FromSharesheet",
+                                    default_app_name);
+      break;
+    case apps::mojom::LaunchSource::kFromReleaseNotesNotification:
+      base::UmaHistogramEnumeration(
+          "Apps.DefaultAppLaunch.FromReleaseNotesNotification",
+          default_app_name);
+      break;
   }
 }
 
@@ -158,6 +170,8 @@ void RecordBuiltInAppLaunch(apps::BuiltInAppName built_in_app_name,
     case apps::mojom::LaunchSource::kFromInstalledNotification:
     case apps::mojom::LaunchSource::kFromTest:
     case apps::mojom::LaunchSource::kFromArc:
+    case apps::mojom::LaunchSource::kFromSharesheet:
+    case apps::mojom::LaunchSource::kFromReleaseNotesNotification:
       break;
   }
 }
@@ -172,8 +186,6 @@ void RecordAppLaunch(const std::string& app_id,
     RecordDefaultAppLaunch(DefaultAppName::kCalculator, launch_source);
   else if (app_id == extension_misc::kTextEditorAppId)
     RecordDefaultAppLaunch(DefaultAppName::kText, launch_source);
-  else if (app_id == extension_misc::kGeniusAppId)
-    RecordDefaultAppLaunch(DefaultAppName::kGetHelp, launch_source);
   else if (app_id == file_manager::kGalleryAppId)
     RecordDefaultAppLaunch(DefaultAppName::kGallery, launch_source);
   else if (app_id == file_manager::kVideoPlayerAppId)
@@ -233,6 +245,8 @@ void RecordAppLaunch(const std::string& app_id,
            app_id == arc::kYoutubeAppId)
     RecordDefaultAppLaunch(DefaultAppName::kYouTube, launch_source);
 #endif  // OS_CHROMEOS
+  else if (app_id == chromeos::default_web_apps::kYoutubeMusicAppId)
+    RecordDefaultAppLaunch(DefaultAppName::kYouTubeMusic, launch_source);
 
   // Above are default apps; below are built-in apps.
 
@@ -251,6 +265,8 @@ void RecordAppLaunch(const std::string& app_id,
 #endif  // OS_CHROMEOS
   } else if (app_id == ash::kReleaseNotesAppId) {
     RecordBuiltInAppLaunch(BuiltInAppName::kReleaseNotes, launch_source);
+  } else if (app_id == chromeos::default_web_apps::kMockSystemAppId) {
+    RecordDefaultAppLaunch(DefaultAppName::kMockSystemApp, launch_source);
   }
 }
 

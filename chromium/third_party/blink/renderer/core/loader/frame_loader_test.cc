@@ -5,6 +5,7 @@
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/web_frame_widget_base.h"
 #include "third_party/blink/renderer/core/html/html_anchor_element.h"
 #include "third_party/blink/renderer/core/page/chrome_client_impl.h"
@@ -72,7 +73,8 @@ TEST_F(FrameLoaderSimTest, LoadEventProgressBeforeUnloadCanceled) {
 
   // We'll only allow canceling a beforeunload if there's a sticky user
   // activation present so simulate a user gesture.
-  frame_b->NotifyUserActivationInLocalTree();
+  frame_b->NotifyUserActivationInLocalTree(
+      mojom::UserActivationNotificationType::kTest);
 
   auto& chrome_client =
       To<ChromeClientImpl>(WebView().GetPage()->GetChromeClient());

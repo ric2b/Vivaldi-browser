@@ -13,16 +13,31 @@ Polymer({
       [I18nBehavior, settings.RouteObserverBehavior, WebUIListenerBehavior],
 
   properties: {
-    /** @private {!AmbientModeTopicSource} */
-    topicSource_: {
-      type: AmbientModeTopicSource,
+    photoPreviewEnabled: {
+      type: Boolean,
       value() {
-        return AmbientModeTopicSource.UNKNOWN;
+        return loadTimeData.getBoolean('isAmbientModePhotoPreviewEnabled');
       },
+      readOnly: true,
     },
 
-    /** @private {Array<Object>} */
-    photosContainers_: Array,
+    /** @type {!AmbientModeTopicSource} */
+    topicSource: {
+      type: Number,
+      value: AmbientModeTopicSource.UNKNOWN,
+    },
+
+    /** @type {?Array<!AmbientModeAlbum>} */
+    albums: {
+      type: Array,
+      notify: true,
+      // Set to null to differentiate from an empty album.
+      value: null,
+    },
+  },
+
+  listeners: {
+    'selected-albums-changed': 'onSelectedAlbumsChanged_',
   },
 
   /** @private {?settings.AmbientModeBrowserProxy} */
@@ -35,15 +50,9 @@ Polymer({
 
   /** @override */
   ready() {
+    this.addWebUIListener('albums-changed', this.onAlbumsChanged_.bind(this));
     this.addWebUIListener(
-        'photos-containers-changed', (AmbientModeSettings) => {
-          // This page has been reused by other topic source since the last time
-          // requesting the containers. Do not update on this stale event.
-          if (AmbientModeSettings.topicSource !== this.topicSource_) {
-            return;
-          }
-          this.photosContainers_ = AmbientModeSettings.topicContainers;
-        });
+        'album-preview-changed', this.onAlbumPreviewChanged_.bind(this));
   },
 
   /**
@@ -65,19 +74,50 @@ Polymer({
       return;
     }
 
-    this.topicSource_ = /** @type {!AmbientModeTopicSource} */ (topicSourceInt);
-    if (this.topicSource_ === AmbientModeTopicSource.GOOGLE_PHOTOS) {
+    this.topicSource = /** @type {!AmbientModeTopicSource} */ (topicSourceInt);
+    if (this.topicSource === AmbientModeTopicSource.GOOGLE_PHOTOS) {
       this.parentNode.pageTitle =
           this.i18n('ambientModeTopicSourceGooglePhotos');
-    } else if (this.topicSource_ === AmbientModeTopicSource.ART_GALLERY) {
+    } else if (this.topicSource === AmbientModeTopicSource.ART_GALLERY) {
       this.parentNode.pageTitle = this.i18n('ambientModeTopicSourceArtGallery');
     } else {
       assertNotReached();
       return;
     }
 
-    this.photosContainers_ = [];
-    this.browserProxy_.requestPhotosContainers(this.topicSource_);
+    // TODO(b/162793904): Have a better plan to cache the UI data.
+    // Reset to null to distinguish empty albums fetched from server.
+    this.albums = null;
+    this.browserProxy_.requestAlbums(this.topicSource);
+  },
+
+  /**
+   * @param {!AmbientModeSettings} settings
+   * @private
+   */
+  onAlbumsChanged_(settings) {
+    // This page has been reused by other topic source since the last time
+    // requesting the albums. Do not update on this stale event.
+    if (settings.topicSource !== this.topicSource) {
+      return;
+    }
+    this.albums = settings.albums;
+  },
+
+  /**
+   * @param {!AmbientModeAlbum} album
+   * @private
+   */
+  onAlbumPreviewChanged_(album) {
+    if (album.topicSource !== this.topicSource) {
+      return;
+    }
+
+    for (let i = 0; i < this.albums.length; ++i) {
+      if (this.albums[i].albumId === album.albumId) {
+        this.set('albums.' + i + '.url', album.url);
+      }
+    }
   },
 
   /**
@@ -85,25 +125,48 @@ Polymer({
    * @return {string}
    * @private
    */
-  getDescription_(topicSource) {
-    // TODO(b/159766700): Finialize the strings and i18n.
+  getTitleInnerHtml_(topicSource) {
     if (topicSource === AmbientModeTopicSource.GOOGLE_PHOTOS) {
-      return 'A slideshow of selected memories will be created';
+      return this.i18nAdvanced('ambientModeAlbumsSubpageGooglePhotosTitle');
     } else {
-      return 'Curated images and artwork';
+      return this.i18n('ambientModeTopicSourceArtGalleryDescription');
     }
+  },
+
+  /**
+   * @param {!CustomEvent<{item: !AmbientModeAlbum}>} event
+   * @private
+   */
+  onSelectedAlbumsChanged_(event) {
+    const albums = [];
+    this.albums.forEach(/** @param {AmbientModeAlbum} album */ (album) => {
+      if (album.checked) {
+        albums.push({albumId: album.albumId});
+      }
+    });
+
+    this.browserProxy_.setSelectedAlbums(
+        {topicSource: this.topicSource, albums: albums});
   },
 
   /** @private */
   onCheckboxChange_() {
-    const checkboxes = this.$$('#containers').querySelectorAll('cr-checkbox');
-    const containers = [];
+    const checkboxes = this.$$('#albums').querySelectorAll('cr-checkbox');
+    const albums = [];
     checkboxes.forEach((checkbox) => {
       if (checkbox.checked && !checkbox.hidden) {
-        containers.push(checkbox.label);
+        albums.push({albumId: checkbox.dataset.id});
       }
     });
-    this.browserProxy_.setSelectedPhotosContainers(containers);
-  }
+    this.browserProxy_.setSelectedAlbums(
+        {topicSource: this.topicSource, albums: albums});
+  },
 
+  /**
+   * @return {boolean}
+   * @private
+   */
+  hasNoAlbums_() {
+    return !!this.albums && !this.albums.length;
+  },
 });

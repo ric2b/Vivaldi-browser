@@ -36,7 +36,7 @@
 #include "components/variations/service/safe_seed_manager.h"
 #include "components/variations/service/variations_service.h"
 #include "components/variations/service/variations_service_client.h"
-#include "components/variations/variations_http_header_provider.h"
+#include "components/variations/variations_ids_provider.h"
 #include "components/variations/variations_seed_processor.h"
 #include "components/variations/variations_switches.h"
 #include "ui/base/device_form_factor.h"
@@ -240,7 +240,10 @@ VariationsFieldTrialCreator::GetClientFilterableStateForVersion(
       ConvertProductChannelToStudyChannel(client_->GetChannelForVariations());
   state->form_factor = GetCurrentFormFactor();
   state->platform = GetPlatform();
-  state->hardware_class = GetShortHardwareClass();
+  // TODO(crbug/1111131): Expand to other platforms.
+#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
+  state->hardware_class = base::SysInfo::HardwareModelName();
+#endif
 #if defined(OS_ANDROID)
   // This is set on Android only currently, because the IsLowEndDevice() API
   // on other platforms has no intrinsic meaning outside of a field trial that
@@ -374,24 +377,6 @@ void VariationsFieldTrialCreator::OverrideCachedUIStrings() {
   overridden_strings_map_.clear();
 }
 
-// static
-std::string VariationsFieldTrialCreator::GetShortHardwareClass() {
-#if defined(OS_CHROMEOS)
-  std::string board = base::SysInfo::GetLsbReleaseBoard();
-  // GetLsbReleaseBoard() may be suffixed with a "-signed-" and other extra
-  // info. Strip it.
-  const size_t index = board.find("-signed-");
-  if (index != std::string::npos)
-    board.resize(index);
-
-  return base::ToUpperASCII(board);
-#elif defined(OS_ANDROID)
-  return base::SysInfo::HardwareModelName();
-#else
-  return std::string();
-#endif
-}
-
 bool VariationsFieldTrialCreator::LoadSeed(VariationsSeed* seed,
                                            std::string* seed_data,
                                            std::string* base64_signature) {
@@ -481,24 +466,24 @@ bool VariationsFieldTrialCreator::SetupFieldTrials(
     }
   }
 
-  VariationsHttpHeaderProvider* http_header_provider =
-      VariationsHttpHeaderProvider::GetInstance();
+  VariationsIdsProvider* http_header_provider =
+      VariationsIdsProvider::GetInstance();
   // Force the variation ids selected in chrome://flags and/or specified using
   // the command-line flag.
   auto result = http_header_provider->ForceVariationIds(
       variation_ids,
       command_line->GetSwitchValueASCII(switches::kForceVariationIds));
   switch (result) {
-    case VariationsHttpHeaderProvider::ForceIdsResult::INVALID_SWITCH_ENTRY:
+    case VariationsIdsProvider::ForceIdsResult::INVALID_SWITCH_ENTRY:
       ExitWithMessage(base::StringPrintf("Invalid --%s list specified.",
                                          switches::kForceVariationIds));
       break;
-    case VariationsHttpHeaderProvider::ForceIdsResult::INVALID_VECTOR_ENTRY:
+    case VariationsIdsProvider::ForceIdsResult::INVALID_VECTOR_ENTRY:
       // It should not be possible to have invalid variation ids from the
       // vector param (which corresponds to chrome://flags).
       NOTREACHED();
       break;
-    case VariationsHttpHeaderProvider::ForceIdsResult::SUCCESS:
+    case VariationsIdsProvider::ForceIdsResult::SUCCESS:
       break;
   }
 

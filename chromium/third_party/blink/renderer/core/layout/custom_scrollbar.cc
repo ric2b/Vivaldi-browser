@@ -41,9 +41,7 @@ CustomScrollbar::CustomScrollbar(ScrollableArea* scrollable_area,
                                  Element* style_source)
     : Scrollbar(scrollable_area,
                 orientation,
-                kRegularScrollbar,
                 style_source,
-                nullptr,
                 CustomScrollbarTheme::GetCustomScrollbarTheme()) {
   DCHECK(style_source);
 }
@@ -131,11 +129,24 @@ void CustomScrollbar::SetPressedPart(ScrollbarPart part,
 scoped_refptr<const ComputedStyle>
 CustomScrollbar::GetScrollbarPseudoElementStyle(ScrollbarPart part_type,
                                                 PseudoId pseudo_id) {
-  if (!StyleSource()->GetLayoutObject())
+  Element* element = StyleSource();
+  DCHECK(element);
+  Document& document = element->GetDocument();
+  if (!document.InStyleRecalc()) {
+    // We are currently querying style for custom scrollbars on a style-dirty
+    // tree outside style recalc. Update active style to make sure we don't
+    // crash on null RuleSets.
+    // TODO(crbug.com/1114644): We should not compute style for a dirty tree
+    // outside the lifecycle update. Instead we should mark the originating
+    // element for style recalc and let the next lifecycle update compute the
+    // scrollbar styles.
+    document.GetStyleEngine().UpdateActiveStyle();
+  }
+  if (!element->GetLayoutObject())
     return nullptr;
-  const ComputedStyle* source_style = StyleSource()->GetLayoutObject()->Style();
+  const ComputedStyle* source_style = element->GetLayoutObject()->Style();
   scoped_refptr<const ComputedStyle> part_style =
-      StyleSource()->StyleForPseudoElement(
+      element->StyleForPseudoElement(
           PseudoElementStyleRequest(pseudo_id, this, part_type), source_style);
   if (!part_style)
     return nullptr;
@@ -415,12 +426,6 @@ void CustomScrollbar::InvalidateDisplayItemClientsOfScrollbarParts() {
 void CustomScrollbar::ClearPaintFlags() {
   for (auto& part : parts_)
     part.value->ClearPaintFlags();
-}
-
-void CustomScrollbar::SetVisualRect(const IntRect& rect) {
-  Scrollbar::SetVisualRect(rect);
-  for (auto& part : parts_)
-    part.value->GetMutableForPainting().FirstFragment().SetVisualRect(rect);
 }
 
 }  // namespace blink

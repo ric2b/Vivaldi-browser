@@ -46,7 +46,7 @@ class TabWebContentsDelegateAndroid
 
   void PortalWebContentsCreated(content::WebContents* portal_contents) override;
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
-                      std::unique_ptr<content::FileSelectListener> listener,
+                      scoped_refptr<content::FileSelectListener> listener,
                       const blink::mojom::FileChooserParams& params) override;
   std::unique_ptr<content::BluetoothChooser> RunBluetoothChooser(
       content::RenderFrameHost* frame,
@@ -77,7 +77,7 @@ class TabWebContentsDelegateAndroid
       content::WebContents* source) override;
   void AdjustPreviewsStateForNavigation(
       content::WebContents* web_contents,
-      content::PreviewsState* previews_state) override;
+      blink::PreviewsState* previews_state) override;
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
@@ -132,7 +132,7 @@ class TabWebContentsDelegateAndroid
 #endif
 
 #if BUILDFLAG(ENABLE_PAINT_PREVIEW)
-  void CapturePaintPreviewOfCrossProcessSubframe(
+  void CapturePaintPreviewOfSubframe(
       content::WebContents* web_contents,
       const gfx::Rect& rect,
       const base::UnguessableToken& guid,

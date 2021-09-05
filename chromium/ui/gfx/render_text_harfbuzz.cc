@@ -18,15 +18,15 @@
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop_current.h"
-#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/current_thread.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "third_party/icu/source/common/unicode/ubidi.h"
@@ -41,7 +41,6 @@
 #include "ui/gfx/font.h"
 #include "ui/gfx/font_fallback.h"
 #include "ui/gfx/font_render_params.h"
-#include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/harfbuzz_font_skia.h"
 #include "ui/gfx/platform_font.h"
 #include "ui/gfx/range/range_f.h"
@@ -50,7 +49,7 @@
 #include "ui/gfx/text_utils.h"
 #include "ui/gfx/utf16_indexing.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #include "third_party/skia/include/ports/SkTypeface_mac.h"
@@ -65,13 +64,6 @@
 namespace gfx {
 
 namespace {
-
-// Experiment to determine best cache size (see https://crbug.com/1050793).
-const base::Feature kShapeRunCacheSize = {"ShapeRunCacheSize",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::FeatureParam<int> kShapeRunCacheSizeParam = {&kShapeRunCacheSize,
-                                                         "CacheSize", 10000};
 
 // Text length limit. Longer strings are slow and not fully tested.
 const size_t kMaxTextLength = 10000;
@@ -419,6 +411,7 @@ class HarfBuzzLineBreaker {
   HarfBuzzLineBreaker(size_t max_width,
                       int min_baseline,
                       float min_height,
+                      float glyph_height_for_test,
                       WordWrapBehavior word_wrap_behavior,
                       const base::string16& text,
                       const BreakList<size_t>* words,
@@ -426,6 +419,7 @@ class HarfBuzzLineBreaker {
       : max_width_((max_width == 0) ? SK_ScalarMax : SkIntToScalar(max_width)),
         min_baseline_(min_baseline),
         min_height_(min_height),
+        glyph_height_for_test_(glyph_height_for_test),
         word_wrap_behavior_(word_wrap_behavior),
         text_(text),
         words_(words),
@@ -524,9 +518,14 @@ class HarfBuzzLineBreaker {
                   return run_list_.logical_to_visual(s1.run) <
                          run_list_.logical_to_visual(s2.run);
                 });
-      line->size.set_height(std::max(min_height_, max_descent_ + max_ascent_));
+
+      line->size.set_height(
+          glyph_height_for_test_
+              ? glyph_height_for_test_
+              : std::max(min_height_, max_descent_ + max_ascent_));
+
       line->baseline = std::max(min_baseline_, SkScalarRoundToInt(max_ascent_));
-      line->preceding_heights = std::ceil(total_size_.height());
+      line->preceding_heights = base::ClampCeil(total_size_.height());
       // Subtract newline segment's width from |total_size_| because it's not
       // drawn.
       float line_width = line->size.width();
@@ -741,6 +740,7 @@ class HarfBuzzLineBreaker {
   const SkScalar max_width_;
   const int min_baseline_;
   const float min_height_;
+  const float glyph_height_for_test_;
   const WordWrapBehavior word_wrap_behavior_;
   const base::string16& text_;
   const BreakList<size_t>* const words_;
@@ -787,7 +787,7 @@ void ApplyForcedDirection(UBiDiLevel* level) {
 }
 
 internal::TextRunHarfBuzz::FontParams CreateFontParams(
-    const gfx::Font& primary_font,
+    const Font& primary_font,
     UBiDiLevel bidi_level,
     UScriptCode script,
     const internal::StyleIterator& style) {
@@ -813,7 +813,7 @@ namespace internal {
 sk_sp<SkTypeface> CreateSkiaTypeface(const Font& font,
                                      bool italic,
                                      Font::Weight weight) {
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   const Font::FontStyle style = italic ? Font::ITALIC : Font::NORMAL;
   Font font_with_style = font.Derive(0, style, weight);
   if (!font_with_style.GetNativeFont())
@@ -860,14 +860,14 @@ void TextRunHarfBuzz::FontParams::
     // Calculate a slightly smaller font. The ratio here is somewhat arbitrary.
     // Proportions from 5/9 to 5/7 all look pretty good.
     const float ratio = 5.0f / 9.0f;
-    font_size = ToRoundedInt(font.GetFontSize() * ratio);
+    font_size = base::ClampRound(font.GetFontSize() * ratio);
     switch (baseline_type) {
       case SUPERSCRIPT:
         baseline_offset = font.GetCapHeight() - font.GetHeight();
         break;
       case SUPERIOR:
         baseline_offset =
-            ToRoundedInt(font.GetCapHeight() * ratio) - font.GetCapHeight();
+            base::ClampRound(font.GetCapHeight() * ratio) - font.GetCapHeight();
         break;
       case SUBSCRIPT:
         baseline_offset = font.GetHeight() - font.GetBaseline();
@@ -1262,14 +1262,16 @@ struct ShapeRunWithFontInput {
   size_t hash = 0;
 };
 
-// An MRU cache of the results from calling ShapeRunWithFont. Use the same
-// maximum cache size as is used in blink::ShapeCache.
+// An MRU cache of the results from calling ShapeRunWithFont. The maximum cache
+// size used in blink::ShapeCache is 10k. A Finch experiment showed that
+// reducing the cache size to 1k has no performance impact.
+constexpr int kShapeRunCacheSize = 1000;
 using ShapeRunCacheBase = base::HashingMRUCache<ShapeRunWithFontInput,
                                                 TextRunHarfBuzz::ShapeOutput,
                                                 ShapeRunWithFontInput::Hash>;
 class ShapeRunCache : public ShapeRunCacheBase {
  public:
-  ShapeRunCache() : ShapeRunCacheBase(kShapeRunCacheSizeParam.Get()) {}
+  ShapeRunCache() : ShapeRunCacheBase(kShapeRunCacheSize) {}
 };
 
 void ShapeRunWithFont(const ShapeRunWithFontInput& in,
@@ -1342,8 +1344,14 @@ void ShapeRunWithFont(const ShapeRunWithFontInput& in,
     if (in.obscured)
       out->width += in.obscured_glyph_spacing;
 
+    // When subpixel positioning is not enabled, glyph width is rounded to avoid
+    // fractional width. Disable this conversion when a glyph width is provided
+    // for testing. Using an integral glyph width has the same behavior as
+    // disabling the subpixel positioning.
+    const bool force_subpixel_for_test = in.glyph_width_for_test != 0;
+
     // Round run widths if subpixel positioning is off to match native behavior.
-    if (!in.render_params.subpixel_positioning)
+    if (!in.render_params.subpixel_positioning && !force_subpixel_for_test)
       out->width = std::round(out->width);
   }
 
@@ -1397,21 +1405,17 @@ SizeF RenderTextHarfBuzz::GetStringSizeF() {
   return total_size_;
 }
 
-Size RenderTextHarfBuzz::GetLineSize(const SelectionModel& caret) {
-  const auto to_size = [](const internal::Line& line) {
-    return Size(std::ceil(line.size.width()), line.size.height());
-  };
-
+SizeF RenderTextHarfBuzz::GetLineSizeF(const SelectionModel& caret) {
   const internal::ShapedText* shaped_text = GetShapedText();
   const auto& caret_run = GetRunContainingCaret(caret);
   for (const auto& line : shaped_text->lines()) {
     for (const internal::LineSegment& segment : line.segments) {
       if (segment.run == caret_run)
-        return to_size(line);
+        return line.size;
     }
   }
 
-  return to_size(shaped_text->lines().back());
+  return shaped_text->lines().back().size;
 }
 
 std::vector<Rect> RenderTextHarfBuzz::GetSubstringBounds(const Range& range) {
@@ -1450,9 +1454,11 @@ std::vector<Rect> RenderTextHarfBuzz::GetSubstringBounds(const Range& range) {
         const internal::TextRunHarfBuzz& run = *run_list->runs()[segment.run];
         RangeF selected_span =
             run.GetGraphemeSpanForCharRange(this, intersection);
-        int start_x = std::ceil(selected_span.start() - line_start_x);
-        int end_x = std::ceil(selected_span.end() - line_start_x);
-        Rect rect(start_x, 0, end_x - start_x, std::ceil(line.size.height()));
+        DCHECK(!selected_span.is_reversed());
+        int start_x = base::ClampFloor(selected_span.start() - line_start_x);
+        int end_x = base::ClampCeil(selected_span.end() - line_start_x);
+        Rect rect(start_x, 0, end_x - start_x,
+                  base::ClampCeil(line.size.height()));
         rects.push_back(rect + GetLineOffset(line_index));
       }
     }
@@ -1507,6 +1513,11 @@ size_t RenderTextHarfBuzz::GetLineContainingCaret(const SelectionModel& caret) {
 
   if (caret.caret_pos() == 0)
     return 0;
+
+  if (!multiline()) {
+    DCHECK_EQ(1u, GetShapedText()->lines().size());
+    return 0;
+  }
 
   size_t layout_position = TextIndexToDisplayIndex(caret.caret_pos());
   LogicalCursorDirection affinity = caret.caret_affinity();
@@ -1675,7 +1686,7 @@ void RenderTextHarfBuzz::EnsureLayout() {
     HarfBuzzLineBreaker line_breaker(
         display_rect().width(),
         DetermineBaselineCenteringText(height, font_list()), height,
-        word_wrap_behavior(), GetDisplayText(),
+        glyph_height_for_test_, word_wrap_behavior(), GetDisplayText(),
         multiline() ? &GetLineBreaks() : nullptr, *run_list);
 
     if (multiline())
@@ -2153,7 +2164,7 @@ void RenderTextHarfBuzz::ShapeRunsWithFont(
   std::vector<internal::TextRunHarfBuzz*> runs_with_missing_glyphs;
   for (internal::TextRunHarfBuzz*& run : *in_out_runs) {
     // First do a cache lookup.
-    bool can_use_cache = base::MessageLoopCurrentForUI::IsSet() &&
+    bool can_use_cache = base::CurrentUIThread::IsSet() &&
                          run->range.length() <= kMaxRunLengthToCache;
     bool found_in_cache = false;
     const internal::ShapeRunWithFontInput cache_key(

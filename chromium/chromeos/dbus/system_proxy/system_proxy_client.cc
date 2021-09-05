@@ -67,15 +67,33 @@ class SystemProxyClientImpl : public SystemProxyClient {
                                request, std::move(callback));
   }
 
-  void ShutDownDaemon(ShutDownDaemonCallback callback) override {
-    CallProtoMethod(system_proxy::kShutDownMethod, std::move(callback));
+  void ClearUserCredentials(
+      const system_proxy::ClearUserCredentialsRequest& request,
+      ClearUserCredentialsCallback callback) override {
+    CallProtoMethodWithRequest(system_proxy::kClearUserCredentialsMethod,
+                               request, std::move(callback));
   }
 
-  void ConnectToWorkerActiveSignal(WorkerActiveCallback callback) override {
+  void ShutDownProcess(const system_proxy::ShutDownRequest& request,
+                       ShutDownProcessCallback callback) override {
+    CallProtoMethodWithRequest(system_proxy::kShutDownProcessMethod, request,
+                               std::move(callback));
+  }
+
+  void SetWorkerActiveSignalCallback(WorkerActiveCallback callback) override {
     DCHECK(callback);
     DCHECK(!worker_active_callback_);
     worker_active_callback_ = callback;
+  }
 
+  void SetAuthenticationRequiredSignalCallback(
+      AuthenticationRequiredCallback callback) override {
+    DCHECK(callback);
+    DCHECK(!auth_required_callback_);
+    auth_required_callback_ = callback;
+  }
+
+  void ConnectToWorkerSignals() override {
     proxy_->WaitForServiceToBeAvailable(
         base::BindOnce(&SystemProxyClientImpl::OnSystemProxyServiceAvailable,
                        weak_factory_.GetWeakPtr()));
@@ -155,8 +173,30 @@ class SystemProxyClientImpl : public SystemProxyClient {
                     "worker process.";
       return;
     }
-    DCHECK(worker_active_callback_);
+    if (!worker_active_callback_) {
+      LOG(WARNING) << "WorkerActive signal is ignored.";
+      return;
+    }
     worker_active_callback_.Run(details);
+  }
+
+  void OnAuthenticationRequired(dbus::Signal* signal) {
+    DCHECK_EQ(signal->GetInterface(), system_proxy::kSystemProxyInterface);
+    DCHECK_EQ(signal->GetMember(), system_proxy::kAuthenticationRequiredSignal);
+
+    dbus::MessageReader signal_reader(signal);
+    system_proxy::AuthenticationRequiredDetails details;
+    if (!signal_reader.PopArrayOfBytesAsProto(&details)) {
+      LOG(ERROR)
+          << "Failed to read required authentication details from signal.";
+      return;
+    }
+    if (!auth_required_callback_) {
+      LOG(WARNING) << "AuthenticationRequired signal is ignored.";
+      return;
+    }
+
+    auth_required_callback_.Run(details);
   }
 
   void OnSystemProxyServiceAvailable(bool is_available) {
@@ -170,10 +210,18 @@ class SystemProxyClientImpl : public SystemProxyClient {
         base::BindRepeating(&SystemProxyClientImpl::OnWorkerActive,
                             weak_factory_.GetWeakPtr()),
         base::BindOnce(&OnSignalConnected));
+
+    proxy_->ConnectToSignal(
+        system_proxy::kSystemProxyInterface,
+        system_proxy::kAuthenticationRequiredSignal,
+        base::BindRepeating(&SystemProxyClientImpl::OnAuthenticationRequired,
+                            weak_factory_.GetWeakPtr()),
+        base::BindOnce(&OnSignalConnected));
   }
 
-  // Signal callback.
+  // Signal callbacks.
   WorkerActiveCallback worker_active_callback_;
+  AuthenticationRequiredCallback auth_required_callback_;
 
   // D-Bus proxy for the SystemProxy daemon, not owned.
   dbus::ObjectProxy* proxy_ = nullptr;

@@ -25,9 +25,9 @@
 
 #include "build/build_config.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/widget/screen_info.h"
 #include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_screen_info.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
@@ -137,9 +137,15 @@ bool LayoutView::HitTest(const HitTestLocation& location,
   // Note that if an iframe has its render pipeline throttled, it will not
   // update layout here, and it will also not propagate the hit test into the
   // iframe's inner document.
-  if (!GetFrameView()->UpdateAllLifecyclePhasesExceptPaint(
-          DocumentUpdateReason::kHitTest))
-    return false;
+  if (RuntimeEnabledFeatures::CompositingOptimizationsEnabled()) {
+    if (!GetFrameView()->UpdateLifecycleToPrePaintClean(
+            DocumentUpdateReason::kHitTest))
+      return false;
+  } else {
+    if (!GetFrameView()->UpdateAllLifecyclePhasesExceptPaint(
+            DocumentUpdateReason::kHitTest))
+      return false;
+  }
   HitTestLatencyRecorder hit_test_latency_recorder(
       result.GetHitTestRequest().AllowsChildFrameContent());
   return HitTestNoLifecycleUpdate(location, result);
@@ -395,8 +401,8 @@ void LayoutView::MapLocalToAncestor(const LayoutBoxModelObject* ancestor,
                                                    mode);
     } else {
       DCHECK(!ancestor);
-      if (mode & kApplyRemoteRootFrameOffset)
-        GetFrameView()->MapLocalToRemoteRootFrame(transform_state);
+      if (mode & kApplyRemoteMainFrameTransform)
+        GetFrameView()->MapLocalToRemoteMainFrame(transform_state);
     }
   }
 }
@@ -445,10 +451,10 @@ void LayoutView::MapAncestorToLocal(const LayoutBoxModelObject* ancestor,
           parent_doc_layout_object->PhysicalContentBoxOffset());
     } else {
       DCHECK(!ancestor);
-      // Note that MapLocalToAncestorRootFrame is correct here because
+      // Note that MapLocalToRemoteMainFrame is correct here because
       // transform_state will be set to kUnapplyInverseTransformDirection.
-      if (mode & kApplyRemoteRootFrameOffset)
-        GetFrameView()->MapLocalToRemoteRootFrame(transform_state);
+      if (mode & kApplyRemoteMainFrameTransform)
+        GetFrameView()->MapLocalToRemoteMainFrame(transform_state);
     }
   } else {
     DCHECK(this == ancestor || !ancestor);

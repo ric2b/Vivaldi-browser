@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <vector>
 
 #include "base/command_line.h"
@@ -35,7 +36,7 @@ using StartupBrowserCreatorTest = InProcessBrowserTest;
 // Chrome OS doesn't support multiprofile.
 // And BrowserWindow::IsActive() always returns false in tests on MAC.
 // And this test is useless without that functionality.
-#if !defined(OS_CHROMEOS) && !defined(OS_MACOSX)
+#if !defined(OS_CHROMEOS) && !defined(OS_MAC)
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, LastUsedProfileActivated) {
   base::ScopedAllowBlockingForTesting allow_blocking;
   ProfileManager* profile_manager = g_browser_process->profile_manager();
@@ -107,7 +108,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, LastUsedProfileActivated) {
   ASSERT_TRUE(new_browser);
   EXPECT_FALSE(new_browser->window()->IsActive());
 }
-#endif  // !OS_MACOSX && !OS_CHROMEOS
+#endif  // !OS_MAC && !OS_CHROMEOS
 
 #if defined(USE_AURA)
 class StartupPagePrefSetterMainExtraParts : public ChromeBrowserMainExtraParts {
@@ -148,7 +149,7 @@ class StartupPageTest : public InProcessBrowserTest {
     ChromeBrowserMainParts* chrome_browser_main_parts =
         static_cast<ChromeBrowserMainParts*>(browser_main_parts);
     chrome_browser_main_parts->AddParts(
-        new StartupPagePrefSetterMainExtraParts(urls));
+        std::make_unique<StartupPagePrefSetterMainExtraParts>(urls));
   }
 
  private:

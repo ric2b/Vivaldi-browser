@@ -103,8 +103,7 @@ class CalendarBackend
   void Commit();
 
   // Creates an Event
-  void CreateCalendarEvent(EventRow ev,
-                           std::shared_ptr<CreateEventResult> result);
+  void CreateCalendarEvent(EventRow ev, std::shared_ptr<EventResultCB> result);
 
   // Creates multiple events
   void CreateCalendarEvents(std::vector<calendar::EventRow> events,
@@ -136,9 +135,8 @@ class CalendarBackend
   void DeleteEventType(EventTypeID event_type_id,
                        std::shared_ptr<DeleteEventTypeResult> result);
 
-  void CreateRecurrenceException(
-      RecurrenceExceptionRow row,
-      std::shared_ptr<CreateRecurrenceExceptionResult> result);
+  void CreateRecurrenceException(RecurrenceExceptionRow row,
+                                 std::shared_ptr<EventResultCB> result);
   void GetAllNotifications(std::shared_ptr<GetAllNotificationResult> results);
 
   void CreateNotification(calendar::NotificationRow row,

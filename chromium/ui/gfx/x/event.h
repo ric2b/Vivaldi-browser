@@ -12,31 +12,39 @@
 #include <utility>
 
 #include "base/component_export.h"
+#include "base/memory/ref_counted_memory.h"
+#include "base/memory/scoped_refptr.h"
+#include "ui/gfx/x/xproto.h"
 
 namespace x11 {
 
 class Connection;
 class Event;
+struct ReadBuffer;
 
 COMPONENT_EXPORT(X11)
-void ReadEvent(Event* event, Connection* connection, const uint8_t* buffer);
+void ReadEvent(Event* event, Connection* connection, ReadBuffer* buffer);
 
 class COMPONENT_EXPORT(X11) Event {
  public:
-  // Used to create events for testing.
   template <typename T>
-  Event(XEvent* xlib_event, T&& xproto_event) {
+  explicit Event(T&& xproto_event) {
     sequence_valid_ = true;
-    sequence_ = xlib_event_.xany.serial;
-    custom_allocated_xlib_event_ = true;
-    xlib_event_ = *xlib_event;
+    sequence_ = xproto_event.sequence;
     type_id_ = T::type_id;
     deleter_ = [](void* event) { delete reinterpret_cast<T*>(event); };
-    event_ = new T(std::forward<T>(xproto_event));
+    T* event = new T(std::forward<T>(xproto_event));
+    event_ = event;
+    window_ = event->GetWindow();
   }
 
   Event();
   Event(xcb_generic_event_t* xcb_event,
+        Connection* connection,
+        bool sequence_valid = true);
+  // |event_bytes| is modified and will not be valid after this call.
+  // A copy is necessary if the original data is still needed.
+  Event(scoped_refptr<base::RefCountedMemory> event_bytes,
         Connection* connection,
         bool sequence_valid = true);
 
@@ -63,28 +71,26 @@ class COMPONENT_EXPORT(X11) Event {
   bool sequence_valid() const { return sequence_valid_; }
   uint32_t sequence() const { return sequence_; }
 
-  const XEvent& xlib_event() const { return xlib_event_; }
-  XEvent& xlib_event() { return xlib_event_; }
+  x11::Window window() const { return window_ ? *window_ : x11::Window::None; }
 
  private:
   friend void ReadEvent(Event* event,
                         Connection* connection,
-                        const uint8_t* buffer);
+                        ReadBuffer* buffer);
 
   void Dealloc();
 
   bool sequence_valid_ = false;
-  uint32_t sequence_ = 0;
-
-  // Indicates if |xlib_event_| was allocated manually and therefore
-  // needs to be freed manually.
-  bool custom_allocated_xlib_event_ = false;
-  XEvent xlib_event_{};
+  uint16_t sequence_ = 0;
 
   // XProto event state.
   int type_id_ = 0;
   void (*deleter_)(void*) = nullptr;
   void* event_ = nullptr;
+
+  // This member points to a field in |event_|, or may be nullptr if there's no
+  // associated window for the event.  It's owned by |event_|, not us.
+  x11::Window* window_ = nullptr;
 };
 
 }  // namespace x11

@@ -103,10 +103,13 @@ void GPU::ContextDestroyed() {
 }
 
 void GPU::OnRequestAdapterCallback(ScriptPromiseResolver* resolver,
-                                   uint32_t adapter_server_id,
+                                   int32_t adapter_server_id,
                                    const WGPUDeviceProperties& properties) {
-  auto* adapter = MakeGarbageCollected<GPUAdapter>(
-      "Default", adapter_server_id, properties, dawn_control_client_);
+  GPUAdapter* adapter = nullptr;
+  if (adapter_server_id >= 0) {
+    adapter = MakeGarbageCollected<GPUAdapter>(
+        "Default", adapter_server_id, properties, dawn_control_client_);
+  }
   resolver->Resolve(adapter);
 }
 
@@ -118,7 +121,8 @@ ScriptPromise GPU::requestAdapter(ScriptState* script_state,
   // For now we choose kHighPerformance by default.
   gpu::webgpu::PowerPreference power_preference =
       gpu::webgpu::PowerPreference::kHighPerformance;
-  if (options->powerPreference() == "low-power") {
+  if (options->hasPowerPreference() &&
+      options->powerPreference() == "low-power") {
     power_preference = gpu::webgpu::PowerPreference::kLowPower;
   }
 

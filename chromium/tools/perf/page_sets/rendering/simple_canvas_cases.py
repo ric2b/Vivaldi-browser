@@ -32,6 +32,11 @@ class SimpleCanvasPage(rendering_story.RenderingStory):
       action_runner.Wait(10)
 
 
+class Canvas2dToTexture(SimpleCanvasPage):
+  BASE_NAME = 'canvas2d_to_texture.html'
+  URL = 'file://../simple_canvas/canvas2d_to_texture.html'
+
+
 class CanvasToCanvasDrawPage(SimpleCanvasPage):
   BASE_NAME = 'canvas_to_canvas_draw'
   URL = 'file://../simple_canvas/canvas_to_canvas_draw.html'
@@ -52,6 +57,16 @@ class DocsTable(SimpleCanvasPage):
   URL = 'file://../simple_canvas/docs_table.html'
 
 
+class DrawImage(SimpleCanvasPage):
+  BASE_NAME = 'draw_image'
+  URL = 'file://../simple_canvas/draw_image.html'
+
+
+class DrawimageNotPixelAligned(SimpleCanvasPage):
+  BASE_NAME = 'draw_image_not_pixel_aligned'
+  URL = 'file://../simple_canvas/draw_image_not_pixel_aligned.html'
+
+
 class DynamicCanvasToHWAcceleratedCanvas(SimpleCanvasPage):
   BASE_NAME = 'dynamic_canvas_to_hw_accelerated_canvas.html'
   URL = 'file://../simple_canvas/dynamic_canvas_to_hw_accelerated_canvas.html'
@@ -62,9 +77,34 @@ class DynamicWebglToHWAcceleratedCanvas(SimpleCanvasPage):
   URL = 'file://../simple_canvas/dynamic_webgl_to_hw_accelerated_canvas.html'
 
 
-class GetImageData(SimpleCanvasPage):
-  BASE_NAME = 'get_image_data.html'
-  URL = 'file://../simple_canvas/get_image_data.html'
+class FallingParticleSimulationOnCPU(SimpleCanvasPage):
+  BASE_NAME = 'falling_particle_simulation_cpu.html'
+  URL = 'file://../simple_canvas/falling_particle_simulation_cpu.html'
+
+
+class FallingParticleSimulationOnGPU(SimpleCanvasPage):
+  BASE_NAME = 'falling_particle_simulation_gpu.html'
+  URL = 'file://../simple_canvas/falling_particle_simulation_gpu.html'
+
+
+class FillClearRect(SimpleCanvasPage):
+  BASE_NAME = 'fill_clear_rect.html'
+  URL = 'file://../simple_canvas/fill_clear_rect.html'
+
+
+class GetImageDataOnCPU(SimpleCanvasPage):
+  BASE_NAME = 'get_image_data_cpu.html'
+  URL = 'file://../simple_canvas/get_image_data_cpu.html'
+
+
+class GetImageDataOnGPU(SimpleCanvasPage):
+  BASE_NAME = 'get_image_data_gpu.html'
+  URL = 'file://../simple_canvas/get_image_data_gpu.html'
+
+
+class GpuBoundShader(SimpleCanvasPage):
+  BASE_NAME = 'gpu_bound_shader.html'
+  URL = 'file://../simple_canvas/gpu_bound_shader.html'
 
 
 class HWAcceleratedCanvasToSWCanvas(SimpleCanvasPage):
@@ -90,3 +130,38 @@ class StaticCanvasToHWAcceleratedCanvas(SimpleCanvasPage):
 class StaticWebglToHWAcceleratedCanvas(SimpleCanvasPage):
   BASE_NAME = 'static_webgl_to_hw_accelerated_canvas.html'
   URL = 'file://../simple_canvas/static_webgl_to_hw_accelerated_canvas.html'
+
+
+class SheetsRender(SimpleCanvasPage):
+  BASE_NAME = 'sheets_render.html'
+  URL = 'file://../simple_canvas/sheets_render.html'
+
+
+class ToBlobDurationJpeg(SimpleCanvasPage):
+  BASE_NAME = 'toBlob_duration_jpeg.html'
+  URL = 'file://../simple_canvas/toBlob_duration_jpeg.html'
+
+
+class TransferFromImageBitmap(SimpleCanvasPage):
+  BASE_NAME = 'transfer_from_imageBitmap.html'
+  URL = 'file://../simple_canvas/transfer_from_imageBitmap.html'
+
+
+class VideoToHWAcceleratedCanvas(SimpleCanvasPage):
+  BASE_NAME = 'video_to_hw_accelerated_canvas'
+  URL = 'file://../simple_canvas/video_to_hw_accelerated_canvas.html'
+
+
+class VideoToSubTexture(SimpleCanvasPage):
+  BASE_NAME = 'video_to_sub_texture'
+  URL = 'file://../simple_canvas/video_to_sub_texture.html'
+
+
+class VideoToTexture(SimpleCanvasPage):
+  BASE_NAME = 'video_to_texture'
+  URL = 'file://../simple_canvas/video_to_texture.html'
+
+
+class WebglToTexture(SimpleCanvasPage):
+  BASE_NAME = 'webgl_to_texture'
+  URL = 'file://../simple_canvas/webgl_to_texture.html'

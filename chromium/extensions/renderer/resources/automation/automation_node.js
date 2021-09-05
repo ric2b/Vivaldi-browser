@@ -226,6 +226,7 @@ var GetLocation = natives.GetLocation;
  * @param {number} nodeID The id of a node.
  * @param {number} startIndex The start index of the range.
  * @param {number} endIndex The end index of the range.
+ * @param {boolean} clipped Whether the bounds are clipped to ancestors.
  * @return {?automation.Rect} The bounding box of the subrange of this node,
  *     or the location if there are no subranges, or undefined if
  *     the tree or node wasn't found.
@@ -619,6 +620,20 @@ AutomationNodeImpl.prototype = {
   },
 
   boundsForRange: function(startIndex, endIndex, callback) {
+    this.boundsForRangeInternal_(
+        startIndex, endIndex, true /* clipped */, callback);
+  },
+
+  unclippedBoundsForRange: function(startIndex, endIndex, callback) {
+    this.boundsForRangeInternal_(
+        startIndex, endIndex, false /* clipped */, callback);
+  },
+
+  boundsForRangeInternal_: function(startIndex, endIndex, clipped, callback) {
+    const errorMessage = clipped ?
+        'Error with bounds for range callback' :
+        'Error with unclipped bounds for range callback';
+
     if (!this.rootImpl)
       return;
 
@@ -632,11 +647,11 @@ AutomationNodeImpl.prototype = {
 
     if (!GetBoolAttribute(this.treeID, this.id, 'supportsTextLocation')) {
       try {
-        callback(
-            GetBoundsForRange(this.treeID, this.id, startIndex, endIndex));
+        callback(GetBoundsForRange(
+            this.treeID, this.id, startIndex, endIndex, clipped /* clipped */));
         return;
       } catch (e) {
-        logging.WARNING('Error with bounds for range callback' + e);
+        logging.WARNING(errorMessage + e);
       }
       return;
     }
@@ -937,6 +952,14 @@ AutomationNodeImpl.prototype = {
 
   scrollRight: function(opt_callback) {
     this.performAction_('scrollRight', {}, opt_callback);
+  },
+
+  scrollToPoint: function(x, y) {
+    this.performAction_('scrollToPoint', {x, y});
+  },
+
+  setScrollOffset: function(x, y) {
+    this.performAction_('setScrollOffset', {x, y});
   },
 
   setAccessibilityFocus: function() {
@@ -1796,8 +1819,11 @@ function AutomationNode() {
 }
 utils.expose(AutomationNode, AutomationNodeImpl, {
   functions: [
+    'addEventListener',
+    'boundsForRange',
     'createPosition',
     'doDefault',
+    'domQuerySelector',
     'find',
     'findAll',
     'focus',
@@ -1805,19 +1831,23 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
     'getNextTextMatch',
     'hitTest',
     'hitTestWithReply',
+    'languageAnnotationForStringAttribute',
     'makeVisible',
     'matches',
     'performCustomAction',
     'performStandardAction',
+    'removeEventListener',
     'replaceSelectedText',
     'resumeMedia',
     'scrollBackward',
-    'scrollForward',
-    'scrollUp',
     'scrollDown',
+    'scrollForward',
     'scrollLeft',
     'scrollRight',
+    'scrollToPoint',
+    'scrollUp',
     'setAccessibilityFocus',
+    'setScrollOffset',
     'setSelection',
     'setSequentialFocusNavigationStartingPoint',
     'setValue',
@@ -1825,12 +1855,8 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
     'startDuckingMedia',
     'stopDuckingMedia',
     'suspendMedia',
-    'addEventListener',
-    'removeEventListener',
-    'domQuerySelector',
     'toString',
-    'boundsForRange',
-    'languageAnnotationForStringAttribute',
+    'unclippedBoundsForRange'
   ],
   readonly: $Array.concat(
       publicAttributes,

@@ -1,4 +1,3 @@
-import("//build/config/jumbo.gni")
 import("//tools/grit/grit_rule.gni")
 
 static_library("extensions") {

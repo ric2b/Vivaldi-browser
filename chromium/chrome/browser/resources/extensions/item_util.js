@@ -79,9 +79,7 @@ export function userCanChangeEnablement(item) {
  * @return {SourceType}
  */
 export function getItemSource(item) {
-  if (item.controlledInfo &&
-      item.controlledInfo.type ===
-          chrome.developerPrivate.ControllerType.POLICY) {
+  if (item.controlledInfo) {
     return SourceType.POLICY;
   }
 
@@ -169,7 +167,7 @@ export function getEnableControl(data) {
   if (isTerminated_(data.state)) {
     return EnableControl.RELOAD;
   }
-  if (data.disableReasons.corruptInstall) {
+  if (data.disableReasons.corruptInstall && data.userMayModify) {
     return EnableControl.REPAIR;
   }
   return EnableControl.ENABLE_TOGGLE;

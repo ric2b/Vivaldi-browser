@@ -254,10 +254,12 @@ bool IsElementReady(content::WebContents* web_contents,
       "  window.domAutomationController.send('DocumentNotReady');"
       "} else if (%s == null) {"
       "  window.domAutomationController.send('NotFound');"
+      "} else if (%s.hidden) {"
+      "  window.domAutomationController.send('Hidden');"
       "} else {"
       "  window.domAutomationController.send('Ok');"
       "}",
-      element_selector.c_str());
+      element_selector.c_str(), element_selector.c_str());
   EXPECT_TRUE(content::ExecuteScriptAndExtractString(
       web_contents, find_element_js, &message));
   return message == "Ok";
@@ -366,15 +368,14 @@ void WaitUntilUIReady(Browser* browser) {
   std::string message;
   ASSERT_TRUE(content::ExecuteScriptAndExtractString(
       browser->tab_strip_model()->GetActiveWebContents(),
-      "if (!inline.login.getAuthExtHost())"
-      "  inline.login.initialize();"
       "var handler = function() {"
       "  window.domAutomationController.send('ready');"
       "};"
-      "if (inline.login.isAuthReady())"
+      "if (!document.querySelector('inline-login-app').loading_)"
       "  handler();"
       "else"
-      "  inline.login.getAuthExtHost().addEventListener('ready', handler);",
+      "  document.querySelector('inline-login-app').authExtHost_"
+      "     .addEventListener('ready', handler);",
       &message));
   ASSERT_EQ("ready", message);
 }

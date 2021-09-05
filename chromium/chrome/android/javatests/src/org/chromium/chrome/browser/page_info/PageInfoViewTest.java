@@ -13,6 +13,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.chromium.components.content_settings.PrefNames.BLOCK_THIRD_PARTY_COOKIES;
 
 import android.os.Build;
+import android.view.View;
 
 import androidx.test.filters.MediumTest;
 
@@ -26,22 +27,21 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.notifications.channels.SiteChannelsManager;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
 import org.chromium.components.content_settings.ContentSettingValues;
-import org.chromium.components.content_settings.ContentSettingsFeatureList;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.location.LocationUtils;
 import org.chromium.components.page_info.PageInfoController;
 import org.chromium.components.page_info.PageInfoFeatureList;
 import org.chromium.components.page_info.PageInfoView;
+import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.net.test.EmbeddedTestServerRule;
@@ -58,8 +58,6 @@ import java.io.IOException;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
         ContentSwitches.HOST_RESOLVER_RULES + "=MAP * 127.0.0.1"})
-@Features.
-EnableFeatures(ContentSettingsFeatureList.IMPROVED_COOKIE_CONTROLS_FOR_THIRD_PARTY_COOKIE_BLOCKING)
 public class PageInfoViewTest {
     @Rule
     public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
@@ -70,7 +68,7 @@ public class PageInfoViewTest {
 
     @Rule
     public RenderTestRule mRenderTestRule =
-            new RenderTestRule.SkiaGoldBuilder().setRevision(3).build();
+            RenderTestRule.Builder.withPublicCorpus().setRevision(3).build();
 
     private boolean mIsSystemLocationSettingEnabled = true;
 
@@ -101,7 +99,8 @@ public class PageInfoViewTest {
 
     private void setThirdPartyCookieBlocking(boolean value) {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            PrefServiceBridge.getInstance().setBoolean(BLOCK_THIRD_PARTY_COOKIES, value);
+            UserPrefs.get(Profile.getLastUsedRegularProfile())
+                    .setBoolean(BLOCK_THIRD_PARTY_COOKIES, value);
         });
     }
 
@@ -111,6 +110,15 @@ public class PageInfoViewTest {
                     ContentSettingsType.GEOLOCATION, url, "*", ContentSettingValues.ALLOW);
             WebsitePreferenceBridge.setContentSettingForPattern(Profile.getLastUsedRegularProfile(),
                     ContentSettingsType.NOTIFICATIONS, url, "*", ContentSettingValues.ALLOW);
+        });
+    }
+
+    private void addDefaultSettingPermissions(String url) {
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            WebsitePreferenceBridge.setContentSettingForPattern(Profile.getLastUsedRegularProfile(),
+                    ContentSettingsType.MEDIASTREAM_MIC, url, "*", ContentSettingValues.DEFAULT);
+            WebsitePreferenceBridge.setContentSettingForPattern(Profile.getLastUsedRegularProfile(),
+                    ContentSettingsType.MEDIASTREAM_CAMERA, url, "*", ContentSettingValues.ASK);
         });
     }
 
@@ -225,6 +233,18 @@ public class PageInfoViewTest {
     }
 
     /**
+     * Tests PageInfo on a website with default setting permissions.
+     */
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    public void testShowWithDefaultSettingPermissions() throws IOException {
+        addDefaultSettingPermissions(mTestServerRule.getServer().getURL("/"));
+        loadUrlAndOpenPageInfo(mTestServerRule.getServer().getURL(mPath));
+        mRenderTestRule.render(getPageInfoView(), "PageInfo_DefaultSettingPermissions");
+    }
+
+    /**
      * Tests the new PageInfo UI on a secure website.
      */
     @Test
@@ -234,6 +254,49 @@ public class PageInfoViewTest {
     public void testShowOnSecureWebsiteV2() throws IOException {
         loadUrlAndOpenPageInfo(mTestServerRule.getServer().getURL(mPath));
         mRenderTestRule.render(getPageInfoView(), "PageInfo_SecureWebsiteV2");
+    }
+
+    /**
+     * Tests the connection info page of the new PageInfo UI.
+     */
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    @Features.EnableFeatures(PageInfoFeatureList.PAGE_INFO_V2)
+    public void testShowConnectionInfoSubpage() throws IOException {
+        loadUrlAndOpenPageInfo(mTestServerRule.getServer().getURL(mPath));
+        View dialog = (View) getPageInfoView().getParent();
+        onView(withId(R.id.page_info_connection_row)).perform(click());
+        mRenderTestRule.render(dialog, "PageInfo_ConnectionInfoSubpage");
+    }
+
+    /**
+     * Tests the permissions page of the new PageInfo UI.
+     */
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    @Features.EnableFeatures(PageInfoFeatureList.PAGE_INFO_V2)
+    public void testShowPermissionsSubpage() throws IOException {
+        loadUrlAndOpenPageInfo(mTestServerRule.getServer().getURL(mPath));
+        View dialog = (View) getPageInfoView().getParent();
+        onView(withId(R.id.page_info_permissions_row)).perform(click());
+        mRenderTestRule.render(dialog, "PageInfo_PermissionsSubpage");
+    }
+
+    /**
+     * Tests the cookies page of the new PageInfo UI.
+     */
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    @Features.EnableFeatures(PageInfoFeatureList.PAGE_INFO_V2)
+    public void testShowCookiesSubpage() throws IOException {
+        setThirdPartyCookieBlocking(true);
+        loadUrlAndOpenPageInfo(mTestServerRule.getServer().getURL(mPath));
+        View dialog = (View) getPageInfoView().getParent();
+        onView(withId(R.id.page_info_cookies_row)).perform(click());
+        mRenderTestRule.render(dialog, "PageInfo_CookiesSubpage");
     }
 
     // TODO(1071762): Add tests for preview pages, offline pages, offline state and other states.

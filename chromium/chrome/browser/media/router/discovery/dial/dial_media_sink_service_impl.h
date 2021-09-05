@@ -37,9 +37,9 @@ class DialMediaSinkServiceImpl : public MediaSinkServiceBase,
   // |app_name|: app name, e.g. YouTube.
   // TODO(imcheng): Move sink query logic into DialAppDiscoveryService and
   // have it use MediaSinkServiceBase::Observer to observe sinks.
-  using SinkQueryByAppFunc = void(const std::string& app_name);
-  using SinkQueryByAppCallback = base::RepeatingCallback<SinkQueryByAppFunc>;
-  using SinkQueryByAppCallbackList = base::CallbackList<SinkQueryByAppFunc>;
+  using SinkQueryByAppCallbackList =
+      base::RepeatingCallbackList<void(const std::string&)>;
+  using SinkQueryByAppCallback = SinkQueryByAppCallbackList::CallbackType;
   using SinkQueryByAppSubscription =
       std::unique_ptr<SinkQueryByAppCallbackList::Subscription>;
 
@@ -83,6 +83,8 @@ class DialMediaSinkServiceImpl : public MediaSinkServiceBase,
   // Marked virtual for tests.
   virtual std::vector<MediaSinkInternal> GetAvailableSinks(
       const std::string& app_name) const;
+
+  void BindLogger(mojo::PendingRemote<mojom::Logger> pending_remote);
 
  protected:
   // Does not take ownership of |dial_registry|.
@@ -190,6 +192,11 @@ class DialMediaSinkServiceImpl : public MediaSinkServiceBase,
   // Set of sink queries keyed by app name.
   base::flat_map<std::string, std::unique_ptr<SinkQueryByAppCallbackList>>
       sink_queries_;
+
+  // Mojo Remote to the logger owned by the Media Router. The Remote is not
+  // bound until |BindLogger()| is called. Always check if |logger_.is_bound()|
+  // is true before using.
+  mojo::Remote<mojom::Logger> logger_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 

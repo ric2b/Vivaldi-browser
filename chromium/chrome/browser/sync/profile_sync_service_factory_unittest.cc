@@ -85,7 +85,7 @@ class ProfileSyncServiceFactoryTest : public testing::Test {
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
     datatypes.push_back(syncer::SUPERVISED_USER_SETTINGS);
-    datatypes.push_back(syncer::SUPERVISED_USER_WHITELISTS);
+    datatypes.push_back(syncer::SUPERVISED_USER_ALLOWLISTS);
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -102,7 +102,7 @@ class ProfileSyncServiceFactoryTest : public testing::Test {
     datatypes.push_back(syncer::SEARCH_ENGINES);
 #endif  // !defined(OS_ANDROID)
 
-#if defined(OS_LINUX) || defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
     datatypes.push_back(syncer::DICTIONARY);
 #endif
 

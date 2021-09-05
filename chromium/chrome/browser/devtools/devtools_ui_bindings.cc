@@ -12,6 +12,7 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/command_line.h"
 #include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -28,6 +29,7 @@
 #include "base/task/post_task.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/lacros_buildflags.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_file_watcher.h"
 #include "chrome/browser/devtools/devtools_window.h"
@@ -99,6 +101,7 @@ static const char kTitleFormat[] = "DevTools - %s";
 
 static const char kDevToolsActionTakenHistogram[] = "DevTools.ActionTaken";
 static const char kDevToolsPanelShownHistogram[] = "DevTools.PanelShown";
+static const char kDevToolsPanelClosedHistogram[] = "DevTools.PanelClosed";
 static const char kDevToolsKeyboardShortcutFiredHistogram[] =
     "DevTools.KeyboardShortcutFired";
 static const char kDevToolsIssuesPanelOpenedFromHistogram[] =
@@ -107,6 +110,18 @@ static const char kDevToolsKeybindSetSettingChanged[] =
     "DevTools.KeybindSetSettingChanged";
 static const char kDevToolsDualScreenDeviceEmulatedHistogram[] =
     "DevTools.DualScreenDeviceEmulated";
+static const char kDevtoolsGridSettingChangedHistogram[] =
+    "DevTools.GridSettingChanged";
+static const char kDevtoolsCSSGridSettingsHistogram[] =
+    "DevTools.CSSGridSettings";
+static const char kDevtoolsExperimentEnabledHistogram[] =
+    "DevTools.ExperimentEnabled";
+static const char kDevtoolsExperimentDisabledHistogram[] =
+    "DevTools.ExperimentDisabled";
+static const char kDevtoolsExperimentEnabledAtLaunchHistogram[] =
+    "DevTools.ExperimentEnabledAtLaunch";
+static const char kDevToolsColorPickerFixedColorHistogram[] =
+    "DevTools.ColorPicker.FixedColor";
 
 static const char kRemotePageActionInspect[] = "inspect";
 static const char kRemotePageActionReload[] = "reload";
@@ -590,7 +605,7 @@ void DevToolsUIBindings::FrontendWebContentsObserver::RenderProcessGone(
   switch (status) {
     case base::TERMINATION_STATUS_ABNORMAL_TERMINATION:
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED:
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
 #endif
     case base::TERMINATION_STATUS_PROCESS_CRASHED:
@@ -868,18 +883,27 @@ void DevToolsUIBindings::LoadNetworkResource(const DispatchCallback& callback,
         base::FilePath() /* profile_path */,
         nullptr /* shared_cors_origin_access_list */);
   } else if (content::HasWebUIScheme(gurl)) {
-    content::WebContents* target_tab;
-#ifndef NDEBUG
-    // In debug builds, allow retrieving files from the chrome:// and
-    // devtools:// schemes
-    target_tab = DevToolsWindow::AsDevToolsWindow(web_contents_)
-                     ->GetInspectedWebContents();
+    content::WebContents* target_tab =
+        DevToolsWindow::AsDevToolsWindow(web_contents_)
+            ->GetInspectedWebContents();
+#if defined(NDEBUG)
+    // In release builds, allow files from the chrome://, devtools:// and
+    // chrome-untrusted:// schemes if a custom devtools front-end was specified.
+    const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
     const bool allow_web_ui_scheme =
-        target_tab && content::HasWebUIScheme(target_tab->GetURL());
+        cmd_line->HasSwitch(switches::kCustomDevtoolsFrontend);
 #else
-    const bool allow_web_ui_scheme = false;
+    // In debug builds, always allow retrieving files from the chrome://,
+    // devtools:// and chrome-untrusted:// schemes.
+    const bool allow_web_ui_scheme = true;
 #endif
-    if (allow_web_ui_scheme) {
+    // Only allow retrieval if the scheme of the file is the same as the
+    // top-level frame of the inspected page.
+    // TODO(sigurds): Track which frame triggered the load, match schemes to the
+    // committed URL of that frame, and use the loader associated with that
+    // frame to allow nested frames with different schemes to load files.
+    if (allow_web_ui_scheme && target_tab &&
+        target_tab->GetURL().scheme() == gurl.scheme()) {
       std::vector<std::string> allowed_webui_hosts;
       content::RenderFrameHost* frame_host = web_contents()->GetMainFrame();
       url_loader_factory = content::CreateWebUIURLLoader(
@@ -887,6 +911,7 @@ void DevToolsUIBindings::LoadNetworkResource(const DispatchCallback& callback,
           std::move(allowed_webui_hosts));
     } else {
       base::DictionaryValue response;
+      response.SetBoolean("schemeSupported", false);
       response.SetInteger("statusCode", 403);
       callback.Run(&response);
       return;
@@ -1190,7 +1215,7 @@ void DevToolsUIBindings::SetPreference(const std::string& name,
 void DevToolsUIBindings::RemovePreference(const std::string& name) {
   DictionaryPrefUpdate update(profile_->GetPrefs(),
                               prefs::kDevToolsPreferences);
-  update.Get()->RemoveWithoutPathExpansion(name, nullptr);
+  update.Get()->RemoveKey(name);
 }
 
 void DevToolsUIBindings::ClearPreferences() {
@@ -1244,6 +1269,8 @@ void DevToolsUIBindings::RecordEnumeratedHistogram(const std::string& name,
     base::UmaHistogramExactLinear(name, sample, boundary_value);
   else if (name == kDevToolsPanelShownHistogram)
     base::UmaHistogramExactLinear(name, sample, boundary_value);
+  else if (name == kDevToolsPanelClosedHistogram)
+    base::UmaHistogramExactLinear(name, sample, boundary_value);
   else if (name == kDevToolsKeyboardShortcutFiredHistogram)
     base::UmaHistogramExactLinear(name, sample, boundary_value);
   else if (name == kDevToolsIssuesPanelOpenedFromHistogram)
@@ -1251,6 +1278,18 @@ void DevToolsUIBindings::RecordEnumeratedHistogram(const std::string& name,
   else if (name == kDevToolsKeybindSetSettingChanged)
     base::UmaHistogramExactLinear(name, sample, boundary_value);
   else if (name == kDevToolsDualScreenDeviceEmulatedHistogram)
+    base::UmaHistogramExactLinear(name, sample, boundary_value);
+  else if (name == kDevtoolsGridSettingChangedHistogram)
+    base::UmaHistogramExactLinear(name, sample, boundary_value);
+  else if (name == kDevtoolsCSSGridSettingsHistogram)
+    base::UmaHistogramExactLinear(name, sample, boundary_value);
+  else if (name == kDevtoolsExperimentEnabledHistogram)
+    base::UmaHistogramExactLinear(name, sample, boundary_value);
+  else if (name == kDevtoolsExperimentDisabledHistogram)
+    base::UmaHistogramExactLinear(name, sample, boundary_value);
+  else if (name == kDevtoolsExperimentEnabledAtLaunchHistogram)
+    base::UmaHistogramExactLinear(name, sample, boundary_value);
+  else if (name == kDevToolsColorPickerFixedColorHistogram)
     base::UmaHistogramExactLinear(name, sample, boundary_value);
   else
     frontend_host_->BadMessageRecieved();
@@ -1488,11 +1527,13 @@ bool DevToolsUIBindings::IsAttachedTo(content::DevToolsAgentHost* agent_host) {
   return agent_host_.get() == agent_host;
 }
 
-void DevToolsUIBindings::CallClientMethod(const std::string& object_name,
-                                          const std::string& method_name,
-                                          const base::Value& arg1,
-                                          const base::Value& arg2,
-                                          const base::Value& arg3) {
+void DevToolsUIBindings::CallClientMethod(
+    const std::string& object_name,
+    const std::string& method_name,
+    const base::Value& arg1,
+    const base::Value& arg2,
+    const base::Value& arg3,
+    base::OnceCallback<void(base::Value)> completion_callback) {
   // If we're not exposing bindings, we shouldn't call functions either.
   if (!frontend_host_)
     return;
@@ -1512,7 +1553,7 @@ void DevToolsUIBindings::CallClientMethod(const std::string& object_name,
   }
   javascript.append(");");
   web_contents_->GetMainFrame()->ExecuteJavaScript(
-      base::UTF8ToUTF16(javascript), base::NullCallback());
+      base::UTF8ToUTF16(javascript), std::move(completion_callback));
 }
 
 void DevToolsUIBindings::ReadyToCommitNavigation(

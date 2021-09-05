@@ -398,6 +398,21 @@ _NAMED_TYPE_INFO = {
       'GL_PROXY_TEXTURE_CUBE_MAP',
     ]
   },
+  'TextureFboTarget': {
+    'type': 'GLenum',
+    'valid': [
+      'GL_TEXTURE_2D',
+      'GL_TEXTURE_CUBE_MAP_POSITIVE_X',
+      'GL_TEXTURE_CUBE_MAP_NEGATIVE_X',
+      'GL_TEXTURE_CUBE_MAP_POSITIVE_Y',
+      'GL_TEXTURE_CUBE_MAP_NEGATIVE_Y',
+      'GL_TEXTURE_CUBE_MAP_POSITIVE_Z',
+      'GL_TEXTURE_CUBE_MAP_NEGATIVE_Z',
+    ],
+    'invalid': [
+      'GL_PROXY_TEXTURE_CUBE_MAP',
+    ]
+  },
   'Texture3DTarget': {
     'type': 'GLenum',
     'is_complete': True,
@@ -3079,12 +3094,6 @@ _FUNCTION_INFO = {
     'extension': 'WEBGL_multi_draw_instanced_base_vertex_base_instance',
     'extension_flag': 'webgl_multi_draw_instanced_base_vertex_base_instance',
   },
-  'OverlayPromotionHintCHROMIUM': {
-    'decoder_func': 'DoOverlayPromotionHintCHROMIUM',
-    'extension': "CHROMIUM_uniform_stream_texture_matrix",
-    'unit_test': False,
-    'client_test': False,
-  },
   'PauseTransformFeedback': {
     'decoder_func': 'DoPauseTransformFeedback',
     'unit_test': False,
@@ -3487,14 +3496,6 @@ _FUNCTION_INFO = {
     'count': 16,
     'decoder_func': 'DoUniformMatrix4fv',
     'unit_test': False,
-  },
-  'UniformMatrix4fvStreamTextureMatrixCHROMIUM': {
-    'type': 'PUT',
-    'count': 16,
-    'decoder_func': 'DoUniformMatrix4fvStreamTextureMatrixCHROMIUM',
-    'extension': "CHROMIUM_uniform_stream_texture_matrix",
-    'unit_test': False,
-    'client_test': False,
   },
   'UniformMatrix4x2fv': {
     'type': 'PUTn',

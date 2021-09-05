@@ -46,7 +46,6 @@ class MODULES_EXPORT FetchEvent final
       public ActiveScriptWrappable<FetchEvent>,
       public ExecutionContextClient {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(FetchEvent);
 
  public:
   using PreloadResponseProperty =
@@ -72,6 +71,11 @@ class MODULES_EXPORT FetchEvent final
 
   void respondWith(ScriptState*, ScriptPromise, ExceptionState&);
   ScriptPromise preloadResponse(ScriptState*);
+  ScriptPromise handled(ScriptState*);
+
+  void ResolveHandledPromise();
+  void RejectHandledPromise(const String& error_message);
+
   void addPerformanceEntry(PerformanceMark*);
   void addPerformanceEntry(PerformanceMeasure*);
 
@@ -99,6 +103,8 @@ class MODULES_EXPORT FetchEvent final
   Member<PreloadResponseProperty> preload_response_property_;
   std::unique_ptr<WebURLResponse> preload_response_;
   Member<DataPipeBytesConsumer::CompletionNotifier> body_completion_notifier_;
+  Member<ScriptPromiseProperty<ToV8UndefinedGenerator, Member<DOMException>>>
+      handled_property_;
   // This is currently null for navigation while https://crbug.com/900700 is
   // being implemented.
   HeapMojoRemote<mojom::blink::WorkerTimingContainer,

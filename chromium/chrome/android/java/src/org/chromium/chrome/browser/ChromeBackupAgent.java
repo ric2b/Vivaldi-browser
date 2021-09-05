@@ -25,10 +25,10 @@ import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.init.AsyncInitTaskRunner;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountUtils;
-import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
@@ -97,6 +97,10 @@ public class ChromeBackupAgent extends BackupAgent {
             ChromePreferenceKeys.FIRST_RUN_FLOW_SIGNIN_SETUP,
             ChromePreferenceKeys.PRIVACY_METRICS_REPORTING,
     };
+
+    // Key used to store the email of the signed in account. This email is obtained from
+    // IdentityManager during the backup.
+    static final String SIGNED_IN_ACCOUNT_KEY = "google.services.username";
 
     // Timeout for running the background tasks, needs to be quite long since they may be doing
     // network access, but must be less than the 1 minute restore timeout to be useful.
@@ -241,10 +245,10 @@ public class ChromeBackupAgent extends BackupAgent {
 
         // Finally add the user id.
         CoreAccountInfo accountInfo =
-                IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo(
-                        ConsentLevel.SYNC);
-        // TODO(https://crbug.com/1046412): Inline SIGNED_IN_ACCOUNT_KEY in this class.
-        backupNames.add(ANDROID_DEFAULT_PREFIX + ChromeSigninController.SIGNED_IN_ACCOUNT_KEY);
+                IdentityServicesProvider.get()
+                        .getIdentityManager(Profile.getLastUsedRegularProfile())
+                        .getPrimaryAccountInfo(ConsentLevel.SYNC);
+        backupNames.add(ANDROID_DEFAULT_PREFIX + SIGNED_IN_ACCOUNT_KEY);
         backupValues.add(ApiCompatibilityUtils.getBytesUtf8(
                 accountInfo == null ? "" : accountInfo.getEmail()));
 
@@ -301,7 +305,7 @@ public class ChromeBackupAgent extends BackupAgent {
             int dataSize = data.getDataSize();
             byte[] buffer = new byte[dataSize];
             data.readEntityData(buffer, 0, dataSize);
-            if (key.equals(ANDROID_DEFAULT_PREFIX + ChromeSigninController.SIGNED_IN_ACCOUNT_KEY)) {
+            if (key.equals(ANDROID_DEFAULT_PREFIX + SIGNED_IN_ACCOUNT_KEY)) {
                 restoredUserName = new String(buffer);
             } else {
                 backupNames.add(key);

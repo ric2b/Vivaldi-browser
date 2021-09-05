@@ -38,7 +38,7 @@ class RuleServiceImpl : public RuleService {
   explicit RuleServiceImpl(content::BrowserContext* context);
   ~RuleServiceImpl() override;
 
-  void Load(scoped_refptr<base::SequencedTaskRunner> task_runner);
+  void Load();
 
   // Implementing RuleService
   bool IsLoaded() const override;

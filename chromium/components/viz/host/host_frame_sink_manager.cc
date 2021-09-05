@@ -12,11 +12,14 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "components/viz/common/surfaces/surface_info.h"
+#include "components/viz/host/renderer_settings_creation.h"
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
+#include "services/viz/privileged/mojom/compositing/renderer_settings.mojom.h"
 
 namespace viz {
 
-HostFrameSinkManager::HostFrameSinkManager() = default;
+HostFrameSinkManager::HostFrameSinkManager()
+    : debug_renderer_settings_(CreateDefaultDebugRendererSettings()) {}
 
 HostFrameSinkManager::~HostFrameSinkManager() = default;
 
@@ -288,6 +291,17 @@ void HostFrameSinkManager::RequestCopyOfOutput(
   frame_sink_manager_->RequestCopyOfOutput(surface_id, std::move(request));
 }
 
+void HostFrameSinkManager::StartThrottling(
+    const std::vector<FrameSinkId>& frame_sink_ids,
+    base::TimeDelta interval) {
+  DCHECK_GT(interval, base::TimeDelta());
+  frame_sink_manager_->StartThrottling(frame_sink_ids, interval);
+}
+
+void HostFrameSinkManager::EndThrottling() {
+  frame_sink_manager_->EndThrottling();
+}
+
 void HostFrameSinkManager::AddHitTestRegionObserver(
     HitTestRegionObserver* observer) {
   observers_.AddObserver(observer);
@@ -400,6 +414,12 @@ void HostFrameSinkManager::EvictCachedBackBuffer(uint32_t cache_id) {
   // platform window is destroyed.
   mojo::SyncCallRestrictions::ScopedAllowSyncCall allow_sync_call;
   frame_sink_manager_remote_->EvictBackBuffer(cache_id);
+}
+
+void HostFrameSinkManager::UpdateDebugRendererSettings(
+    const DebugRendererSettings& debug_settings) {
+  debug_renderer_settings_ = debug_settings;
+  frame_sink_manager_->UpdateDebugRendererSettings(debug_settings);
 }
 
 HostFrameSinkManager::FrameSinkData::FrameSinkData() = default;

@@ -43,8 +43,8 @@ void WaylandDataDevice::StartDrag(const WaylandDataSource& data_source,
   drag_delegate_ = delegate;
 
   wl_data_device_start_drag(data_device_.get(), data_source.data_source(),
-                            origin_window.surface(), icon_surface,
-                            connection()->serial());
+                            origin_window.root_surface()->surface(),
+                            icon_surface, connection()->serial());
   drag_delegate_->DrawIcon();
   connection()->ScheduleFlush();
 }
@@ -81,12 +81,12 @@ void WaylandDataDevice::SetSelectionSource(WaylandDataSource* source) {
   connection()->ScheduleFlush();
 }
 
-void WaylandDataDevice::ReadDragDataFromFD(
-    base::ScopedFD fd,
-    base::OnceCallback<void(const PlatformClipboard::Data&)> callback) {
-  PlatformClipboard::Data contents;
+void WaylandDataDevice::ReadDragDataFromFD(base::ScopedFD fd,
+                                           RequestDataCallback callback) {
+  std::vector<uint8_t> contents;
   wl::ReadDataFromFD(std::move(fd), &contents);
-  std::move(callback).Run(contents);
+  std::move(callback).Run(scoped_refptr<base::RefCountedBytes>(
+      base::RefCountedBytes::TakeVector(&contents)));
 }
 
 // static
@@ -109,7 +109,7 @@ void WaylandDataDevice::OnEnter(void* data,
                                 wl_fixed_t x,
                                 wl_fixed_t y,
                                 wl_data_offer* offer) {
-  WaylandWindow* window = WaylandWindow::FromSurface(surface);
+  WaylandWindow* window = wl::RootWindowFromWlSurface(surface);
   if (!window) {
     LOG(ERROR) << "Failed to get window.";
     return;
@@ -149,15 +149,15 @@ void WaylandDataDevice::OnDrop(void* data, wl_data_device* data_device) {
 
 void WaylandDataDevice::OnLeave(void* data, wl_data_device* data_device) {
   auto* self = static_cast<WaylandDataDevice*>(data);
-  if (self->drag_delegate_) {
+  if (self->drag_delegate_)
     self->drag_delegate_->OnDragLeave();
 
-    // When in a DND session initiated by an external application,
-    // |drag_delegate_| is set at OnEnter, and must be reset here to avoid
-    // potential use-after-free.
-    if (!self->drag_delegate_->IsDragSource())
-      self->drag_delegate_ = nullptr;
-  }
+  // When in a DND session initiated by an external application,
+  // |drag_delegate_| is set at OnEnter, and must be reset here to avoid
+  // potential use-after-free. Above call to OnDragLeave() may result in
+  // |drag_delegate_| being reset, so it must be checked here as well.
+  if (self->drag_delegate_ && !self->drag_delegate_->IsDragSource())
+    self->drag_delegate_ = nullptr;
 }
 
 void WaylandDataDevice::OnSelection(void* data,

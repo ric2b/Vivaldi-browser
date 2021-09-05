@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {FittingType, TwoUpViewAction} from './constants.js';
+import {FittingType} from './constants.js';
 
 // Handles events specific to the PDF viewer and logs the corresponding metrics.
 export class PDFMetrics {
@@ -22,13 +22,12 @@ export class PDFMetrics {
 
   /**
    * Records when the two up view mode is enabled or disabled.
-   * @param {TwoUpViewAction} twoUpViewAction the new TwoUpViewAction.
+   * @param {boolean} enabled True when two up view mode is enabled.
    */
-  static recordTwoUpView(twoUpViewAction) {
+  static recordTwoUpViewEnabled(enabled) {
     PDFMetrics.record(
-        twoUpViewAction === TwoUpViewAction.TWO_UP_VIEW_ENABLE ?
-            PDFMetrics.UserAction.TWO_UP_VIEW_ENABLE :
-            PDFMetrics.UserAction.TWO_UP_VIEW_DISABLE);
+        enabled ? PDFMetrics.UserAction.TWO_UP_VIEW_ENABLE :
+                  PDFMetrics.UserAction.TWO_UP_VIEW_DISABLE);
   }
 
   /**
@@ -178,7 +177,11 @@ PDFMetrics.UserAction = {
   ZOOM_OUT_FIRST: 41,
   ZOOM_OUT: 42,
 
-  NUMBER_OF_ACTIONS: 43,
+  // Recorded when the custom zoom input field is modified.
+  ZOOM_CUSTOM_FIRST: 43,
+  ZOOM_CUSTOM: 44,
+
+  NUMBER_OF_ACTIONS: 45,
 };
 
 // Map from UserAction to the 'FIRST' action. These metrics are recorded
@@ -268,5 +271,9 @@ PDFMetrics.firstMap_ = new Map([
   [
     PDFMetrics.UserAction.ZOOM_OUT,
     PDFMetrics.UserAction.ZOOM_OUT_FIRST,
+  ],
+  [
+    PDFMetrics.UserAction.ZOOM_CUSTOM,
+    PDFMetrics.UserAction.ZOOM_CUSTOM_FIRST,
   ],
 ]);

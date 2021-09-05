@@ -78,6 +78,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
+#include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
@@ -97,6 +98,7 @@
 #include "third_party/blink/renderer/core/page/plugin_script_forbidden_scope.h"
 #include "third_party/blink/renderer/core/page/scrolling/fragment_anchor.h"
 #include "third_party/blink/renderer/core/page/scrolling/scrolling_coordinator.h"
+#include "third_party/blink/renderer/core/page/scrolling/text_fragment_anchor.h"
 #include "third_party/blink/renderer/core/page/viewport_description.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
@@ -214,7 +216,14 @@ ResourceRequest FrameLoader::ResourceRequestForReload(
 FrameLoader::FrameLoader(LocalFrame* frame)
     : frame_(frame),
       progress_tracker_(MakeGarbageCollected<ProgressTracker>(frame)),
-      forced_sandbox_flags_(network::mojom::blink::WebSandboxFlags::kNone),
+      // Frames need to inherit the sandbox flags of their parent frame.
+      // These can be fixed at construction time, because the only actions that
+      // trigger a sandbox flags change in the parent will necessarily detach
+      // this frame.
+      forced_sandbox_flags_(
+          frame_->Tree().Parent()
+              ? frame_->Tree().Parent()->GetSecurityContext()->GetSandboxFlags()
+              : network::mojom::blink::WebSandboxFlags::kNone),
       dispatching_did_clear_window_object_in_main_world_(false),
       detached_(false),
       virtual_time_pauser_(
@@ -235,7 +244,7 @@ void FrameLoader::Trace(Visitor* visitor) const {
   visitor->Trace(frame_);
   visitor->Trace(progress_tracker_);
   visitor->Trace(document_loader_);
-  visitor->Trace(last_origin_document_csp_);
+  visitor->Trace(last_origin_window_csp_);
 }
 
 void FrameLoader::Init() {
@@ -339,16 +348,8 @@ void FrameLoader::DispatchUnloadEvent(
   FrameNavigationDisabler navigation_disabler(*frame_);
   SaveScrollState();
 
-  Document* document = frame_->GetDocument();
-  if (document && !SVGImage::IsInSVGImage(document)) {
-    document->DispatchUnloadEvents(committing_origin, timing);
-    // Remove event listeners if we're firing unload events for a reason other
-    // than committing a navigation. In the commit case, we'll determine whether
-    // event listeners should be retained when choosing whether to reuse the
-    // LocalDOMWindow.
-    if (!timing)
-      document->RemoveAllEventListenersRecursively();
-  }
+  if (!SVGImage::IsInSVGImage(frame_->GetDocument()))
+    frame_->GetDocument()->DispatchUnloadEvents(committing_origin, timing);
 }
 
 void FrameLoader::DidExplicitOpen() {
@@ -357,6 +358,7 @@ void FrameLoader::DidExplicitOpen() {
   // Calling document.open counts as committing the first real document load.
   if (!state_machine_.CommittedFirstRealDocumentLoad())
     state_machine_.AdvanceTo(FrameLoaderStateMachine::kCommittedFirstRealLoad);
+  has_loaded_non_empty_document_ = true;
 
   // Only model a document.open() as part of a navigation if its parent is not
   // done or in the process of completing.
@@ -400,11 +402,8 @@ void FrameLoader::FinishedParsing() {
 // does not do anything when navigation is in progress, or when loading
 // has finished already. We should call it at the right times.
 void FrameLoader::DidFinishNavigation(NavigationFinishState state) {
-  // We should have either finished the provisional or committed navigation if
-  // this is called. Only delcare the whole frame finished if neither is in
-  // progress.
-  DCHECK((document_loader_ && document_loader_->SentDidFinishLoad()) ||
-         !HasProvisionalNavigation());
+  // Only declare the whole frame finished if the committed navigation is done
+  // and there is no provisional navigation in progress.
   if ((document_loader_ && !document_loader_->SentDidFinishLoad()) ||
       HasProvisionalNavigation()) {
     return;
@@ -500,7 +499,7 @@ void FrameLoader::DidFinishSameDocumentNavigation(
 WebFrameLoadType FrameLoader::DetermineFrameLoadType(
     const KURL& url,
     const AtomicString& http_method,
-    Document* origin_document,
+    bool has_origin_window,
     const KURL& failing_url,
     WebFrameLoadType frame_load_type) {
   // TODO(dgozman): this method is rewriting the load type, which makes it hard
@@ -511,8 +510,7 @@ WebFrameLoadType FrameLoader::DetermineFrameLoadType(
   // both in the renderer and in the browser.
   if (frame_load_type == WebFrameLoadType::kStandard ||
       frame_load_type == WebFrameLoadType::kReplaceCurrentItem) {
-    if (frame_->Tree().Parent() &&
-        !state_machine_.CommittedFirstRealDocumentLoad())
+    if (frame_->Tree().Parent() && !has_loaded_non_empty_document_)
       return WebFrameLoadType::kReplaceCurrentItem;
     if (!frame_->Tree().Parent() && !Client()->BackForwardLength()) {
       if (Opener() && url.IsEmpty())
@@ -522,18 +520,11 @@ WebFrameLoadType FrameLoader::DetermineFrameLoadType(
   }
   if (frame_load_type != WebFrameLoadType::kStandard)
     return frame_load_type;
-  // From the HTML5 spec for location.assign():
-  // "If the browsing context's session history contains only one Document,
-  // and that was the about:blank Document created when the browsing context
-  // was created, then the navigation must be done with replacement enabled."
-  if ((!state_machine_.CommittedMultipleRealLoads() &&
-       EqualIgnoringASCIICase(frame_->GetDocument()->Url(), BlankURL())))
-    return WebFrameLoadType::kReplaceCurrentItem;
 
   if (url == document_loader_->UrlForHistory()) {
     if (http_method == http_names::kPOST)
       return WebFrameLoadType::kStandard;
-    if (!origin_document)
+    if (!has_origin_window)
       return WebFrameLoadType::kReload;
     return WebFrameLoadType::kReplaceCurrentItem;
   }
@@ -552,22 +543,21 @@ WebFrameLoadType FrameLoader::DetermineFrameLoadType(
 bool FrameLoader::AllowRequestForThisFrame(const FrameLoadRequest& request) {
   // If no origin Document* was specified, skip remaining security checks and
   // assume the caller has fully initialized the FrameLoadRequest.
-  if (!request.OriginDocument())
+  if (!request.GetOriginWindow())
     return true;
 
   const KURL& url = request.GetResourceRequest().Url();
   if (url.ProtocolIsJavaScript()) {
-    Document* origin_document = request.OriginDocument();
     // Check the CSP of the caller (the "source browsing context") if required,
     // as per https://html.spec.whatwg.org/C/#javascript-protocol.
     bool javascript_url_is_allowed =
-        request.ShouldCheckMainWorldContentSecurityPolicy() ==
-            network::mojom::CSPDisposition::DO_NOT_CHECK ||
-        origin_document->GetContentSecurityPolicy()->AllowInline(
-            ContentSecurityPolicy::InlineType::kNavigation,
-            frame_->DeprecatedLocalOwner(), url.GetString(),
-            String() /* nonce */, origin_document->Url(),
-            OrdinalNumber::First());
+        request.GetOriginWindow()
+            ->GetContentSecurityPolicyForWorld(request.JavascriptWorld().get())
+            ->AllowInline(ContentSecurityPolicy::InlineType::kNavigation,
+                          frame_->DeprecatedLocalOwner(), url.GetString(),
+                          String() /* nonce */,
+                          request.GetOriginWindow()->Url(),
+                          OrdinalNumber::First());
 
     if (!javascript_url_is_allowed)
       return false;
@@ -580,7 +570,7 @@ bool FrameLoader::AllowRequestForThisFrame(const FrameLoadRequest& request) {
   }
 
   if (!request.CanDisplay(url)) {
-    request.OriginDocument()->AddConsoleMessage(
+    request.GetOriginWindow()->AddConsoleMessage(
         MakeGarbageCollected<ConsoleMessage>(
             mojom::ConsoleMessageSource::kSecurity,
             mojom::ConsoleMessageLevel::kError,
@@ -657,7 +647,7 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
 
   ResourceRequest& resource_request = request.GetResourceRequest();
   const KURL& url = resource_request.Url();
-  Document* origin_document = request.OriginDocument();
+  LocalDOMWindow* origin_window = request.GetOriginWindow();
 
   resource_request.SetHasUserGesture(
       LocalFrame::HasTransientUserActivation(frame_));
@@ -673,9 +663,9 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
   // handled by a plugin or end up as a download, so allow it to let the
   // embedder figure out what to do with it. Navigations to filesystem URLs are
   // always blocked here.
-  if (frame_->IsMainFrame() && origin_document &&
+  if (frame_->IsMainFrame() && origin_window &&
       !frame_->Client()->AllowContentInitiatedDataUrlNavigations(
-          request.OriginDocument()->Url()) &&
+          origin_window->Url()) &&
       (url.ProtocolIs("filesystem") ||
        (url.ProtocolIsData() &&
         network_utils::IsDataURLMimeTypeSupported(url)))) {
@@ -696,7 +686,7 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
   }
 
   frame_load_type = DetermineFrameLoadType(
-      resource_request.Url(), resource_request.HttpMethod(), origin_document,
+      resource_request.Url(), resource_request.HttpMethod(), origin_window,
       KURL(), frame_load_type);
 
   bool same_document_navigation =
@@ -707,12 +697,19 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
   // Perform same document navigation.
   if (same_document_navigation) {
     document_loader_->CommitSameDocumentNavigation(
-        url, frame_load_type, nullptr, request.ClientRedirect(),
-        origin_document,
+        url, frame_load_type, nullptr, request.ClientRedirect(), origin_window,
         request.GetTriggeringEventInfo() != TriggeringEventInfo::kNotFromEvent,
         nullptr /* extra_data */);
     return;
   }
+
+  // If we're navigating and there's still a text fragment permission token on
+  // the document loader, it means this navigation didn't try to invoke a text
+  // fragment. In this case, we want to propagate this to the next document to
+  // allow text-fragments across client-side redirects.
+  bool text_fragment_token = GetDocumentLoader()->ConsumeTextFragmentToken();
+
+  resource_request.SetHasTextFragmentToken(text_fragment_token);
 
   WebNavigationType navigation_type = DetermineNavigationType(
       frame_load_type, resource_request.HttpBody() || request.Form(),
@@ -735,20 +732,20 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
   mojo::PendingRemote<mojom::blink::NavigationInitiator> navigation_initiator;
   WTF::Vector<network::mojom::blink::ContentSecurityPolicyPtr> initiator_csp;
   network::mojom::blink::CSPSourcePtr initiator_self_source;
-  if (origin_document && origin_document->GetContentSecurityPolicy()
-                             ->ExperimentalFeaturesEnabled()) {
-    ContentSecurityPolicy* origin_document_csp =
-        origin_document->GetContentSecurityPolicy();
-    CSPSource* origin_document_csp_self_source =
-        origin_document_csp->GetSelfSource();
+  if (origin_window && origin_window->GetContentSecurityPolicy()
+                           ->ExperimentalFeaturesEnabled()) {
+    ContentSecurityPolicy* origin_window_csp =
+        origin_window->GetContentSecurityPolicy();
+    CSPSource* origin_window_csp_self_source =
+        origin_window_csp->GetSelfSource();
 
-    initiator_csp = origin_document_csp->ExposeForNavigationalChecks();
-    if (origin_document_csp_self_source) {
+    initiator_csp = origin_window_csp->ExposeForNavigationalChecks();
+    if (origin_window_csp_self_source) {
       initiator_self_source =
-          origin_document_csp_self_source->ExposeForNavigationalChecks();
+          origin_window_csp_self_source->ExposeForNavigationalChecks();
     }
-    origin_document->NavigationInitiator().BindReceiver(
-        navigation_initiator.InitWithNewPipeAndPassReceiver());
+    NavigationInitiatorImpl::From(*origin_window)
+        .BindReceiver(navigation_initiator.InitWithNewPipeAndPassReceiver());
   }
 
   // Record the document that has initiated this navigation. It will be used at
@@ -756,10 +753,10 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
   // TODO(arthursonzogni): This looks very fragile. It seems easy to confuse the
   // FrameLoader by starting several navigations in a row. We should get rid of
   // this.
-  last_origin_document_csp_ = MakeGarbageCollected<ContentSecurityPolicy>();
-  if (origin_document && origin_document->GetContentSecurityPolicy()) {
-    last_origin_document_csp_->CopyStateFrom(
-        origin_document->GetContentSecurityPolicy());
+  last_origin_window_csp_ = MakeGarbageCollected<ContentSecurityPolicy>();
+  if (origin_window && origin_window->GetContentSecurityPolicy()) {
+    last_origin_window_csp_->CopyStateFrom(
+        origin_window->GetContentSecurityPolicy());
   }
 
   // Record the latest requiredCSP value that will be used when loading the
@@ -781,29 +778,27 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
 
   // Report-only CSP headers are checked in browser.
   const FetchClientSettingsObject* fetch_client_settings_object = nullptr;
-  if (origin_document) {
-    fetch_client_settings_object = &origin_document->Fetcher()
+  if (origin_window) {
+    fetch_client_settings_object = &origin_window->Fetcher()
                                         ->GetProperties()
                                         .GetFetchClientSettingsObject();
   }
   ModifyRequestForCSP(resource_request, fetch_client_settings_object,
-                      origin_document, request.GetFrameType());
+                      origin_window, request.GetFrameType());
 
   DCHECK(Client()->HasWebView());
   // Check for non-escaped new lines in the url.
   if (url.PotentiallyDanglingMarkup() && url.ProtocolIsInHTTPFamily()) {
     Deprecation::CountDeprecation(
-        origin_document ? origin_document->GetExecutionContext() : nullptr,
-        WebFeature::kCanRequestURLHTTPContainingNewline);
+        origin_window, WebFeature::kCanRequestURLHTTPContainingNewline);
     return;
   }
 
   if (url.ProtocolIsJavaScript()) {
-    if (!origin_document ||
-        origin_document->GetExecutionContext()->CanExecuteScripts(
-            kAboutToExecuteScript)) {
-      frame_->GetDocument()->ProcessJavaScriptUrl(
-          url, request.ShouldCheckMainWorldContentSecurityPolicy());
+    if (!origin_window ||
+        origin_window->CanExecuteScripts(kAboutToExecuteScript)) {
+      frame_->GetDocument()->ProcessJavaScriptUrl(url,
+                                                  request.JavascriptWorld());
     }
     return;
   }
@@ -832,20 +827,29 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
   }
 
   const network::mojom::IPAddressSpace initiator_address_space =
-      origin_document ? origin_document->GetSecurityContext().AddressSpace()
-                      : network::mojom::IPAddressSpace::kUnknown;
+      origin_window ? origin_window->AddressSpace()
+                    : network::mojom::IPAddressSpace::kUnknown;
 
+  // TODO(crbug.com/896041): Instead of just bypassing the CSP for navigations
+  // from isolated world, ideally we should enforce the isolated world CSP by
+  // plumbing the correct CSP to the browser.
+  using CSPDisposition = network::mojom::CSPDisposition;
+  CSPDisposition should_check_main_world_csp =
+      ContentSecurityPolicy::ShouldBypassMainWorld(
+          request.JavascriptWorld().get())
+          ? CSPDisposition::DO_NOT_CHECK
+          : CSPDisposition::CHECK;
   Client()->BeginNavigation(
-      resource_request, request.GetFrameType(), origin_document,
+      resource_request, request.GetFrameType(), origin_window,
       nullptr /* document_loader */, navigation_type,
       request.GetNavigationPolicy(), frame_load_type,
       request.ClientRedirect() == ClientRedirectPolicy::kClientRedirect,
       request.GetTriggeringEventInfo(), request.Form(),
-      request.ShouldCheckMainWorldContentSecurityPolicy(),
-      request.GetBlobURLToken(), request.GetInputStartTime(),
-      request.HrefTranslate().GetString(), request.Impression(),
-      std::move(initiator_csp), std::move(initiator_self_source),
-      initiator_address_space, std::move(navigation_initiator));
+      should_check_main_world_csp, request.GetBlobURLToken(),
+      request.GetInputStartTime(), request.HrefTranslate().GetString(),
+      request.Impression(), std::move(initiator_csp),
+      std::move(initiator_self_source), initiator_address_space,
+      std::move(navigation_initiator));
 }
 
 static void FillStaticResponseIfNeeded(WebNavigationParams* params,
@@ -892,6 +896,14 @@ static void FillStaticResponseIfNeeded(WebNavigationParams* params,
           params, archive_resource->MimeType(),
           archive_resource->TextEncoding(),
           base::make_span(archive_data->Data(), archive_data->size()));
+    } else {
+      // The requested archive resource does not exist. In an ideal world, this
+      // would commit as a failed navigation, but the browser doesn't know
+      // anything about what resources are available in the archive. Just
+      // synthesize an empty document so that something commits still.
+      // TODO(https://crbug.com/1112965): remove these special cases by adding
+      // an URLLoaderFactory implementation for MHTML archives.
+      WebNavigationParams::FillStaticResponse(params, "text/html", "UTF-8", "");
     }
   }
 }
@@ -920,8 +932,13 @@ static bool ShouldNavigate(WebNavigationParams* params, LocalFrame* frame) {
   if (MIMETypeRegistry::IsSupportedMIMEType(mime_type))
     return true;
   PluginData* plugin_data = frame->GetPluginData();
-  return !mime_type.IsEmpty() && plugin_data &&
-         plugin_data->SupportsMimeType(mime_type);
+  bool can_load_with_plugin = !mime_type.IsEmpty() && plugin_data &&
+                              plugin_data->SupportsMimeType(mime_type);
+  if (!can_load_with_plugin) {
+    WebLocalFrameImpl::FromFrame(frame)->Client()->WillFailCommitNavigation(
+        WebLocalFrameClient::CommitFailureReason::kNoPluginForMimeType);
+  }
+  return can_load_with_plugin;
 }
 
 void FrameLoader::CommitNavigation(
@@ -952,7 +969,7 @@ void FrameLoader::CommitNavigation(
 
   navigation_params->frame_load_type = DetermineFrameLoadType(
       navigation_params->url, navigation_params->http_method,
-      nullptr /* origin_document */, navigation_params->unreachable_url,
+      false /* has_origin_window */, navigation_params->unreachable_url,
       navigation_params->frame_load_type);
 
   // Note: we might actually classify this navigation as same document
@@ -987,8 +1004,14 @@ void FrameLoader::CommitNavigation(
   // violations and display console messages properly.
   ContentSecurityPolicy* content_security_policy = CreateCSP(
       navigation_params->url, navigation_params->response.ToResourceResponse(),
-      navigation_params->origin_policy, last_origin_document_csp_.Release(),
+      navigation_params->origin_policy, last_origin_window_csp_.Release(),
       commit_reason);
+
+  for (auto& csp : navigation_params->forced_content_security_policies) {
+    content_security_policy->AddPolicyFromHeaderValue(
+        csp, network::mojom::ContentSecurityPolicyType::kEnforce,
+        network::mojom::ContentSecurityPolicySource::kHTTP);
+  }
 
   base::Optional<Document::UnloadEventTiming> unload_timing;
   FrameSwapScope frame_swap_scope(frame_owner);
@@ -1007,6 +1030,9 @@ void FrameLoader::CommitNavigation(
   }
 
   tls_version_warning_origins_.clear();
+
+  if (!DocumentLoader::WillLoadUrlAsEmpty(navigation_params->url))
+    has_loaded_non_empty_document_ = true;
 
   // TODO(dgozman): navigation type should probably be passed by the caller.
   // It seems incorrect to pass |false| for |have_event| and then use
@@ -1179,35 +1205,6 @@ void FrameLoader::CommitDocumentLoader(
   Client()->TransitionToCommittedForNewPage();
 
   document_loader_->CommitNavigation();
-
-  {
-    FrameNavigationDisabler navigation_disabler(*frame_);
-    if (commit_reason == CommitReason::kInitialization) {
-      Client()->DidCreateInitialEmptyDocument();
-    } else if (commit_reason == CommitReason::kJavascriptUrl ||
-               commit_reason == CommitReason::kXSLT) {
-      Client()->DidCommitDocumentReplacementNavigation(document_loader_);
-    } else {
-      Client()->DispatchDidCommitLoad(
-          document_loader_->GetHistoryItem(),
-          DocumentLoader::LoadTypeToCommitType(document_loader_->LoadType()),
-          document_loader_->GetGlobalObjectReusePolicy());
-    }
-    // TODO(dgozman): make DidCreateScriptContext notification call currently
-    // triggered by installing new document happen here, after commit.
-  }
-  if (commit_reason != CommitReason::kInitialization) {
-    // Note: this must be called after DispatchDidCommitLoad() for
-    // metrics to be correctly sent to the browser process.
-    document_loader_->GetUseCounterHelper().DidCommitLoad(frame_);
-  }
-  if (document_loader_->LoadType() == WebFrameLoadType::kBackForward) {
-    if (Page* page = frame_->GetPage())
-      page->HistoryNavigationVirtualTimePauser().UnpauseVirtualTime();
-  }
-
-  // Load the document if needed.
-  document_loader_->StartLoadingResponse();
 }
 
 void FrameLoader::RestoreScrollPositionAndViewState() {
@@ -1529,11 +1526,6 @@ void FrameLoader::ForceSandboxFlags(
   forced_sandbox_flags_ |= flags;
 }
 
-void FrameLoader::SetFrameOwnerSandboxFlags(
-    network::mojom::blink::WebSandboxFlags flags) {
-  frame_owner_sandbox_flags_ = flags;
-}
-
 void FrameLoader::DispatchDidClearDocumentOfWindowObject() {
   if (state_machine_.CreatingInitialEmptyDocument())
     return;
@@ -1567,41 +1559,21 @@ void FrameLoader::DispatchDidClearWindowObjectInMainWorld() {
   Client()->DispatchDidClearWindowObjectInMainWorld();
 }
 
-network::mojom::blink::WebSandboxFlags FrameLoader::EffectiveSandboxFlags()
-    const {
-  network::mojom::blink::WebSandboxFlags flags = forced_sandbox_flags_;
-  if (frame_->Owner()) {
-    // Cannot use flags in frame_owner->GetFramePolicy().sandbox_flags, because
-    // frame_owner's frame policy is volatile and can be changed by javascript
-    // before navigation commits. Uses a snapshot
-    // value(frame_owner_sandbox_flags_) which is set in
-    // DocumentInit::WithFramePolicy instead. crbug.com/1026627
-    DCHECK(frame_owner_sandbox_flags_.has_value());
-    flags |= frame_owner_sandbox_flags_.value();
-  }
-  // Frames need to inherit the sandbox flags of their parent frame.
-  if (Frame* parent_frame = frame_->Tree().Parent())
-    flags |= parent_frame->GetSecurityContext()->GetSandboxFlags();
-  return flags;
-}
-
 network::mojom::blink::WebSandboxFlags
 FrameLoader::PendingEffectiveSandboxFlags() const {
   network::mojom::blink::WebSandboxFlags flags = forced_sandbox_flags_;
   if (FrameOwner* frame_owner = frame_->Owner())
     flags |= frame_owner->GetFramePolicy().sandbox_flags;
-  // Frames need to inherit the sandbox flags of their parent frame.
-  if (Frame* parent_frame = frame_->Tree().Parent())
-    flags |= parent_frame->GetSecurityContext()->GetSandboxFlags();
   return flags;
 }
 
 void FrameLoader::ModifyRequestForCSP(
     ResourceRequest& resource_request,
     const FetchClientSettingsObject* fetch_client_settings_object,
-    Document* document_for_logging,
+    LocalDOMWindow* window_for_logging,
     mojom::RequestContextFrameType frame_type) const {
-  if (!RequiredCSP().IsEmpty()) {
+  if (!base::FeatureList::IsEnabled(network::features::kOutOfBlinkCSPEE) &&
+      !RequiredCSP().IsEmpty()) {
     DCHECK(
         ContentSecurityPolicy::IsValidCSPAttr(RequiredCSP().GetString(), ""));
     resource_request.SetHttpHeaderField(http_names::kSecRequiredCSP,
@@ -1623,9 +1595,7 @@ void FrameLoader::ModifyRequestForCSP(
   }
 
   MixedContentChecker::UpgradeInsecureRequest(
-      resource_request, fetch_client_settings_object,
-      document_for_logging ? document_for_logging->GetExecutionContext()
-                           : nullptr,
+      resource_request, fetch_client_settings_object, window_for_logging,
       frame_type, frame_->GetContentSettingsClient());
 }
 
@@ -1650,7 +1620,7 @@ void FrameLoader::ReportLegacyTLSVersion(const KURL& url,
       .Record(root.GetDocument()->UkmRecorder());
 
   // Web tests use an outdated server on macOS. See https://crbug.com/936515.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (WebTestSupport::IsRunningWebTest())
     return;
 #endif
@@ -1761,7 +1731,7 @@ ContentSecurityPolicy* FrameLoader::CreateCSP(
   // Document.
   if (commit_reason == CommitReason::kXSLT) {
     ContentSecurityPolicy* csp = MakeGarbageCollected<ContentSecurityPolicy>();
-    csp->CopyStateFrom(frame_->GetDocument()->GetContentSecurityPolicy());
+    csp->CopyStateFrom(frame_->DomWindow()->GetContentSecurityPolicy());
     return csp;
   }
 

@@ -15,8 +15,13 @@ import org.chromium.chrome.browser.app.appmenu.AppMenuPropertiesDelegateImpl;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.datareduction.DataReductionMainMenuItem;
+import org.chromium.chrome.browser.enterprise.util.ManagedBrowserUtils;
+import org.chromium.chrome.browser.flags.CachedFeatureFlags;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuDelegate;
@@ -53,7 +58,7 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
 
     @Override
     public int getFooterResourceId() {
-        if (isMenuButtonInBottomToolbar() && !ChromeApplication.isVivaldi()) {
+        if (isMenuButtonInBottomToolbar()) {
             return this.shouldShowPageMenu() ? R.layout.icon_row_menu_footer : 0;
         }
         return shouldShowDataSaverMenuItem() ? R.layout.data_reduction_main_menu_item : 0;
@@ -103,6 +108,19 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
         }
 
         return super.shouldShowHeader(maxMenuHeight);
+    }
+
+    @Override
+    protected boolean shouldShowManagedByMenuItem(Tab currentTab) {
+        return CachedFeatureFlags.isEnabled(ChromeFeatureList.ANDROID_MANAGED_BY_MENU_ITEM)
+                && ManagedBrowserUtils.hasBrowserPoliciesApplied(
+                        Profile.fromWebContents(currentTab.getWebContents()));
+    }
+
+    @Override
+    public boolean shouldShowIconBeforeItem() {
+        if (ChromeApplication.isVivaldi()) return true;
+        return CachedFeatureFlags.isEnabled(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_ICONS);
     }
 
     private boolean canShowDataReductionItem(int maxMenuHeight) {

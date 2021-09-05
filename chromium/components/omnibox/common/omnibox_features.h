@@ -13,18 +13,12 @@ namespace omnibox {
 // Instead, use the categorized and alphabetized lists below this "big blob".
 // You can create a new category if none of the existing ones fit.
 extern const base::Feature kHideFileUrlScheme;
-extern const base::Feature kHideSteadyStateUrlScheme;
-extern const base::Feature kHideSteadyStateUrlTrivialSubdomains;
-extern const base::Feature kRevealSteadyStateUrlPathQueryAndRefOnHover;
-extern const base::Feature kHideSteadyStateUrlPathQueryAndRefOnInteraction;
 extern const base::Feature kOmniboxLocalEntitySuggestions;
 extern const base::Feature kOmniboxReverseAnswers;
 extern const base::Feature kOmniboxShortBookmarkSuggestions;
 extern const base::Feature kOmniboxTailSuggestions;
 extern const base::Feature kOmniboxTabSwitchSuggestions;
-extern const base::Feature kOmniboxTabSwitchSuggestionsDedicatedRow;
 extern const base::Feature kExperimentalKeywordMode;
-extern const base::Feature kOmniboxPedalSuggestions;
 extern const base::Feature kEnableClipboardProviderImageSuggestions;
 extern const base::Feature kSearchProviderWarmUpOnFocus;
 extern const base::Feature kDisplayTitleForCurrentUrl;
@@ -56,8 +50,13 @@ extern const base::Feature kUIExperimentMaxAutocompleteMatches;
 // OmniboxFieldTrial.
 extern const bool kOmniboxMaxURLMatchesEnabledByDefault;
 extern const base::Feature kOmniboxMaxURLMatches;
+extern const base::Feature kDynamicMaxAutocomplete;
 
 // On-Focus Suggestions a.k.a. ZeroSuggest.
+extern const base::Feature kClobberTriggersContextualWebZeroSuggest;
+extern const base::Feature kOmniboxLocalZeroSuggestAgeThreshold;
+extern const base::Feature kOmniboxLocalZeroSuggestFrecencyRanking;
+extern const base::Feature kOmniboxTrendingZeroPrefixSuggestionsOnNTP;
 extern const base::Feature kOnFocusSuggestions;
 extern const base::Feature kOnFocusSuggestionsContextualWeb;
 extern const base::Feature kOnFocusSuggestionsContextualWebOnContent;
@@ -66,6 +65,7 @@ extern const base::Feature kReactiveZeroSuggestionsOnNTPRealbox;
 extern const base::Feature kZeroSuggestionsOnNTP;
 extern const base::Feature kZeroSuggestionsOnNTPRealbox;
 extern const base::Feature kZeroSuggestionsOnSERP;
+// Related, kMaxZeroSuggestMatches.
 
 // On Device Head Suggest.
 extern const base::Feature kOnDeviceHeadProviderIncognito;
@@ -80,10 +80,12 @@ extern const base::Feature kHistoryQuickProviderAllowMidwordContinuations;
 extern const base::Feature kAdaptiveSuggestionsCount;
 extern const base::Feature kCompactSuggestions;
 extern const base::Feature kDeferredKeyboardPopup;
+extern const base::Feature kMostVisitedTiles;
 extern const base::Feature kRichAutocompletion;
-extern const base::Feature kOmniboxLooseMaxLimitOnDedicatedRows;
 extern const base::Feature kOmniboxSearchReadyIncognito;
 extern const base::Feature kOmniboxSuggestionButtonRow;
+extern const base::Feature kOmniboxPedalSuggestions;
+extern const base::Feature kOmniboxKeywordSearchButton;
 extern const base::Feature kOmniboxSuggestionsRecyclerView;
 extern const base::Feature kOmniboxSuggestionsWrapAround;
 extern const base::Feature kWebUIOmniboxPopup;
@@ -92,6 +94,12 @@ extern const base::Feature kWebUIOmniboxPopup;
 // popup).
 extern const base::Feature kOmniboxAssistantVoiceSearch;
 extern const base::Feature kOmniboxContextMenuShowFullUrls;
+
+// Path-hiding experiments - these hide the path and other URL components in
+// some circumstances in the steady-state omnibox.
+extern const base::Feature kRevealSteadyStateUrlPathQueryAndRefOnHover;
+extern const base::Feature kHideSteadyStateUrlPathQueryAndRefOnInteraction;
+extern const base::Feature kMaybeElideToRegistrableDomain;
 
 }  // namespace omnibox
 

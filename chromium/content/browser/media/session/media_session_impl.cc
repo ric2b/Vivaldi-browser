@@ -26,6 +26,7 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
+#include "media/audio/audio_device_description.h"
 #include "media/base/media_content_type.h"
 #include "media/base/media_switches.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
@@ -278,7 +279,7 @@ void MediaSessionImpl::DidFinishNavigation(
 void MediaSessionImpl::OnWebContentsFocused(RenderWidgetHost*) {
   focused_ = true;
 
-#if !defined(OS_ANDROID) && !defined(OS_MACOSX)
+#if !defined(OS_ANDROID) && !defined(OS_MAC)
   // If we have just gained focus and we have audio focus we should re-request
   // system audio focus. This will ensure this media session is towards the top
   // of the stack if we have multiple sessions active at the same time.
@@ -375,6 +376,7 @@ bool MediaSessionImpl::AddPlayer(MediaSessionPlayerObserver* observer,
         iter->second = required_audio_focus_type;
 
       UpdateRoutedService();
+      RebuildAndNotifyActionsChanged();
       RebuildAndNotifyMediaPositionChanged();
       return true;
     }
@@ -956,6 +958,12 @@ MediaSessionImpl::GetMediaSessionInfoSync() {
           : media_session::mojom::MediaPictureInPictureState::
                 kNotInPictureInPicture;
 
+  auto shared_audio_device_id = GetSharedAudioOutputDeviceId();
+  // When the default audio device is in use, or this session's players are
+  // using different devices, the |audio_sink_id| attribute should remain unset.
+  if (shared_audio_device_id != media::AudioDeviceDescription::kDefaultDeviceId)
+    info->audio_sink_id = shared_audio_device_id;
+
   return info;
 }
 
@@ -1068,6 +1076,14 @@ void MediaSessionImpl::ExitPictureInPicture() {
   DCHECK_EQ(normal_players_.size(), 1u);
   normal_players_.begin()->first.observer->OnExitPictureInPicture(
       normal_players_.begin()->first.player_id);
+}
+
+void MediaSessionImpl::SetAudioSinkId(const base::Optional<std::string>& id) {
+  for (const auto& it : normal_players_) {
+    it.first.observer->OnSetAudioSinkId(
+        it.first.player_id,
+        id.value_or(media::AudioDeviceDescription::kDefaultDeviceId));
+  }
 }
 
 void MediaSessionImpl::GetMediaImageBitmap(
@@ -1349,6 +1365,10 @@ void MediaSessionImpl::OnPictureInPictureAvailabilityChanged() {
   RebuildAndNotifyActionsChanged();
 }
 
+void MediaSessionImpl::OnAudioOutputSinkIdChanged() {
+  RebuildAndNotifyMediaSessionInfoChanged();
+}
+
 bool MediaSessionImpl::ShouldRouteAction(
     media_session::mojom::MediaSessionAction action) const {
   return routed_service_ && base::Contains(routed_service_->actions(), action);
@@ -1467,6 +1487,23 @@ bool MediaSessionImpl::IsPictureInPictureAvailable() const {
 
   auto& first = normal_players_.begin()->first;
   return first.observer->IsPictureInPictureAvailable(first.player_id);
+}
+
+std::string MediaSessionImpl::GetSharedAudioOutputDeviceId() const {
+  if (normal_players_.empty())
+    return media::AudioDeviceDescription::kDefaultDeviceId;
+
+  auto& first = normal_players_.begin()->first;
+  const auto& first_id = first.observer->GetAudioOutputSinkId(first.player_id);
+  if (std::all_of(normal_players_.cbegin(), normal_players_.cend(),
+                  [&first_id](const auto& player) {
+                    return player.first.observer->GetAudioOutputSinkId(
+                               player.first.player_id) == first_id;
+                  })) {
+    return first_id;
+  }
+
+  return media::AudioDeviceDescription::kDefaultDeviceId;
 }
 
 MediaAudioVideoState MediaSessionImpl::GetMediaAudioVideoState() {

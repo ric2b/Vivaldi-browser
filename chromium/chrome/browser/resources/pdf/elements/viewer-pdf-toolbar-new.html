@@ -1,10 +1,233 @@
-<style>
+<style include="pdf-shared">
   :host {
-    --pdf-toolbar-background-color: rgb(50, 54, 57);
-    background-color: var(--pdf-toolbar-background-color);
-    box-shadow: var(--cr-elevation-2);
+    box-shadow:
+        0 -2px 8px rgba(0, 0, 0, 0.09),
+        0 4px 8px rgba(0, 0, 0, 0.06),
+        0 1px 2px rgba(0, 0, 0, 0.3),
+        0 2px 6px rgba(0, 0, 0, 0.15);
+  }
+
+  #toolbar {
+    align-items: center;
+    background-color: var(--viewer-pdf-toolbar-background-color);
     color: white;
+    display: flex;
     height: 48px;
   }
+
+  #sidenavToggle {
+    margin: 0 6px;
+  }
+
+  #title {
+    font-size: 0.87rem;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #actionMenuTrigger {
+    margin-inline-end: 6px;
+  }
+
+  #start {
+    align-items: center;
+    display: flex;
+    overflow: hidden;
+    padding-inline-end: 20px;
+  }
+
+  #start,
+  #end {
+    flex: 1;
+  }
+
+  #end {
+    padding-inline-start: 20px;
+    text-align: end;
+    white-space: nowrap;
+  }
+
+  #zoom-controls {
+    border-inline-end: 1px solid rgba(255, 255, 255, 0.3);
+    border-inline-start: 1px solid rgba(255, 255, 255, 0.3);
+    margin-inline-end: 12px;
+    margin-inline-start: 21px;
+    padding: 0 6px;
+  }
+
+  @media(max-width: 600px) {
+    #title,
+    #zoom-controls input {
+      display: none;
+    }
+  }
+
+  viewer-page-selector {
+    display: inline-flex;
+  }
+
+  input {
+    background: rgba(0, 0, 0, 0.5);
+    border: none;
+    caret-color: currentColor;
+    color: inherit;
+    font-family: inherit;
+    line-height: inherit;
+    margin: 0 4px;
+    outline: none;
+    padding: 0 4px;
+    text-align: center;
+    width: 5ch;
+  }
+
+  paper-progress {
+    --paper-progress-active-color: var(--google-blue-refresh-300);
+    --paper-progress-container-color: transparent;
+    --paper-progress-height: 3px;
+    bottom: 0;
+    position: absolute;
+    width: 100%;
+  }
+
+  paper-progress,
+  #center,
+  #end {
+    transition: opacity 100ms cubic-bezier(0, 0, 0.2, 1);
+  }
+
+  paper-progress,
+  :host([loading_]) #menuButton,
+  :host([loading_]) #center,
+  :host([loading_]) #end {
+    opacity: 0;
+    /* Ensure UI is not interactable while hidden */
+    visibility: hidden;
+  }
+
+  :host([loading_]) paper-progress,
+  #menuButton,
+  #center,
+  #end {
+    opacity: 1;
+    visibility: visible;
+  }
+
+<if expr="chromeos">
+  :host([annotation-mode]) #annotate {
+    background-color: var(--active-button-bg);
+    border-radius: 50%;
+  }
+</if>
+
+  .dropdown-item {
+    padding-inline-end: 16px;
+    padding-inline-start: 12px;
+  }
+
+  .check-container {
+    margin-inline-end: 12px;
+    width: 16px;
+  }
+
+  #show-annotations-button {
+    border-top: var(--cr-separator-line);
+  }
 </style>
-New PDF Viewer toolbar will appear here.
+<!-- TODO(dpapad): Add aria-label and title for all buttons -->
+<div id="toolbar">
+  <div id="start">
+    <cr-icon-button id="sidenavToggle" iron-icon="pdf:open-book"
+        on-click="onSidenavToggleClick_">
+    </cr-icon-button>
+    <span id="title">[[docTitle]]</span>
+  </div>
+  <div id="center">
+    <viewer-page-selector doc-length="[[docLength]]" page-no="[[pageNo]]">
+    </viewer-page-selector>
+    <span id="zoom-controls">
+      <cr-icon-button iron-icon="pdf:remove" title="$i18n{tooltipZoomOut}"
+          on-click="onZoomOutClick_">
+      </cr-icon-button>
+      <input type="text" value="100%" on-input="onZoomInput_"
+          on-blur="onZoomInputBlur_">
+      </input>
+      <cr-icon-button iron-icon="pdf:add" title="$i18n{tooltipZoomIn}"
+          on-click="onZoomInClick_">
+      </cr-icon-button>
+    </span>
+    <cr-icon-button iron-icon="[[fitToButtonIcon_]]"
+        title="[[getFitToButtonTooltip_('$i18nPolymer{tooltipFitToPage}',
+                                        '$i18nPolymer{tooltipFitToWidth}',
+                                        fittingType_)]]"
+        on-click="onFitToButtonClick_">
+    </cr-icon-button>
+    <cr-icon-button iron-icon="pdf:rotate-left"
+        disabled="[[annotationMode]]" aria-label$="$i18n{tooltipRotateCCW}"
+        title="$i18n{tooltipRotateCCW}" on-click="onRotateClick_">
+    </cr-icon-button>
+  </div>
+  <div id="end">
+  <if expr="chromeos">
+    <template is="dom-if" if="[[pdfAnnotationsEnabled]]">
+      <cr-icon-button id="annotate" iron-icon="pdf:create"
+          disabled="[[!annotationAvailable]]" on-click="toggleAnnotation"
+          aria-label$="$i18n{tooltipAnnotate}"
+          title="$i18n{tooltipAnnotate}"></cr-icon-button>
+    </template>
+  </if>
+    <viewer-download-controls id="downloads"
+        has-edits="[[hasEdits]]"
+        has-entered-annotation-mode="[[hasEnteredAnnotationMode]]"
+        is-form-field-focused="[[isFormFieldFocused]]"
+        pdf-form-save-enabled="[[pdfFormSaveEnabled]]">
+    </viewer-download-controls>
+    <cr-icon-button id="print" iron-icon="cr:print"
+        aria-label$="$i18n{tooltipPrint}" hidden="[[!printingEnabled]]"
+        title="$i18n{tooltipPrint}" on-click="onPrintClick_"></cr-icon-button>
+    <cr-icon-button id="more"
+        iron-icon="cr:more-vert" on-click="onMoreClick_"></cr-icon-button>
+  </div>
+</div>
+<paper-progress id="progress" value="[[loadProgress]]" hidden="[[!loading_]]">
+</paper-progress>
+
+<cr-action-menu>
+  <button id="single-page-view-button"
+      class="dropdown-item" on-click="onSinglePageViewClick_"
+      role="radio"
+      aria-checked="[[getSinglePageAriaChecked_(twoUpViewEnabled_)]]">
+    <span class="check-container">
+      <iron-icon icon="pdf:check" hidden="[[twoUpViewEnabled_]]"></iron-icon>
+    </span>
+    $i18n{twoUpViewDisable}
+  </button>
+  <button id="two-page-view-button"
+      class="dropdown-item" on-click="onTwoPageViewClick_"
+      role="radio"
+      aria-checked="[[getTwoPageViewAriaChecked_(twoUpViewEnabled_)]]">
+    <span class="check-container">
+      <iron-icon icon="pdf:check" hidden="[[!twoUpViewEnabled_]]"></iron-icon>
+    </span>
+    $i18n{twoUpViewEnable}
+  </button>
+
+  <button id="show-annotations-button"
+      class="dropdown-item" on-click="toggleDisplayAnnotations_"
+      role="checkbox"
+      aria-checked="[[getShowAnnotationsAriaChecked_(displayAnnotations_)]]">
+    <span class="check-container">
+      <iron-icon icon="pdf:check" hidden="[[!displayAnnotations_]]"></iron-icon>
+    </span>
+    $i18n{annotationsShowToggle}
+  </button>
+</cr-action-menu>
+
+<if expr="chromeos">
+  <template is="dom-if" if="[[showAnnotationsBar_]]">
+    <viewer-annotations-bar annotation-mode="[[annotationMode]]"
+        ink-controller="[[inkController]]">
+    </viewer-annotations-bar>
+  </template>
+</if>

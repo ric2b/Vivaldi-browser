@@ -23,7 +23,6 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/sync_prefs.h"
-#include "components/sync/base/unrecoverable_error_handler.h"
 #include "components/sync/driver/data_type_controller.h"
 #include "components/sync/driver/data_type_manager.h"
 #include "components/sync/driver/data_type_manager_observer.h"
@@ -71,7 +70,6 @@ class ProfileSyncService : public SyncService,
                            public SyncEngineHost,
                            public SyncPrefObserver,
                            public DataTypeManagerObserver,
-                           public UnrecoverableErrorHandler,
                            public signin::IdentityManager::Observer {
  public:
   // If AUTO_START, sync will set IsFirstSetupComplete() automatically and sync
@@ -209,10 +207,6 @@ class ProfileSyncService : public SyncService,
   bool HasCookieJarMismatch(
       const std::vector<gaia::ListedAccount>& cookie_jar_accounts);
 
-  // UnrecoverableErrorHandler implementation.
-  void OnUnrecoverableError(const base::Location& from_here,
-                            const std::string& message) override;
-
   // SyncPrefObserver implementation.
   void OnSyncManagedPrefChange(bool is_sync_managed) override;
   void OnFirstSetupCompletePrefChange(bool is_first_setup_complete) override;
@@ -249,9 +243,6 @@ class ProfileSyncService : public SyncService,
 
   bool IsDataTypeControllerRunningForTest(ModelType type) const;
 
-  // Sometimes we need to wait for tasks on the |backend_task_runner_| in tests.
-  void FlushBackendTaskRunnerForTest() const;
-
   // Some tests rely on injecting calls to the encryption observer.
   SyncEncryptionHandler::Observer* GetEncryptionObserverForTest();
 
@@ -263,8 +254,8 @@ class ProfileSyncService : public SyncService,
   friend class vivaldi::VivaldiProfileSyncService;
 
   // Passed as an argument to StopImpl to control whether or not the sync
-  // engine should clear its data directory when it shuts down. See StopImpl
-  // for more information.
+  // engine should clear its data when it shuts down. See StopImpl for more
+  // information.
   enum SyncStopDataFate {
     KEEP_DATA,
     CLEAR_DATA,
@@ -283,8 +274,6 @@ class ProfileSyncService : public SyncService,
   // Virtual for testing.
   virtual WeakHandle<JsEventHandler> GetJsEventHandler();
 
-  WeakHandle<UnrecoverableErrorHandler> GetUnrecoverableErrorHandler();
-
   // Callbacks for SyncAuthManager.
   void AccountStateChanged();
   void CredentialsChanged();
@@ -292,7 +281,11 @@ class ProfileSyncService : public SyncService,
   // Callbacks for SyncUserSettingsImpl.
   void SyncAllowedByPlatformChanged(bool allowed);
 
-  bool IsEngineAllowedToStart() const;
+  bool IsEngineAllowedToRun() const;
+
+  // Same as GetTransportState() returning PAUSED. In this state, the engine
+  // shouldn't run.
+  bool IsInPausedState() const;
 
   // Reconfigures the data type manager with the latest enabled types.
   // Note: Does not initialize the engine if it is not already initialized.
@@ -338,10 +331,6 @@ class ProfileSyncService : public SyncService,
   void NotifyShutdown();
 
   void ClearUnrecoverableError();
-
-  // Initializes |backend_task_runner_| which is backed by |sync_thread_| or the
-  // ThreadPool depending on the ProfileSyncServiceUsesThreadPool experiment.
-  void InitializeBackendTaskRunnerIfNeeded();
 
   // Kicks off asynchronous initialization of the SyncEngine.
   void StartUpSlowEngineComponents();
@@ -406,11 +395,6 @@ class ProfileSyncService : public SyncService,
 
   // A utility object containing logic and state relating to encryption.
   SyncServiceCrypto crypto_;
-
-  // Owns the sync thread and takes care of its destruction.
-  // TODO(https://crbug.com/1014464): Remove once we have switched to
-  // Threadpool.
-  base::OnceClosure sync_thread_stopper_;
 
   // TODO(crbug.com/923287): Move out of this class. Possibly to SyncEngineImpl.
   scoped_refptr<base::SequencedTaskRunner> backend_task_runner_;

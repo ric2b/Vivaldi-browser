@@ -51,13 +51,11 @@
         pref="{{prefs.settings.accessibility}}"
         label="$i18n{chromeVoxLabel}">
     </settings-toggle-button>
-    <template is="dom-if" if="[[!isKioskModeActive_]]">
-      <iron-collapse opened="[[prefs.settings.accessibility.value]]">
-        <cr-link-row id="chromeVoxSubpageButton"
-            class="settings-box" on-click="onChromeVoxSettingsTap_"
-            label="$i18n{chromeVoxOptionsLabel}" external></cr-link-row>
-      </iron-collapse>
-    </template>
+    <iron-collapse opened="[[prefs.settings.accessibility.value]]">
+      <cr-link-row id="chromeVoxSubpageButton"
+          class="settings-box" on-click="onChromeVoxSettingsTap_"
+          label="$i18n{chromeVoxOptionsLabel}" external></cr-link-row>
+    </iron-collapse>
     <settings-toggle-button
         pref="{{prefs.settings.a11y.select_to_speak}}"
         class="hr"
@@ -159,6 +157,13 @@
         pref="{{prefs.settings.a11y.caret_highlight}}"
         label="$i18n{caretHighlightLabel}">
     </settings-toggle-button>
+    <settings-toggle-button
+        class="hr"
+        pref="{{prefs.settings.a11y.caretbrowsing.enabled}}"
+        on-change="onA11yCaretBrowsingChange_"
+        label="$i18n{caretBrowsingTitle}"
+        sub-label="$i18n{caretBrowsingSubtitle}">
+    </settings-toggle-button>
     <template is="dom-if" if="[[shouldShowExperimentalSwitchAccess_]]">
       <settings-toggle-button
           class="hr"
@@ -243,23 +248,16 @@
       </settings-slider>
     </div>
     <template is="dom-if" if="[[shouldShowExperimentalCursorColor_]]">
-      <settings-toggle-button class="hr"
-          pref="{{prefs.settings.a11y.cursor_color_enabled}}"
-          label="$i18n{cursorColorEnabledLabel}">
-      </settings-toggle-button>
-      <template is="dom-if"
-          if="[[prefs.settings.a11y.cursor_color_enabled.value]]">
-        <div class="settings-box continuation">
-          <div class="start sub-item settings-box-text"
-              id="cursorColorOptionsLabel">
-            $i18n{cursorColorOptionsLabel}
-          </div>
-          <settings-dropdown-menu aria-labeledby="cursorColorOptionsLabel"
-              pref="{{prefs.settings.a11y.cursor_color}}"
-              menu-options="[[cursorColorOptions_]]">
-          </settings-dropdown-menu>
+      <div class="settings-box">
+        <div class="start settings-box-text" id="cursorColorOptionsLabel">
+          $i18n{cursorColorOptionsLabel}
         </div>
-      </template>
+        <settings-dropdown-menu aria-labeledby="cursorColorOptionsLabel"
+            pref="{{prefs.settings.a11y.cursor_color}}"
+            menu-options="[[cursorColorOptions_]]"
+            on-settings-control-change="onA11yCursorColorChange_">
+        </settings-dropdown-menu>
+      </div>
     </template>
     <settings-toggle-button
         class="hr"
@@ -271,26 +269,27 @@
         sub-label="$i18n{mouseSettingsDescription}"
         role-description="$i18n{subpageArrowRoleDescription}" embedded>
     </cr-link-row>
-    <!-- If shelf navigation buttons are implicitly enabled by other a11y
-        settings (e.g. by spoken feedback), the toggle control should be
-        disabled, and toggled regardless of the actual backing pref value. To
-        handle effective pref value changes, wrap the backing pref in a private
-        property, which changes to a stub pref object when the setting is
-        implicitly enabled. -->
-    <settings-toggle-button
-        id="shelfNavigationButtonsEnabledControl"
-        class="hr"
-        hidden$="[[!showShelfNavigationButtonsSettings_]]"
-        disabled="[[shelfNavigationButtonsImplicitlyEnabled_]]"
-        pref="[[shelfNavigationButtonsPref_]]"
-        no-set-pref
-        on-settings-boolean-control-change=
-            "updateShelfNavigationButtonsEnabledPref_"
-        label="$i18n{tabletModeShelfNavigationButtonsSettingLabel}"
-        sub-label="$i18n{tabletModeShelfNavigationButtonsSettingDescription}"
-        learn-more-url="$i18n{tabletModeShelfNavigationButtonsLearnMoreUrl}"
-        on-learn-more-clicked="onShelfNavigationButtonsLearnMoreClicked_">
-    </settings-toggle-button>
+    <template is="dom-if" if="[[showShelfNavigationButtonsSettings_]]" restamp>
+      <!-- If shelf navigation buttons are implicitly enabled by other a11y
+          settings (e.g. by spoken feedback), the toggle control should be
+          disabled, and toggled regardless of the actual backing pref value. To
+          handle effective pref value changes, wrap the backing pref in a
+          private property, which changes to a stub pref object when the setting
+          is implicitly enabled. -->
+      <settings-toggle-button
+          id="shelfNavigationButtonsEnabledControl"
+          class="hr"
+          disabled="[[shelfNavigationButtonsImplicitlyEnabled_]]"
+          pref="[[shelfNavigationButtonsPref_]]"
+          no-set-pref
+          on-settings-boolean-control-change=
+              "updateShelfNavigationButtonsEnabledPref_"
+          label="$i18n{tabletModeShelfNavigationButtonsSettingLabel}"
+          sub-label="$i18n{tabletModeShelfNavigationButtonsSettingDescription}"
+          learn-more-url="$i18n{tabletModeShelfNavigationButtonsLearnMoreUrl}"
+          on-learn-more-clicked="onShelfNavigationButtonsLearnMoreClicked_">
+      </settings-toggle-button>
+    </template>
 
     <h2>$i18n{audioAndCaptionsHeading}</h2>
     <template is="dom-if" if="[[!isKioskModeActive_]]">

@@ -40,13 +40,15 @@ chrome.test.runTests([
                   Country: 'us',
                   Name: 'Cellular1_Provider'
                 },
+                // ENS, ICCID, IMEI, MDN, MEID, and MIN are filtered for
+                // networkingOnc.
                 ModelID:"test_model_id",
                 NetworkTechnology: 'GSM',
                 RoamingState: 'Home',
                 SIMLockStatus: {
                   LockEnabled: true,
                   LockType: '',
-                  RetriesLeft: 3,
+                  RetriesLeft: 3
                 },
                 Scanning: false,
               },
@@ -98,10 +100,6 @@ chrome.test.runTests([
           stubVerificationProperties, chrome.test.callbackFail(expectedError));
       chrome.networking.onc.verifyAndEncryptData(
           stubVerificationProperties, '',
-          chrome.test.callbackFail(expectedError));
-      chrome.networking.onc.setWifiTDLSEnabledState('', false,
-          chrome.test.callbackFail(expectedError));
-      chrome.networking.onc.getWifiTDLSStatus('',
           chrome.test.callbackFail(expectedError));
     }
 ]);

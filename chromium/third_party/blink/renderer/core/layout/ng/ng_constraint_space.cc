@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
+#include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 
 namespace blink {
 
@@ -29,8 +30,7 @@ struct SameSizeAsNGConstraintSpace {
   unsigned bitfields[1];
 };
 
-static_assert(sizeof(NGConstraintSpace) == sizeof(SameSizeAsNGConstraintSpace),
-              "NGConstraintSpace should stay small.");
+ASSERT_SIZE(NGConstraintSpace, SameSizeAsNGConstraintSpace);
 
 }  // namespace
 
@@ -92,7 +92,8 @@ NGConstraintSpace NGConstraintSpace::CreateFromLayoutObject(
     const ComputedStyle& cell_style = cell.ToLayoutObject()->StyleRef();
     const ComputedStyle& table_style =
         cell.TableInterface()->ToLayoutObject()->StyleRef();
-    builder.SetIsTableCell(true);
+    DCHECK(block.IsTableCellLegacy());
+    builder.SetIsTableCell(true, /* is_table_cell_legacy */ true);
     builder.SetIsRestrictedBlockSizeTableCell(
         !cell_style.LogicalHeight().IsAuto() ||
         !table_style.LogicalHeight().IsAuto());

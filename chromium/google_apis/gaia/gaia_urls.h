@@ -11,10 +11,6 @@
 #include "base/memory/singleton.h"
 #include "url/gurl.h"
 
-namespace base {
-class FilePath;
-}  // namespace base
-
 // A signleton that provides all the URLs that are used for connecting to GAIA.
 //
 // Please update InitializeFromConfig() when adding new URLs.
@@ -30,6 +26,8 @@ class GaiaUrls {
   const GURL& client_login_url() const;
   const GURL& service_login_url() const;
   const GURL& embedded_setup_chromeos_url(unsigned version) const;
+  const GURL& embedded_setup_chromeos_kid_signup_url() const;
+  const GURL& embedded_setup_chromeos_kid_signin_url() const;
   const GURL& embedded_setup_windows_url() const;
   const GURL& signin_chrome_sync_dice() const;
   const GURL& signin_chrome_sync_keys_url() const;
@@ -72,7 +70,7 @@ class GaiaUrls {
   friend class GaiaUrlsTest;
 
   void InitializeDefault();
-  void InitializeFromConfig(const base::FilePath& config_path);
+  void InitializeFromConfig();
 
   GURL google_url_;
   GURL secure_google_url_;
@@ -86,6 +84,8 @@ class GaiaUrls {
   GURL client_login_url_;
   GURL service_login_url_;
   GURL embedded_setup_chromeos_url_v2_;
+  GURL embedded_setup_chromeos_kid_signup_url_;
+  GURL embedded_setup_chromeos_kid_signin_url_;
   GURL embedded_setup_windows_url_;
   GURL signin_chrome_sync_dice_;
   GURL signin_chrome_sync_keys_url_;

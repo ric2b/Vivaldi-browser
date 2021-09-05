@@ -484,6 +484,8 @@ void HTMLMetaElement::NameRemoved(const AtomicString& name_value) {
     GetDocument().GetFrame()->DidChangeThemeColor();
   } else if (EqualIgnoringASCIICase(name_value, "color-scheme")) {
     GetDocument().ColorSchemeMetaChanged();
+  } else if (EqualIgnoringASCIICase(name_value, "battery-savings")) {
+    GetDocument().BatterySavingsMetaChanged();
   }
 }
 
@@ -565,6 +567,10 @@ void HTMLMetaElement::ProcessContent() {
     GetDocument().ColorSchemeMetaChanged();
     return;
   }
+  if (EqualIgnoringASCIICase(name_value, "battery-savings")) {
+    GetDocument().BatterySavingsMetaChanged();
+    return;
+  }
 
   // All situations below require a content attribute (which can be the empty
   // string).
@@ -582,13 +588,18 @@ void HTMLMetaElement::ProcessContent() {
       UseCounter::Count(&GetDocument(),
                         WebFeature::kHTMLMetaElementReferrerPolicyOutsideHead);
     }
+    bool comma_in_content_value = false;
     if (content_value.Contains(',')) {
+      comma_in_content_value = true;
       UseCounter::Count(
           &GetDocument(),
           WebFeature::kHTMLMetaElementReferrerPolicyMultipleTokens);
     }
+
     GetExecutionContext()->ParseAndSetReferrerPolicy(
-        content_value, true /* support legacy keywords */);
+        content_value, true /* support legacy keywords */,
+        /*from_meta_tag_with_list_of_policies=*/
+        comma_in_content_value);
   } else if (EqualIgnoringASCIICase(name_value, "handheldfriendly") &&
              EqualIgnoringASCIICase(content_value, "true")) {
     ProcessViewportContentAttribute("width=device-width",

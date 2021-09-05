@@ -62,25 +62,6 @@
 
 namespace blink {
 
-namespace {
-DarkModeFilter::ElementRole GetElementRoleForImage(Image* image) {
-  DCHECK(image);
-
-  if (image->IsBitmapImage())
-    return DarkModeFilter::ElementRole::kBitmapImage;
-
-  if (image->IsSVGImage() || image->IsSVGImageForContainer())
-    return DarkModeFilter::ElementRole::kSVGImage;
-
-  if (image->IsGradientGeneratedImage())
-    return DarkModeFilter::ElementRole::kGradientGeneratedImage;
-
-  // TODO(prashant.n): Check if remaining image types need to be treated
-  // separately.
-  return DarkModeFilter::ElementRole::kUnhandledImage;
-}
-}  // namespace
-
 // Helper class that copies |flags| only when dark mode is enabled.
 //
 // TODO(gilmanmh): Investigate removing const from |flags| in the calling
@@ -346,7 +327,7 @@ int AdjustedFocusRingOffset(int offset) {
   // need to call this method.
   DCHECK(!::features::IsFormControlsRefreshEnabled());
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   return offset + 2;
 #else
   return 0;
@@ -355,8 +336,7 @@ int AdjustedFocusRingOffset(int offset) {
 
 }  // namespace
 
-int GraphicsContext::FocusRingOutsetExtent(int offset,
-                                           int width) {
+int GraphicsContext::FocusRingOutsetExtent(int offset, int width) {
   // Unlike normal outlines (whole width is outside of the offset), focus
   // rings can be drawn with the center of the path aligned with the offset, so
   // only half of the width is outside of the offset.
@@ -441,7 +421,7 @@ void GraphicsContext::DrawFocusRing(const Vector<IntRect>& rects,
                                     float min_border_width,
                                     const Color& color,
                                     WebColorScheme color_scheme) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   const Color& inner_color = color_scheme == WebColorScheme::kDark
                                  ? SkColorSetRGB(0x99, 0xC8, 0xFF)
                                  : color;
@@ -652,7 +632,8 @@ static void EnforceDotsAtEndpoints(GraphicsContext& context,
 
 void GraphicsContext::DrawLine(const IntPoint& point1,
                                const IntPoint& point2,
-                               const DarkModeFilter::ElementRole role) {
+                               const DarkModeFilter::ElementRole role,
+                               bool is_text_line) {
   DCHECK(canvas_);
 
   StrokeStyle pen_style = GetStrokeStyle();
@@ -669,18 +650,21 @@ void GraphicsContext::DrawLine(const IntPoint& point1,
   // probably worth the speed up of no square root, which also won't be exact.
   FloatSize disp = p2 - p1;
   int length = SkScalarRoundToInt(disp.Width() + disp.Height());
-  const DarkModeFlags flags(this, ImmutableState()->StrokeFlags(length), role);
+  const DarkModeFlags flags(this, ImmutableState()->StrokeFlags(length, width),
+                            role);
 
   if (pen_style == kDottedStroke) {
     if (StrokeData::StrokeIsDashed(width, pen_style)) {
-      // We draw thin dotted lines as dashes and gaps that are always
-      // exactly the size of the width. When the length of the line is
-      // an odd multiple of the width, things work well because we get
-      // dots at each end of the line, but if the length is anything else,
-      // we get gaps or partial dots at the end of the line. Fix that by
-      // explicitly enforcing full dots at the ends of lines.
-      EnforceDotsAtEndpoints(*this, p1, p2, length, width, flags,
-                             is_vertical_line);
+      // When the length of the line is an odd multiple of the width, things
+      // work well because we get dots at each end of the line, but if the
+      // length is anything else, we get gaps or partial dots at the end of the
+      // line. Fix that by explicitly enforcing full dots at the ends of lines.
+      // Note that we don't enforce end points when it's text line as enforcing
+      // is to improve border line quality.
+      if (!is_text_line) {
+        EnforceDotsAtEndpoints(*this, p1, p2, length, width, flags,
+                               is_vertical_line);
+      }
     } else {
       // We draw thick dotted lines with 0 length dash strokes and round
       // endcaps, producing circles. The endcaps extend beyond the line's
@@ -726,7 +710,7 @@ void GraphicsContext::DrawLineForText(const FloatPoint& pt, float width) {
     case kDashedStroke: {
       int y = floorf(pt.Y() + std::max<float>(StrokeThickness() / 2.0f, 0.5f));
       DrawLine(IntPoint(pt.X(), y), IntPoint(pt.X() + width, y),
-               DarkModeFilter::ElementRole::kText);
+               DarkModeFilter::ElementRole::kText, true);
       return;
     }
     case kWavyStroke:
@@ -887,10 +871,10 @@ void GraphicsContext::DrawImage(
   image_flags.setFilterQuality(ComputeFilterQuality(image, dest, src));
 
   // Do not classify the image if the element has any CSS filters.
-  if (!has_filter_property && dark_mode_filter_.IsDarkModeActive()) {
+  if (!has_filter_property && dark_mode_filter_.IsDarkModeActive() &&
+      dark_mode_filter_.AnalyzeShouldApplyToImage(src, dest)) {
     dark_mode_filter_.ApplyToImageFlagsIfNeeded(
-        src, dest, image->PaintImageForCurrentFrame(), &image_flags,
-        GetElementRoleForImage(image));
+        src, dest, image->PaintImageForCurrentFrame(), &image_flags);
   }
 
   image->Draw(canvas_, image_flags, dest, src, should_respect_image_orientation,
@@ -928,10 +912,11 @@ void GraphicsContext::DrawImageRRect(
   image_flags.setFilterQuality(
       ComputeFilterQuality(image, dest.Rect(), src_rect));
 
-  if (dark_mode_filter_.IsDarkModeActive()) {
+  if (dark_mode_filter_.IsDarkModeActive() &&
+      dark_mode_filter_.AnalyzeShouldApplyToImage(src_rect, dest.Rect())) {
     dark_mode_filter_.ApplyToImageFlagsIfNeeded(
-        src_rect, dest.Rect(), image->PaintImageForCurrentFrame(), &image_flags,
-        GetElementRoleForImage(image));
+        src_rect, dest.Rect(), image->PaintImageForCurrentFrame(),
+        &image_flags);
   }
 
   bool use_shader = (visible_src == src_rect) &&
@@ -1189,11 +1174,11 @@ void GraphicsContext::StrokeRect(const FloatRect& rect, float line_width) {
   } else if (valid_w || valid_h) {
     // we are expected to respect the lineJoin, so we can't just call
     // drawLine -- we have to create a path that doubles back on itself.
-    SkPath path;
+    SkPathBuilder path;
     path.moveTo(r.fLeft, r.fTop);
     path.lineTo(r.fRight, r.fBottom);
     path.close();
-    DrawPath(path, flags);
+    DrawPath(path.detach(), flags);
   }
 }
 
@@ -1268,13 +1253,7 @@ void GraphicsContext::Scale(float x, float y) {
 
 void GraphicsContext::SetURLForRect(const KURL& link,
                                     const IntRect& dest_rect) {
-  DCHECK(canvas_ || tracker_);
-
-  // Intercept URL rects when painting previews.
-  if (IsPaintingPreview() && tracker_) {
-    tracker_->AnnotateLink(GURL(link), dest_rect);
-    return;
-  }
+  DCHECK(canvas_);
 
   sk_sp<SkData> url(SkData::MakeWithCString(link.GetString().Utf8().c_str()));
   canvas_->Annotate(cc::PaintCanvas::AnnotationType::URL, dest_rect,
@@ -1283,13 +1262,7 @@ void GraphicsContext::SetURLForRect(const KURL& link,
 
 void GraphicsContext::SetURLFragmentForRect(const String& dest_name,
                                             const IntRect& rect) {
-  DCHECK(canvas_ || tracker_);
-
-  // Intercept URL rects when painting previews.
-  if (IsPaintingPreview() && tracker_) {
-    tracker_->AnnotateLink(GURL(dest_name.Utf8()), rect);
-    return;
-  }
+  DCHECK(canvas_);
 
   sk_sp<SkData> sk_dest_name(SkData::MakeWithCString(dest_name.Utf8().c_str()));
   canvas_->Annotate(cc::PaintCanvas::AnnotationType::LINK_TO_DESTINATION, rect,
@@ -1299,6 +1272,10 @@ void GraphicsContext::SetURLFragmentForRect(const String& dest_name,
 void GraphicsContext::SetURLDestinationLocation(const String& name,
                                                 const IntPoint& location) {
   DCHECK(canvas_);
+
+  // Paint previews don't make use of linked destinations.
+  if (tracker_)
+    return;
 
   SkRect rect = SkRect::MakeXYWH(location.X(), location.Y(), 0, 0);
   sk_sp<SkData> sk_name(SkData::MakeWithCString(name.Utf8().c_str()));

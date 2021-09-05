@@ -3,6 +3,8 @@
 #ifndef SYNC_VIVALDI_SYNC_UI_HELPER_H_
 #define SYNC_VIVALDI_SYNC_UI_HELPER_H_
 
+#include "base/callback.h"
+#include "base/files/file_path.h"
 #include "base/time/time.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/sync/driver/sync_service_observer.h"
@@ -13,6 +15,8 @@ class VivaldiProfileSyncService;
 
 class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
  public:
+  using ResultCallback = base::OnceCallback<void(bool)>;
+
   enum CycleStatus {
     NOT_SYNCED = 0,
     SUCCESS,
@@ -33,10 +37,16 @@ class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
     base::Time next_retry_time;
   };
 
-  VivaldiSyncUIHelper(Profile* profile, VivaldiProfileSyncService* sync_manager);
+  VivaldiSyncUIHelper(Profile* profile,
+                      VivaldiProfileSyncService* sync_manager);
   ~VivaldiSyncUIHelper() override;
 
   bool SetEncryptionPassword(const std::string& password);
+
+  void BackupEncryptionToken(const base::FilePath& target,
+                             ResultCallback callback);
+  void RestoreEncryptionToken(const base::FilePath& source,
+                              ResultCallback callback);
 
   CycleData GetCycleData();
 

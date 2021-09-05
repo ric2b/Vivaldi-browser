@@ -31,9 +31,6 @@ import {IronA11yKeysBehavior} from 'chrome://resources/polymer/v3_0/iron-a11y-ke
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 
-// <if expr="chromeos">
-import {convertImageSequenceToPng} from 'chrome://resources/cr_elements/chromeos/cr_picture/png.m.js';
-// </if>
 import '../controls/extension_controlled_indicator.m.js';
 import '../controls/settings_toggle_button.m.js';
 import {GlobalScrollTargetBehavior} from '../global_scroll_target_behavior.m.js';
@@ -55,6 +52,7 @@ import './passwords_list_handler.js';
 import {PasswordManagerImpl, PasswordManagerProxy} from './password_manager_proxy.js';
 import './passwords_export_dialog.js';
 import './passwords_shared_css.js';
+import './avatar_icon.js';
 import {ProfileInfo, ProfileInfoBrowserProxy, ProfileInfoBrowserProxyImpl} from '../people_page/profile_info_browser_proxy.m.js';
 // <if expr="chromeos">
 import '../controls/password_prompt_dialog.m.js';
@@ -97,6 +95,12 @@ Polymer({
     storedAccounts_: Array,
     // </if>
 
+    /** @type {!Map<string, (string|Function)>} */
+    focusConfig: {
+      type: Object,
+      observer: 'focusConfigChanged_',
+    },
+
     /** Preferences state. */
     prefs: {
       type: Object,
@@ -134,7 +138,8 @@ Polymer({
     eligibleForAccountStorage_: {
       type: Boolean,
       value: false,
-      computed: 'computeEligibleForAccountStorage_(syncStatus_, signedIn_)',
+      computed: 'computeEligibleForAccountStorage_(' +
+          'syncStatus_, signedIn_, syncPrefs_)',
     },
 
     /** @private */
@@ -310,6 +315,26 @@ Polymer({
    */
   setPasswordExceptionsListener_: null,
 
+  /**
+   * @param {!Map<string, string>} newConfig
+   * @param {?Map<string, string>} oldConfig
+   * @private
+   */
+  focusConfigChanged_(newConfig, oldConfig) {
+    // focusConfig is set only once on the parent, so this observer should
+    // only fire once.
+    assert(!oldConfig);
+
+    // Populate the |focusConfig| map of the parent <settings-autofill-page>
+    // element, with additional entries that correspond to subpage trigger
+    // elements residing in this element's Shadow DOM.
+    if (this.enablePasswordCheck_) {
+      this.focusConfig.set(assert(routes.CHECK_PASSWORDS).path, () => {
+        focusWithoutInk(assert(this.$$('#icon')));
+      });
+    }
+  },
+
   /** @override */
   attached() {
     // Create listener functions.
@@ -351,15 +376,8 @@ Polymer({
     this.addWebUIListener('sync-status-changed', syncStatusChanged);
 
     const syncPrefsChanged = syncPrefs => this.syncPrefs_ = syncPrefs;
-    syncBrowserProxy.sendSyncPrefsChanged();
     this.addWebUIListener('sync-prefs-changed', syncPrefsChanged);
-
-    /** @type {!ProfileInfoBrowserProxy} */ (
-        ProfileInfoBrowserProxyImpl.getInstance())
-        .getProfileInfo()
-        .then(this.extractImageFromProfileInfo_.bind(this));
-    this.addWebUIListener(
-        'profile-info-changed', this.extractImageFromProfileInfo_.bind(this));
+    syncBrowserProxy.sendSyncPrefsChanged();
 
     // For non-ChromeOS, also check whether accounts are available.
     // <if expr="not chromeos">
@@ -444,10 +462,13 @@ Polymer({
    * @private
    */
   computeEligibleForAccountStorage_() {
-    // |this.syncStatus_.signedIn| means the user has sync enabled, while
-    // |this.signedIn_| means they have signed in, in the content area.
+    // The user must have signed in but should have sync disabled
+    // (|!this.syncStatus_.signedin|). They should not be using a custom
+    // passphrase to encrypt their sync data, since there's no way for account
+    // storage users to input their passphrase and decrypt the passwords.
     return this.accountStorageFeatureEnabled_ &&
-        (!!this.syncStatus_ && !this.syncStatus_.signedIn) && this.signedIn_;
+        (!!this.syncStatus_ && !this.syncStatus_.signedIn) && this.signedIn_ &&
+        (!this.syncPrefs_ || !this.syncPrefs_.encryptAllData);
   },
 
   /**
@@ -622,27 +643,6 @@ Polymer({
   /** @private */
   onOptOut_: function() {
     this.passwordManager_.optInForAccountStorage(false);
-  },
-
-  /**
-   * Updates the profile icon used in the opt-in/opt-out element based on the
-   * given profile info.
-   * @private
-   * @param {!ProfileInfo} info
-   */
-  extractImageFromProfileInfo_(info) {
-    /**
-     * Extract first frame from image by creating a single frame PNG using
-     * url as input if base64 encoded and potentially animated.
-     */
-    // <if expr="chromeos">
-    if (info.iconUrl.startsWith('data:image/png;base64')) {
-      this.profileIcon_ = getImage(convertImageSequenceToPng([info.iconUrl]));
-      return;
-    }
-    // </if>
-
-    this.profileIcon_ = getImage(info.iconUrl);
   },
 
   /**

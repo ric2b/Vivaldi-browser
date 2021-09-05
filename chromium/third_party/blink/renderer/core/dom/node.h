@@ -227,6 +227,8 @@ class CORE_EXPORT Node : public EventTarget {
   void After(const HeapVector<NodeOrStringOrTrustedScript>&, ExceptionState&);
   void ReplaceWith(const HeapVector<NodeOrStringOrTrustedScript>&,
                    ExceptionState&);
+  void ReplaceChildren(const HeapVector<NodeOrStringOrTrustedScript>&,
+                       ExceptionState&);
   void remove(ExceptionState&);
   void remove();
 
@@ -597,7 +599,6 @@ class CORE_EXPORT Node : public EventTarget {
   void SetHasFocusWithin(bool flag);
   virtual void SetDragged(bool flag);
 
-  virtual const Node* FocusDelegate() const;
   // This is called only when the node is focused.
   virtual bool ShouldHaveFocusAppearance() const;
 

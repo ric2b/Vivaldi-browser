@@ -13,6 +13,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/common/channel_info.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_service.h"
@@ -23,7 +24,9 @@
 #include "components/signin/public/identity_manager/scope_set.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#include "components/version_info/channel.h"
 #include "content/public/browser/device_service.h"
+#include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
@@ -37,10 +40,39 @@ const user_manager::User* GetActiveUser() {
   return user_manager::UserManager::Get()->GetActiveUser();
 }
 
+const user_manager::User* GetPrimaryUser() {
+  return user_manager::UserManager::Get()->GetPrimaryUser();
+}
+
 Profile* GetProfileForActiveUser() {
   const user_manager::User* const active_user = GetActiveUser();
   DCHECK(active_user);
   return chromeos::ProfileHelper::Get()->GetProfileByUser(active_user);
+}
+
+bool IsPrimaryUser() {
+  return GetActiveUser() == GetPrimaryUser();
+}
+
+bool HasPrimaryAccount(const Profile* profile) {
+  auto* identity_manager =
+      IdentityManagerFactory::GetForProfileIfExists(profile);
+  if (!identity_manager)
+    return false;
+
+  return identity_manager->HasPrimaryAccount(
+      signin::ConsentLevel::kNotRequired);
+}
+
+bool IsEmailDomainSupported(const user_manager::User* user) {
+  const std::string email = user->GetAccountId().GetUserEmail();
+  DCHECK(!email.empty());
+
+  constexpr char kGmailDomain[] = "gmail.com";
+  constexpr char kGooglemailDomain[] = "googlemail.com";
+  return (gaia::ExtractDomainName(email) == kGmailDomain ||
+          gaia::ExtractDomainName(email) == kGooglemailDomain ||
+          gaia::IsGoogleInternalAccountEmail(email));
 }
 
 }  // namespace
@@ -59,14 +91,19 @@ bool AmbientClientImpl::IsAmbientModeAllowed() {
   if (!active_user || !active_user->HasGaiaAccount())
     return false;
 
+  if (!IsPrimaryUser())
+    return false;
+
+  if (!IsEmailDomainSupported(active_user))
+    return false;
+
   auto* profile = GetProfileForActiveUser();
   if (!profile)
     return false;
 
-  if (!profile->GetPrefs()->GetBoolean(
-          ash::ambient::prefs::kAmbientModeEnabled)) {
+  // Primary account might be missing during unittests.
+  if (!HasPrimaryAccount(profile))
     return false;
-  }
 
   if (!profile->IsRegularProfile())
     return false;
@@ -128,4 +165,13 @@ void AmbientClientImpl::GetAccessToken(
                             /*access_token=*/std::string(),
                             /*expiration_time=*/base::Time::Now());
   }
+}
+
+bool AmbientClientImpl::ShouldUseProdServer() {
+  if (chromeos::features::IsAmbientModeDevUseProdEnabled())
+    return true;
+
+  auto channel = chrome::GetChannel();
+  return channel == version_info::Channel::STABLE ||
+         channel == version_info::Channel::BETA;
 }

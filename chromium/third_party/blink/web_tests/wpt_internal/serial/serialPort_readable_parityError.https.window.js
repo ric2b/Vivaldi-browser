@@ -3,7 +3,8 @@
 // META: script=/gen/layout_test_data/mojo/public/js/mojo_bindings.js
 // META: script=/gen/mojo/public/mojom/base/unguessable_token.mojom.js
 // META: script=/gen/third_party/blink/public/mojom/serial/serial.mojom.js
-// META: script=resources/serial-test-utils.js
+// META: script=resources/common.js
+// META: script=resources/automation.js
 
 // ParityError is not (as of 2020/03/23) a valid DOMException, so cannot use
 // promise_rejects_dom for it.
@@ -21,7 +22,7 @@ async function promise_rejects_with_parity_error(t, promise) {
 serial_test(async (t, fake) => {
   const {port, fakePort} = await getFakeSerialPort(fake);
   // Select a buffer size smaller than the amount of data transferred.
-  await port.open({baudrate: 9600, buffersize: 64});
+  await port.open({baudRate: 9600, bufferSize: 64});
 
   let readable = port.readable;
   let reader = readable.getReader();

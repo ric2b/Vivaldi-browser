@@ -47,7 +47,7 @@
 #include "net/base/features.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_cache.h"
-#include "services/network/cross_origin_read_blocking.h"
+#include "services/network/public/cpp/cross_origin_read_blocking.h"
 #include "services/network/public/cpp/features.h"
 #include "storage/browser/blob/blob_storage_context.h"
 
@@ -328,8 +328,8 @@ class SignedExchangePrefetchBrowserTest
     EXPECT_EQ(1u, cached_exchanges.size());
     const auto it = cached_exchanges.find(sxg_url);
     ASSERT_TRUE(it != cached_exchanges.end());
-    const std::unique_ptr<const PrefetchedSignedExchangeCache::Entry>&
-        exchange = it->second;
+    const std::unique_ptr<const PrefetchedSignedExchangeCacheEntry>& exchange =
+        it->second;
     EXPECT_EQ(sxg_url, exchange->outer_url());
     EXPECT_EQ(inner_url, exchange->inner_url());
     EXPECT_EQ(header_integrity, *exchange->header_integrity());
@@ -697,7 +697,7 @@ IN_PROC_BROWSER_TEST_P(SignedExchangePrefetchBrowserTest,
 }
 
 // Flaky on Linux TSan, http://crbug.com/1050879
-#if defined(OS_LINUX) && defined(THREAD_SANITIZER)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(THREAD_SANITIZER)
 #define MAYBE_PrefetchMainResourceSXG_SignatureExpire \
   DISABLED_PrefetchMainResourceSXG_SignatureExpire
 #else
@@ -860,7 +860,7 @@ IN_PROC_BROWSER_TEST_P(SignedExchangePrefetchBrowserTest,
 
       const auto script_it = cached_exchanges.find(sxg_script_url);
       ASSERT_TRUE(script_it != cached_exchanges.end());
-      const std::unique_ptr<const PrefetchedSignedExchangeCache::Entry>&
+      const std::unique_ptr<const PrefetchedSignedExchangeCacheEntry>&
           script_exchange = script_it->second;
       EXPECT_EQ(sxg_script_url, script_exchange->outer_url());
       EXPECT_EQ(inner_url_script_url, script_exchange->inner_url());
@@ -876,7 +876,7 @@ IN_PROC_BROWSER_TEST_P(SignedExchangePrefetchBrowserTest,
     }
     const auto page_it = cached_exchanges.find(sxg_page_url);
     ASSERT_TRUE(page_it != cached_exchanges.end());
-    const std::unique_ptr<const PrefetchedSignedExchangeCache::Entry>&
+    const std::unique_ptr<const PrefetchedSignedExchangeCacheEntry>&
         page_exchange = page_it->second;
     EXPECT_EQ(sxg_page_url, page_exchange->outer_url());
     EXPECT_EQ(inner_url_page_url, page_exchange->inner_url());

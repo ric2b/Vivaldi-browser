@@ -9,17 +9,18 @@ import android.view.View;
 
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.WebContentsFactory;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.payments.handler.toolbar.PaymentHandlerToolbarCoordinator;
-import org.chromium.chrome.browser.thinwebview.ThinWebView;
-import org.chromium.chrome.browser.thinwebview.ThinWebViewConstraints;
-import org.chromium.chrome.browser.thinwebview.ThinWebViewFactory;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerProvider;
 import org.chromium.components.browser_ui.styles.R;
 import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.components.payments.PaymentFeatureList;
+import org.chromium.components.thinwebview.ThinWebView;
+import org.chromium.components.thinwebview.ThinWebViewConstraints;
+import org.chromium.components.thinwebview.ThinWebViewFactory;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.SelectionClient;
 import org.chromium.content_public.browser.SelectionPopupController;
@@ -91,9 +92,11 @@ public class PaymentHandlerCoordinator {
                 mWebContents, uiObserver, activity.getActivityTab().getView(),
                 mToolbarCoordinator.getToolbarHeightPx(),
                 calculateBottomSheetToolbarContainerTopPadding(activity),
-                activity.getLifecycleDispatcher());
+                activity.getLifecycleDispatcher(),
+                BottomSheetControllerProvider.from(activity.getWindowAndroid()));
         activity.getWindow().getDecorView().addOnLayoutChangeListener(mediator);
-        BottomSheetController bottomSheetController = activity.getBottomSheetController();
+        BottomSheetController bottomSheetController =
+                BottomSheetControllerProvider.from(activity.getWindowAndroid());
         bottomSheetController.addObserver(mediator);
         mWebContents.addObserver(mediator);
 

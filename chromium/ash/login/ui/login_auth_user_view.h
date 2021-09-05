@@ -30,6 +30,7 @@ namespace ash {
 
 class LoginPasswordView;
 class LoginPinView;
+class LoginPinInputView;
 
 // Wraps a UserView which also has authentication available. Adds additional
 // views below the UserView instance which show authentication UIs.
@@ -54,6 +55,28 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
                              // message to user.
   };
 
+  // Extra control parameters to be passed when setting the auth methods.
+  struct AuthMethodsMetadata {
+    explicit AuthMethodsMetadata() {}
+    // If the virtual keyboard is visible, the pinpad is hidden.
+    bool virtual_keyboard_visible = false;
+    // Whether to show the pinpad for the password field.
+    bool show_pinpad_for_pw = false;
+    // User's pin length to use for autosubmit.
+    size_t autosubmit_pin_length = 0;
+  };
+
+  // Possible states that the input fields (PasswordView & PinInputView)
+  // might be in. This is determined by the current authentication methods
+  // that a user has.
+  enum class InputFieldMode {
+    NONE,              // Not showing any input field.
+    PASSWORD_ONLY,     // No PIN set. Password only field.
+    PIN_AND_PASSWORD,  // PIN set, but auto-submit feature disabled.
+    PIN_WITH_TOGGLE,   // PIN field for auto submit.
+    PWD_WITH_TOGGLE    // PWD field when auto submit enabled.
+  };
+
   // TestApi is used for tests to get internal implementation details.
   class ASH_EXPORT TestApi {
    public:
@@ -63,10 +86,12 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
     LoginUserView* user_view() const;
     LoginPasswordView* password_view() const;
     LoginPinView* pin_view() const;
+    LoginPinInputView* pin_input_view() const;
+    views::Button* pin_password_toggle() const;
     views::Button* online_sign_in_message() const;
     views::View* disabled_auth_message() const;
-    views::Button* external_binary_auth_button() const;
-    views::Button* external_binary_enrollment_button() const;
+    views::Button* challenge_response_button();
+    views::Label* challenge_response_label();
     bool HasAuthMethod(AuthMethods auth_method) const;
     const base::string16& GetDisabledAuthMessageContent() const;
 
@@ -105,10 +130,14 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
   ~LoginAuthUserView() override;
 
   // Set the displayed set of auth methods. |auth_methods| contains or-ed
-  // together AuthMethod values. |can_use_pin| should be true if the user can
-  // authenticate using PIN, even if the PIN keyboard is not displayed.
-  void SetAuthMethods(uint32_t auth_methods, bool can_use_pin);
+  // together AuthMethod values. |auth_metadata| provides additional control
+  // parameters for the view. Must always be called in conjunction with
+  // `CaptureStateForAnimationPreLayout` and `ApplyAnimationPostLayout`.
+  void SetAuthMethods(
+      uint32_t auth_methods,
+      AuthMethodsMetadata auth_metadata = AuthMethodsMetadata());
   AuthMethods auth_methods() const { return auth_methods_; }
+  InputFieldMode input_field_mode() const { return input_field_mode_; }
 
   // Add an easy unlock icon.
   void SetEasyUnlockIcon(EasyUnlockIconId id,
@@ -118,8 +147,9 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
   // animation.
   void CaptureStateForAnimationPreLayout();
   // Applies animation based on current layout state compared to the most
-  // recently captured state.
-  void ApplyAnimationPostLayout();
+  // recently captured state. If `animate` is false, the previous UI state
+  // is released and no animation is performed.
+  void ApplyAnimationPostLayout(bool animate);
 
   // Update the displayed name, icon, etc to that of |user|.
   void UpdateForUser(const LoginUserInfo& user);
@@ -138,8 +168,13 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
 
   const LoginUserInfo& current_user() const;
 
+  // Provides the view that should be the anchor to message bubbles. Either the
+  // password field, or the PIN field.
+  views::View* GetActiveInputView();
   LoginPasswordView* password_view() { return password_view_; }
   LoginUserView* user_view() { return user_view_; }
+
+  bool tpm_is_locked() const { return tpm_is_locked_; }
 
   // views::View:
   gfx::Size CalculatePreferredSize() const override;
@@ -149,7 +184,7 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
  private:
-  struct AnimationState;
+  struct UiState;
   class FingerprintView;
   class ChallengeResponseView;
   class DisabledAuthMessageView;
@@ -172,8 +207,12 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
   // Called when the online sign-in message is tapped. It opens the Gaia screen.
   void OnOnlineSignInMessageTap();
 
-  // Called when the user presses the back button of the PIN keyboard.
-  void OnPinBack();
+  // Called from LoginPinView, forwards the calls to the active input field.
+  void OnPinPadBackspace();
+  void OnPinPadInsertDigit(int digit);
+  // Called from both input fields, forwards the call to LoginPinView (pin pad)
+  void OnPasswordTextChanged(bool is_empty);
+  void OnPinTextChanged(bool is_empty);
 
   // Helper method to check if an auth method is enable. Use it like this:
   // bool has_tap = HasAuthMethod(AUTH_TAP).
@@ -187,14 +226,43 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
   // starts the asynchronous authentication process against a security token.
   void AttemptAuthenticateWithChallengeResponse();
 
+  // Updates the element in focus. Used in `ApplyAnimationPostLayout`.
+  void UpdateFocus();
+
+  // Updates the UI internally when the switch button is clicked to toggle
+  // between pin and password.
+  void OnSwitchButtonClicked();
+
+  // Determines the mode of the input field based on the available
+  // authentication methods.
+  void UpdateInputFieldMode();
+
+  // Convenience methods to determine element visibility.
+  bool ShouldShowPinPad() const;
+  bool ShouldShowPasswordField() const;
+  bool ShouldShowPinInputField() const;
+  bool ShouldShowToggle() const;
+
+  // Convenience methods to determine the necessary paddings.
+  gfx::Size GetPaddingBelowUserView() const;
+  gfx::Size GetPaddingBelowPasswordView() const;
+
+  // Convenience methods to determine UI text based on the InputFieldMode.
+  base::string16 GetPinPasswordToggleText();
+  base::string16 GetPasswordViewPlaceholder() const;
+
+  // Authentication methods available and extra parameters that control the UI.
   AuthMethods auth_methods_ = AUTH_NONE;
-  // True if the user's password might be a PIN. PIN is hashed differently from
-  // password. The PIN keyboard may not always be visible even when the user
-  // wants to submit a PIN, eg. the virtual keyboard hides the PIN keyboard.
-  bool can_use_pin_ = false;
+  AuthMethodsMetadata auth_metadata_ = AuthMethodsMetadata();
+
+  // Controls which input field is currently being shown.
+  InputFieldMode input_field_mode_ = InputFieldMode::NONE;
+
   LoginUserView* user_view_ = nullptr;
   LoginPasswordView* password_view_ = nullptr;
   NonAccessibleView* password_view_container_ = nullptr;
+  LoginPinInputView* pin_input_view_ = nullptr;
+  views::LabelButton* pin_password_toggle_ = nullptr;
   LoginPinView* pin_view_ = nullptr;
   views::LabelButton* online_sign_in_message_ = nullptr;
   DisabledAuthMessageView* disabled_auth_message_ = nullptr;
@@ -202,6 +270,9 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
   ChallengeResponseView* challenge_response_view_ = nullptr;
   LockedTpmMessageView* locked_tpm_message_view_ = nullptr;
 
+  // Padding below the user view. Grows when there isn't an input field
+  // or smart card login.
+  NonAccessibleView* padding_below_user_view_ = nullptr;
   // Displays padding between:
   // 1. Password field and pin keyboard
   // 2. Password field and fingerprint view, when pin is not available.
@@ -210,12 +281,12 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
   const OnAuthCallback on_auth_;
   const LoginUserView::OnTap on_tap_;
 
-  bool tpm_is_locked_ = false;
+  // UI state that was stored before setting new authentication methods.
+  // Generated by `CaptureStateForAnimationPreLayout` and consumed by
+  // `ApplyAnimationPostLayout`.
+  std::unique_ptr<UiState> previous_state_;
 
-  // Animation state that was cached from before a layout. Generated by
-  // |CaptureStateForAnimationPreLayout| and consumed by
-  // |ApplyAnimationPostLayout|.
-  std::unique_ptr<AnimationState> cached_animation_state_;
+  bool tpm_is_locked_ = false;
 
   base::WeakPtrFactory<LoginAuthUserView> weak_factory_{this};
 

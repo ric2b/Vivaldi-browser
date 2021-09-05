@@ -7,16 +7,16 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/scoped_java_ref.h"
+#include "components/infobars/android/infobar_android.h"
 #include "components/infobars/core/infobar_delegate.h"
 #include "content/public/browser/web_contents.h"
-#include "weblayer/browser/infobar_android.h"
 
 namespace weblayer {
 
 class TestInfoBarDelegate;
 
 // A test infobar.
-class TestInfoBar : public InfoBarAndroid {
+class TestInfoBar : public infobars::InfoBarAndroid {
  public:
   explicit TestInfoBar(std::unique_ptr<TestInfoBarDelegate> delegate);
   ~TestInfoBar() override;
@@ -29,7 +29,7 @@ class TestInfoBar : public InfoBarAndroid {
  protected:
   infobars::InfoBarDelegate* GetDelegate();
 
-  // InfoBarAndroid overrides.
+  // infobars::InfoBarAndroid overrides.
   void ProcessButton(int action) override;
   base::android::ScopedJavaLocalRef<jobject> CreateRenderInfoBar(
       JNIEnv* env) override;

@@ -34,14 +34,35 @@ public final class FeedServiceBridge {
         return result;
     }
 
+    @CalledByNative
+    public static void clearAll() {
+        FeedStreamSurface.clearAll();
+    }
+
     /** Called at startup to trigger creation of |FeedService|. */
     public static void startup() {
         FeedServiceBridgeJni.get().startup();
+    }
+
+    public static String getClientInstanceId() {
+        return FeedServiceBridgeJni.get().getClientInstanceId();
+    }
+
+    /** Retrieves the config value for load_more_trigger_lookahead. */
+    public static int getLoadMoreTriggerLookahead() {
+        return FeedServiceBridgeJni.get().getLoadMoreTriggerLookahead();
+    }
+
+    public static void reportOpenVisitComplete(long visitTimeMs) {
+        FeedServiceBridgeJni.get().reportOpenVisitComplete(visitTimeMs);
     }
 
     @NativeMethods
     interface Natives {
         boolean isEnabled();
         void startup();
+        int getLoadMoreTriggerLookahead();
+        String getClientInstanceId();
+        void reportOpenVisitComplete(long visitTimeMs);
     }
 }

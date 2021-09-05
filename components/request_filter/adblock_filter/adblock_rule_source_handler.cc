@@ -394,7 +394,7 @@ void RuleSourceHandler::RulesReader::Read(RulesReadResult* read_result) {
   }
 
   if (delete_after_read_) {
-    base::DeleteFile(source_path_, false);
+    base::DeleteFile(source_path_);
   }
 
   if (read_result->fetch_result != FetchResult::kSuccess)

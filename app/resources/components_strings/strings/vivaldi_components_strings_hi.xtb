@@ -1,14 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hi">
-<translation id="1152921474424827756"><ph name="URL" /> की <ph name="BEGIN_LINK" />संचित प्रति<ph name="END_LINK" /> एक्सेस करें</translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> ने अनपेक्षित रूप से कनेक्शन बंद कर दिया है.</translation>
 <translation id="1375198122581997741">वर्शन के बारे में</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> ने कोई डेटा नहीं भेजा.</translation>
 <translation id="1559528461873125649">कोई ऐसी फ़ाइल या निर्देशिका नहीं है</translation>
 <translation id="1710259589646384581">OS</translation>
-<translation id="194030505837763158"><ph name="LINK" /> पर जाएं</translation>
-<translation id="2030481566774242610">क्या आप मतलब <ph name="LINK" /> से है?</translation>
 <translation id="2166378884831602661">यह साइट सुरक्षित कनेक्शन प्रदान नहीं कर सकती</translation>
 <translation id="2292556288342944218">आपका इंटरनेट कनेक्शन अवरुद्ध है</translation>
 <translation id="2344028582131185878">स्वचालित डाउनलोड</translation>
@@ -40,12 +37,10 @@
 <translation id="4764776831041365478"><ph name="URL" /> पर मौजूद वेबपेज संभवतः अस्थायी रूप से बंद है या उसे स्थायी रूप से किसी नए वेब पते पर ले जाया गया है.</translation>
 <translation id="5023310440958281426">अपने व्यवस्थापक की नीतियां देखें</translation>
 <translation id="5115563688576182185">(64-बिट)</translation>
-<translation id="5431657950005405462">आपकी फ़ाइल नहीं मिली</translation>
 <translation id="5452270690849572955">यह <ph name="HOST_NAME" /> पेज प्राप्त नहीं किया जा सकता</translation>
 <translation id="5492298309214877701">कंपनी, संगठन या विद्यालय के इंट्रानेट पर इस साइट का URL एक बाहरी वेबसाइट जैसा है.
     <ph name="LINE_BREAK" />
     अपने सिस्टम व्यस्थापक से संपर्क करने का प्रयास करें.</translation>
-<translation id="5510766032865166053">हो सकता है कि उसे ले जाया गया हो या हटा दिया गया हो.</translation>
 <translation id="5556459405103347317">पुन: लोड करें</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> ने आपको कई बार रीडायरेक्ट किया है.</translation>
 <translation id="5675650730144413517">यह पेज काम नहीं कर रहा है</translation>

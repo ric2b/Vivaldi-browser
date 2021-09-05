@@ -18,7 +18,6 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/url_constants.h"
-#include "net/url_request/url_request.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 
 namespace {
@@ -40,14 +39,6 @@ namespace content {
 void URLDataSource::Add(BrowserContext* browser_context,
                         std::unique_ptr<URLDataSource> source) {
   URLDataManager::AddDataSource(browser_context, std::move(source));
-}
-
-// static
-URLDataSource* URLDataSource::GetSourceForURL(BrowserContext* browser_context,
-                                              const GURL& url) {
-  return URLDataManagerBackend::GetForBrowserContext(browser_context)
-      ->GetDataSourceFromURL(url)
-      ->source();
 }
 
 // static
@@ -95,14 +86,32 @@ std::string URLDataSource::GetContentSecurityPolicy(
       return "script-src chrome://resources 'self';";
     case network::mojom::CSPDirectiveName::FrameAncestors:
       return "frame-ancestors 'none';";
+    case network::mojom::CSPDirectiveName::RequireTrustedTypesFor:
+      return "require-trusted-types-for 'script';";
+    case network::mojom::CSPDirectiveName::TrustedTypes:
+      return "trusted-types;";
+    case network::mojom::CSPDirectiveName::BaseURI:
+    case network::mojom::CSPDirectiveName::BlockAllMixedContent:
     case network::mojom::CSPDirectiveName::ConnectSrc:
-    case network::mojom::CSPDirectiveName::FormAction:
     case network::mojom::CSPDirectiveName::FrameSrc:
+    case network::mojom::CSPDirectiveName::FontSrc:
+    case network::mojom::CSPDirectiveName::FormAction:
     case network::mojom::CSPDirectiveName::ImgSrc:
+    case network::mojom::CSPDirectiveName::ManifestSrc:
     case network::mojom::CSPDirectiveName::MediaSrc:
-    case network::mojom::CSPDirectiveName::NavigateTo:
+    case network::mojom::CSPDirectiveName::PrefetchSrc:
+    case network::mojom::CSPDirectiveName::ReportURI:
+    case network::mojom::CSPDirectiveName::Sandbox:
+    case network::mojom::CSPDirectiveName::ScriptSrcAttr:
+    case network::mojom::CSPDirectiveName::ScriptSrcElem:
     case network::mojom::CSPDirectiveName::StyleSrc:
+    case network::mojom::CSPDirectiveName::StyleSrcAttr:
+    case network::mojom::CSPDirectiveName::StyleSrcElem:
+    case network::mojom::CSPDirectiveName::UpgradeInsecureRequests:
+    case network::mojom::CSPDirectiveName::TreatAsPublicAddress:
     case network::mojom::CSPDirectiveName::WorkerSrc:
+    case network::mojom::CSPDirectiveName::ReportTo:
+    case network::mojom::CSPDirectiveName::NavigateTo:
     case network::mojom::CSPDirectiveName::Unknown:
       return std::string();
   }
@@ -127,8 +136,6 @@ std::string URLDataSource::GetAccessControlAllowOriginForOrigin(
     const std::string& origin) {
   return std::string();
 }
-
-void URLDataSource::DisablePolymer2ForHost(const std::string& host) {}
 
 const ui::TemplateReplacements* URLDataSource::GetReplacements() {
   return nullptr;

@@ -28,7 +28,7 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.blink.mojom.ContactIconBlob;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeActivityTestRule;
@@ -43,6 +43,8 @@ import org.chromium.content_public.browser.test.util.TestTouchUtils;
 import org.chromium.payments.mojom.PaymentAddress;
 import org.chromium.ui.ContactsPickerListener;
 import org.chromium.ui.test.util.DisableAnimationsTestRule;
+import org.chromium.ui.vr.VrModeObserver;
+import org.chromium.ui.vr.VrModeProvider;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -67,7 +69,8 @@ public class ContactsPickerDialogTest
             new ChromeActivityTestRule<>(ChromeActivity.class);
 
     @Rule
-    public ChromeRenderTestRule mRenderTestRule = new ChromeRenderTestRule();
+    public ChromeRenderTestRule mRenderTestRule =
+            ChromeRenderTestRule.Builder.withPublicCorpus().build();
 
     // The dialog we are testing.
     private ContactsPickerDialog mDialog;
@@ -166,9 +169,20 @@ public class ContactsPickerDialogTest
                     @Override
                     public ContactsPickerDialog call() {
                         final ContactsPickerDialog dialog = new ContactsPickerDialog(
-                                mActivityTestRule.getActivity(), ContactsPickerDialogTest.this,
+                                mActivityTestRule.getActivity().getWindowAndroid(),
+                                new ChromePickerAdapter(), ContactsPickerDialogTest.this,
                                 multiselect, includeNames, includeEmails, includeTel,
-                                includeAddresses, includeIcons, "example.com");
+                                includeAddresses, includeIcons, "example.com",
+                                new VrModeProvider() {
+                                    @Override
+                                    public boolean isInVr() {
+                                        return false;
+                                    }
+                                    @Override
+                                    public void registerVrModeObserver(VrModeObserver observer) {}
+                                    @Override
+                                    public void unregisterVrModeObserver(VrModeObserver observer) {}
+                                });
                         dialog.show();
                         return dialog;
                     }

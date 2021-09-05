@@ -23,10 +23,10 @@
 #include "ash/public/cpp/app_list/app_list_controller.h"
 #include "ash/public/cpp/assistant/controller/assistant_controller_observer.h"
 #include "ash/public/cpp/keyboard/keyboard_controller_observer.h"
+#include "ash/public/cpp/session/session_observer.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
 #include "ash/public/cpp/wallpaper_controller_observer.h"
-#include "ash/session/session_observer.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell_observer.h"
 #include "ash/wm/mru_window_tracker.h"
@@ -82,6 +82,8 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
   // AppListController:
   void SetClient(AppListClient* client) override;
   AppListClient* GetClient() override;
+  void AddObserver(AppListControllerObserver* observer) override;
+  void RemoveObserver(AppListControllerObserver* obsever) override;
   void AddItem(std::unique_ptr<AppListItemMetadata> app_item) override;
   void AddItemToFolder(std::unique_ptr<AppListItemMetadata> app_item,
                        const std::string& folder_id) override;
@@ -113,6 +115,7 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
   void ResolveOemFolderPosition(
       const syncer::StringOrdinal& preferred_oem_position,
       ResolveOemFolderPositionCallback callback) override;
+  void NotifyProcessSyncChangesFinished() override;
   void DismissAppList() override;
   void GetAppInfoDialogBounds(GetAppInfoDialogBoundsCallback callback) override;
   void ShowAppList() override;
@@ -217,9 +220,6 @@ class ASH_EXPORT AppListControllerImpl : public AppListController,
   gfx::Rect SnapBoundsToDisplayEdge(const gfx::Rect& bounds) override;
   int GetShelfSize() override;
   bool IsInTabletMode() override;
-
-  void AddObserver(AppListControllerObserver* observer);
-  void RemoveObserver(AppListControllerObserver* obsever);
 
   // Notifies observers of AppList visibility changes.
   void OnVisibilityChanged(bool visible, int64_t display_id);

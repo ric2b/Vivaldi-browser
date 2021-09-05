@@ -32,8 +32,10 @@ const base::FilePath::CharType kVivaldiResourcesFolder[] =
     FILE_PATH_LITERAL("vivaldi");
 const base::FilePath::CharType kMenuFolder[] =
     FILE_PATH_LITERAL("menus");
-const base::FilePath::CharType kFileName[] =
+const base::FilePath::CharType kMainMenuFileName[] =
     FILE_PATH_LITERAL("mainmenu.json");
+const base::FilePath::CharType kContextMenuFileName[] =
+    FILE_PATH_LITERAL("contextmenu.json");
 const base::FilePath::CharType kBackupExtension[] =
     FILE_PATH_LITERAL("bak");
 
@@ -57,8 +59,16 @@ void MakeGuids(const base::FilePath& path) {
     }
     fclose(fp);
   }
-}
+} Menu_Model* model,
 */
+
+const base::FilePath::CharType* GetFileName(Menu_Model* model) {
+  if (model->mode() == Menu_Model::kMainMenu) {
+    return kMainMenuFileName;
+  } else {
+    return kContextMenuFileName;
+  }
+}
 
 // Make a backup. Note, this file only exists during startup, It is deleted
 // elsewhere once startup completes.
@@ -234,18 +244,19 @@ MenuStorage::MenuStorage(content::BrowserContext* context,
                          Menu_Model* model,
                          base::SequencedTaskRunner* sequenced_task_runner)
   : model_(model),
-    writer_(context->GetPath().Append(kFileName), sequenced_task_runner,
+    writer_(context->GetPath().Append(GetFileName(model)),
+            sequenced_task_runner,
             base::TimeDelta::FromMilliseconds(kSaveDelayMS)),
     weak_factory_(this) {
   // Set up bundled file. We will use a developer version of this file if
   // appropriate (non official build and using load-and-launch-app) to simplify
   // testing and general workflow. Note that if there is a proper file present
   // in the profile it will overrule this bundled file regardless of type.
-  if (!vivaldi::GetDeveloperFilePath(kFileName, &bundled_file_)) {
+  if (!vivaldi::GetDeveloperFilePath(GetFileName(model), &bundled_file_)) {
     base::PathService::Get(chrome::DIR_RESOURCES, &bundled_file_);
     bundled_file_ = bundled_file_.Append(kVivaldiResourcesFolder)
                                  .Append(kMenuFolder)
-                                 .Append(kFileName);
+                                 .Append(GetFileName(model));
   }
 
   sequenced_task_runner_ = sequenced_task_runner;

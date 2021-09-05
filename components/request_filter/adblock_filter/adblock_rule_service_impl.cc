@@ -7,6 +7,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "components/request_filter/adblock_filter/adblock_cosmetic_filter.h"
 #include "components/request_filter/adblock_filter/adblock_known_sources_handler.h"
 #include "components/request_filter/adblock_filter/adblock_request_filter.h"
@@ -39,13 +41,14 @@ void RuleServiceImpl::RemoveObserver(Observer* observer) {
   observers_.RemoveObserver(observer);
 }
 
-void RuleServiceImpl::Load(
-    scoped_refptr<base::SequencedTaskRunner> task_runner) {
+void RuleServiceImpl::Load() {
   DCHECK(!is_loaded_ && !state_store_);
-  file_task_runner_ = task_runner;
-  resources_.emplace(task_runner.get());
+  file_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+       base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
+  resources_.emplace(file_task_runner_.get());
 
-  state_store_.emplace(context_, this, task_runner.get());
+  state_store_.emplace(context_, this, file_task_runner_.get());
 
   // Unretained is safe because we own the sources store
   state_store_->Load(

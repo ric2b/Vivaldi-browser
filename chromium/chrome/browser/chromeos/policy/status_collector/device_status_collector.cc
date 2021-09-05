@@ -46,6 +46,7 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
 #include "chrome/browser/chromeos/crostini/crostini_reporting_util.h"
+#include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/guest_os/guest_os_registry_service.h"
 #include "chrome/browser/chromeos/guest_os/guest_os_registry_service_factory.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
@@ -531,7 +532,7 @@ bool AddCrostiniAppInfo(
         crostini::GetThreeDayWindowStart(last_launch_time).ToJavaTime());
   }
 
-  if (registration.is_terminal_app()) {
+  if (registration.app_id() == crostini::kCrostiniTerminalSystemAppId) {
     app->set_app_type(em::CROSTINI_APP_TYPE_TERMINAL);
     // We do not log package information if the App is the terminal:
     return true;
@@ -715,11 +716,13 @@ class DeviceStatusCollectorState : public StatusCollectorState {
 
   void FetchCrosHealthdData(
       const policy::DeviceStatusCollector::CrosHealthdDataFetcher&
-          cros_healthd_data_fetcher) {
+          cros_healthd_data_fetcher,
+      bool report_system_info,
+      bool report_vpd_info) {
     cros_healthd_data_fetcher.Run(
         CrosHealthdCollectionMode::kFull,
         base::BindOnce(&DeviceStatusCollectorState::OnCrosHealthdDataReceived,
-                       this));
+                       this, report_system_info, report_vpd_info));
   }
 
   void FetchEMMCLifeTime(
@@ -819,6 +822,8 @@ class DeviceStatusCollectorState : public StatusCollectorState {
 
   // Stores the contents of |probe_result| and |samples| to |response_params_|.
   void OnCrosHealthdDataReceived(
+      bool report_system_info,
+      bool report_vpd_info,
       chromeos::cros_healthd::mojom::TelemetryInfoPtr probe_result,
       const base::circular_deque<std::unique_ptr<SampledData>>& samples) {
     namespace cros_healthd = chromeos::cros_healthd::mojom;
@@ -879,28 +884,94 @@ class DeviceStatusCollectorState : public StatusCollectorState {
               disk_info_out->set_discard_time_seconds_since_last_boot(
                   discard_time->value);
             }
+
+            // vendor_id
+            const auto& vendor_id = storage->vendor_id;
+            switch (vendor_id->which()) {
+              case chromeos::cros_healthd::mojom::BlockDeviceVendor::Tag::
+                  NVME_SUBSYSTEM_VENDOR:
+                disk_info_out->set_nvme_subsystem_vendor(
+                    vendor_id->get_nvme_subsystem_vendor());
+                break;
+              case chromeos::cros_healthd::mojom::BlockDeviceVendor::Tag::
+                  EMMC_OEMID:
+                disk_info_out->set_emmc_oemid(vendor_id->get_emmc_oemid());
+                break;
+              case chromeos::cros_healthd::mojom::BlockDeviceVendor::Tag::OTHER:
+                disk_info_out->set_other_vendor(vendor_id->get_other());
+                break;
+            }
+
+            // product_id
+            const auto& product_id = storage->product_id;
+            switch (product_id->which()) {
+              case chromeos::cros_healthd::mojom::BlockDeviceProduct::Tag::
+                  NVME_SUBSYSTEM_DEVICE:
+                disk_info_out->set_nvme_subsystem_device(
+                    product_id->get_nvme_subsystem_device());
+                break;
+              case chromeos::cros_healthd::mojom::BlockDeviceProduct::Tag::
+                  EMMC_PNM:
+                disk_info_out->set_emmc_pnm(product_id->get_emmc_pnm());
+                break;
+              case chromeos::cros_healthd::mojom::BlockDeviceProduct::Tag::
+                  OTHER:
+                disk_info_out->set_other_product(product_id->get_other());
+                break;
+            }
+
+            // revision
+            const auto& revision = storage->revision;
+            switch (revision->which()) {
+              case chromeos::cros_healthd::mojom::BlockDeviceRevision::Tag::
+                  NVME_PCIE_REV:
+                disk_info_out->set_nvme_hardware_rev(
+                    revision->get_nvme_pcie_rev());
+                break;
+              case chromeos::cros_healthd::mojom::BlockDeviceRevision::Tag::
+                  EMMC_PRV:
+                disk_info_out->set_emmc_hardware_rev(revision->get_emmc_prv());
+                break;
+              case chromeos::cros_healthd::mojom::BlockDeviceRevision::Tag::
+                  OTHER:
+                disk_info_out->set_other_hardware_rev(revision->get_other());
+                break;
+            }
+
+            // firmware version
+            const auto& fw_version = storage->firmware_version;
+            switch (fw_version->which()) {
+              case chromeos::cros_healthd::mojom::BlockDeviceFirmware::Tag::
+                  NVME_FIRMWARE_REV:
+                disk_info_out->set_nvme_firmware_rev(
+                    fw_version->get_nvme_firmware_rev());
+                break;
+              case chromeos::cros_healthd::mojom::BlockDeviceFirmware::Tag::
+                  EMMC_FWREV:
+                disk_info_out->set_emmc_firmware_rev(
+                    fw_version->get_emmc_fwrev());
+                break;
+              case chromeos::cros_healthd::mojom::BlockDeviceFirmware::Tag::
+                  OTHER:
+                disk_info_out->set_other_firmware_rev(fw_version->get_other());
+                break;
+            }
+
+            switch (storage->purpose) {
+              case chromeos::cros_healthd::mojom::StorageDevicePurpose::
+                  kUnknown:
+                disk_info_out->set_purpose(em::DiskInfo::PURPOSE_UNKNOWN);
+                break;
+              case chromeos::cros_healthd::mojom::StorageDevicePurpose::
+                  kBootDevice:
+                disk_info_out->set_purpose(em::DiskInfo::PURPOSE_BOOT);
+                break;
+              case chromeos::cros_healthd::mojom::StorageDevicePurpose::
+                  kSwapDevice:
+                disk_info_out->set_purpose(em::DiskInfo::PURPOSE_SWAP);
+                break;
+            }
           }
-          break;
-        }
-      }
-    }
-
-    // Process CachedVpdResult.
-    const auto& vpd_result = probe_result->vpd_result;
-    if (!vpd_result.is_null()) {
-      switch (vpd_result->which()) {
-        case cros_healthd::CachedVpdResult::Tag::ERROR: {
-          LOG(ERROR) << "cros_healthd: Error getting cached VPD info: "
-                     << vpd_result->get_error()->msg;
-          break;
-        }
-
-        case cros_healthd::CachedVpdResult::Tag::VPD_INFO: {
-          const auto& vpd_info = vpd_result->get_vpd_info();
-          em::SystemStatus* const system_status_out =
-              response_params_.device_status->mutable_system_status();
-          if (vpd_info->sku_number.has_value())
-            system_status_out->set_vpd_sku_number(vpd_info->sku_number.value());
           break;
         }
       }
@@ -1140,6 +1211,62 @@ class DeviceStatusCollectorState : public StatusCollectorState {
         }
       }
     }
+
+    // Process SystemResult.
+    const auto& system_result = probe_result->system_result;
+    if (!system_result.is_null()) {
+      switch (system_result->which()) {
+        case cros_healthd::SystemResult::Tag::ERROR: {
+          LOG(ERROR) << "cros_healthd: Error getting system info: "
+                     << system_result->get_error()->msg;
+          break;
+        }
+
+        case cros_healthd::SystemResult::Tag::SYSTEM_INFO: {
+          const auto& system_info = system_result->get_system_info();
+          em::SystemStatus* const system_status_out =
+              response_params_.device_status->mutable_system_status();
+          if (report_vpd_info) {
+            if (system_info->first_power_date.has_value()) {
+              system_status_out->set_first_power_date(
+                  system_info->first_power_date.value());
+            }
+            if (system_info->manufacture_date.has_value()) {
+              system_status_out->set_manufacture_date(
+                  system_info->manufacture_date.value());
+            }
+            if (system_info->product_sku_number.has_value()) {
+              system_status_out->set_vpd_sku_number(
+                  system_info->product_sku_number.value());
+            }
+          }
+          if (report_system_info) {
+            system_status_out->set_marketing_name(system_info->marketing_name);
+            if (system_info->bios_version.has_value()) {
+              system_status_out->set_bios_version(
+                  system_info->bios_version.value());
+            }
+            if (system_info->board_name.has_value()) {
+              system_status_out->set_board_name(
+                  system_info->board_name.value());
+            }
+            if (system_info->board_version.has_value()) {
+              system_status_out->set_board_version(
+                  system_info->board_version.value());
+            }
+            if (system_info->chassis_type) {
+              system_status_out->set_chassis_type(
+                  system_info->chassis_type->value);
+            }
+            if (system_info->product_name.has_value()) {
+              system_status_out->set_product_name(
+                  system_info->product_name.value());
+            }
+          }
+          break;
+        }
+      }
+    }
   }
 
   void OnEMMCLifetimeReceived(const em::DiskLifetimeEstimation& est) {
@@ -1328,6 +1455,8 @@ DeviceStatusCollector::DeviceStatusCollector(
       chromeos::kReportDeviceVpdInfo, callback);
   app_info_subscription_ = cros_settings_->AddSettingsObserver(
       chromeos::kReportDeviceAppInfo, callback);
+  system_info_subscription_ = cros_settings_->AddSettingsObserver(
+      chromeos::kReportDeviceSystemInfo, callback);
   stats_reporting_pref_subscription_ = cros_settings_->AddSettingsObserver(
       chromeos::kStatsReportingPref, callback);
 
@@ -1479,6 +1608,10 @@ void DeviceStatusCollector::UpdateReportingSettings() {
   if (!cros_settings_->GetBoolean(chromeos::kReportDeviceBluetoothInfo,
                                   &report_bluetooth_info_)) {
     report_bluetooth_info_ = false;
+  }
+  if (!cros_settings_->GetBoolean(chromeos::kReportDeviceSystemInfo,
+                                  &report_system_info_)) {
+    report_system_info_ = false;
   }
   if (!cros_settings_->GetBoolean(chromeos::kReportDeviceFanInfo,
                                   &report_fan_info_)) {
@@ -1771,8 +1904,8 @@ void DeviceStatusCollector::FetchCrosHealthdData(
   SamplingProbeResultCallback completion_callback;
   switch (mode) {
     case CrosHealthdCollectionMode::kFull: {
-      if (report_vpd_info_)
-        categories_to_probe.push_back(ProbeCategoryEnum::kCachedVpdData);
+      if (report_vpd_info_ || report_system_info_)
+        categories_to_probe.push_back(ProbeCategoryEnum::kSystem);
       if (report_storage_status_) {
         categories_to_probe.push_back(
             ProbeCategoryEnum::kNonRemovableBlockDevices);
@@ -1823,7 +1956,8 @@ void DeviceStatusCollector::OnProbeDataFetched(
 bool DeviceStatusCollector::ShouldFetchCrosHealthdData() const {
   return report_vpd_info_ || report_power_status_ || report_storage_status_ ||
          report_cpu_info_ || report_timezone_info_ || report_memory_info_ ||
-         report_backlight_info_ || report_fan_info_ || report_bluetooth_info_;
+         report_backlight_info_ || report_fan_info_ || report_bluetooth_info_ ||
+         report_system_info_;
 }
 
 void DeviceStatusCollector::ReportingUsersChanged() {
@@ -2155,7 +2289,8 @@ bool DeviceStatusCollector::GetHardwareStatus(
     state->FetchEMMCLifeTime(emmc_lifetime_fetcher_);
 
   if (ShouldFetchCrosHealthdData()) {
-    state->FetchCrosHealthdData(cros_healthd_data_fetcher_);
+    state->FetchCrosHealthdData(cros_healthd_data_fetcher_, report_system_info_,
+                                report_vpd_info_);
   } else {
     // Sample CPU temperature in a background thread.
     state->SampleCPUTempInfo(cpu_temp_fetcher_);

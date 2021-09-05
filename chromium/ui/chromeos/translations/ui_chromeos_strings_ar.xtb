@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">نظارات شمسية</translation>
 <translation id="115443833402798225">هانغول أهنماتي</translation>
 <translation id="1155759005174418845">الكتالانية</translation>
+<translation id="1172970565351728681">تبقّى <ph name="REMAINING_TIME" /> تقريبًا</translation>
 <translation id="1173894706177603556">إعادة تسمية</translation>
 <translation id="117624967391683467">جارٍ نسخ <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">الإيقاف مؤقتًا</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">هناك ملف بالاسم "<ph name="FILENAME" />" موجود فعلاً. ما الإجراء الذي تريد تنفيذه؟</translation>
 <translation id="2121825465123208577">تغيير الحجم</translation>
 <translation id="2136953289241069843">‏التحويل الصوتي (ناماستي ← नमस्कार)</translation>
-<translation id="2138867954865495510">يتعذَّر فتح "<ph name="PATH" />": <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">حرف غير صالح: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">‏لوحة المفاتيح الفيتنامية (TCVN)</translation>
 <translation id="2168214441502403371">لوحة المفاتيح الفارسية</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">سيتم نقل الملكية إلى <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">الأيرلندية</translation>
 <translation id="3245321423178950146">فنان غير معروف</translation>
+<translation id="3248185426436836442">معلَّق</translation>
 <translation id="3252266817569339921">الفرنسية</translation>
 <translation id="3254434849914415189">اختر التطبيق التلقائي لملفات <ph name="FILE_TYPE" />:</translation>
 <translation id="3264582393905923483">السياق</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">عام التسجيل</translation>
 <translation id="3338239663705455570">لوحة المفاتيح السلوفينية</translation>
 <translation id="3353984535370177728">حدد مجلدًا لتحميله</translation>
+<translation id="3356580349448036450">مكتمل</translation>
 <translation id="3399597614303179694">لوحة مفاتيح باللغة المقدونية</translation>
 <translation id="3414856743105198592">يؤدي تنسيق الوسائط القابلة للإزالة إلى مسح جميع البيانات. هل تريد المتابعة؟</translation>
 <translation id="3437801641691368414">وقت الإنشاء</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">ليس لديك إذن لنقل الملفات إلى '<ph name="FOLDER_NAME" />'.</translation>
 <translation id="3786301125658655746">أنت غير متصل بالإنترنت.</translation>
 <translation id="3789841737615482174">تثبيت</translation>
+<translation id="3793469551756281394">تبقّى <ph name="REMAINING_TIME_HOUR" /> و<ph name="REMAINING_TIME_MINUTE" /> تقريبًا</translation>
 <translation id="3798449238516105146">الإصدار</translation>
 <translation id="3801082500826908679">الفاروية</translation>
 <translation id="3809272675881623365">أرنب</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">‏تمّت مشاركة هذا المجلد مع نظام التشغيل Windows.</translation>
 <translation id="4487088045714738411">لوحة المفاتيح البلجيكية</translation>
 <translation id="4522570452068850558">التفاصيل</translation>
+<translation id="4542387084127299777">يتعذّر فتح "<ph name="PATH" />".</translation>
 <translation id="4552678318981539154">شراء المزيد من مساحة التخزين</translation>
 <translation id="4559767610552730302">‏تأثير Bokeh</translation>
 <translation id="4572815280350369984">ملف <ph name="FILE_TYPE" /></translation>
@@ -511,6 +515,7 @@
 <translation id="6629841649550503054">‏تم نسخ جميع العناصر احتياطيًا في <ph name="BEGIN_LINK" />Google Drive.<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">محو</translation>
 <translation id="6650726141019353908">فراشة وردية</translation>
+<translation id="6657585470893396449">كلمة المرور</translation>
 <translation id="6710213216561001401">السابق</translation>
 <translation id="6718273304615422081">جارٍ الضغط...</translation>
 <translation id="6751256176799620176">تم اختيار مجلد واحد</translation>
@@ -551,7 +556,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">تعذّر التثبيت.</translation>
 <translation id="7040138676081995583">فتح باستخدام...</translation>
-<translation id="7059566040011178088">يتبقّى أقل من <ph name="REMAINING_TIME" />.</translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> من العناصر المحددة</translation>
 <translation id="7106346894903675391">شراء المزيد من مساحة التخزين...</translation>
 <translation id="7126604456862387217">‏'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;البحث في Drive&lt;/em&gt;</translation>
@@ -652,7 +656,7 @@
 <translation id="8137331602592933310">تمت مشاركة "<ph name="FILENAME" />" معك. لا يمكنك حذفه، نظرًا لأنك لا تمتلكه.</translation>
 <translation id="8145409227593688472">‏أسلوب الإدخال لنظام Wubi</translation>
 <translation id="8148264977957212129">‏أسلوب الإدخال لنظام Pinyin</translation>
-<translation id="8151638057146502721">تهيئة</translation>
+<translation id="8151638057146502721">إعداد</translation>
 <translation id="8153607920959057464">يتعذر عرض هذا الملف.</translation>
 <translation id="8154842056504218462">تم اختيار جميع الإدخالات.</translation>
 <translation id="8157684860301034423">تعذّر جلب معلومات التطبيق.</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">طراز الجهاز</translation>
 <translation id="8208580316430297579">عمل فني</translation>
 <translation id="8223479393428528563">لحفظ هذه الملفات بلا اتصال، عليك العودة للاتصال انقر بزر الماوس الأيمن على الملفات، وحدد خيار <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">يتبقّى حوالي <ph name="REMAINING_TIME" />.</translation>
 <translation id="8249296373107784235">إلغاء</translation>
 <translation id="8261506727792406068">حذف</translation>
 <translation id="8269755669432358899">تصغير لوحات التعليقات على الملفات</translation>
@@ -725,6 +728,7 @@
 <translation id="9065203028668620118">تعديل</translation>
 <translation id="9099674669267916096">عدد الصفحات</translation>
 <translation id="9110990317705400362">‏نحن نبحث باستمرار عن طرق من شأنها زيادة أمان تجربة تصفحك. في السابق، كان من الممكن لأي موقع إلكتروني أن يطالبك بتثبيت إضافة في متصفحك. أما في أحدث إصدارات Google Chrome، فيجب أن تبلغ Chrome صراحة أنك تريد تثبيت هذه الإضافات عن طريق إضافتها عبر صفحة الإضافات. <ph name="BEGIN_LINK" />مزيد من المعلومات<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">فتح القفل</translation>
 <translation id="912419004897138677">برنامج ترميز</translation>
 <translation id="9129931661813833980">تثبيت المجلد</translation>
 <translation id="9130775360844693113">سيحصل أعضاء '<ph name="DESTINATION_NAME" />' على إمكانية الوصول إلى هذه العناصر.</translation>

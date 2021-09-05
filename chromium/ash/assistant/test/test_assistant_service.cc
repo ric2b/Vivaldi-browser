@@ -25,10 +25,10 @@ using chromeos::assistant::AssistantSuggestion;
 //    - A conversation is finished before starting a new one.
 //    - No responses (text, card, ...) are sent before starting or after
 //    finishing an interaction.
-class SanityCheckSubscriber : public AssistantInteractionSubscriber {
+class LibassistantContractChecker : public AssistantInteractionSubscriber {
  public:
-  SanityCheckSubscriber() = default;
-  ~SanityCheckSubscriber() override = default;
+  LibassistantContractChecker() = default;
+  ~LibassistantContractChecker() override = default;
 
   // DefaultAssistantInteractionSubscriber implementation:
   void OnInteractionStarted(
@@ -68,7 +68,7 @@ class SanityCheckSubscriber : public AssistantInteractionSubscriber {
   bool OnOpenAppResponse(
       const chromeos::assistant::AndroidAppInfo& app_info) override {
     CheckResponse();
-    return true;
+    return false;
   }
 
  private:
@@ -89,7 +89,7 @@ class SanityCheckSubscriber : public AssistantInteractionSubscriber {
 
   ConversationState current_state_ = ConversationState::kNotStarted;
 
-  DISALLOW_COPY_AND_ASSIGN(SanityCheckSubscriber);
+  DISALLOW_COPY_AND_ASSIGN(LibassistantContractChecker);
 };
 
 // Subscriber that tracks the current interaction.
@@ -187,10 +187,11 @@ class ResolutionResponse : public InteractionResponse::Response {
 };
 
 TestAssistantService::TestAssistantService()
-    : sanity_check_subscriber_(std::make_unique<SanityCheckSubscriber>()),
+    : libassistant_contract_checker_(
+          std::make_unique<LibassistantContractChecker>()),
       current_interaction_subscriber_(
           std::make_unique<CurrentInteractionSubscriber>()) {
-  AddAssistantInteractionSubscriber(sanity_check_subscriber_.get());
+  AddAssistantInteractionSubscriber(libassistant_contract_checker_.get());
   AddAssistantInteractionSubscriber(current_interaction_subscriber_.get());
 }
 
@@ -228,10 +229,6 @@ void TestAssistantService::StartVoiceInteraction() {
     SendInteractionResponse();
 }
 
-void TestAssistantService::StartWarmerWelcomeInteraction(
-    int num_warmer_welcome_triggered,
-    bool allow_tts) {}
-
 void TestAssistantService::StopActiveInteraction(bool cancel_conversation) {
   if (!running_active_interaction_)
     return;
@@ -254,11 +251,11 @@ void TestAssistantService::RemoveAssistantInteractionSubscriber(
 }
 
 void TestAssistantService::RetrieveNotification(
-    const chromeos::assistant::mojom::AssistantNotification& notification,
+    const chromeos::assistant::AssistantNotification& notification,
     int action_index) {}
 
 void TestAssistantService::DismissNotification(
-    const chromeos::assistant::mojom::AssistantNotification& notification) {}
+    const chromeos::assistant::AssistantNotification& notification) {}
 
 void TestAssistantService::OnAccessibilityStatusChanged(
     bool spoken_feedback_enabled) {}
@@ -270,8 +267,7 @@ void TestAssistantService::NotifyEntryIntoAssistantUi(
     chromeos::assistant::AssistantEntryPoint entry_point) {}
 
 void TestAssistantService::AddTimeToTimer(const std::string& id,
-                                          base::TimeDelta duration) {
-}
+                                          base::TimeDelta duration) {}
 
 void TestAssistantService::PauseTimer(const std::string& id) {}
 

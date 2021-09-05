@@ -21,10 +21,10 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
 #include "chrome/browser/android/vr/arcore_device/ar_image_transport.h"
-#include "chrome/browser/android/vr/arcore_device/arcore_impl.h"
 #include "chrome/browser/android/vr/arcore_device/arcore_session_utils.h"
-#include "chrome/browser/android/vr/arcore_device/type_converters.h"
 #include "chrome/browser/android/vr/web_xr_presentation_state.h"
+#include "device/vr/android/arcore/arcore.h"
+#include "device/vr/android/arcore/type_converters.h"
 #include "device/vr/public/mojom/pose.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "gpu/ipc/common/gpu_memory_buffer_impl_android_hardware_buffer.h"
@@ -259,8 +259,20 @@ bool ArCoreGl::InitializeGl(gfx::AcceleratedWidget drawing_widget) {
     return false;
   }
 
+  gl::GLContextAttribs context_attribs;
+  // When using augmented images or certain other ARCore features that involve a
+  // frame delay, ARCore's shared EGL context needs to be compatible with ours.
+  // Any mismatches result in a EGL_BAD_MATCH error, including different reset
+  // notification behavior according to
+  // https://www.khronos.org/registry/EGL/specs/eglspec.1.5.pdf page 56.
+  // Chromium defaults to lose context on reset when the robustness extension is
+  // present, even if robustness features are not requested specifically.
+  context_attribs.client_major_es_version = 3;
+  context_attribs.client_minor_es_version = 0;
+  context_attribs.lose_context_on_reset = false;
+
   scoped_refptr<gl::GLContext> context =
-      gl::init::CreateGLContext(nullptr, surface.get(), gl::GLContextAttribs());
+      gl::init::CreateGLContext(nullptr, surface.get(), context_attribs);
   if (!context.get()) {
     DLOG(ERROR) << "gl::init::CreateGLContext failed";
     return false;
@@ -411,9 +423,9 @@ void ArCoreGl::GetFrameData(
 
     frame_data->stage_parameters_updated = true;
     frame_data->stage_parameters = mojom::VRStageParameters::New();
-    frame_data->stage_parameters->standing_transform = gfx::Transform();
-    frame_data->stage_parameters->standing_transform.Translate3d(
-        0, *floor_height_estimate_, 0);
+    frame_data->stage_parameters->mojo_from_floor = gfx::Transform();
+    frame_data->stage_parameters->mojo_from_floor.Translate3d(
+        0, (-1 * *floor_height_estimate_), 0);
   }
 
   frame_data->frame_id = webxr_->StartFrameAnimating();
@@ -434,6 +446,13 @@ void ArCoreGl::GetFrameData(
     gpu::MailboxHolder buffer_holder = ar_image_transport_->TransferFrame(
         webxr_.get(), transfer_size_, uv_transform_);
     frame_data->buffer_holder = buffer_holder;
+
+    if (IsFeatureEnabled(device::mojom::XRSessionFeature::CAMERA_ACCESS)) {
+      gpu::MailboxHolder camera_image_buffer_holder =
+          ar_image_transport_->TransferCameraImageFrame(
+              webxr_.get(), transfer_size_, uv_transform_);
+      frame_data->camera_image_buffer_holder = camera_image_buffer_holder;
+    }
   }
 
   // Create the frame data to return to the renderer.
@@ -869,7 +888,7 @@ void ArCoreGl::ProcessFrame(
   frame_data->anchors_data = arcore_->GetAnchorsData();
 
   // Get planes data if it was requested.
-  if (options && options->include_plane_data) {
+  if (IsFeatureEnabled(device::mojom::XRSessionFeature::PLANE_DETECTION)) {
     frame_data->detected_planes_data = arcore_->GetDetectedPlanesData();
   }
 
@@ -1069,6 +1088,10 @@ std::vector<mojom::XRInputSourceStatePtr> ArCoreGl::GetInputSourceStates() {
   screen_touch_events_.swap(still_touching_events);
 
   return result;
+}
+
+bool ArCoreGl::IsFeatureEnabled(mojom::XRSessionFeature feature) {
+  return base::Contains(enabled_features_, feature);
 }
 
 void ArCoreGl::Pause() {

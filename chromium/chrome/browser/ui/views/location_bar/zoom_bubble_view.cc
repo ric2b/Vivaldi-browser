@@ -33,6 +33,7 @@
 #include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/grit/extensions_browser_resources.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/favicon_size.h"
@@ -136,8 +137,7 @@ bool IsBrowserFullscreen(Browser* browser) {
 views::View* GetAnchorViewForBrowser(Browser* browser) {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   if (!IsBrowserFullscreen(browser) || browser_view->IsToolbarVisible() ||
-      browser_view->immersive_mode_controller()->IsRevealed() ||
-      browser->app_controller()) {
+      browser_view->immersive_mode_controller()->IsRevealed()) {
     return browser_view->toolbar_button_provider()->GetAnchorView(
         PageActionIconType::kZoom);
   }
@@ -401,7 +401,6 @@ void ZoomBubbleView::Init() {
   auto label = std::make_unique<ZoomValue>(web_contents());
   label->SetProperty(views::kMarginsKey, gfx::Insets(label_margin));
   label_ = label.get();
-  UpdateZoomPercent();
   AddChildView(std::move(label));
 
   // Add Zoom Out ("-") button.
@@ -417,7 +416,7 @@ void ZoomBubbleView::Init() {
                                gfx::Insets(vector_button_margin));
 
   // Add "Reset" button.
-  auto reset_button = views::MdTextButton::Create(
+  auto reset_button = std::make_unique<views::MdTextButton>(
       this, l10n_util::GetStringUTF16(IDS_ZOOM_SET_DEFAULT));
   reset_button->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_ACCNAME_ZOOM_SET_DEFAULT));
@@ -428,6 +427,7 @@ void ZoomBubbleView::Init() {
   zoom_level_alert_ = zoom_level_alert.get();
   GetViewAccessibility().AddVirtualChildView(std::move(zoom_level_alert));
 
+  UpdateZoomPercent();
   StartTimerIfNecessary();
 }
 
@@ -536,6 +536,19 @@ void ZoomBubbleView::SetExtensionInfo(const extensions::Extension* extension) {
 void ZoomBubbleView::UpdateZoomPercent() {
   label_->SetText(base::FormatPercent(
       zoom::ZoomController::FromWebContents(web_contents())->GetZoomPercent()));
+
+  // Disable buttons at min, max and default
+  auto* zoom_controller = zoom::ZoomController::FromWebContents(web_contents());
+  double current_zoom_level = zoom_controller->GetZoomLevel();
+  double default_zoom_level = zoom_controller->GetDefaultZoomLevel();
+  std::vector<double> zoom_levels =
+      zoom::PageZoom::PresetZoomLevels(default_zoom_level);
+  DCHECK(zoom_out_button_);
+  zoom_out_button_->SetEnabled(
+      !blink::PageZoomValuesEqual(zoom_levels.front(), current_zoom_level));
+  DCHECK(zoom_in_button_);
+  zoom_in_button_->SetEnabled(
+      !blink::PageZoomValuesEqual(zoom_levels.back(), current_zoom_level));
 }
 
 void ZoomBubbleView::UpdateZoomIconVisibility() {

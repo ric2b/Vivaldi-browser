@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Elemento de lista</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Desliza dos dedos hacia la derecha</translation>
+<translation id="1016393160682012902">Pulsa una tecla del teclado QWERTY, una tecla de braille actualizable o un gesto táctil para saber su función. Para salir, pulsa Ctrl + W o Esc.</translation>
 <translation id="1022586497894531524">¿Es la primera vez que utilizas los mensajes de voz de ChromeVox? En este rápido tutorial encontrarás los conceptos básicos para empezar a utilizar ChromeVox.</translation>
 <translation id="1025074108959230262">Modo persistente inhabilitado</translation>
 <translation id="1031961866430398710">y</translation>
@@ -32,7 +33,7 @@
 <translation id="1207086294218137981">No hay ningún título de nivel 4 posterior</translation>
 <translation id="1212770441379271564">Aunque las siguientes combinaciones de teclas no son comandos de ChromeVox, siguen resultando muy útiles para sacar el máximo partido a Chrome.
     Para desplazarte hacia adelante por los elementos accionables, como botones y enlaces, pulsa el tabulador. Para retroceder, pulsa Mayús + Tabulador.
-    Para acceder al cuadro de direcciones del navegador Chrome, también denominado omnibox, pulsa Control + L.
+    Para acceder a la barra de direcciones del navegador Chrome, también denominada omnibox, pulsa Control + L.
     Para abrir una nueva pestaña y acceder automáticamente a ella, pulsa Control + T. El cursor se situará en el omnibox.
     Para cerrar una pestaña, pulsa Control + W.
     Para desplazarte hacia adelante por las pestañas abiertas, utiliza Control + Tabulador.
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Enlace interno</translation>
 <translation id="4909019435900810068">Retroceder una palabra</translation>
 <translation id="4911349081560453449">No hay ninguna casilla anterior</translation>
-<translation id="4915087353619183190">Se está iniciando el modo de aprendizaje. Pulsa una tecla del teclado QWERTY, una tecla de braille actualizable o un gesto táctil para saber su función. Para salir, pulsa Ctrl + W o Esc.</translation>
 <translation id="492295894462528572">Prefacio</translation>
 <translation id="495046168593986294">Desplazarse hacia arriba</translation>
 <translation id="495170559598752135">Acciones</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Verde</translation>
 <translation id="602001110135236999">Desplazar a la izquierda</translation>
 <translation id="6034000775414344507">Gris claro</translation>
+<translation id="6036135911048686884">Toca para explorar</translation>
 <translation id="6037602951055904232">Se desplaza hacia delante</translation>
 <translation id="6044160928851315051">Oscurecer la pantalla</translation>
 <translation id="6082768461603900813">Navegación básica</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{almohadilla}other{# almohadillas}}</translation>
 <translation id="8378855320830505539">Región</translation>
 <translation id="8382679411218029383">Autocompletados insertados y lista de autocompletados</translation>
+<translation id="8394908167088220973">Pausar/Reproducir contenido multimedia</translation>
 <translation id="8428213095426709021">Configuración</translation>
 <translation id="8428603554127842284">nivel <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">sale del contenido estructurado (por ejemplo, tablas)</translation>
 <translation id="8779057862865475116">No hay ningún enlace anterior</translation>
 <translation id="8796411681063377102">Siguiente encabezado de nivel 3</translation>
+<translation id="8823311177246872527">Página <ph name="CURRENTPAGE" /> de <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">principal</translation>
 <translation id="8882002077197914455">Encabezado de fila</translation>

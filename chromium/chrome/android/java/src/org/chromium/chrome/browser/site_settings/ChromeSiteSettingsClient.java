@@ -8,11 +8,13 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 
+import androidx.annotation.Nullable;
 import androidx.preference.Preference;
 
 import org.chromium.base.Callback;
 import org.chromium.base.CommandLine;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.browserservices.permissiondelegation.TrustedWebActivityPermissionManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.notifications.channels.SiteChannelsManager;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -25,7 +27,9 @@ import org.chromium.components.browser_ui.site_settings.SiteSettingsClient;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsHelpClient;
 import org.chromium.components.browser_ui.site_settings.WebappSettingsClient;
 import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
+import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.embedder_support.browser_context.BrowserContextHandle;
+import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.common.ContentSwitches;
 
@@ -42,18 +46,19 @@ public class ChromeSiteSettingsClient implements SiteSettingsClient {
     private static final float FAVICON_TEXT_SIZE_FRACTION = 0.625f;
 
     private final Context mContext;
+    private final BrowserContextHandle mBrowserContext;
     private ChromeSiteSettingsHelpClient mChromeSiteSettingsHelpClient;
-    private ChromeSiteSettingsPrefClient mChromeSiteSettingsPrefClient;
     private ChromeWebappSettingsClient mChromeWebappSettingsClient;
     private ManagedPreferenceDelegate mManagedPreferenceDelegate;
 
-    public ChromeSiteSettingsClient(Context context) {
+    public ChromeSiteSettingsClient(Context context, BrowserContextHandle browserContext) {
         mContext = context;
+        mBrowserContext = browserContext;
     }
 
     @Override
     public BrowserContextHandle getBrowserContextHandle() {
-        return Profile.getLastUsedRegularProfile();
+        return mBrowserContext;
     }
 
     @Override
@@ -75,14 +80,6 @@ public class ChromeSiteSettingsClient implements SiteSettingsClient {
             mChromeSiteSettingsHelpClient = new ChromeSiteSettingsHelpClient();
         }
         return mChromeSiteSettingsHelpClient;
-    }
-
-    @Override
-    public ChromeSiteSettingsPrefClient getSiteSettingsPrefClient() {
-        if (mChromeSiteSettingsPrefClient == null) {
-            mChromeSiteSettingsPrefClient = new ChromeSiteSettingsPrefClient();
-        }
-        return mChromeSiteSettingsPrefClient;
     }
 
     @Override
@@ -176,5 +173,30 @@ public class ChromeSiteSettingsClient implements SiteSettingsClient {
     @Override
     public String getChannelIdForOrigin(String origin) {
         return SiteChannelsManager.getInstance().getChannelIdForOrigin(origin);
+    }
+
+    @Override
+    public String getAppName() {
+        return mContext.getString(R.string.app_name);
+    }
+
+    @Override
+    @Nullable
+    public String getDelegateAppNameForOrigin(Origin origin, @ContentSettingsType int type) {
+        if (type == ContentSettingsType.NOTIFICATIONS) {
+            return TrustedWebActivityPermissionManager.get().getDelegateAppName(origin);
+        }
+
+        return null;
+    }
+
+    @Override
+    @Nullable
+    public String getDelegatePackageNameForOrigin(Origin origin, @ContentSettingsType int type) {
+        if (type == ContentSettingsType.NOTIFICATIONS) {
+            return TrustedWebActivityPermissionManager.get().getDelegatePackageName(origin);
+        }
+
+        return null;
     }
 }

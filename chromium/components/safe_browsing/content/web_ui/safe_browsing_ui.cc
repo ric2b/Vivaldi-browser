@@ -24,7 +24,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/grit/components_resources.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/password_manager/core/browser/hash_password_manager.h"
@@ -33,7 +32,9 @@
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/core/features.h"
 #include "components/safe_browsing/core/proto/csd.pb.h"
+#include "services/network/public/mojom/cookie_manager.mojom.h"
 #if BUILDFLAG(FULL_SAFE_BROWSING)
+#include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/safe_browsing/core/proto/webprotect.pb.h"
 #endif
 #include "components/safe_browsing/core/realtime/policy_engine.h"
@@ -47,6 +48,11 @@
 
 #if BUILDFLAG(SAFE_BROWSING_DB_LOCAL)
 #include "components/safe_browsing/core/db/v4_local_database_manager.h"
+#endif
+
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+using TriggeredRule =
+    enterprise_connectors::ContentAnalysisResponse::Result::TriggeredRule;
 #endif
 
 using base::Time;
@@ -273,6 +279,7 @@ void WebUIInfoSingleton::AddToDeepScanRequests(
 }
 
 void WebUIInfoSingleton::AddToDeepScanRequests(
+    const GURL& tab_url,
     const enterprise_connectors::ContentAnalysisRequest& request) {
   if (!HasListener())
     return;
@@ -284,6 +291,7 @@ void WebUIInfoSingleton::AddToDeepScanRequests(
         base::Time::Now();
   }
 
+  deep_scan_requests_[request.request_token()].tab_url = tab_url;
   deep_scan_requests_[request.request_token()].content_analysis_request =
       request;
 
@@ -335,33 +343,20 @@ void WebUIInfoSingleton::UnregisterWebUIInstance(SafeBrowsingUIHandler* webui) {
   MaybeClearData();
 }
 
-network::mojom::CookieManager* WebUIInfoSingleton::GetCookieManager() {
-  if (!cookie_manager_remote_)
-    InitializeCookieManager();
+mojo::Remote<network::mojom::CookieManager>
+WebUIInfoSingleton::GetCookieManager(content::BrowserContext* browser_context) {
+  mojo::Remote<network::mojom::CookieManager> cookie_manager_remote;
+  if (sb_service_) {
+    sb_service_->GetNetworkContext(browser_context)
+        ->GetCookieManager(cookie_manager_remote.BindNewPipeAndPassReceiver());
+  }
 
-  return cookie_manager_remote_.get();
+  return cookie_manager_remote;
 }
 
 void WebUIInfoSingleton::ClearListenerForTesting() {
   has_test_listener_ = false;
   MaybeClearData();
-}
-
-void WebUIInfoSingleton::InitializeCookieManager() {
-  DCHECK(network_context_);
-
-  // Reset |cookie_manager_remote_|, and only re-initialize it if we have a
-  // listening SafeBrowsingUIHandler.
-  cookie_manager_remote_.reset();
-
-  if (HasListener()) {
-    network_context_->GetNetworkContext()->GetCookieManager(
-        cookie_manager_remote_.BindNewPipeAndPassReceiver());
-
-    // base::Unretained is safe because |this| owns |cookie_manager_remote_|.
-    cookie_manager_remote_.set_disconnect_handler(base::BindOnce(
-        &WebUIInfoSingleton::InitializeCookieManager, base::Unretained(this)));
-  }
 }
 
 void WebUIInfoSingleton::MaybeClearData() {
@@ -1180,6 +1175,20 @@ base::Value SerializeDomFeatures(const DomFeatures& dom_features) {
   return std::move(dom_features_dict);
 }
 
+base::Value SerializeUrlDisplayExperiment(
+    const LoginReputationClientRequest::UrlDisplayExperiment& experiment) {
+  base::DictionaryValue d;
+  d.SetBoolean("delayed_warnings_enabled",
+               experiment.delayed_warnings_enabled());
+  d.SetBoolean("delayed_warnings_mouse_clicks_enabled",
+               experiment.delayed_warnings_mouse_clicks_enabled());
+  d.SetBoolean("reveal_on_hover", experiment.reveal_on_hover());
+  d.SetBoolean("hide_on_interaction", experiment.hide_on_interaction());
+  d.SetBoolean("elide_to_registrable_domain",
+               experiment.elide_to_registrable_domain());
+  return std::move(d);
+}
+
 std::string SerializePGPing(const LoginReputationClientRequest& request) {
   base::DictionaryValue request_dict;
 
@@ -1230,6 +1239,12 @@ std::string SerializePGPing(const LoginReputationClientRequest& request) {
                         SerializeDomFeatures(request.dom_features()));
   }
 
+  if (request.has_url_display_experiment()) {
+    request_dict.SetKey(
+        "url_display_experiment",
+        SerializeUrlDisplayExperiment(request.url_display_experiment()));
+  }
+
   std::string request_serialized;
   JSONStringValueSerializer serializer(&request_serialized);
   serializer.set_pretty_print(true);
@@ -1277,6 +1292,7 @@ std::string SerializeRTLookupPing(const RTLookupRequestAndToken& ping) {
   request_dict.SetKey("population",
                       SerializeChromeUserPopulation(request.population()));
   request_dict.SetKey("scoped_oauth_token", base::Value(ping.token));
+  request_dict.SetKey("dm_token", base::Value(request.dm_token()));
 
   std::string lookupType;
   switch (request.lookup_type()) {
@@ -1290,8 +1306,39 @@ std::string SerializeRTLookupPing(const RTLookupRequestAndToken& ping) {
       lookupType = "DOWNLOAD";
       break;
   }
-
   request_dict.SetKey("lookup_type", base::Value(lookupType));
+
+  request_dict.SetKey("version", base::Value(request.version()));
+
+  std::string os;
+  switch (request.os_type()) {
+    case RTLookupRequest::OS_TYPE_UNSPECIFIED:
+      DCHECK(false) << "RTLookupRequest::os_type is undefined.";
+      os = "UNSPECIFIED";
+      break;
+    case RTLookupRequest::OS_TYPE_LINUX:
+      os = "LINUX";
+      break;
+    case RTLookupRequest::OS_TYPE_WINDOWS:
+      os = "WINDOWS";
+      break;
+    case RTLookupRequest::OS_TYPE_MAC:
+      os = "MAC";
+      break;
+    case RTLookupRequest::OS_TYPE_ANDROID:
+      os = "ANDROID";
+      break;
+    case RTLookupRequest::OS_TYPE_IOS:
+      os = "IOS";
+      break;
+    case RTLookupRequest::OS_TYPE_CHROME_OS:
+      os = "CHROME_OS";
+      break;
+    case RTLookupRequest::OS_TYPE_FUCHSIA:
+      os = "FUCHSIA";
+      break;
+  }
+  request_dict.SetKey("os", base::Value(os));
 
   std::string request_serialized;
   JSONStringValueSerializer serializer(&request_serialized);
@@ -1340,6 +1387,7 @@ base::Value SerializeReportingEvent(const base::Value& event) {
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
 std::string SerializeContentAnalysisRequest(
+    const GURL& tab_url,
     const enterprise_connectors::ContentAnalysisRequest& request) {
   base::DictionaryValue request_dict;
 
@@ -1366,10 +1414,14 @@ std::string SerializeContentAnalysisRequest(
     request_data.SetStringKey("url", request.request_data().url());
     request_data.SetStringKey("filename", request.request_data().filename());
     request_data.SetStringKey("digest", request.request_data().digest());
-    // TODO(domfc): Improve this once csd is populated for this proto.
-    request_data.SetStringKey("csd",
-                              request.request_data().csd().SerializeAsString());
+    if (request.request_data().has_csd()) {
+      request_data.SetStringKey(
+          "csd", request.request_data().csd().SerializeAsString());
+    }
     request_dict.SetKey("request_data", std::move(request_data));
+  }
+  if (tab_url.is_valid()) {
+    request_dict.SetStringKey("tab_url", tab_url.spec());
   }
 
   base::ListValue tags;
@@ -1471,20 +1523,16 @@ std::string SerializeContentAnalysisResponse(
       base::DictionaryValue rule_value;
 
       switch (rule.action()) {
-        case enterprise_connectors::ContentAnalysisResponse::Result::
-            TriggeredRule::ACTION_UNSPECIFIED:
+        case TriggeredRule::ACTION_UNSPECIFIED:
           rule_value.SetStringKey("action", "ACTION_UNSPECIFIED");
           break;
-        case enterprise_connectors::ContentAnalysisResponse::Result::
-            TriggeredRule::REPORT_ONLY:
+        case TriggeredRule::REPORT_ONLY:
           rule_value.SetStringKey("action", "REPORT_ONLY");
           break;
-        case enterprise_connectors::ContentAnalysisResponse::Result::
-            TriggeredRule::WARN:
+        case TriggeredRule::WARN:
           rule_value.SetStringKey("action", "WARN");
           break;
-        case enterprise_connectors::ContentAnalysisResponse::Result::
-            TriggeredRule::BLOCK:
+        case TriggeredRule::BLOCK:
           rule_value.SetStringKey("action", "BLOCK");
           break;
       }
@@ -1615,8 +1663,9 @@ base::Value SerializeDeepScanDebugData(const std::string& token,
     value.SetStringKey("request",
                        SerializeDeepScanningRequest(data.request.value()));
   } else if (data.content_analysis_request.has_value()) {
-    value.SetStringKey("request", SerializeContentAnalysisRequest(
-                                      data.content_analysis_request.value()));
+    value.SetStringKey(
+        "request", SerializeContentAnalysisRequest(
+                       data.tab_url, data.content_analysis_request.value()));
   }
 
   if (!data.response_time.is_null()) {
@@ -1707,7 +1756,9 @@ void SafeBrowsingUIHandler::GetCookie(const base::ListValue* args) {
   std::string callback_id;
   args->GetString(0, &callback_id);
 
-  WebUIInfoSingleton::GetInstance()->GetCookieManager()->GetAllCookies(
+  cookie_manager_remote_ =
+      WebUIInfoSingleton::GetInstance()->GetCookieManager(browser_context_);
+  cookie_manager_remote_->GetAllCookies(
       base::BindOnce(&SafeBrowsingUIHandler::OnGetCookie,
                      weak_factory_.GetWeakPtr(), std::move(callback_id)));
 }

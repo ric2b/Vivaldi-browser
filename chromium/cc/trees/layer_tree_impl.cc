@@ -12,6 +12,7 @@
 #include <limits>
 #include <memory>
 #include <set>
+#include <unordered_set>
 #include <utility>
 
 #include "base/containers/adapters.h"
@@ -605,7 +606,7 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
 
   target_tree->set_overscroll_behavior(overscroll_behavior_);
 
-  target_tree->SetRasterColorSpace(raster_color_space_);
+  target_tree->SetDisplayColorSpaces(display_color_spaces_);
   target_tree->elastic_overscroll()->PushPendingToActive();
 
   target_tree->set_painted_device_scale_factor(painted_device_scale_factor());
@@ -1215,11 +1216,11 @@ gfx::Rect LayerTreeImpl::GetDeviceViewport() const {
   return external_viewport;
 }
 
-void LayerTreeImpl::SetRasterColorSpace(
-    const gfx::ColorSpace& raster_color_space) {
-  if (raster_color_space == raster_color_space_)
+void LayerTreeImpl::SetDisplayColorSpaces(
+    const gfx::DisplayColorSpaces& display_color_spaces) {
+  if (display_color_spaces_ == display_color_spaces)
     return;
-  raster_color_space_ = raster_color_space;
+  display_color_spaces_ = display_color_spaces;
 }
 
 void LayerTreeImpl::SetExternalPageScaleFactor(
@@ -1457,17 +1458,6 @@ bool LayerTreeImpl::UpdateDrawProperties(
   return true;
 }
 
-void LayerTreeImpl::UpdateCanUseLCDText() {
-  // If this is not the sync tree, then it is not safe to update lcd text
-  // as it causes invalidations and the tiles may be in use.
-  DCHECK(IsSyncTree());
-  bool tile_priorities_updated = false;
-  for (auto* layer : picture_layers_)
-    tile_priorities_updated |= layer->UpdateCanUseLCDTextAfterCommit();
-  if (tile_priorities_updated)
-    DidModifyTilePriorities();
-}
-
 const RenderSurfaceList& LayerTreeImpl::GetRenderSurfaceList() const {
   // If this assert triggers, then the list is dirty.
   DCHECK(!needs_update_draw_properties_);
@@ -1666,7 +1656,7 @@ LayerImpl* LayerTreeImpl::FindPendingTreeLayerById(int id) {
 }
 
 bool LayerTreeImpl::PinchGestureActive() const {
-  return host_impl_->pinch_gesture_active();
+  return host_impl_->GetInputHandler().pinch_gesture_active();
 }
 
 const viz::BeginFrameArgs& LayerTreeImpl::CurrentBeginFrameArgs() const {
@@ -1975,9 +1965,11 @@ void LayerTreeImpl::UnregisterScrollbar(
   if (scrollbar_ids.horizontal == Layer::INVALID_ID &&
       scrollbar_ids.vertical == Layer::INVALID_ID) {
     element_id_to_scrollbar_layer_ids_.erase(scroll_element_id);
-    if (IsActiveTree()) {
-      host_impl_->DidUnregisterScrollbarLayer(scroll_element_id);
-    }
+  }
+
+  if (IsActiveTree()) {
+    host_impl_->DidUnregisterScrollbarLayer(scroll_element_id,
+                                            scrollbar_layer->orientation());
   }
 }
 
@@ -2197,13 +2189,9 @@ LayerImpl* LayerTreeImpl::FindFirstScrollingLayerOrScrollbarThatIsHitByPoint(
 
   FindClosestMatchingLayerState state;
   LayerImpl* root_layer = layer_list_[0].get();
-  auto HitTestScrollingLayerOrScrollbarFunctor =
-      [this](const LayerImpl* layer) {
-        return layer->HitTestable() &&
-               (layer->IsScrollbarLayer() ||
-                (property_trees()->scroll_tree.FindNodeFromElementId(
-                    layer->element_id())));
-      };
+  auto HitTestScrollingLayerOrScrollbarFunctor = [](const LayerImpl* layer) {
+    return layer->HitTestable() && layer->IsScrollerOrScrollbar();
+  };
   FindClosestMatchingLayer(screen_space_point, root_layer,
                            HitTestScrollingLayerOrScrollbarFunctor, &state);
   return state.closest_match;
@@ -2294,6 +2282,91 @@ LayerTreeImpl::FindLayersHitByPointInNonFastScrollableRegion(
   return layers;
 }
 
+std::vector<const LayerImpl*>
+LayerTreeImpl::FindAllLayersUpToAndIncludingFirstScrollable(
+    const gfx::PointF& screen_space_point) {
+  std::vector<const LayerImpl*> layers;
+  if (layer_list_.empty())
+    return layers;
+  if (!UpdateDrawProperties())
+    return layers;
+
+  // If we hit a layer in a 3d context we can't rely on layer orders, we need
+  // to sort the layers by distance to hit. This is used only if the first_hit
+  // layer is in a 3d rendering context.
+  std::vector<std::pair<const LayerImpl*, float>> layers_3d;
+
+  const LayerImpl* first_hit = nullptr;
+
+  // We want to iterate from front to back when hit testing.
+  LayerImpl* root_layer = layer_list_[0].get();
+  for (const auto* layer : base::Reversed(*root_layer->layer_tree_impl())) {
+    if (!layer->HitTestable())
+      continue;
+
+    if (first_hit &&
+        layer->GetSortingContextId() != first_hit->GetSortingContextId())
+      continue;
+
+    float distance_to_intersection = 0.f;
+    bool hit = false;
+    if (layer->Is3dSorted()) {
+      hit =
+          PointHitsLayer(layer, screen_space_point, &distance_to_intersection);
+    } else {
+      hit = PointHitsLayer(layer, screen_space_point, nullptr);
+    }
+
+    if (!hit)
+      continue;
+
+    if (!first_hit)
+      first_hit = layer;
+
+    if (first_hit->Is3dSorted()) {
+      layers_3d.emplace_back(
+          std::pair<const LayerImpl*, float>(layer, distance_to_intersection));
+    } else {
+      layers.push_back(layer);
+      if (layer->IsScrollerOrScrollbar())
+        break;
+    }
+  }
+
+  if (!first_hit) {
+    DCHECK(layers.empty());
+    DCHECK(layers_3d.empty());
+    return layers;
+  }
+
+  if (first_hit->Is3dSorted()) {
+    DCHECK(layers.empty());
+    DCHECK(!layers_3d.empty());
+
+    // Since we hit a layer in a rendering context, we need to sort the layers
+    // based on their distance then add all until the first scrollable one to
+    // the return vector.
+    std::sort(layers_3d.begin(), layers_3d.end(),
+              [](const std::pair<const LayerImpl*, float>& a,
+                 const std::pair<const LayerImpl*, float>& b) {
+                return a.second > b.second;
+              });
+
+    for (const auto& pair : layers_3d) {
+      const LayerImpl* layer = pair.first;
+
+      layers.push_back(layer);
+      if (layer->IsScrollerOrScrollbar())
+        break;
+    }
+  } else {
+    DCHECK(!layers.empty());
+    DCHECK(layers_3d.empty());
+  }
+
+  return layers;
+}
+
 bool LayerTreeImpl::PointHitsNonFastScrollableRegion(
     const gfx::PointF& screen_space_point,
     const LayerImpl& layer) const {
@@ -2307,11 +2380,78 @@ bool LayerTreeImpl::PointHitsNonFastScrollableRegion(
                          layer.non_fast_scrollable_region(), &layer);
 }
 
-struct HitTestFramedVisibleScrollableOrTouchableFunctor {
-  bool operator()(LayerImpl* layer) const {
-    return layer->HitTestable() && layer->frame_element_id();
+static ElementId GetFrameElementIdForLayer(const LayerImpl* layer) {
+  auto& transform_tree =
+      layer->layer_tree_impl()->property_trees()->transform_tree;
+  auto* node = transform_tree.Node(layer->transform_tree_index());
+  while (node && !node->visible_frame_element_id) {
+    node = transform_tree.Node(node->parent_frame_id);
   }
-};
+  return node ? node->visible_frame_element_id : ElementId();
+}
+
+static void FindClosestMatchingLayerForAttribution(
+    const gfx::PointF& screen_space_point,
+    const LayerImpl* root_layer,
+    FindClosestMatchingLayerState* state) {
+  std::unordered_set<ElementId, ElementIdHash> hit_visible_frame_element_ids;
+  // We want to iterate from front to back when hit testing.
+  for (auto* layer : base::Reversed(*root_layer->layer_tree_impl())) {
+    if (!layer->HitTestable())
+      continue;
+
+    float distance_to_intersection = 0.f;
+    bool hit = false;
+    if (layer->Is3dSorted()) {
+      hit =
+          PointHitsLayer(layer, screen_space_point, &distance_to_intersection);
+    } else {
+      hit = PointHitsLayer(layer, screen_space_point, nullptr);
+    }
+
+    if (!hit)
+      continue;
+
+    bool in_front_of_previous_candidate =
+        state->closest_match &&
+        layer->GetSortingContextId() ==
+            state->closest_match->GetSortingContextId() &&
+        distance_to_intersection >
+            state->closest_distance + std::numeric_limits<float>::epsilon();
+
+    if (!state->closest_match || in_front_of_previous_candidate) {
+      state->closest_distance = distance_to_intersection;
+      state->closest_match = layer;
+    }
+
+    ElementId visible_frame_element_id = GetFrameElementIdForLayer(layer);
+    hit_visible_frame_element_ids.insert(visible_frame_element_id);
+  }
+
+  // Iterate through the transform tree of the hit layer in order to derive the
+  // frame path. If we hit any frame layer in our hit testing that belonged to
+  // a frame outside of this hierarchy, bail out.
+  //
+  // We explicitly allow occluding layers whose frames are parents of the
+  // targeted frame so that we can properly attribute the (common) parent ->
+  // child frame relationship. This is made possible since we can accurately
+  // hit test within layerized subframes, but not for all occluders.
+  if (auto* layer = state->closest_match) {
+    auto& transform_tree =
+        layer->layer_tree_impl()->property_trees()->transform_tree;
+    for (auto* node = transform_tree.Node(layer->transform_tree_index()); node;
+         node = transform_tree.Node(node->parent_frame_id)) {
+      hit_visible_frame_element_ids.erase(node->visible_frame_element_id);
+      if (hit_visible_frame_element_ids.size() == 0)
+        break;
+    }
+
+    if (hit_visible_frame_element_ids.size() > 0) {
+      state->closest_distance = 0.f;
+      state->closest_match = nullptr;
+    }
+  }
+}
 
 ElementId LayerTreeImpl::FindFrameElementIdAtPoint(
     const gfx::PointF& screen_space_point) {
@@ -2320,11 +2460,10 @@ ElementId LayerTreeImpl::FindFrameElementIdAtPoint(
   if (!UpdateDrawProperties())
     return {};
   FindClosestMatchingLayerState state;
-  FindClosestMatchingLayer(screen_space_point, layer_list_[0].get(),
-                           HitTestFramedVisibleScrollableOrTouchableFunctor(),
-                           &state);
+  FindClosestMatchingLayerForAttribution(screen_space_point,
+                                         layer_list_[0].get(), &state);
 
-  if (auto* layer = state.closest_match) {
+  if (const auto* layer = state.closest_match) {
     // TODO(https://crbug.com/1058870): Permit hit testing only if the framed
     // element hit has a simple mask/clip. We don't have enough information
     // about complex masks/clips on the impl-side to do accurate hit testing.
@@ -2333,8 +2472,9 @@ ElementId LayerTreeImpl::FindFrameElementIdAtPoint(
             layer->effect_tree_index());
 
     if (!layer_hit_test_region_is_masked)
-      return layer->frame_element_id();
+      return GetFrameElementIdForLayer(layer);
   }
+
   return {};
 }
 
@@ -2472,6 +2612,11 @@ void LayerTreeImpl::UpdateImageDecodingHints(
 int LayerTreeImpl::GetMSAASampleCountForRaster(
     const scoped_refptr<DisplayItemList>& display_list) {
   return host_impl_->GetMSAASampleCountForRaster(display_list);
+}
+
+gfx::ColorSpace LayerTreeImpl::GetRasterColorSpace(
+    gfx::ContentColorUsage content_color_usage) const {
+  return host_impl_->GetRasterColorSpace(content_color_usage);
 }
 
 void LayerTreeImpl::SetPendingPageScaleAnimation(

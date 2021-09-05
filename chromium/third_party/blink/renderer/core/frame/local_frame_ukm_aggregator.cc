@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame_ukm_aggregator.h"
 
 #include "base/format_macros.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/rand_util.h"
 #include "base/time/default_tick_clock.h"
 #include "cc/metrics/begin_main_frame_metrics.h"
@@ -60,13 +61,13 @@ LocalFrameUkmAggregator::LocalFrameUkmAggregator(int64_t source_id,
       "Blink.MainFrame.UpdateTime.AggregatedPreFCP", 0, 10000000, 50));
 
   // Set up the substrings to create the UMA names
-  const String uma_preamble = "Blink.";
-  const String uma_postscript = ".UpdateTime";
-  const String uma_prefcp_postscript = ".PreFCP";
-  const String uma_postfcp_postscript = ".PostFCP";
-  const String uma_pre_fcp_aggregated_postscript = ".AggregatedPreFCP";
-  const String uma_percentage_preamble = "Blink.MainFrame.";
-  const String uma_percentage_postscript = "Ratio";
+  const char* const uma_preamble = "Blink.";
+  const char* const uma_postscript = ".UpdateTime";
+  const char* const uma_prefcp_postscript = ".PreFCP";
+  const char* const uma_postfcp_postscript = ".PostFCP";
+  const char* const uma_pre_fcp_aggregated_postscript = ".AggregatedPreFCP";
+  const char* const uma_percentage_preamble = "Blink.MainFrame.";
+  const char* const uma_percentage_postscript = "Ratio";
 
   // Set up sub-strings for the bucketed UMA metrics
   Vector<String> threshold_substrings;
@@ -89,9 +90,7 @@ LocalFrameUkmAggregator::LocalFrameUkmAggregator(int64_t source_id,
   // Populate all the sub-metrics.
   absolute_metric_records_.ReserveInitialCapacity(kCount);
   main_frame_percentage_records_.ReserveInitialCapacity(kCount);
-  for (unsigned i = 0; i < (unsigned)kCount; ++i) {
-    const MetricInitializationData& metric_data = metrics_data()[i];
-
+  for (const MetricInitializationData& metric_data : metrics_data()) {
     // Absolute records report the absolute time for each metric per frame.
     // They also aggregate the time spent in each stage between navigation
     // (LocalFrameView resets) and First Contentful Paint.
@@ -185,9 +184,13 @@ LocalFrameUkmAggregator::GetBeginMainFrameMetrics() {
   metrics_data->prepaint =
       main_frame_percentage_records_[static_cast<unsigned>(MetricId::kPrePaint)]
           .interval_duration;
-  metrics_data->composite =
+  metrics_data->compositing_assignments =
       main_frame_percentage_records_[static_cast<unsigned>(
-                                         MetricId::kCompositing)]
+                                         MetricId::kCompositingAssignments)]
+          .interval_duration;
+  metrics_data->compositing_inputs =
+      main_frame_percentage_records_[static_cast<unsigned>(
+                                         MetricId::kCompositingInputs)]
           .interval_duration;
   metrics_data->paint =
       main_frame_percentage_records_[static_cast<unsigned>(MetricId::kPaint)]
@@ -297,18 +300,23 @@ void LocalFrameUkmAggregator::RecordEndOfFrameMetrics(
     base::TimeTicks start,
     base::TimeTicks end,
     cc::ActiveFrameSequenceTrackers trackers) {
-  // Any of the early out's in LocalFrameView::UpdateLifecyclePhases
-  // will mean we are not in a main frame update. Recording is triggered
-  // higher in the stack, so we cannot know to avoid calling this method.
-  if (!in_main_frame_update_) {
+  const base::TimeDelta duration = end - start;
+  const bool have_valid_metrics =
+      // Any of the early outs in LocalFrameView::UpdateLifecyclePhases() will
+      // mean we are not in a main frame update. Recording is triggered higher
+      // in the stack, so we cannot know to avoid calling this method.
+      in_main_frame_update_ &&
+      // In tests it's possible to reach here with zero duration.
+      (duration > base::TimeDelta());
+
+  in_main_frame_update_ = false;
+  if (!have_valid_metrics) {
     // Reset for the next frame to start the next recording period with
     // clear counters, even when we did not record anything this frame.
     ResetAllMetrics();
     return;
   }
-  in_main_frame_update_ = false;
 
-  base::TimeDelta duration = end - start;
   bool report_as_pre_fcp = (fcp_state_ != kHavePassedFCP);
   bool report_fcp_metrics = (fcp_state_ == kThisFrameReachedFCP);
 
@@ -334,9 +342,8 @@ void LocalFrameUkmAggregator::RecordEndOfFrameMetrics(
   }
 
   for (auto& record : main_frame_percentage_records_) {
-    unsigned percentage =
-        (unsigned)floor(record.interval_duration.InMicrosecondsF() * 100.0 /
-                        duration.InMicrosecondsF());
+    auto percentage = base::ClampRound<base::HistogramBase::Sample>(
+        100 * record.interval_duration / duration);
     record.uma_counters_per_bucket[bucket_index]->Count(percentage);
   }
 
@@ -383,14 +390,12 @@ void LocalFrameUkmAggregator::UpdateEventTimeAndUpdateSampleIfNeeded(
 void LocalFrameUkmAggregator::UpdateSample(
     cc::ActiveFrameSequenceTrackers trackers) {
   current_sample_.primary_metric_duration = primary_metric_.interval_duration;
-  float primary_metric_in_microseconds =
-      primary_metric_.interval_duration.InMicrosecondsF();
   for (unsigned i = 0; i < static_cast<unsigned>(kCount); ++i) {
     current_sample_.sub_metrics_durations[i] =
         absolute_metric_records_[i].interval_duration;
-    current_sample_.sub_metric_percentages[i] = static_cast<unsigned>(floor(
-        main_frame_percentage_records_[i].interval_duration.InMicrosecondsF() *
-        100.0 / primary_metric_in_microseconds));
+    current_sample_.sub_metric_percentages[i] = base::ClampRound<unsigned>(
+        100 * main_frame_percentage_records_[i].interval_duration /
+        primary_metric_.interval_duration);
   }
   current_sample_.trackers = trackers;
 }
@@ -413,8 +418,9 @@ void LocalFrameUkmAggregator::ReportPreFCPEvent() {
     }
 
     switch (static_cast<MetricId>(i)) {
-      CASE_FOR_ID(Compositing);
+      CASE_FOR_ID(CompositingAssignments);
       CASE_FOR_ID(CompositingCommit);
+      CASE_FOR_ID(CompositingInputs);
       CASE_FOR_ID(ImplCompositorCommit);
       CASE_FOR_ID(IntersectionObservation);
       CASE_FOR_ID(Paint);
@@ -458,8 +464,9 @@ void LocalFrameUkmAggregator::ReportUpdateTimeEvent() {
   builder.SetMainFrameReasons(current_sample_.trackers);
   for (unsigned i = 0; i < static_cast<unsigned>(kCount); ++i) {
     switch (static_cast<MetricId>(i)) {
-      CASE_FOR_ID(Compositing, i);
+      CASE_FOR_ID(CompositingAssignments, i);
       CASE_FOR_ID(CompositingCommit, i);
+      CASE_FOR_ID(CompositingInputs, i);
       CASE_FOR_ID(ImplCompositorCommit, i);
       CASE_FOR_ID(IntersectionObservation, i);
       CASE_FOR_ID(Paint, i);

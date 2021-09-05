@@ -10,6 +10,7 @@
 
 #include <memory>
 
+#include "ash/public/cpp/ash_switches.h"
 #include "base/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/base/math_util.h"
@@ -105,7 +106,7 @@ class FastInkHost::LayerTreeFrameSinkHolder
         last_local_surface_id_allocation_time_;
     frame.metadata.frame_token = ++next_frame_token_;
     std::unique_ptr<viz::RenderPass> pass = viz::RenderPass::Create();
-    pass->SetNew(1, gfx::Rect(last_frame_size_in_pixels_),
+    pass->SetNew(viz::RenderPassId{1}, gfx::Rect(last_frame_size_in_pixels_),
                  gfx::Rect(last_frame_size_in_pixels_), gfx::Transform());
     frame.render_pass_list.push_back(std::move(pass));
     frame_sink_->SubmitCompositorFrame(std::move(frame),
@@ -259,6 +260,21 @@ FastInkHost::FastInkHost(aura::Window* host_window,
                                   gpu::kNullSurfaceHandle);
   LOG_IF(ERROR, !gpu_memory_buffer_) << "Failed to create GPU memory buffer";
 
+  if (ash::switches::ShouldClearFastInkBuffer()) {
+    bool map_result = gpu_memory_buffer_->Map();
+    LOG_IF(ERROR, !map_result) << "Failed to map gpu buffer";
+    uint8_t* memory = static_cast<uint8_t*>(gpu_memory_buffer_->memory(0));
+    if (memory != nullptr) {
+      gfx::Size size = gpu_memory_buffer_->GetSize();
+      int stride = gpu_memory_buffer_->stride(0);
+      // Clear the buffer before usage, since it may be uninitialized.
+      // (http://b/168735625)
+      for (int i = 0; i < size.height(); ++i)
+        memset(memory + i * stride, 0, size.width() * 4);
+    }
+    gpu_memory_buffer_->Unmap();
+  }
+
   frame_sink_holder_ = std::make_unique<LayerTreeFrameSinkHolder>(
       this, host_window_->CreateLayerTreeFrameSink());
 }
@@ -350,7 +366,8 @@ void FastInkHost::SubmitCompositorFrame() {
               ->context_factory()
               ->GetGpuMemoryBufferManager();
       resource->mailbox = sii->CreateSharedImage(
-          gpu_memory_buffer_.get(), gmb_manager, gfx::ColorSpace(), usage);
+          gpu_memory_buffer_.get(), gmb_manager, gfx::ColorSpace(),
+          kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage);
     } else {
       sii->UpdateSharedImage(resource->sync_token, resource->mailbox);
     }
@@ -377,7 +394,7 @@ void FastInkHost::SubmitCompositorFrame() {
   bool rv = target_to_buffer_transform.GetInverse(&buffer_to_target_transform);
   DCHECK(rv);
 
-  const int kRenderPassId = 1;
+  const viz::RenderPassId kRenderPassId{1};
   std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
   render_pass->SetNew(kRenderPassId, output_rect, damage_rect,
                       buffer_to_target_transform);

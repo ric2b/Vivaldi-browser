@@ -12,6 +12,7 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_ui_constants.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/browser/ui/table_view/feature_flags.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
@@ -757,9 +758,17 @@ using chrome_test_util::TappableBookmarkNodeWithLabel;
   // Reopen bookmarks.
   [BookmarkEarlGreyUI openBookmarks];
 
-  // Ensure the root node is opened, by verifying Mobile Bookmarks is seen in a
-  // table cell.
-  [BookmarkEarlGreyUI verifyBookmarkFolderIsSeen:@"Mobile Bookmarks"];
+  if (base::FeatureList::IsEnabled(kIllustratedEmptyStates)) {
+    // Ensure the root node is opened, by verifying that there isn't a Back
+    // button in the navigation bar.
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                            BookmarksNavigationBarBackButton()]
+        assertWithMatcher:grey_nil()];
+  } else {
+    // Ensure the root node is opened, by verifying Mobile Bookmarks is seen in
+    // a table cell.
+    [BookmarkEarlGreyUI verifyBookmarkFolderIsSeen:@"Mobile Bookmarks"];
+  }
 }
 
 - (void)testCachePositionIsRecreatedWhenNodeIsMoved {
@@ -837,6 +846,60 @@ using chrome_test_util::TappableBookmarkNodeWithLabel;
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
                                           kBookmarkHomeTableViewIdentifier)]
       assertWithMatcher:grey_nil()];
+}
+
+- (void)testFolderEmptyState {
+  [BookmarkEarlGrey setupStandardBookmarks];
+  [BookmarkEarlGreyUI openBookmarks];
+  [BookmarkEarlGreyUI openMobileBookmarks];
+
+  // Enter Folder 1.1 (which is empty)
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Folder 1.1")]
+      performAction:grey_tap()];
+
+  // Empty TableView background should be visible.
+  [BookmarkEarlGreyUI verifyEmptyState];
+}
+
+// Test to make sure the Mobile Bookmarks folder is not created if empty.
+- (void)testRootEmptyState {
+  [BookmarkEarlGreyUI openBookmarks];
+
+  if (base::FeatureList::IsEnabled(kIllustratedEmptyStates)) {
+    // When the user has no bookmarks, the root view should be an empty state.
+    [BookmarkEarlGreyUI verifyEmptyState];
+  } else {
+    // Mobile Bookmark should be visible, even when empty.
+    [BookmarkEarlGreyUI verifyBookmarkFolderIsSeen:@"Mobile Bookmarks"];
+  }
+}
+
+// When deleting the last bookmark, the root view should be empty when
+// navigating back.
+- (void)testRootEmptyStateAfterAllBookmarkDeleted {
+  [BookmarkEarlGrey setupStandardBookmarks];
+  [BookmarkEarlGreyUI openBookmarks];
+  [BookmarkEarlGreyUI openMobileBookmarks];
+
+  // Delete all bookmarks and folders under Mobile Bookmarks.
+  [BookmarkEarlGrey removeBookmarkWithTitle:@"Folder 1.1"];
+  [BookmarkEarlGrey removeBookmarkWithTitle:@"Folder 1"];
+  [BookmarkEarlGrey removeBookmarkWithTitle:@"French URL"];
+  [BookmarkEarlGrey removeBookmarkWithTitle:@"Second URL"];
+  [BookmarkEarlGrey removeBookmarkWithTitle:@"First URL"];
+
+  // Navigate back to the root view.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          BookmarksNavigationBarBackButton()]
+      performAction:grey_tap()];
+
+  if (base::FeatureList::IsEnabled(kIllustratedEmptyStates)) {
+    // When the user has no bookmarks, the root view should be an empty state.
+    [BookmarkEarlGreyUI verifyEmptyState];
+  } else {
+    // Mobile Bookmark should be visible, even when empty.
+    [BookmarkEarlGreyUI verifyBookmarkFolderIsSeen:@"Mobile Bookmarks"];
+  }
 }
 
 // TODO(crbug.com/695749): Add egtests for:

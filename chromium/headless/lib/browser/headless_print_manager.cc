@@ -12,10 +12,13 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/printing/browser/print_manager_utils.h"
+#include "components/printing/common/print.mojom.h"
 #include "components/printing/common/print_messages.h"
 #include "content/public/browser/render_view_host.h"
+#include "printing/mojom/print.mojom.h"
 #include "printing/print_job_constants.h"
 #include "printing/units.h"
 
@@ -83,11 +86,11 @@ HeadlessPrintManager::PageRangeTextToPages(base::StringPiece page_range_text,
     } else if (range_string == "-") {
       range.from = 1;
       range.to = pages_count;
-    } else if (range_string.starts_with("-")) {
+    } else if (base::StartsWith(range_string, "-")) {
       range.from = 1;
       if (!base::StringToInt(range_string.substr(1), &range.to))
         return SYNTAX_ERROR;
-    } else if (range_string.ends_with("-")) {
+    } else if (base::EndsWith(range_string, "-")) {
       range.to = pages_count;
       if (!base::StringToInt(range_string.substr(0, range_string.length() - 1),
                              &range.from))
@@ -163,7 +166,7 @@ HeadlessPrintManager::GetPrintParamsFromSettings(
     print_settings.set_url(base::UTF8ToUTF16(url));
   }
 
-  print_settings.set_margin_type(printing::CUSTOM_MARGINS);
+  print_settings.set_margin_type(printing::mojom::MarginType::kCustomMargins);
   print_settings.SetCustomMargins(settings.margins_in_points);
 
   gfx::Rect printable_area_device_units(settings.paper_size_in_points);
@@ -267,9 +270,9 @@ void HeadlessPrintManager::OnPrintingFailed(int cookie) {
 
 void HeadlessPrintManager::OnDidPrintDocument(
     content::RenderFrameHost* render_frame_host,
-    const PrintHostMsg_DidPrintDocument_Params& params,
+    const printing::mojom::DidPrintDocumentParams& params,
     std::unique_ptr<DelayedFrameDispatchHelper> helper) {
-  auto& content = params.content;
+  auto& content = *params.content;
   if (!content.metafile_data_region.IsValid()) {
     ReleaseJob(INVALID_MEMORY_HANDLE);
     return;

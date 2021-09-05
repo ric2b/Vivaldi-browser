@@ -44,6 +44,7 @@ class VIZ_SERVICE_EXPORT OutputPresenter {
     SkSurface* sk_surface();
     std::vector<GrBackendSemaphore> TakeEndWriteSkiaSemaphores();
     void EndWriteSkia();
+    void PreGrContextSubmit();
 
     virtual void BeginPresent() = 0;
     virtual void EndPresent() = 0;
@@ -70,6 +71,9 @@ class VIZ_SERVICE_EXPORT OutputPresenter {
     OverlayData(OverlayData&&);
     ~OverlayData();
     OverlayData& operator=(OverlayData&&);
+
+    const gpu::Mailbox& mailbox() const;
+    bool IsInUseByWindowServer() const;
 
    private:
     std::unique_ptr<gpu::SharedImageRepresentationOverlay> representation_;

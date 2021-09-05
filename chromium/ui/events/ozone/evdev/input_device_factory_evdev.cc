@@ -107,12 +107,9 @@ std::unique_ptr<EventConverterEvdev> CreateConverter(
 
   // Touchscreen: use TouchEventConverterEvdev.
   if (devinfo.HasTouchscreen()) {
-    std::unique_ptr<TouchEventConverterEvdev> converter(
-        new TouchEventConverterEvdev(std::move(fd), params.path, params.id,
-                                     devinfo, params.shared_palm_state,
-                                     params.dispatcher));
-    converter->Initialize(devinfo);
-    return std::move(converter);
+    return TouchEventConverterEvdev::Create(
+        std::move(fd), params.path, params.id, devinfo,
+        params.shared_palm_state, params.dispatcher);
   }
 
   // Graphics tablet
@@ -356,9 +353,7 @@ void InputDeviceFactoryEvdev::ApplyInputDeviceSettings() {
   SetBoolPropertyForOneType(
       DT_MOUSE, "Mouse Reverse Scrolling",
       input_device_settings_.mouse_reverse_scroll_enabled);
-  SetBoolPropertyForOneType(
-      DT_MOUSE, "Mouse High Resolution Scrolling",
-      base::FeatureList::IsEnabled(ui::kEnableHighResolutionMouseScrolling));
+  SetBoolPropertyForOneType(DT_MOUSE, "Mouse High Resolution Scrolling", true);
 
   SetBoolPropertyForOneType(DT_TOUCHPAD, "Tap Paused",
                             input_device_settings_.tap_to_click_paused);
@@ -394,6 +389,26 @@ void InputDeviceFactoryEvdev::ApplyCapsLockLed() {
   for (const auto& it : converters_) {
     EventConverterEvdev* converter = it.second.get();
     converter->SetCapsLockLed(caps_lock_led_enabled_);
+  }
+}
+
+void InputDeviceFactoryEvdev::PlayVibrationEffect(int id,
+                                                  uint8_t amplitude,
+                                                  uint16_t duration_millis) {
+  for (const auto& it : converters_) {
+    if (it.second->id() == id) {
+      it.second->PlayVibrationEffect(amplitude, duration_millis);
+      return;
+    }
+  }
+}
+
+void InputDeviceFactoryEvdev::StopVibration(int id) {
+  for (const auto& it : converters_) {
+    if (it.second->id() == id) {
+      it.second->StopVibration();
+      return;
+    }
   }
 }
 
@@ -515,7 +530,8 @@ void InputDeviceFactoryEvdev::NotifyGamepadDevicesUpdated() {
   for (auto it = converters_.begin(); it != converters_.end(); ++it) {
     if (it->second->HasGamepad()) {
       gamepads.emplace_back(it->second->input_device(),
-                            it->second->GetGamepadAxes());
+                            it->second->GetGamepadAxes(),
+                            it->second->GetGamepadRumbleCapability());
     }
   }
 

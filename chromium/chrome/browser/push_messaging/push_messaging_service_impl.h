@@ -16,6 +16,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "base/time/time.h"
 #include "chrome/browser/push_messaging/push_messaging_notification_manager.h"
 #include "chrome/common/buildflags.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
@@ -40,7 +41,7 @@ class ScopedKeepAlive;
 
 namespace blink {
 namespace mojom {
-enum class PushDeliveryStatus;
+enum class PushEventStatus;
 enum class PushRegistrationStatus;
 }  // namespace mojom
 }  // namespace blink
@@ -123,6 +124,16 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
                                ContentSettingsType content_type,
                                const std::string& resource_identifier) override;
 
+  // Fires the `pushsubscriptionchange` event to the associated service worker
+  // of |app_identifier|, which is the app identifier for |old_subscription|
+  // whereas |new_subscription| can be either null e.g. when a subscription is
+  // lost due to permission changes or a new subscription when it was refreshed.
+  void FirePushSubscriptionChange(
+      const PushMessagingAppIdentifier& app_identifier,
+      base::OnceClosure completed_closure,
+      blink::mojom::PushSubscriptionPtr new_subscription,
+      blink::mojom::PushSubscriptionPtr old_subscription);
+
   // KeyedService implementation.
   void Shutdown() override;
 
@@ -156,7 +167,7 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
                               int64_t service_worker_registration_id,
                               const gcm::IncomingMessage& message,
                               base::OnceClosure message_handled_closure,
-                              blink::mojom::PushDeliveryStatus status);
+                              blink::mojom::PushEventStatus status);
 
   void DidHandleMessage(const std::string& app_id,
                         const std::string& push_message_id,
@@ -165,7 +176,7 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
 
   // Subscribe methods ---------------------------------------------------------
 
-  void DoSubscribe(const PushMessagingAppIdentifier& app_identifier,
+  void DoSubscribe(PushMessagingAppIdentifier app_identifier,
                    blink::mojom::PushSubscriptionOptionsPtr options,
                    RegisterCallback callback,
                    int render_process_id,
@@ -175,6 +186,7 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
   void SubscribeEnd(RegisterCallback callback,
                     const std::string& subscription_id,
                     const GURL& endpoint,
+                    const base::Optional<base::Time>& expiration_time,
                     const std::vector<uint8_t>& p256dh,
                     const std::vector<uint8_t>& auth,
                     blink::mojom::PushRegistrationStatus status);
@@ -198,13 +210,16 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
 
   // GetSubscriptionInfo methods -----------------------------------------------
 
-  void DidValidateSubscription(const std::string& app_id,
-                               const std::string& sender_id,
-                               const GURL& endpoint,
-                               SubscriptionInfoCallback callback,
-                               bool is_valid);
+  void DidValidateSubscription(
+      const std::string& app_id,
+      const std::string& sender_id,
+      const GURL& endpoint,
+      const base::Optional<base::Time>& expiration_time,
+      SubscriptionInfoCallback callback,
+      bool is_valid);
 
   void DidGetEncryptionInfo(const GURL& endpoint,
+                            const base::Optional<base::Time>& expiration_time,
                             SubscriptionInfoCallback callback,
                             std::string p256dh,
                             std::string auth_secret) const;
@@ -236,14 +251,38 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
 
   // OnContentSettingChanged methods -------------------------------------------
 
-  void UnsubscribeBecausePermissionRevoked(
+  void UnsubscribePermissionRevoked(
+      const PushMessagingAppIdentifier& app_identifier,
+      UnregisterCallback unregister_callback);
+
+  void DidGetSenderIdUnsubscribePermissionRevoked(
       const PushMessagingAppIdentifier& app_identifier,
       UnregisterCallback callback,
+      const std::string& sender_id);
+
+  void GetPushSubscriptionFromAppIdentifier(
+      const PushMessagingAppIdentifier& app_identifier,
+      base::OnceCallback<void(blink::mojom::PushSubscriptionPtr)> callback);
+
+  void DidGetSWData(
+      const PushMessagingAppIdentifier& app_identifier,
+      base::OnceCallback<void(blink::mojom::PushSubscriptionPtr)> callback,
       const std::string& sender_id,
-      bool success,
-      bool not_found);
+      const std::string& subscription_id);
+
+  void GetPushSubscriptionFromAppIdentifierEnd(
+      base::OnceCallback<void(blink::mojom::PushSubscriptionPtr)> callback,
+      const std::string& sender_id,
+      bool is_valid,
+      const GURL& endpoint,
+      const base::Optional<base::Time>& expiration_time,
+      const std::vector<uint8_t>& p256dh,
+      const std::vector<uint8_t>& auth);
 
   // Helper methods ------------------------------------------------------------
+  void FirePushSubscriptionChangeCallback(
+      const PushMessagingAppIdentifier& app_identifier,
+      blink::mojom::PushEventStatus status);
 
   // Normalizes the |sender_info|. In most cases the |sender_info| will be
   // passed through to the GCM Driver as-is, but NIST P-256 application server

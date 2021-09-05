@@ -2,14 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {browserProxy} from '../browser_proxy/browser_proxy.js';
 import {DeviceOperator} from '../mojo/device_operator.js';
 // eslint-disable-next-line no-unused-vars
 import {ResolutionList} from '../type.js';
+
 import {Camera3DeviceInfo} from './camera3_device_info.js';
-import {PhotoConstraintsPreferrer,  // eslint-disable-line no-unused-vars
-        VideoConstraintsPreferrer,  // eslint-disable-line no-unused-vars
+import {
+  PhotoConstraintsPreferrer,  // eslint-disable-line no-unused-vars
+  VideoConstraintsPreferrer,  // eslint-disable-line no-unused-vars
 } from './constraints_preferrer.js';
-import {LegacyVCDError} from './error.js';
 
 /**
  * Contains information of all cameras on the device and will updates its value
@@ -36,7 +38,7 @@ export class DeviceInfoUpdater {
 
     /**
      * Listeners to be called after new camera information is available.
-     * @type {!Array<!function(!DeviceInfoUpdater): Promise>}
+     * @type {!Array<function(!DeviceInfoUpdater): !Promise>}
      * @private
      */
     this.deviceChangeListeners_ = [];
@@ -63,9 +65,16 @@ export class DeviceInfoUpdater {
     this.devicesInfo_ = this.enumerateDevices_();
 
     /**
+     * Got the permission to run enumerateDevices() or not.
+     * @type {boolean}
+     * @private
+     */
+    this.canEnumerateDevices_ = false;
+
+    /**
      * Camera3DeviceInfo of all available video devices. Is null on HALv1 device
      * without mojo api support.
-     * @type {!Promise<?Array<Camera3DeviceInfo>>}
+     * @type {!Promise<?Array<!Camera3DeviceInfo>>}
      * @private
      */
     this.camera3DevicesInfo_ = this.queryMojoDevicesInfo_();
@@ -133,10 +142,17 @@ export class DeviceInfoUpdater {
   /**
    * Enumerates all available devices and gets their MediaDeviceInfo.
    * @return {!Promise<!Array<!MediaDeviceInfo>>}
-   * @throws {Error}
+   * @throws {!Error}
    * @private
    */
   async enumerateDevices_() {
+    if (!this.canEnumerateDevices_) {
+      this.canEnumerateDevices_ =
+          await browserProxy.requestEnumerateDevicesPermission();
+      if (!this.canEnumerateDevices_) {
+        throw new Error('Failed to get the permission for enumerateDevices()');
+      }
+    }
     const devices = (await navigator.mediaDevices.enumerateDevices())
                         .filter((device) => device.kind === 'videoinput');
     if (devices.length === 0) {
@@ -150,7 +166,7 @@ export class DeviceInfoUpdater {
    * @return {!Promise<?Array<!Camera3DeviceInfo>>} Camera3DeviceInfo
    *     of available devices. Maybe null on HALv1 devices without supporting
    *     private mojo api.
-   * @throws {Error} Thrown when camera unplugging happens between enumerating
+   * @throws {!Error} Thrown when camera unplugging happens between enumerating
    *     devices and querying mojo APIs with current device info results.
    * @private
    */
@@ -164,7 +180,7 @@ export class DeviceInfoUpdater {
 
   /**
    * Registers listener to be called when state of available devices changes.
-   * @param {!function(!DeviceInfoUpdater)} listener
+   * @param {function(!DeviceInfoUpdater)} listener
    */
   addDeviceChangeListener(listener) {
     this.deviceChangeListeners_.push(listener);
@@ -174,7 +190,7 @@ export class DeviceInfoUpdater {
    * Requests to lock update of device information. This function is preserved
    * for device information reader to lock the update capability so as to ensure
    * getting consistent data between all information providers.
-   * @param {!function(!DeviceInfoUpdater): Promise} callback Called after
+   * @param {function(): !Promise} callback Called after
    *     update capability is locked. Getting information from all providers in
    *     callback are guaranteed to be consistent.
    */
@@ -190,7 +206,7 @@ export class DeviceInfoUpdater {
     }
     this.lockingUpdate_ = (async () => {
       try {
-        await callback(this);
+        await callback();
       } finally {
         this.lockingUpdate_ = null;
       }
@@ -222,22 +238,5 @@ export class DeviceInfoUpdater {
    */
   async getCamera3DevicesInfo() {
     return this.camera3DevicesInfo_;
-  }
-
-  /**
-   * Gets supported photo and video resolutions for specified video device.
-   * @param {string} deviceId Device id of the video device.
-   * @return {!Promise<!{photo: !ResolutionList, video: !ResolutionList}>}
-   *     Supported photo and video resolutions.
-   * @throws {Error} May fail on HALv1 device without capability of querying
-   *     supported resolutions.
-   */
-  async getDeviceResolutions(deviceId) {
-    const devices = await this.getCamera3DevicesInfo();
-    if (!devices) {
-      throw new LegacyVCDError();
-    }
-    const info = devices.find((info) => info.deviceId === deviceId);
-    return {photo: info.photoResols, video: info.videoResols};
   }
 }

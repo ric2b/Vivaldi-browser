@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Okulary przeciwsłoneczne</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Kataloński</translation>
+<translation id="1172970565351728681">Zostało około <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Zmień nazwę</translation>
 <translation id="117624967391683467">Kopiuję <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">Wstrzymaj</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Plik o nazwie „<ph name="FILENAME" />” już istnieje. Co chcesz zrobić?</translation>
 <translation id="2121825465123208577">Zmień rozmiar</translation>
 <translation id="2136953289241069843">Transliteracja (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Nie można otworzyć „<ph name="PATH" />”: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Nieprawidłowy znak: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Klawiatura wietnamska (TCVN)</translation>
 <translation id="2168214441502403371">Klawiatura perska</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Własność zostanie przeniesiona do domeny <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">Irlandzki</translation>
 <translation id="3245321423178950146">Nieznany wykonawca</translation>
+<translation id="3248185426436836442">Oczekuje</translation>
 <translation id="3252266817569339921">Francuski</translation>
 <translation id="3254434849914415189">Wybierz domyślną aplikację dla plików <ph name="FILE_TYPE" />:</translation>
 <translation id="3264582393905923483">Kontekst</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Rok nagrania</translation>
 <translation id="3338239663705455570">Klawiatura słoweńska</translation>
 <translation id="3353984535370177728">Wybierz folder do przesłania</translation>
+<translation id="3356580349448036450">Zakończone</translation>
 <translation id="3399597614303179694">Klawiatura macedońska</translation>
 <translation id="3414856743105198592">Formatowanie nośnika wymiennego spowoduje usunięcie wszystkich danych. Czy chcesz kontynuować?</translation>
 <translation id="3437801641691368414">Godzina utworzenia</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Nie masz uprawnień, by przenieść pliki do folderu „<ph name="FOLDER_NAME" />”.</translation>
 <translation id="3786301125658655746">Jesteś offline</translation>
 <translation id="3789841737615482174">Zainstaluj</translation>
+<translation id="3793469551756281394">Zostało około <ph name="REMAINING_TIME_HOUR" /> i <ph name="REMAINING_TIME_MINUTE" /></translation>
 <translation id="3798449238516105146">Wersja</translation>
 <translation id="3801082500826908679">Farerski</translation>
 <translation id="3809272675881623365">Królik</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Ten folder jest udostępniany systemowi Windows</translation>
 <translation id="4487088045714738411">Klawiatura belgijska</translation>
 <translation id="4522570452068850558">Szczegóły</translation>
+<translation id="4542387084127299777">Nie udało się otworzyć pliku „<ph name="PATH" />”</translation>
 <translation id="4552678318981539154">Kup więcej miejsca</translation>
 <translation id="4559767610552730302">Boke</translation>
 <translation id="4572815280350369984">Plik <ph name="FILE_TYPE" /></translation>
@@ -511,7 +515,8 @@
 <translation id="6629841649550503054">Kopie zapasowe wszystkich materiałów zostały utworzone na <ph name="BEGIN_LINK" />Dysku Google<ph name="END_LINK" />.</translation>
 <translation id="6643016212128521049">Wyczyść</translation>
 <translation id="6650726141019353908">Różowy motyl</translation>
-<translation id="6710213216561001401">Wstecz</translation>
+<translation id="6657585470893396449">Hasło</translation>
+<translation id="6710213216561001401">Poprzedni</translation>
 <translation id="6718273304615422081">Pakuję...</translation>
 <translation id="6751256176799620176">Wybrano jeden folder</translation>
 <translation id="6760765581316020278">Klawiatura wietnamska (VNI)</translation>
@@ -551,7 +556,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Instalacja nie powiodła się.</translation>
 <translation id="7040138676081995583">Otwórz za pomocą...</translation>
-<translation id="7059566040011178088">Mniej niż <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923">Wybrane elementy: <ph name="COUNT" /></translation>
 <translation id="7106346894903675391">Kup więcej miejsca...</translation>
 <translation id="7126604456862387217">„&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;” – &lt;em&gt;wyszukaj na Dysku&lt;/em&gt;</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">Model urządzenia</translation>
 <translation id="8208580316430297579">Dzieła sztuki</translation>
 <translation id="8223479393428528563">Aby zapisać te pliki i używać ich offline, przejdź do trybu online, kliknij pliki prawym przyciskiem myszy i wybierz opcję <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Około <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Przerwij</translation>
 <translation id="8261506727792406068">Usuń</translation>
 <translation id="8269755669432358899">Zwiń panele informacji zwrotnej o plikach</translation>
@@ -725,6 +728,7 @@
 <translation id="9065203028668620118">Edytuj</translation>
 <translation id="9099674669267916096">Liczba stron</translation>
 <translation id="9110990317705400362">Stale szukamy rozwiązań, dzięki którym przeglądanie internetu będzie bezpieczniejsze. Wcześniej każda strona mogła poprosić o dodanie rozszerzenia do przeglądarki. W nowszych wersjach Google Chrome musisz dodać rozszerzenie na stronie Rozszerzenia, by wyraźnie poinformować przeglądarkę, że chcesz je zainstalować. <ph name="BEGIN_LINK" />Więcej informacji<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Odblokuj</translation>
 <translation id="912419004897138677">Kodek</translation>
 <translation id="9129931661813833980">Przypnij folder</translation>
 <translation id="9130775360844693113">Osoby z uprawnieniami do: „<ph name="DESTINATION_NAME" />” uzyskają dostęp do tych elementów.</translation>

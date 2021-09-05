@@ -26,7 +26,7 @@ class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
 
   void PostProfileInit() override;
 
-  static VivaldiBrowserMainExtraParts* Create();
+  static std::unique_ptr<VivaldiBrowserMainExtraParts> Create();
 
  private:
   void EnsureBrowserContextKeyedServiceFactoriesBuilt();

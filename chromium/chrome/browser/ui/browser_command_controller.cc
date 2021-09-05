@@ -41,6 +41,7 @@
 #include "chrome/browser/ui/page_info/page_info_dialog.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
@@ -50,7 +51,6 @@
 #include "chrome/common/url_constants.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/dom_distiller/core/dom_distiller_features.h"
-#include "components/feature_engagement/buildflags.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
@@ -67,7 +67,7 @@
 #include "printing/buildflags/buildflags.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "chrome/browser/ui/browser_commands_mac.h"
 #endif
 
@@ -85,13 +85,6 @@
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 #include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"  // nogncheck
-#endif
-
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-#include "chrome/browser/feature_engagement/bookmark/bookmark_tracker.h"
-#include "chrome/browser/feature_engagement/bookmark/bookmark_tracker_factory.h"
-#include "chrome/browser/feature_engagement/new_tab/new_tab_tracker.h"
-#include "chrome/browser/feature_engagement/new_tab/new_tab_tracker_factory.h"
 #endif
 
 #if defined(USE_OZONE)
@@ -179,7 +172,7 @@ BrowserCommandController::BrowserCommandController(Browser* browser)
       prefs::kPrintingEnabled,
       base::Bind(&BrowserCommandController::UpdatePrintingState,
                  base::Unretained(this)));
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   profile_pref_registrar_.Add(
       prefs::kFullscreenAllowed,
       base::Bind(&BrowserCommandController::UpdateCommandsForFullscreenMode,
@@ -240,7 +233,7 @@ bool BrowserCommandController::IsReservedCommandOrKey(
     // found in http://crbug.com/680809.
     const bool is_exit_fullscreen =
         (command_id == IDC_EXIT || command_id == IDC_FULLSCREEN);
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     // This behavior is different on Mac OS, which has a unique user-initiated
     // full-screen mode. According to the discussion in http://crbug.com/702251,
     // the commands should be reserved for browser-side handling if the browser
@@ -389,6 +382,9 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_STOP:
       Stop(browser_);
       break;
+    case IDC_TAB_SEARCH:
+      ShowTabSearch(browser_);
+      break;
 
       // Window management commands
     case IDC_NEW_WINDOW:
@@ -403,16 +399,6 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       break;
     case IDC_NEW_TAB: {
       NewTab(browser_);
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-      // This is not in NewTab() to avoid tracking programmatic creation of new
-      // tabs by extensions.
-      auto* new_tab_tracker =
-          feature_engagement::NewTabTrackerFactory::GetInstance()
-              ->GetForProfile(profile());
-
-      new_tab_tracker->OnNewTabOpened();
-      new_tab_tracker->CloseBubble();
-#endif
       break;
     }
     case IDC_CLOSE_TAB:
@@ -500,7 +486,7 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     }
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     case IDC_TOGGLE_FULLSCREEN_TOOLBAR:
       chrome::ToggleFullscreenToolbar(browser_);
       break;
@@ -518,19 +504,9 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       SavePage(browser_);
       break;
     case IDC_BOOKMARK_THIS_TAB:
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-      feature_engagement::BookmarkTrackerFactory::GetInstance()
-          ->GetForProfile(profile())
-          ->OnBookmarkAdded();
-#endif
       BookmarkCurrentTab(browser_);
       break;
     case IDC_BOOKMARK_ALL_TABS:
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-      feature_engagement::BookmarkTrackerFactory::GetInstance()
-          ->GetForProfile(profile())
-          ->OnBookmarkAdded();
-#endif
       BookmarkAllTabs(browser_);
       break;
     case IDC_VIEW_SOURCE:
@@ -690,6 +666,9 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       break;
     case IDC_PROFILING_ENABLED:
       content::Profiling::Toggle();
+      break;
+    case IDC_CARET_BROWSING_TOGGLE:
+      ToggleCaretBrowsing(browser_);
       break;
 
     case IDC_SHOW_BOOKMARK_MANAGER:
@@ -1017,6 +996,7 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(
       IDC_SHOW_SAVE_LOCAL_CARD_SIGN_IN_PROMO_IF_APPLICABLE, true);
   command_updater_.UpdateCommandEnabled(IDC_CLOSE_SIGN_IN_PROMO, true);
+  command_updater_.UpdateCommandEnabled(IDC_CARET_BROWSING_TOGGLE, true);
 
   UpdateShowSyncState(true);
 
@@ -1069,6 +1049,11 @@ void BrowserCommandController::InitCommandState() {
                                         normal_window);
   command_updater_.UpdateCommandEnabled(IDC_WINDOW_CLOSE_OTHER_TABS,
                                         normal_window);
+
+  command_updater_.UpdateCommandEnabled(
+      IDC_TAB_SEARCH, base::FeatureList::IsEnabled(features::kTabSearch) &&
+                          browser_->is_type_normal() &&
+                          !browser_->profile()->IsIncognitoProfile());
 
   // Initialize other commands whose state changes based on various conditions.
   UpdateCommandsForFullscreenMode();
@@ -1236,7 +1221,7 @@ void BrowserCommandController::UpdateCommandsForDevTools() {
                                         dev_tools_enabled);
   command_updater_.UpdateCommandEnabled(IDC_DEV_TOOLS_TOGGLE,
                                         dev_tools_enabled);
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   command_updater_.UpdateCommandEnabled(IDC_TOGGLE_JAVASCRIPT_APPLE_EVENTS,
                                         dev_tools_enabled);
 #endif
@@ -1329,7 +1314,7 @@ void BrowserCommandController::UpdateCommandsForFullscreenMode() {
   if (base::debug::IsProfilingSupported())
     command_updater_.UpdateCommandEnabled(IDC_PROFILING_ENABLED, show_main_ui);
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   // Disable toggling into fullscreen mode if disallowed by pref.
   const bool fullscreen_enabled =
       is_fullscreen ||
@@ -1363,14 +1348,14 @@ void BrowserCommandController::UpdateCommandsForHostedAppAvailability() {
 namespace {
 
 #if DCHECK_IS_ON()
-// Makes sure that all commands that are not whitelisted are disabled. DCHECKs
+// Makes sure that all commands that are not allowlisted are disabled. DCHECKs
 // otherwise. Compiled only in debug mode.
-void NonWhitelistedCommandsAreDisabled(CommandUpdaterImpl* command_updater) {
-  constexpr int kWhitelistedIds[] = {IDC_CUT, IDC_COPY, IDC_PASTE};
+void NonAllowlistedCommandsAreDisabled(CommandUpdaterImpl* command_updater) {
+  constexpr int kAllowlistedIds[] = {IDC_CUT, IDC_COPY, IDC_PASTE};
 
-  // Go through all the command ids, skip the whitelisted ones.
+  // Go through all the command ids, skip the allowlisted ones.
   for (int id : command_updater->GetAllIds()) {
-    if (base::Contains(kWhitelistedIds, id)) {
+    if (base::Contains(kAllowlistedIds, id)) {
       continue;
     }
     DCHECK(!command_updater->IsCommandEnabled(id));
@@ -1391,14 +1376,14 @@ void BrowserCommandController::UpdateCommandsForLockedFullscreenMode() {
 
   if (is_locked_fullscreen_) {
     command_updater_.DisableAllCommands();
-    // Update the state of whitelisted commands:
+    // Update the state of allowlisted commands:
     // IDC_CUT/IDC_COPY/IDC_PASTE,
     UpdateCommandsForContentRestrictionState();
     // TODO(crbug.com/904637): Re-enable Find and Zoom in locked fullscreen.
     // All other commands will be disabled (there is an early return in their
     // corresponding UpdateCommandsFor* functions).
 #if DCHECK_IS_ON()
-    NonWhitelistedCommandsAreDisabled(&command_updater_);
+    NonAllowlistedCommandsAreDisabled(&command_updater_);
 #endif
   } else {
     // Do an init call to re-initialize command state after the

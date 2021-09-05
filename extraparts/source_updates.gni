@@ -29,7 +29,7 @@ foreach(_target, _main_dll_targets) {
   }
 }
 
-if (!is_android) {
+if (vivaldi_build_tests) {
   update_target("//chrome/test:test_support") {
     sources += [
       "//vivaldi/extraparts/vivaldi_main_delegate.cpp",

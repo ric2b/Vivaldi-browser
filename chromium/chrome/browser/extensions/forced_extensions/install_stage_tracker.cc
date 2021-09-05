@@ -6,9 +6,21 @@
 
 #include "base/check_op.h"
 #include "chrome/browser/extensions/forced_extensions/install_stage_tracker_factory.h"
+#include "chrome/browser/profiles/profile.h"
 #include "net/base/net_errors.h"
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#endif  // defined(OS_CHROMEOS)
+
 namespace extensions {
+
+#if defined(OS_CHROMEOS)
+InstallStageTracker::UserInfo::UserInfo(const UserInfo&) = default;
+InstallStageTracker::UserInfo::UserInfo(user_manager::UserType user_type,
+                                        bool is_new_user)
+    : user_type(user_type), is_new_user(is_new_user) {}
+#endif  // defined(OS_CHROMEOS)
 
 // InstallStageTracker::InstallationData implementation.
 
@@ -72,6 +84,10 @@ std::string InstallStageTracker::GetFormattedInstallationData(
     str << "; no_update_info: "
         << static_cast<int>(data.no_updates_info.value());
   }
+  if (data.app_status_error) {
+    str << "; app_status_error: "
+        << static_cast<int>(data.app_status_error.value());
+  }
 
   return str.str();
 }
@@ -93,6 +109,19 @@ InstallStageTracker* InstallStageTracker::Get(
   return InstallStageTrackerFactory::GetForBrowserContext(context);
 }
 
+#if defined(OS_CHROMEOS)
+InstallStageTracker::UserInfo InstallStageTracker::GetUserInfo(
+    Profile* profile) {
+  const user_manager::User* user =
+      chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
+  DCHECK(user);
+  bool is_new_user = user_manager::UserManager::Get()->IsCurrentUserNew() ||
+                     profile->IsNewProfile();
+  UserInfo current_user(user->GetType(), is_new_user);
+  return current_user;
+}
+#endif  // defined(OS_CHROMEOS)
+
 void InstallStageTracker::ReportInfoOnNoUpdatesFailure(
     const ExtensionId& id,
     const std::string& info) {
@@ -113,10 +142,15 @@ void InstallStageTracker::ReportInfoOnNoUpdatesFailure(
 
 void InstallStageTracker::ReportManifestInvalidFailure(
     const ExtensionId& id,
-    ManifestInvalidError error) {
+    const ExtensionDownloaderDelegate::FailureData& failure_data) {
+  DCHECK(failure_data.manifest_invalid_error);
   InstallationData& data = installation_data_map_[id];
   data.failure_reason = FailureReason::MANIFEST_INVALID;
-  data.manifest_invalid_error = error;
+  data.manifest_invalid_error = failure_data.manifest_invalid_error.value();
+  if (failure_data.app_status_error) {
+    data.app_status_error =
+        GetManifestInvalidAppStatusError(failure_data.app_status_error.value());
+  }
   NotifyObserversOfFailure(id, data.failure_reason.value(), data);
 }
 
@@ -125,6 +159,7 @@ void InstallStageTracker::ReportInstallationStage(const ExtensionId& id,
   InstallationData& data = installation_data_map_[id];
   data.install_stage = stage;
   for (auto& observer : observers_) {
+    observer.OnExtensionInstallationStageChanged(id, stage);
     observer.OnExtensionDataChangedForTesting(id, browser_context_, data);
   }
 }
@@ -134,6 +169,41 @@ void InstallStageTracker::ReportDownloadingStage(
     ExtensionDownloaderDelegate::Stage stage) {
   InstallationData& data = installation_data_map_[id];
   data.downloading_stage = stage;
+  const base::TimeTicks current_time = base::TimeTicks::Now();
+  if (stage == ExtensionDownloaderDelegate::Stage::DOWNLOADING_MANIFEST)
+    data.download_manifest_started_time = current_time;
+  else if (stage == ExtensionDownloaderDelegate::Stage::MANIFEST_LOADED)
+    data.download_manifest_finish_time = current_time;
+  else if (stage == ExtensionDownloaderDelegate::Stage::DOWNLOADING_CRX)
+    data.download_CRX_started_time = current_time;
+  else if (stage == ExtensionDownloaderDelegate::Stage::FINISHED)
+    data.download_CRX_finish_time = current_time;
+
+  for (auto& observer : observers_) {
+    observer.OnExtensionDownloadingStageChanged(id, stage);
+    observer.OnExtensionDataChangedForTesting(id, browser_context_, data);
+  }
+}
+
+void InstallStageTracker::ReportCRXInstallationStage(const ExtensionId& id,
+                                                     InstallationStage stage) {
+  DCHECK(!id.empty());
+  InstallationData& data = installation_data_map_[id];
+  data.installation_stage = stage;
+  const base::TimeTicks current_time = base::TimeTicks::Now();
+  if (stage == InstallationStage::kVerification)
+    data.verification_started_time = current_time;
+  else if (stage == InstallationStage::kCopying)
+    data.copying_started_time = current_time;
+  else if (stage == InstallationStage::kUnpacking)
+    data.unpacking_started_time = current_time;
+  else if (stage == InstallationStage::kCheckingExpectations)
+    data.checking_expectations_started_time = current_time;
+  else if (stage == InstallationStage::kFinalizing)
+    data.finalizing_started_time = current_time;
+  else if (stage == InstallationStage::kComplete)
+    data.installation_complete_time = current_time;
+
   for (auto& observer : observers_) {
     observer.OnExtensionDataChangedForTesting(id, browser_context_, data);
   }
@@ -179,6 +249,18 @@ void InstallStageTracker::ReportManifestUpdateCheckStatus(
   }
 }
 
+InstallStageTracker::AppStatusError
+InstallStageTracker::GetManifestInvalidAppStatusError(
+    const std::string& status) {
+  if (status == "error-unknownApplication")
+    return AppStatusError::kErrorUnknownApplication;
+  else if (status == "error-invalidAppId")
+    return AppStatusError::kErrorInvalidAppId;
+  else if (status == "error-restricted" || status == "restricted")
+    return AppStatusError::kErrorRestricted;
+  return AppStatusError::kUnknown;
+}
+
 void InstallStageTracker::ReportFetchError(
     const ExtensionId& id,
     FailureReason reason,
@@ -201,9 +283,8 @@ void InstallStageTracker::ReportFailure(const ExtensionId& id,
   NotifyObserversOfFailure(id, reason, data);
 }
 
-void InstallStageTracker::ReportExtensionTypeForPolicyDisallowedExtension(
-    const ExtensionId& id,
-    Manifest::Type extension_type) {
+void InstallStageTracker::ReportExtensionType(const ExtensionId& id,
+                                              Manifest::Type extension_type) {
   InstallationData& data = installation_data_map_[id];
   data.extension_type = extension_type;
 }

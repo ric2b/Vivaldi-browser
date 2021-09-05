@@ -4,8 +4,7 @@
 
 package org.chromium.chrome.test.util;
 
-import android.annotation.TargetApi;
-import android.os.Build;
+import org.hamcrest.Matchers;
 
 import org.chromium.chrome.browser.ntp.IncognitoNewTabPage;
 import org.chromium.chrome.browser.ntp.NewTabPage;
@@ -33,24 +32,17 @@ public class NewTabPageTestUtils {
      *
      * @param tab The tab to be monitored for NTP loading.
      */
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public static void waitForNtpLoaded(final Tab tab) {
-        CriteriaHelper.pollUiThread(new Criteria("NTP never fully loaded") {
-            @Override
-            public boolean isSatisfied() {
-                if (!tab.isIncognito()) {
-                    // TODO(tedchoc): Make MostVisitedPage also have a isLoaded() concept.
-                    if (tab.getNativePage() instanceof NewTabPage) {
-                        return ((NewTabPage) tab.getNativePage()).isLoadedForTests();
-                    } else {
-                        return false;
-                    }
-                } else {
-                    if (!(tab.getNativePage() instanceof IncognitoNewTabPage)) {
-                        return false;
-                    }
-                    return ((IncognitoNewTabPage) tab.getNativePage()).isLoadedForTests();
-                }
+        CriteriaHelper.pollUiThread(() -> {
+            if (!tab.isIncognito()) {
+                Criteria.checkThat(tab.getNativePage(), Matchers.instanceOf(NewTabPage.class));
+                Criteria.checkThat(
+                        ((NewTabPage) tab.getNativePage()).isLoadedForTests(), Matchers.is(true));
+            } else {
+                Criteria.checkThat(
+                        tab.getNativePage(), Matchers.instanceOf(IncognitoNewTabPage.class));
+                Criteria.checkThat(((IncognitoNewTabPage) tab.getNativePage()).isLoadedForTests(),
+                        Matchers.is(true));
             }
         });
     }

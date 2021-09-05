@@ -59,7 +59,6 @@ Polymer({
   ready() {
     this.initializeLoginScreen('TermsOfServiceScreen', {
       resetAllowed: true,
-      enableDebuggingAllowed: true,
     });
   },
 

@@ -4,6 +4,7 @@
 
 #include "ash/app_list/views/expand_arrow_view.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -14,6 +15,7 @@
 #include "ash/public/cpp/app_list/vector_icons/vector_icons.h"
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/safe_conversions.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/canvas.h"
@@ -333,11 +335,10 @@ void ExpandArrowView::AnimationProgressed(const gfx::Animation* animation) {
   }
 
   // Update pulse radius.
-  pulse_radius_ = static_cast<int>(
-      (kPulseMaxRadius - kPulseMinRadius) *
-      gfx::Tween::CalculateValue(
-          gfx::Tween::EASE_IN_OUT,
-          time.InMillisecondsF() / kCycleDuration.InMillisecondsF()));
+  pulse_radius_ =
+      base::ClampRound((kPulseMaxRadius - kPulseMinRadius) *
+                       gfx::Tween::CalculateValue(gfx::Tween::EASE_IN_OUT,
+                                                  time / kCycleDuration));
 
   // Update y position offset of the arrow.
   constexpr auto kArrowMoveOutBeginTime =
@@ -346,17 +347,15 @@ void ExpandArrowView::AnimationProgressed(const gfx::Animation* animation) {
   constexpr auto kArrowMoveInBeginTime = base::TimeDelta::FromMilliseconds(500);
   constexpr auto kArrowMoveInEndTime = base::TimeDelta::FromMilliseconds(900);
   if (time > kArrowMoveOutBeginTime && time <= kArrowMoveOutEndTime) {
-    const double progress =
-        (time - kArrowMoveOutBeginTime).InMillisecondsF() /
-        (kArrowMoveOutEndTime - kArrowMoveOutBeginTime).InMillisecondsF();
-    arrow_y_offset_ = static_cast<int>(
+    const double progress = (time - kArrowMoveOutBeginTime) /
+                            (kArrowMoveOutEndTime - kArrowMoveOutBeginTime);
+    arrow_y_offset_ = base::ClampRound(
         -kTotalArrowYOffset *
         gfx::Tween::CalculateValue(gfx::Tween::EASE_IN, progress));
   } else if (time > kArrowMoveInBeginTime && time <= kArrowMoveInEndTime) {
-    const double progress =
-        (time - kArrowMoveInBeginTime).InMillisecondsF() /
-        (kArrowMoveInEndTime - kArrowMoveInBeginTime).InMillisecondsF();
-    arrow_y_offset_ = static_cast<int>(
+    const double progress = (time - kArrowMoveInBeginTime) /
+                            (kArrowMoveInEndTime - kArrowMoveInBeginTime);
+    arrow_y_offset_ = base::ClampRound(
         kTotalArrowYOffset *
         (1 - gfx::Tween::CalculateValue(gfx::Tween::EASE_OUT, progress)));
   }

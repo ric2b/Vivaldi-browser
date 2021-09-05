@@ -11,39 +11,13 @@
 #include "base/component_export.h"
 #include "base/observer_list_types.h"
 #include "base/scoped_observer.h"
-#include "chromeos/services/assistant/public/mojom/assistant_notification.mojom.h"
+#include "chromeos/services/assistant/public/cpp/assistant_enums.h"
+#include "chromeos/services/assistant/public/cpp/assistant_notification.h"
+#include "chromeos/services/assistant/public/shared/utils.h"
 #include "ui/accessibility/mojom/ax_assistant_structure.mojom.h"
 
 namespace chromeos {
 namespace assistant {
-
-// Enumeration of possible Assistant query sources. These values are persisted
-// to logs. Entries should not be renumbered and numeric values should never
-// be reused. Append new values to the end.
-enum class AssistantQuerySource {
-  kUnspecified = 0,
-  kMinValue = kUnspecified,
-  kDeepLink = 1,
-  kDialogPlateTextField = 2,
-  kStylus = 3,
-  kSuggestionChip = 4,
-  kVoiceInput = 5,
-  kProactiveSuggestions = 6,
-  kLibAssistantInitiated = 7,
-  kWarmerWelcome = 8,
-  kConversationStarter = 9,
-  kWhatsOnMyScreen = 10,
-  kQuickAnswers = 11,
-  kLauncherChip = 12,
-  kBetterOnboarding = 13,
-  kMaxValue = kBetterOnboarding,
-};
-
-// Enumeration of possible Assistant interaction types.
-enum class AssistantInteractionType {
-  kText,
-  kVoice,
-};
 
 // Describes an Assistant interaction.
 struct COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) AssistantInteractionMetadata {
@@ -60,27 +34,6 @@ struct COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) AssistantInteractionMetadata {
   AssistantInteractionType type{AssistantInteractionType::kText};
   AssistantQuerySource source{AssistantQuerySource::kUnspecified};
   std::string query;
-};
-
-// Enumeration of possible completions for an Assistant interaction.
-enum class AssistantInteractionResolution {
-  // Assistant interaction completed normally.
-  kNormal,
-  // Assistant interaction completed due to barge in or cancellation.
-  kInterruption,
-  // Assistant interaction completed due to error.
-  kError,
-  // Assistant interaction completed due to mic timeout.
-  kMicTimeout,
-  // Assistant interaction completed due to multi-device hotword loss.
-  kMultiDeviceHotwordLoss,
-};
-
-// Enumeration of possible Assistant suggestion types.
-enum class AssistantSuggestionType {
-  kUnspecified,
-  kConversationStarter,
-  kBetterOnboarding,
 };
 
 // Models an Assistant suggestion.
@@ -101,53 +54,20 @@ struct COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) AssistantSuggestion {
   // Assistant suggestion of another type (e.g. a conversation starter).
   AssistantSuggestionType type{AssistantSuggestionType::kUnspecified};
 
+  AssistantBetterOnboardingType better_onboarding_type{
+      AssistantBetterOnboardingType::kUnspecified};
+
   // Display text. e.g. "Cancel".
   std::string text;
 
   // Optional URL for icon. e.g. "https://www.gstatic.com/icon.png".
+  // NOTE: This may be an icon resource link. e.g.
+  // "googleassistant://resource?type=icon&name=assistant".
   GURL icon_url;
 
   // Optional URL for action. e.g.
   // "https://www.google.com/search?query=action".
   GURL action_url;
-};
-
-// Models status of an app.
-// TODO(xiaohuic): update to constant style naming.
-enum class AppStatus {
-  UNKNOWN,
-  AVAILABLE,
-  UNAVAILABLE,
-  VERSION_MISMATCH,
-  DISABLED
-};
-
-// Models an Android app.
-struct COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) AndroidAppInfo {
-  AndroidAppInfo();
-  AndroidAppInfo(const AndroidAppInfo& suggestion);
-  AndroidAppInfo& operator=(const AndroidAppInfo&);
-  AndroidAppInfo(AndroidAppInfo&& suggestion);
-  AndroidAppInfo& operator=(AndroidAppInfo&&);
-  ~AndroidAppInfo();
-
-  // Unique name to identify a specific app.
-  std::string package_name;
-
-  // Version number of the app.
-  int version{0};
-
-  // Localized app name.
-  std::string localized_app_name;
-
-  // Intent data to operate on.
-  std::string intent;
-
-  // Status of the app.
-  AppStatus status{AppStatus::UNKNOWN};
-
-  // The general action to be performed, such as ACTION_VIEW, ACTION_MAIN, etc.
-  std::string action;
 };
 
 // Subscribes to Assistant's interaction event. These events are server driven
@@ -231,49 +151,6 @@ struct COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) AssistantFeedback {
   std::string screenshot_png;
 };
 
-// Enumeration of Assistant entry points. These values are persisted to logs.
-// Entries should not be renumbered and numeric values should never be reused.
-// Only append to this enum is allowed if the possible entry source grows.
-enum class AssistantEntryPoint {
-  kUnspecified = 0,
-  kMinValue = kUnspecified,
-  kDeepLink = 1,
-  kHotkey = 2,
-  kHotword = 3,
-  // kLauncherSearchBoxDeprecated = 4,
-  kLongPressLauncher = 5,
-  kSetup = 6,
-  kStylus = 7,
-  kLauncherSearchResult = 8,
-  kLauncherSearchBoxIcon = 9,
-  kProactiveSuggestions = 10,
-  kLauncherChip = 11,
-  kMaxValue = kLauncherChip,
-};
-
-// Enumeration of Assistant exit points. These values are persisted to logs.
-// Entries should not be renumbered and numeric values should never be reused.
-// Only append to this enum is allowed if the possible exit source grows.
-enum class AssistantExitPoint {
-  // Includes keyboard interruptions (e.g. launching Chrome OS feedback
-  // using keyboard shortcuts, pressing search button).
-  kUnspecified = 0,
-  kMinValue = kUnspecified,
-  kCloseButton = 1,
-  kHotkey = 2,
-  kNewBrowserTabFromServer = 3,
-  kNewBrowserTabFromUser = 4,
-  kOutsidePress = 5,
-  kSetup = 6,
-  kStylus = 7,
-  kBackInLauncher = 8,
-  kLauncherClose = 9,
-  kLauncherOpen = 10,
-  kScreenshot = 11,
-  kOverviewMode = 12,
-  kMaxValue = kOverviewMode,
-};
-
 class COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) Assistant {
  public:
   Assistant() = default;
@@ -306,13 +183,6 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) Assistant {
   // Starts a new Assistant voice interaction.
   virtual void StartVoiceInteraction() = 0;
 
-  // Starts a warmer welcome interaction for Assistant launch.
-  // |num_warmer_welcome_triggered| is the count of warmer welcomes
-  // already triggered. If |allow_tts| is true, the result may contain TTS.
-  // Otherwise TTS will not be present in the generated server response.
-  virtual void StartWarmerWelcomeInteraction(int num_warmer_welcome_triggered,
-                                             bool allow_tts) = 0;
-
   // Stops the active Assistant interaction and cancel the conversation if
   // |cancel_conversation|. If there is no active interaction, this method
   // is a no-op.
@@ -332,13 +202,12 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) Assistant {
   // |action_index| is the index of the tapped action. The main UI in the
   // notification contains the top level action, which index is 0. The buttons
   // have the additional actions, which are indexed starting from 1.
-  virtual void RetrieveNotification(
-      const mojom::AssistantNotification& notification,
-      int action_index) = 0;
+  virtual void RetrieveNotification(const AssistantNotification& notification,
+                                    int action_index) = 0;
 
   // Dismisses a notification.
   virtual void DismissNotification(
-      const mojom::AssistantNotification& notification) = 0;
+      const AssistantNotification& notification) = 0;
 
   // Invoked when accessibility status is changed. Note that though
   // accessibility status has changed, |spoken_feedback_enabled| may not have.

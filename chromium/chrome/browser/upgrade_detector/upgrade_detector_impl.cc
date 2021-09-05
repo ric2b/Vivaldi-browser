@@ -41,36 +41,33 @@
 
 #if defined(OS_WIN)
 #include "base/enterprise_util.h"
-#include "chrome/browser/policy/browser_dm_token_storage.h"
 #include "chrome/installer/util/google_update_settings.h"
-#elif defined(OS_MACOSX)
+#include "components/enterprise/browser/controller/browser_dm_token_storage.h"
+#elif defined(OS_MAC)
 #include "chrome/browser/mac/keystone_glue.h"
 #endif
 
 namespace {
 
 // The default thresholds for reaching annoyance levels.
-constexpr base::TimeDelta kDefaultVeryLowThreshold =
-    base::TimeDelta::FromHours(1);
-constexpr base::TimeDelta kDefaultLowThreshold = base::TimeDelta::FromDays(2);
-constexpr base::TimeDelta kDefaultElevatedThreshold =
-    base::TimeDelta::FromDays(4);
-constexpr base::TimeDelta kDefaultHighThreshold = base::TimeDelta::FromDays(7);
+constexpr auto kDefaultVeryLowThreshold = base::TimeDelta::FromHours(1);
+constexpr auto kDefaultLowThreshold = base::TimeDelta::FromDays(2);
+constexpr auto kDefaultElevatedThreshold = base::TimeDelta::FromDays(4);
+constexpr auto kDefaultHighThreshold = base::TimeDelta::FromDays(7);
 
 // How long to wait (each cycle) before checking which severity level we should
 // be at. Once we reach the highest severity, the timer will stop.
-constexpr base::TimeDelta kNotifyCycleTime = base::TimeDelta::FromMinutes(20);
+constexpr auto kNotifyCycleTime = base::TimeDelta::FromMinutes(20);
 
 // Same as kNotifyCycleTimeMs but only used during testing.
-constexpr base::TimeDelta kNotifyCycleTimeForTesting =
+constexpr auto kNotifyCycleTimeForTesting =
     base::TimeDelta::FromMilliseconds(500);
 
 // How often to check to see if the build has become outdated.
-constexpr base::TimeDelta kOutdatedBuildDetectorPeriod =
-    base::TimeDelta::FromDays(1);
+constexpr auto kOutdatedBuildDetectorPeriod = base::TimeDelta::FromDays(1);
 
 // The number of days after which we identify a build/install as outdated.
-constexpr base::TimeDelta kOutdatedBuildAge = base::TimeDelta::FromDays(12 * 7);
+constexpr auto kOutdatedBuildAge = base::TimeDelta::FromDays(7) * 12;
 
 constexpr bool ShouldDetectOutdatedBuilds() {
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -176,7 +173,7 @@ void UpgradeDetectorImpl::DoInitializeThresholds() {
 
   // When testing, scale everything back so that a day passes in ten seconds.
   if (is_testing_) {
-    static constexpr int64_t scale_factor =
+    constexpr int64_t scale_factor =
         base::TimeDelta::FromDays(1) / base::TimeDelta::FromSeconds(10);
     for (auto& stage : stages_)
       stage /= scale_factor;
@@ -464,7 +461,7 @@ void UpgradeDetectorImpl::Init() {
 
   // On macOS, only enable upgrade notifications if the updater (Keystone) is
   // present.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (!keystone_glue::KeystoneEnabled())
     return;
 #endif

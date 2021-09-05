@@ -186,8 +186,7 @@ void ManagePasswordsState::TransitionToState(
       << state_;
   if (state_ == password_manager::ui::CREDENTIAL_REQUEST_STATE) {
     if (!credentials_callback_.is_null()) {
-      credentials_callback_.Run(nullptr);
-      credentials_callback_.Reset();
+      std::move(credentials_callback_).Run(nullptr);
     }
   }
   SetState(state);
@@ -204,7 +203,7 @@ void ManagePasswordsState::ProcessLoginsChanged(
     if (change.type() != password_manager::PasswordStoreChange::REMOVE)
       all_changes_are_deletion = false;
     const PasswordForm& changed_form = change.form();
-    if (changed_form.blacklisted_by_user)
+    if (changed_form.blocked_by_user)
       continue;
     if (change.type() == password_manager::PasswordStoreChange::REMOVE) {
       if (RemoveFormFromVector(changed_form, &local_credentials_forms_))
@@ -226,17 +225,16 @@ void ManagePasswordsState::ProcessLoginsChanged(
 }
 
 void ManagePasswordsState::ProcessUnsyncedCredentialsWillBeDeleted(
-    const std::vector<autofill::PasswordForm>& unsynced_credentials) {
-  unsynced_credentials_ = unsynced_credentials;
+    std::vector<autofill::PasswordForm> unsynced_credentials) {
+  unsynced_credentials_ = std::move(unsynced_credentials);
   SetState(password_manager::ui::WILL_DELETE_UNSYNCED_ACCOUNT_PASSWORDS_STATE);
 }
 
 void ManagePasswordsState::ChooseCredential(const PasswordForm* form) {
   DCHECK_EQ(password_manager::ui::CREDENTIAL_REQUEST_STATE, state());
-  DCHECK(!credentials_callback().is_null());
+  DCHECK(!credentials_callback_.is_null());
 
-  credentials_callback().Run(form);
-  set_credentials_callback(ManagePasswordsState::CredentialsCallback());
+  std::move(credentials_callback_).Run(form);
 }
 
 void ManagePasswordsState::ClearData() {

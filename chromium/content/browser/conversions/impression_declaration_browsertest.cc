@@ -19,11 +19,14 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/hit_test_region_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/shell/browser/shell.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/default_handlers.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
+#include "ui/gfx/geometry/point.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -201,7 +204,7 @@ IN_PROC_BROWSER_TEST_F(ImpressionDeclarationBrowserTest,
 }
 
 // Flaky on Mac: crbug.com/1099410
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_ImpressionTagNavigatesExistingRemoteFrame_ImpressionReceived \
   DISABLED_ImpressionTagNavigatesExistingRemoteFrame_ImpressionReceived
 #else
@@ -447,6 +450,45 @@ IN_PROC_BROWSER_TEST_F(ImpressionDeclarationBrowserTest,
   EXPECT_EQ(1u, impression_observer.Wait().impression_data);
 }
 
+// Tests that when a context menu is shown, there is an impression attached to
+// the ContextMenu data forwarded to the browser process.
+
+// TODO(johnidel): SimulateMouseClickAt() does not work on Android, find a
+// different way to invoke the context menu that works on Android.
+#if !defined(OS_ANDROID)
+IN_PROC_BROWSER_TEST_F(ImpressionDeclarationBrowserTest,
+                       ContextMenuShownForImpression_ImpressionSet) {
+  // Navigate to a page with the non-https server.
+  EXPECT_TRUE(NavigateToURL(
+      web_contents(),
+      https_server()->GetURL("b.test", "/page_with_impression_creator.html")));
+
+  EXPECT_TRUE(ExecJs(web_contents(), R"(
+    createImpressionTagAtLocation("link",
+                        "page_with_conversion_redirect.html",
+                        "10" /* impression data */,
+                        "https://dest.com" /* conversion_destination */,
+                        100 /* left */, 100 /* top */);)"));
+
+  content::RenderProcessHost* render_process_host =
+      web_contents()->GetMainFrame()->GetProcess();
+  auto context_menu_filter = base::MakeRefCounted<content::ContextMenuFilter>();
+  render_process_host->AddFilter(context_menu_filter.get());
+
+  content::SimulateMouseClickAt(web_contents(), 0,
+                                blink::WebMouseEvent::Button::kRight,
+                                gfx::Point(100, 100));
+
+  context_menu_filter->Wait();
+  content::UntrustworthyContextMenuParams params =
+      context_menu_filter->get_params();
+  EXPECT_TRUE(params.impression);
+  EXPECT_EQ(16UL, params.impression->impression_data);
+  EXPECT_EQ(url::Origin::Create(GURL("https://dest.com")),
+            params.impression->conversion_destination);
+}
+#endif  // !defined(OS_ANDROID)
+
 IN_PROC_BROWSER_TEST_F(ImpressionDeclarationBrowserTest,
                        ImpressionNavigationReloads_NoImpression) {
   EXPECT_TRUE(NavigateToURL(
@@ -519,7 +561,7 @@ IN_PROC_BROWSER_TEST_F(ImpressionDeclarationBrowserTest,
   EXPECT_TRUE(second_back_nav_observer.WaitForNavigationWithNoImpression());
 
   // Wait for the page to load and render the impression tag.
-  WaitForLoadStop(web_contents());
+  EXPECT_TRUE(WaitForLoadStop(web_contents()));
   ImpressionObserver second_impression_observer(web_contents());
   EXPECT_TRUE(ExecJs(shell(), "simulateClick(\'impression_tag\');"));
   EXPECT_EQ(1UL, second_impression_observer.Wait().impression_data);

@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">בחירה</translation>
 <translation id="1859234291848436338">כיוון כתיבה</translation>
 <translation id="1860796786778352021">סגירת הודעה</translation>
+<translation id="186476001994626254">‏תוכן מ-Web Smart Paste</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652">%<ph name="NUMBER" /></translation>
 <translation id="1901303067676059328">בחר &amp;הכל</translation>
+<translation id="19085484004813472">זוהי תכונה חדשה</translation>
 <translation id="2006524834898217237">יש לוודא שהמכשיר הזה מחובר לאינטרנט.</translation>
 <translation id="208586643495776849">יש לנסות שוב</translation>
 <translation id="2090963878406559571">‏כדי לשלוח מספר מ-<ph name="ORIGIN" /> לטלפון ה-Android שלך, צריך <ph name="TROUBLESHOOT_LINK" /> בהגדרות של שני המכשירים.</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">ניהול ההגדרות</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{עוד שעה}two{עוד 2 שעות}many{עוד # שעות}other{עוד # שעות}}</translation>
 <translation id="2583543531130364912">כיול מסך המגע</translation>
+<translation id="2586657967955657006">לוח</translation>
 <translation id="2666092431469916601">למעלה</translation>
 <translation id="2701330563083355633">שותפה מהמכשיר <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">חדש</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />,‏ <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">פתח את התיקייה</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{לפני שנה אחת}two{לפני שנתיים}many{לפני # שנים}other{לפני # שנים}}</translation>
+<translation id="2878511608894704031">מחיקת הכול</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{עוד יום אחד}two{עוד 2 ימים}many{עוד # ימים}other{עוד # ימים}}</translation>
 <translation id="2931838996092594335">לחץ</translation>
 <translation id="2981684127883932071">מוצגות הצעות</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">התחל לדבר</translation>
 <translation id="430191667033048642">האפליקציה <ph name="MOVED_APP_NAME" /> הועברה אל התיקייה <ph name="FOLDER_NAME" />.</translation>
 <translation id="4316910396681052118">כל האפליקציות</translation>
+<translation id="4491109536499578614">תמונה</translation>
 <translation id="4588090240171750605">גלול ימינה</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />, דירוג כוכבים: <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />, המלצה על אפליקציה</translation>
@@ -147,8 +152,9 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{יום אחד ו }two{יומיים ו }many{# ימים ו }other{# ימים ו }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{עוד שנה אחת}two{עוד 2 שנים}many{עוד # שנים}other{עוד # שנים}}</translation>
+<translation id="588258955323874662">מסך מלא</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{נותרה שנייה אחת}two{נותרו # שניות}many{נותרו # שניות}other{נותרו # שניות}}</translation>
-<translation id="5941711191222866238">מזער</translation>
+<translation id="5941711191222866238">מזעור</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{שעה אחת}two{שעתיים}many{# שעות}other{# שעות}}</translation>
 <translation id="6012623610530968780">דף <ph name="SELECTED_PAGE" /> מתוך <ph name="TOTAL_PAGE_NUM" /></translation>
 <translation id="6022924867608035986">ניקוי הטקסט בתיבת החיפוש</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">Google Assistant</translation>
 <translation id="6430678249303439055">חסימת כל ההודעות מהאפליקציה הזו</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{לפני שנייה אחת}two{לפני # שניות}many{לפני # שניות}other{לפני # שניות}}</translation>
+<translation id="6503257047630241175">‏תוכן בפורמט RTF</translation>
 <translation id="6539092367496845964">משהו השתבש. יש לנסות שוב מאוחר יותר.</translation>
 <translation id="654149438358937226">חסימת כל ההודעות</translation>
 <translation id="6567071839949112727">לחיצה על אב</translation>

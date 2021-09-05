@@ -127,7 +127,7 @@ class PhishingClassifierTest : public ChromeRenderViewTest {
         page_text,
         base::BindOnce(&PhishingClassifierTest::ClassificationFinished,
                        base::Unretained(this)));
-    base::RunLoop().RunUntilIdle();
+    run_loop_.Run();
   }
 
   // Completion callback for classification.
@@ -138,8 +138,11 @@ class PhishingClassifierTest : public ChromeRenderViewTest {
                                   verdict.feature_map(i).value());
     }
     is_phishing_ = verdict.is_phishing();
+    screenshot_digest_ = verdict.screenshot_digest();
     screenshot_phash_ = verdict.screenshot_phash();
     phash_dimension_size_ = verdict.phash_dimension_size();
+
+    run_loop_.Quit();
   }
 
   void LoadHtml(const GURL& url, const std::string& content) {
@@ -155,6 +158,7 @@ class PhishingClassifierTest : public ChromeRenderViewTest {
   std::string response_content_;
   std::unique_ptr<Scorer> scorer_;
   std::unique_ptr<PhishingClassifier> classifier_;
+  base::RunLoop run_loop_;
 
   // Features that are in the model.
   const std::string url_tld_token_net_;
@@ -166,6 +170,7 @@ class PhishingClassifierTest : public ChromeRenderViewTest {
   FeatureMap feature_map_;
   float phishy_score_;
   bool is_phishing_;
+  std::string screenshot_digest_;
   std::string screenshot_phash_;
   int phash_dimension_size_;
 
@@ -274,6 +279,14 @@ TEST_F(PhishingClassifierTest, TestSendsVisualHash) {
 
   EXPECT_EQ(phash_dimension_size_, 48);
   EXPECT_FALSE(screenshot_phash_.empty());
+}
+
+TEST_F(PhishingClassifierTest, TestSendsVisualDigest) {
+  LoadHtml(GURL("https://host.net"),
+           "<html><body><a href=\"http://safe.com/\">login</a></body></html>");
+  RunPhishingClassifier(&page_text_);
+
+  EXPECT_FALSE(screenshot_digest_.empty());
 }
 
 // TODO(jialiul): Add test to verify that classification only starts on GET

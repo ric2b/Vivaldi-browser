@@ -12,6 +12,7 @@
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
+#include "ash/scoped_animation_disabler.h"
 #include "ash/screen_util.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
@@ -415,8 +416,19 @@ std::unique_ptr<WindowResizer> CreateWindowResizer(
   if (!window_state->CanResize() && window_component != HTCAPTION)
     return nullptr;
 
-  if (!window_state->IsNormalOrSnapped() && !window_state->IsMaximized())
+  const bool maximized = window_state->IsMaximized();
+  if (!window_state->IsNormalOrSnapped() && !maximized)
     return nullptr;
+
+  // TODO(https://crbug.com/1084695): Disable dragging maximized and snapped ARC
+  // windows from the caption. This is because ARC does not currently handle
+  // setting bounds on a maximized or snapped window well.
+  if ((maximized || window_state->IsSnapped()) &&
+      window_state->window()->GetProperty(aura::client::kAppType) ==
+          static_cast<int>(AppType::ARC_APP) &&
+      window_component == HTCAPTION) {
+    return nullptr;
+  }
 
   int bounds_change =
       WindowResizer::GetBoundsChangeForWindowComponent(window_component);
@@ -690,6 +702,11 @@ void WorkspaceWindowResizer::CompleteDrag() {
       // window at the bounds that the user has moved/resized the
       // window to.
       window_state()->SaveCurrentBoundsForRestore();
+
+      // Since we saved the current bounds to the restore bounds, the restore
+      // animation will use the current bounds as the target bounds, so we can
+      // disable the animation here.
+      ScopedAnimationDisabler disabler(window_state()->window());
       window_state()->Restore();
     }
     return;
@@ -699,7 +716,17 @@ void WorkspaceWindowResizer::CompleteDrag() {
   // window here.
   if (window_state()->IsMaximized()) {
     DCHECK_EQ(HTCAPTION, details().window_component);
+    // Reaching here the only running animation should be the drag to
+    // unmaximize animation. Stop animating so that animations that might come
+    // after because of a gesture swipe or fling look smoother.
+    window_state()->window()->layer()->GetAnimator()->StopAnimating();
+
     window_state()->SaveCurrentBoundsForRestore();
+
+    // Since we saved the current bounds to the restore bounds, the restore
+    // animation will use the current bounds as the target bounds, so we can
+    // disable the animation here.
+    ScopedAnimationDisabler disabler(window_state()->window());
     window_state()->Restore();
     return;
   }

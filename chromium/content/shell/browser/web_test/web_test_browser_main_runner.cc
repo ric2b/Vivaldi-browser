@@ -24,18 +24,20 @@
 #include "cc/base/switches.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/viz/common/switches.h"
+#include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/public/browser/browser_main_runner.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/ppapi_test_utils.h"
-#include "content/public/test/web_test_support_browser.h"
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/web_test/test_info_extractor.h"
 #include "content/shell/browser/web_test/web_test_browser_main_platform_support.h"
 #include "content/shell/browser/web_test/web_test_control_host.h"
 #include "content/shell/common/shell_switches.h"
 #include "content/shell/common/web_test/web_test_switches.h"
+#include "content/test/gpu_browsertest_helpers.h"
 #include "gpu/config/gpu_switches.h"
+#include "gpu/ipc/client/gpu_channel_host.h"
 #include "media/base/media_switches.h"
 #include "net/base/filename_util.h"
 #include "ppapi/buildflags/buildflags.h"
@@ -52,6 +54,7 @@ namespace {
 bool RunOneTest(const content::TestInfo& test_info,
                 content::WebTestControlHost* web_test_control_host,
                 content::BrowserMainRunner* main_runner) {
+  TRACE_EVENT0("shell", "WebTestBrowserMainRunner::RunOneTest");
   DCHECK(web_test_control_host);
 
   if (!web_test_control_host->PrepareForWebTest(test_info))
@@ -63,6 +66,7 @@ bool RunOneTest(const content::TestInfo& test_info,
 }
 
 void RunTests(content::BrowserMainRunner* main_runner) {
+  TRACE_EVENT0("shell", "WebTestBrowserMainRunner::RunTests");
   content::WebTestControlHost test_controller;
   {
     // We're outside of the message loop here, and this is a test.
@@ -70,6 +74,17 @@ void RunTests(content::BrowserMainRunner* main_runner) {
     base::FilePath temp_path;
     base::GetTempDir(&temp_path);
     test_controller.SetTempPath(temp_path);
+  }
+
+  {
+    // Kick off the launch of the GPU process early, to minimize blocking
+    // startup of the first renderer process in PrepareForWebTest. (This avoids
+    // GPU process startup time from being counted in the first test's timeout,
+    // hopefully making it less likely to time out flakily.)
+    // https://crbug.com/953991
+    TRACE_EVENT0("shell",
+                 "WebTestBrowserMainRunner::RunTests::EstablishGpuChannelSync");
+    content::GpuBrowsertestEstablishGpuChannelSyncRunLoop();
   }
 
   std::cout << "#READY\n";
@@ -117,11 +132,9 @@ void WebTestBrowserMainRunner::Initialize() {
   command_line.AppendSwitch(
       switches::kDisableBackgroundingOccludedWindowsForTesting);
 
-  // Always disable the unsandbox GPU process for DX12 and Vulkan Info
-  // collection to avoid interference. This GPU process is launched 120
-  // seconds after chrome starts.
-  command_line.AppendSwitch(
-      switches::kDisableGpuProcessForDX12VulkanInfoCollection);
+  // Always disable the unsandbox GPU process for DX12 Info collection to avoid
+  // interference. This GPU process is launched 120 seconds after chrome starts.
+  command_line.AppendSwitch(switches::kDisableGpuProcessForDX12InfoCollection);
 
 #if BUILDFLAG(ENABLE_PLUGINS)
   bool ppapi_ok = ppapi::RegisterBlinkTestPlugin(&command_line);
@@ -202,17 +215,15 @@ void WebTestBrowserMainRunner::Initialize() {
   // Enable the deprecated WebAuthn Mojo Testing API.
   command_line.AppendSwitch(switches::kEnableWebAuthDeprecatedMojoTestingApi);
 
-  // Always disable the unsandbox GPU process for DX12 and Vulkan Info
-  // collection to avoid interference. This GPU process is launched 120
-  // seconds after chrome starts.
-  command_line.AppendSwitch(
-      switches::kDisableGpuProcessForDX12VulkanInfoCollection);
+  // Always disable the unsandbox GPU process for DX12 Info collection to avoid
+  // interference. This GPU process is launched 120 seconds after chrome starts.
+  command_line.AppendSwitch(switches::kDisableGpuProcessForDX12InfoCollection);
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX)
   content::WebTestBrowserPlatformInitialize();
 #endif
 
-  content::EnableBrowserWebTestMode();
+  RenderWidgetHostImpl::DisableResizeAckCheckForTesting();
 }
 
 void WebTestBrowserMainRunner::RunBrowserMain(

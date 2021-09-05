@@ -27,12 +27,10 @@ class ContentRendererClientImpl : public content::ContentRendererClient {
   // content::ContentRendererClient:
   void RenderThreadStarted() override;
   void RenderFrameCreated(content::RenderFrame* render_frame) override;
+  void RenderViewCreated(content::RenderView* render_view) override;
   SkBitmap* GetSadPluginBitmap() override;
   SkBitmap* GetSadWebViewBitmap() override;
   bool HasErrorPage(int http_status_code) override;
-  bool ShouldSuppressErrorPage(content::RenderFrame* render_frame,
-                               const GURL& url,
-                               int error_code) override;
   void PrepareErrorPage(content::RenderFrame* render_frame,
                         const blink::WebURLError& error,
                         const std::string& http_method,
@@ -44,6 +42,11 @@ class ContentRendererClientImpl : public content::ContentRendererClient {
       std::vector<std::unique_ptr<::media::KeySystemProperties>>* key_systems)
       override;
   void SetRuntimeFeaturesDefaultsBeforeBlinkInitialization() override;
+  bool IsPrefetchOnly(content::RenderFrame* render_frame,
+                      const blink::WebURLRequest& request) override;
+  bool DeferMediaLoad(content::RenderFrame* render_frame,
+                      bool has_played_media_before,
+                      base::OnceClosure closure) override;
 
  private:
 #if defined(OS_ANDROID)

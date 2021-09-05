@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <memory>
 #include <set>
 #include <utility>
 
@@ -108,7 +109,7 @@
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
-#include "components/policy/content/policy_blacklist_service.h"
+#include "components/policy/content/policy_blocklist_service.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/search_engines_pref_names.h"
@@ -154,6 +155,7 @@
 #include "third_party/blink/public/public_buildflags.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "ui/base/clipboard/clipboard.h"
+#include "ui/base/clipboard/clipboard_data_endpoint.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/emoji/emoji_panel_helper.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -195,6 +197,12 @@
 #include "chrome/browser/printing/print_preview_dialog_controller.h"
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #endif  // BUILDFLAG(ENABLE_PRINTING)
+
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+#include "chrome/browser/supervised_user/supervised_user_service.h"
+#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#include "chrome/browser/supervised_user/supervised_user_url_filter.h"
+#endif
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #include "chrome/grit/theme_resources.h"
@@ -791,7 +799,8 @@ void RenderViewContextMenu::WriteURLToClipboard(const GURL& url) {
   if (url.is_empty() || !url.is_valid())
     return;
 
-  ui::ScopedClipboardWriter scw(ui::ClipboardBuffer::kCopyPaste);
+  ui::ScopedClipboardWriter scw(ui::ClipboardBuffer::kCopyPaste,
+                                CreateDataEndpoint());
   scw.WriteText(FormatURLForClipboard(url));
 }
 
@@ -1247,10 +1256,14 @@ void RenderViewContextMenu::AppendLinkItems() {
 
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
 
+    // Place QR Generator close to send-tab-to-self feature for link images.
+    if (params_.has_image_contents)
+      AppendQRCodeGeneratorItem(/*for_image=*/true, /*draw_icon=*/true);
+
     if (browser && send_tab_to_self::ShouldOfferFeatureForLink(
                        active_web_contents, params_.link_url)) {
       if (send_tab_to_self::GetValidDeviceCount(GetBrowser()->profile()) == 1) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
         menu_model_.AddItem(IDC_CONTENT_LINK_SEND_TAB_TO_SELF_SINGLE_TARGET,
                             l10n_util::GetStringFUTF16(
                                 IDS_LINK_MENU_SEND_TAB_TO_SELF_SINGLE_TARGET,
@@ -1271,7 +1284,7 @@ void RenderViewContextMenu::AppendLinkItems() {
                 active_web_contents,
                 send_tab_to_self::SendTabToSelfMenuType::kLink,
                 params_.link_url);
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
         menu_model_.AddSubMenuWithStringId(
             IDC_CONTENT_LINK_SEND_TAB_TO_SELF, IDS_LINK_MENU_SEND_TAB_TO_SELF,
             send_tab_to_self_sub_menu_model_.get());
@@ -1342,9 +1355,7 @@ void RenderViewContextMenu::AppendSmartSelectionActionItems() {
 
 void RenderViewContextMenu::AppendOpenInWebAppLinkItems() {
   Profile* const profile = Profile::FromBrowserContext(browser_context_);
-  // TODO(crbug.com/1100255): Check whether
-  // AppServiceProxy::BrowserAppLauncher() is nullptr instead to be more direct.
-  if (profile->IsOffTheRecord())
+  if (!apps::AppServiceProxyFactory::IsAppServiceAvailableForProfile(profile))
     return;
 
   base::Optional<web_app::AppId> app_id =
@@ -1387,6 +1398,10 @@ void RenderViewContextMenu::AppendImageItems() {
                                   IDS_CONTENT_CONTEXT_COPYIMAGE);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYIMAGELOCATION,
                                   IDS_CONTENT_CONTEXT_COPYIMAGELOCATION);
+
+  // Don't double-add for linked images, which also add the item.
+  if (params_.link_url.is_empty())
+    AppendQRCodeGeneratorItem(/*for_image=*/true, /*draw_icon=*/false);
 
   ::vivaldi::VivaldiAddImageItems(&menu_model_, source_web_contents_, params_);
 }
@@ -1492,7 +1507,7 @@ void RenderViewContextMenu::AppendPageItems() {
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
     send_tab_to_self_menu_present = true;
     if (send_tab_to_self::GetValidDeviceCount(GetBrowser()->profile()) == 1) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
       menu_model_.AddItem(IDC_SEND_TAB_TO_SELF_SINGLE_TARGET,
                           l10n_util::GetStringFUTF16(
                               IDS_CONTEXT_MENU_SEND_TAB_TO_SELF_SINGLE_TARGET,
@@ -1512,7 +1527,7 @@ void RenderViewContextMenu::AppendPageItems() {
           std::make_unique<send_tab_to_self::SendTabToSelfSubMenuModel>(
               GetBrowser()->tab_strip_model()->GetActiveWebContents(),
               send_tab_to_self::SendTabToSelfMenuType::kContent);
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
       menu_model_.AddSubMenuWithStringId(
           IDC_SEND_TAB_TO_SELF, IDS_CONTEXT_MENU_SEND_TAB_TO_SELF,
           send_tab_to_self_sub_menu_model_.get());
@@ -1533,15 +1548,7 @@ void RenderViewContextMenu::AppendPageItems() {
     if (!send_tab_to_self_menu_present)
       menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
 
-#if defined(OS_MACOSX)
-    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_GENERATE_QR_CODE,
-                                    IDS_CONTEXT_MENU_GENERATE_QR_CODE_PAGE);
-#else
-    menu_model_.AddItemWithStringIdAndIcon(
-        IDC_CONTENT_CONTEXT_GENERATE_QR_CODE,
-        IDS_CONTEXT_MENU_GENERATE_QR_CODE_PAGE,
-        ui::ImageModel::FromVectorIcon(kQrcodeGeneratorIcon));
-#endif
+    AppendQRCodeGeneratorItem(/*for_image=*/false, /*draw_icon=*/true);
 
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
   } else if (send_tab_to_self_menu_present) {
@@ -1700,7 +1707,7 @@ void RenderViewContextMenu::AppendEditableItems() {
 // 'Undo' and 'Redo' for text input with no suggestions and no text selected.
 // We make an exception for OS X as context clicking will select the closest
 // word. In this case both items are always shown.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_UNDO,
                                   IDS_CONTENT_CONTEXT_UNDO);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_REDO,
@@ -1750,7 +1757,7 @@ void RenderViewContextMenu::AppendLanguageSettings() {
   if (!use_spelling)
     return;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_LANGUAGE_SETTINGS,
                                   IDS_CONTENT_CONTEXT_LANGUAGE_SETTINGS);
 #else
@@ -2092,7 +2099,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
     case IDC_CHECK_SPELLING_WHILE_TYPING:
       return prefs->GetBoolean(spellcheck::prefs::kSpellCheckEnable);
 
-#if !defined(OS_MACOSX) && defined(OS_POSIX)
+#if !defined(OS_MAC) && defined(OS_POSIX)
     // TODO(suzhe): this should not be enabled for password fields.
     case IDC_INPUT_METHODS_MENU:
       return true;
@@ -2329,9 +2336,17 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
           GetBrowser()->tab_strip_model()->GetActiveWebContents();
       auto* bubble_controller =
           qrcode_generator::QRCodeGeneratorBubbleController::Get(web_contents);
-      NavigationEntry* entry =
-          embedder_web_contents_->GetController().GetLastCommittedEntry();
-      bubble_controller->ShowBubble(entry->GetURL());
+      if (params_.media_type == ContextMenuDataMediaType::kImage) {
+        base::RecordAction(
+            UserMetricsAction("SharingQRCode.DialogLaunched.ContextMenuImage"));
+        bubble_controller->ShowBubble(params_.src_url);
+      } else {
+        base::RecordAction(
+            UserMetricsAction("SharingQRCode.DialogLaunched.ContextMenuPage"));
+        NavigationEntry* entry =
+            embedder_web_contents_->GetController().GetLastCommittedEntry();
+        bubble_controller->ShowBubble(entry->GetURL());
+      }
       break;
     }
 
@@ -2448,9 +2463,6 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
       NavigateToManagePasswordsPage(
           GetBrowser(),
           password_manager::ManagePasswordsReferrer::kPasswordContextMenu);
-      password_manager::metrics_util::LogContextOfShowAllSavedPasswordsAccepted(
-          password_manager::metrics_util::ShowAllSavedPasswordsContext::
-              kContextMenu);
       break;
 
     case IDC_CONTENT_CONTEXT_PICTUREINPICTURE:
@@ -2617,12 +2629,24 @@ bool RenderViewContextMenu::IsSaveLinkAsEnabled() const {
   if (!local_state->GetBoolean(prefs::kAllowFileSelectionDialogs))
     return false;
 
-  PolicyBlacklistService* service =
-      PolicyBlacklistFactory::GetForBrowserContext(browser_context_);
-  if (service->GetURLBlacklistState(params_.link_url) ==
-      policy::URLBlacklist::URLBlacklistState::URL_IN_BLACKLIST) {
+  PolicyBlocklistService* service =
+      PolicyBlocklistFactory::GetForBrowserContext(browser_context_);
+  if (service->GetURLBlocklistState(params_.link_url) ==
+      policy::URLBlocklist::URLBlocklistState::URL_IN_BLOCKLIST) {
     return false;
   }
+
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  Profile* const profile = Profile::FromBrowserContext(browser_context_);
+  if (profile->IsChild()) {
+    SupervisedUserService* supervised_user_service =
+        SupervisedUserServiceFactory::GetForProfile(profile);
+    SupervisedUserURLFilter* url_filter = supervised_user_service->GetURLFilter();
+    if (url_filter->GetFilteringBehaviorForURL(params_.link_url) !=
+        SupervisedUserURLFilter::FilteringBehavior::ALLOW)
+      return false;
+  }
+#endif
 
   return params_.link_url.is_valid() &&
       ProfileIOData::IsHandledProtocol(params_.link_url.scheme());
@@ -2686,7 +2710,7 @@ bool RenderViewContextMenu::IsPasteEnabled() const {
 
   std::vector<base::string16> types;
   ui::Clipboard::GetForCurrentThread()->ReadAvailableTypes(
-      ui::ClipboardBuffer::kCopyPaste, &types);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &types);
   return !types.empty();
 }
 
@@ -2696,7 +2720,7 @@ bool RenderViewContextMenu::IsPasteAndMatchStyleEnabled() const {
 
   return ui::Clipboard::GetForCurrentThread()->IsFormatAvailable(
       ui::ClipboardFormatType::GetPlainTextType(),
-      ui::ClipboardBuffer::kCopyPaste);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr);
 }
 
 bool RenderViewContextMenu::IsPrintPreviewEnabled() const {
@@ -2721,6 +2745,35 @@ bool RenderViewContextMenu::IsQRCodeGeneratorEnabled() const {
   bool incognito = browser_context_->IsOffTheRecord();
   return qrcode_generator::QRCodeGeneratorBubbleController::
       IsGeneratorAvailable(entry->GetURL(), incognito);
+}
+
+void RenderViewContextMenu::AppendQRCodeGeneratorItem(bool for_image,
+                                                      bool draw_icon) {
+  if (!IsQRCodeGeneratorEnabled())
+    return;
+  auto string_id = for_image ? IDS_CONTEXT_MENU_GENERATE_QR_CODE_IMAGE
+                             : IDS_CONTEXT_MENU_GENERATE_QR_CODE_PAGE;
+#if defined(OS_MAC)
+  draw_icon = false;
+#endif
+  if (draw_icon) {
+    menu_model_.AddItemWithStringIdAndIcon(
+        IDC_CONTENT_CONTEXT_GENERATE_QR_CODE, string_id,
+        ui::ImageModel::FromVectorIcon(kQrcodeGeneratorIcon));
+  } else {
+    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_GENERATE_QR_CODE,
+                                    string_id);
+  }
+}
+
+std::unique_ptr<ui::ClipboardDataEndpoint>
+RenderViewContextMenu::CreateDataEndpoint() {
+  RenderFrameHost* render_frame_host = GetRenderFrameHost();
+  if (render_frame_host) {
+    return std::make_unique<ui::ClipboardDataEndpoint>(
+        render_frame_host->GetLastCommittedURL());
+  }
+  return nullptr;
 }
 
 bool RenderViewContextMenu::IsRouteMediaEnabled() const {
@@ -2773,7 +2826,7 @@ void RenderViewContextMenu::ExecOpenWebApp() {
   launch_params.override_url = params_.link_url;
   apps::AppServiceProxyFactory::GetForProfile(GetProfile())
       ->BrowserAppLauncher()
-      .LaunchAppWithParams(launch_params);
+      ->LaunchAppWithParams(launch_params);
 }
 
 void RenderViewContextMenu::ExecProtocolHandler(int event_flags,
@@ -2896,7 +2949,8 @@ void RenderViewContextMenu::ExecExitFullscreen() {
 }
 
 void RenderViewContextMenu::ExecCopyLinkText() {
-  ui::ScopedClipboardWriter scw(ui::ClipboardBuffer::kCopyPaste);
+  ui::ScopedClipboardWriter scw(ui::ClipboardBuffer::kCopyPaste,
+                                CreateDataEndpoint());
   scw.WriteText(params_.link_text);
 }
 

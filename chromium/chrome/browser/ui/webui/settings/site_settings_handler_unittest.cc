@@ -10,12 +10,12 @@
 #include <vector>
 
 #include "base/bind_helpers.h"
+#include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -43,7 +43,6 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/infobars/core/infobar.h"
@@ -54,6 +53,7 @@
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_web_ui.h"
@@ -96,6 +96,10 @@ const struct PatternContentTypeTestCase {
     {{"https://google.com", "cookies"}, {true, ""}},
     {{";", "cookies"}, {false, "Not a valid web address"}},
     {{"*", "cookies"}, {false, "Not a valid web address"}},
+    {{"chrome://test", "popups"}, {false, "Not a valid web address"}},
+    {{"chrome-untrusted://test", "popups"}, {false, "Not a valid web address"}},
+    {{"devtools://devtools", "popups"}, {false, "Not a valid web address"}},
+    {{"chrome-search://search", "popups"}, {false, "Not a valid web address"}},
     {{"http://google.com", "location"}, {false, "Origin must be secure"}},
     {{"http://127.0.0.1", "location"}, {true, ""}},  // Localhost is secure.
     {{"http://[::1]", "location"}, {true, ""}}};
@@ -197,8 +201,6 @@ class SiteSettingsHandlerTest : public testing::Test {
     TestingProfile::Builder profile_builder;
     profile_builder.SetPath(profile_dir_.GetPath());
     profile_ = profile_builder.Build();
-    feature_list_.InitAndEnableFeature(
-        content_settings::kImprovedCookieControls);
   }
 
   void SetUp() override {
@@ -206,7 +208,20 @@ class SiteSettingsHandlerTest : public testing::Test {
         std::make_unique<SiteSettingsHandler>(profile_.get(), app_registrar_);
     handler()->set_web_ui(web_ui());
     handler()->AllowJavascript();
+    // AllowJavascript() adds a callback to create leveldb_env::ChromiumEnv
+    // which reads the FeatureList. Wait for the callback to be finished so that
+    // we won't destruct |feature_list_| before the callback is executed.
+    base::RunLoop().RunUntilIdle();
     web_ui()->ClearTrackedCalls();
+  }
+
+  void TearDown() override {
+    if (profile_) {
+      auto* partition =
+          content::BrowserContext::GetDefaultStoragePartition(profile_.get());
+      if (partition)
+        partition->WaitForDeletionTasksForTesting();
+    }
   }
 
   TestingProfile* profile() { return profile_.get(); }
@@ -517,7 +532,6 @@ class SiteSettingsHandlerTest : public testing::Test {
   web_app::TestAppRegistrar app_registrar_;
   content::TestWebUI web_ui_;
   std::unique_ptr<SiteSettingsHandler> handler_;
-  base::test::ScopedFeatureList feature_list_;
 #if defined(OS_CHROMEOS)
   std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
 #endif
@@ -548,12 +562,7 @@ TEST_F(SiteSettingsHandlerTest, GetAndSetDefault) {
 }
 
 // Flaky on CrOS and Linux. https://crbug.com/930481
-#if defined(OS_CHROMEOS) || defined(OS_LINUX)
-#define MAYBE_GetAllSites DISABLED_GetAllSites
-#else
-#define MAYBE_GetAllSites GetAllSites
-#endif
-TEST_F(SiteSettingsHandlerTest, MAYBE_GetAllSites) {
+TEST_F(SiteSettingsHandlerTest, GetAllSites) {
   base::ListValue get_all_sites_args;
   get_all_sites_args.AppendString(kCallbackId);
   base::Value category_list(base::Value::Type::LIST);
@@ -1205,8 +1214,7 @@ TEST_F(SiteSettingsHandlerTest, Origins) {
 TEST_F(SiteSettingsHandlerTest, NotificationPermissionRevokeUkm) {
   const std::string google("https://www.google.com");
   ukm::TestAutoSetUkmRecorder ukm_recorder;
-  ASSERT_TRUE(profile()->CreateHistoryService(/* delete_file= */ true,
-                                              /* no_db= */ false));
+  ASSERT_TRUE(profile()->CreateHistoryService());
   auto* history_service = HistoryServiceFactory::GetForProfile(
       profile(), ServiceAccessType::EXPLICIT_ACCESS);
   history_service->AddPage(GURL(google), base::Time::Now(),
@@ -1262,8 +1270,7 @@ TEST_F(SiteSettingsHandlerTest, NotificationPermissionRevokeUkm) {
 #define MAYBE_DefaultSettingSource DefaultSettingSource
 #endif
 TEST_F(SiteSettingsHandlerTest, MAYBE_DefaultSettingSource) {
-  ASSERT_TRUE(profile()->CreateHistoryService(/* delete_file= */ true,
-                                              /* no_db= */ false));
+  ASSERT_TRUE(profile()->CreateHistoryService());
 
   // Use a non-default port to verify the display name does not strip this
   // off.

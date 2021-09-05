@@ -13,6 +13,7 @@
 #include "base/bind_helpers.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/ranges.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
@@ -29,7 +30,6 @@
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
-#include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/icc_profile.h"
@@ -136,7 +136,7 @@ float GetSDRWhiteLevel(const base::Optional<DISPLAYCONFIG_PATH_INFO>& path) {
     white_level.header.adapterId = path->targetInfo.adapterId;
     white_level.header.id = path->targetInfo.id;
     if (DisplayConfigGetDeviceInfo(&white_level.header) == ERROR_SUCCESS)
-      return white_level.SDRWhiteLevel * 80.0 / 1000.0;
+      return white_level.SDRWhiteLevel * 80.0 / 1000.0;  // From wingdi.h.
   }
   return 200.0f;
 }
@@ -202,15 +202,11 @@ std::vector<DisplayInfo> FindAndRemoveTouchingDisplayInfos(
   return touching_display_infos;
 }
 
-// Default scRGB white level in nits.  This is used to determine the SDR scaling
-// factor with the user configured white level from the SDR brightness slider.
-constexpr float kDefaultScrgbWhiteLevel = 80.0f;
-
 // Helper function to create gfx::DisplayColorSpaces from given |color_space|
 // and |sdr_white_level| with default buffer formats for Windows.
 gfx::DisplayColorSpaces CreateDisplayColorSpaces(
     const gfx::ColorSpace& color_space,
-    float sdr_white_level = kDefaultScrgbWhiteLevel) {
+    float sdr_white_level = gfx::ColorSpace::kDefaultScrgbLinearSdrWhiteLevel) {
   gfx::DisplayColorSpaces display_color_spaces(color_space);
   // When alpha is not needed, specify BGRX_8888 to get
   // DXGI_ALPHA_MODE_IGNORE. This saves significant power (see
@@ -229,8 +225,7 @@ gfx::DisplayColorSpaces GetDisplayColorSpacesForHdr(float sdr_white_level) {
 
   // This will map to DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709. In that space,
   // the brightness of (1,1,1) is 80 nits.
-  const auto scrgb_linear = gfx::ColorSpace::CreateSCRGBLinear(
-      kDefaultScrgbWhiteLevel / sdr_white_level);
+  const auto scrgb_linear = gfx::ColorSpace::CreateSCRGBLinear(sdr_white_level);
 
   // This will map to DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020, with sRGB's
   // (1,1,1) mapping to the specified number of nits.
@@ -260,12 +255,11 @@ gfx::DisplayColorSpaces GetDisplayColorSpacesForHdr(float sdr_white_level) {
 // Sets SDR white level and buffer formats on |display_color_spaces| when using
 // a forced color profile.
 gfx::DisplayColorSpaces GetForcedDisplayColorSpaces() {
-  // Adjust white level to default for Windows if color space is PQ.  This is
-  // needed because the color space is created with the cross-platform default
-  // white level which is different (gfx::ColorSpace::kDefaultSDRWhiteLevel).
+  // Adjust white level to a default value irrespective of whether the color
+  // space is scRGB linear (defaults to 80 nits) or PQ (defaults to 100 nits).
   const auto& color_space =
-      Display::GetForcedDisplayColorProfile().GetWithPQSDRWhiteLevel(
-          kDefaultScrgbWhiteLevel);
+      Display::GetForcedDisplayColorProfile().GetWithSDRWhiteLevel(
+          gfx::ColorSpace::kDefaultScrgbLinearSdrWhiteLevel);
   auto display_color_spaces = CreateDisplayColorSpaces(color_space);
   // Use the forced color profile's buffer format for all content usages.
   if (color_space.GetTransferID() == gfx::ColorSpace::TransferID::SMPTEST2084) {
@@ -728,7 +722,8 @@ Display ScreenWin::GetDisplayNearestPoint(const gfx::Point& point) const {
 }
 
 Display ScreenWin::GetDisplayMatching(const gfx::Rect& match_rect) const {
-  return GetScreenWinDisplayNearestScreenRect(match_rect).display();
+  const gfx::Rect screen_rect = DIPToScreenRect(nullptr, match_rect);
+  return GetScreenWinDisplayNearestScreenRect(screen_rect).display();
 }
 
 Display ScreenWin::GetPrimaryDisplay() const {
@@ -928,8 +923,8 @@ int ScreenWin::GetSystemMetricsForScaleFactor(float scale_factor,
 
   // Windows 8.1 doesn't support GetSystemMetricsForDpi(), yet does support
   // per-process dpi awareness.
-  return gfx::ToRoundedInt(GetSystemMetrics(metric) * scale_factor /
-                           GetPrimaryDisplay().device_scale_factor());
+  return base::ClampRound(GetSystemMetrics(metric) * scale_factor /
+                          GetPrimaryDisplay().device_scale_factor());
 }
 
 void ScreenWin::RecordDisplayScaleFactors() const {

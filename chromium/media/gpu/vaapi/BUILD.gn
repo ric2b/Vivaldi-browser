@@ -10,7 +10,7 @@ import("//tools/generate_stubs/rules.gni")
 import("//ui/gl/features.gni")
 import("//ui/ozone/ozone.gni")
 
-assert(is_linux)  # is_chromeos is a subset of is_linux
+assert(is_linux || is_chromeos)
 assert(use_vaapi)
 
 generate_stubs("libva_stubs") {
@@ -40,8 +40,6 @@ source_set("vaapi") {
     "vaapi_image_decode_accelerator_worker.h",
     "vaapi_image_decoder.cc",
     "vaapi_image_decoder.h",
-    "vaapi_image_processor_backend.cc",
-    "vaapi_image_processor_backend.h",
     "vaapi_jpeg_decoder.cc",
     "vaapi_jpeg_decoder.h",
     "vaapi_jpeg_encoder.cc",
@@ -68,6 +66,8 @@ source_set("vaapi") {
     "vp9_encoder.h",
     "vp9_rate_control.cc",
     "vp9_rate_control.h",
+    "vp9_temporal_layers.cc",
+    "vp9_temporal_layers.h",
     "vp9_vaapi_video_decoder_delegate.cc",
     "vp9_vaapi_video_decoder_delegate.h",
   ]
@@ -114,32 +114,36 @@ source_set("vaapi") {
     ]
   }
 
+  if (use_x11 || use_ozone || use_egl) {
+    sources += [
+      "vaapi_picture_native_pixmap.cc",
+      "vaapi_picture_native_pixmap.h",
+    ]
+  }
+
   if (use_x11) {
     deps += [ "//ui/gfx/x" ]
     sources += [
+      "vaapi_picture_native_pixmap_angle.cc",
+      "vaapi_picture_native_pixmap_angle.h",
       "vaapi_picture_tfp.cc",
       "vaapi_picture_tfp.h",
     ]
   }
 
-  if (use_ozone || use_egl) {
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
     sources += [
-      "vaapi_picture_native_pixmap.cc",
-      "vaapi_picture_native_pixmap.h",
+      "vaapi_picture_native_pixmap_ozone.cc",
+      "vaapi_picture_native_pixmap_ozone.h",
     ]
-    if (use_ozone) {
-      sources += [
-        "vaapi_picture_native_pixmap_ozone.cc",
-        "vaapi_picture_native_pixmap_ozone.h",
-      ]
-      deps += [ "//ui/ozone" ]
-    }
-    if (use_egl) {
-      sources += [
-        "vaapi_picture_native_pixmap_egl.cc",
-        "vaapi_picture_native_pixmap_egl.h",
-      ]
-    }
+  }
+
+  if (use_egl) {
+    sources += [
+      "vaapi_picture_native_pixmap_egl.cc",
+      "vaapi_picture_native_pixmap_egl.h",
+    ]
   }
 }
 
@@ -157,6 +161,7 @@ source_set("common") {
   ]
   public_deps = [
     "//base",
+    "//gpu",
     "//media",
     "//media/gpu:common",
     "//ui/gfx/geometry",
@@ -164,6 +169,7 @@ source_set("common") {
   deps = [
     ":libva_stubs",
     "//third_party/libyuv",
+    "//ui/base:features",
     "//ui/gfx:memory_buffer",
     "//ui/gl",
   ]
@@ -201,6 +207,7 @@ source_set("unit_test") {
     "vaapi_video_decode_accelerator_unittest.cc",
     "vaapi_video_encode_accelerator_unittest.cc",
     "vp9_encoder_unittest.cc",
+    "vp9_temporal_layers_unittest.cc",
   ]
   configs += [ "//third_party/libvpx:libvpx_config" ]
   deps = [
@@ -294,6 +301,7 @@ test("vaapi_unittest") {
     ":vaapi_utils_unittest",
     "//base",
     "//base/test:test_support",
+    "//gpu",
     "//media/gpu/test:helpers",
     "//testing/gtest",
   ]
@@ -311,4 +319,29 @@ group("vaapi_fuzzers") {
   testonly = true
   public_deps =
       [ "//media/gpu/vaapi/fuzzers/jpeg_decoder:vaapi_jpeg_decoder_fuzzertest" ]
+}
+
+executable("decode_test") {
+  testonly = true
+  sources = [
+    "test/decode.cc",
+    "test/macros.h",
+    "test/shared_va_surface.cc",
+    "test/shared_va_surface.h",
+    "test/vaapi_device.cc",
+    "test/vaapi_device.h",
+    "test/video_decoder.h",
+    "test/vp9_decoder.cc",
+    "test/vp9_decoder.h",
+  ]
+  deps = [
+    ":libva_stubs",
+    "//base",
+    "//media",
+    "//media:test_support",
+    "//media/gpu:common",
+    "//third_party/libyuv",
+    "//ui/gfx/codec:codec",
+    "//ui/gfx/geometry",
+  ]
 }

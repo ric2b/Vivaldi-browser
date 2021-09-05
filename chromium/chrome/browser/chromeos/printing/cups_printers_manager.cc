@@ -38,7 +38,7 @@
 #include "chrome/common/pref_names.h"
 #include "chromeos/printing/cups_printer_status.h"
 #include "chromeos/printing/printing_constants.h"
-#include "chromeos/printing/uri_components.h"
+#include "chromeos/printing/uri.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/policy/policy_constants.h"
@@ -51,15 +51,8 @@
 
 namespace chromeos {
 
-bool IsIppUri(base::StringPiece printer_uri) {
-  base::StringPiece::size_type separator_location =
-      printer_uri.find(url::kStandardSchemeSeparator);
-  if (separator_location == base::StringPiece::npos) {
-    return false;
-  }
-
-  base::StringPiece scheme_part = printer_uri.substr(0, separator_location);
-  return scheme_part == kIppScheme || scheme_part == kIppsScheme;
+bool IsIppUri(const Uri& uri) {
+  return (uri.GetScheme() == kIppScheme || uri.GetScheme() == kIppsScheme);
 }
 
 namespace {
@@ -136,8 +129,7 @@ class CupsPrintersManagerImpl
         base::BindRepeating(&CupsPrintersManagerImpl::OnPrintersUpdated,
                             weak_ptr_factory_.GetWeakPtr()));
 
-    native_printers_allowed_.Init(prefs::kUserNativePrintersAllowed,
-                                  pref_service);
+    user_printers_allowed_.Init(prefs::kUserPrintersAllowed, pref_service);
     send_username_and_filename_.Init(
         prefs::kPrintingSendUsernameAndFilenameEnabled, pref_service);
   }
@@ -147,11 +139,11 @@ class CupsPrintersManagerImpl
   // Public API function.
   std::vector<Printer> GetPrinters(PrinterClass printer_class) const override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_);
-    if (!native_printers_allowed_.GetValue() &&
+    if (!user_printers_allowed_.GetValue() &&
         printer_class != PrinterClass::kEnterprise) {
-      // If native printers are disabled then simply return an empty vector.
-      LOG(WARNING) << "Attempting to retrieve native printers when "
-                      "UserNativePrintersAllowed is set to false";
+      // If printers are disabled then simply return an empty vector.
+      LOG(WARNING) << "Attempting to retrieve printers when "
+                      "UserPrintersAllowed is set to false";
       return {};
     }
 
@@ -169,9 +161,9 @@ class CupsPrintersManagerImpl
   // Public API function.
   void SavePrinter(const Printer& printer) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_);
-    if (!native_printers_allowed_.GetValue()) {
+    if (!user_printers_allowed_.GetValue()) {
       LOG(WARNING) << "SavePrinter() called when "
-                      "UserNativePrintersAllowed is set to false";
+                      "UserPrintersAllowed is set to false";
       return;
     }
     synced_printers_manager_->UpdateSavedPrinter(printer);
@@ -209,9 +201,9 @@ class CupsPrintersManagerImpl
   // Public API function.
   void PrinterInstalled(const Printer& printer, bool is_automatic) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_);
-    if (!native_printers_allowed_.GetValue()) {
+    if (!user_printers_allowed_.GetValue()) {
       LOG(WARNING) << "PrinterInstalled() called when "
-                      "UserNativePrintersAllowed is  set to false";
+                      "UserPrintersAllowed is  set to false";
       return;
     }
     MaybeRecordInstallation(printer, is_automatic);
@@ -232,8 +224,8 @@ class CupsPrintersManagerImpl
   // Public API function.
   base::Optional<Printer> GetPrinter(const std::string& id) const override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_);
-    if (!native_printers_allowed_.GetValue()) {
-      LOG(WARNING) << "UserNativePrintersAllowed is disabled - only searching "
+    if (!user_printers_allowed_.GetValue()) {
+      LOG(WARNING) << "UserPrintersAllowed is disabled - only searching "
                       "enterprise printers";
       return GetEnterprisePrinter(id);
     }
@@ -322,8 +314,9 @@ class CupsPrintersManagerImpl
                          << "Printer not found. Printer id: " << printer_id;
       CupsPrinterStatus printer_status(printer_id);
       printer_status.AddStatusReason(
-          CupsPrinterStatus::CupsPrinterStatusReason::Reason::kUnknownReason,
-          CupsPrinterStatus::CupsPrinterStatusReason::Severity::kWarning);
+          CupsPrinterStatus::CupsPrinterStatusReason::Reason::
+              kPrinterUnreachable,
+          CupsPrinterStatus::CupsPrinterStatusReason::Severity::kError);
       std::move(cb).Run(std::move(printer_status));
       return;
     }
@@ -347,9 +340,8 @@ class CupsPrintersManagerImpl
       return;
     }
 
-    base::Optional<UriComponents> parsed_uri = ParseUri(printer->uri());
     // Behavior for querying a non-IPP uri is undefined and disallowed.
-    if (!parsed_uri || !IsIppUri(printer->uri())) {
+    if (!IsIppUri(printer->uri())) {
       PRINTER_LOG(ERROR) << "Unable to complete printer status request. "
                          << "Printer uri is invalid. Printer id: "
                          << printer_id;
@@ -361,9 +353,10 @@ class CupsPrintersManagerImpl
       return;
     }
 
-    const UriComponents& uri = parsed_uri.value();
     QueryIppPrinter(
-        uri.host(), uri.port(), uri.path(), uri.encrypted(),
+        printer->uri().GetHostEncoded(), printer->uri().GetPort(),
+        printer->uri().GetPathEncodedAsString(),
+        printer->uri().GetScheme() == kIppsScheme,
         base::BindOnce(&CupsPrintersManagerImpl::OnPrinterInfoFetched,
                        weak_ptr_factory_.GetWeakPtr(), printer_id,
                        std::move(cb)));
@@ -407,43 +400,53 @@ class CupsPrintersManagerImpl
                          PrinterStatusCallback cb,
                          PrinterQueryResult result,
                          const ::printing::PrinterStatus& printer_status) {
-    if (result == PrinterQueryResult::UNREACHABLE) {
-      PRINTER_LOG(ERROR)
-          << "Printer status request failed. Could not reach printer "
-          << printer_id;
-      CupsPrinterStatus error_printer_status(printer_id);
-      error_printer_status.AddStatusReason(
-          CupsPrinterStatus::CupsPrinterStatusReason::Reason::
-              kPrinterUnreachable,
-          CupsPrinterStatus::CupsPrinterStatusReason::Severity::kError);
-      std::move(cb).Run(std::move(error_printer_status));
-      return;
-    }
+    base::UmaHistogramEnumeration("Printing.CUPS.PrinterStatusQueryResult",
+                                  result);
+    switch (result) {
+      case PrinterQueryResult::UNREACHABLE: {
+        PRINTER_LOG(ERROR)
+            << "Printer status request failed. Could not reach printer "
+            << printer_id;
+        CupsPrinterStatus error_printer_status(printer_id);
+        error_printer_status.AddStatusReason(
+            CupsPrinterStatus::CupsPrinterStatusReason::Reason::
+                kPrinterUnreachable,
+            CupsPrinterStatus::CupsPrinterStatusReason::Severity::kError);
+        std::move(cb).Run(std::move(error_printer_status));
+        break;
+      }
+      case PrinterQueryResult::UNKNOWN_FAILURE: {
+        PRINTER_LOG(ERROR) << "Printer status request failed. Unknown failure "
+                              "trying to reach printer "
+                           << printer_id;
+        CupsPrinterStatus error_printer_status(printer_id);
+        error_printer_status.AddStatusReason(
+            CupsPrinterStatus::CupsPrinterStatusReason::Reason::kUnknownReason,
+            CupsPrinterStatus::CupsPrinterStatusReason::Severity::kWarning);
+        std::move(cb).Run(std::move(error_printer_status));
+        break;
+      }
+      case PrinterQueryResult::SUCCESS: {
+        // Record results from PrinterStatus before converting to
+        // CupsPrinterStatus because the PrinterStatus enum contains more reason
+        // buckets.
+        for (const auto& reason : printer_status.reasons) {
+          base::UmaHistogramEnumeration("Printing.CUPS.PrinterStatusReasons",
+                                        reason.reason);
+        }
 
-    if (result == PrinterQueryResult::UNKNOWN_FAILURE) {
-      PRINTER_LOG(ERROR) << "Printer status request failed. Unknown failure "
-                            "trying to reach printer "
-                         << printer_id;
-      CupsPrinterStatus error_printer_status(printer_id);
-      error_printer_status.AddStatusReason(
-          CupsPrinterStatus::CupsPrinterStatusReason::Reason::kUnknownReason,
-          CupsPrinterStatus::CupsPrinterStatusReason::Severity::kWarning);
-      std::move(cb).Run(std::move(error_printer_status));
-      return;
-    }
+        // Convert printing::PrinterStatus to printing::CupsPrinterStatus
+        CupsPrinterStatus cups_printers_status =
+            PrinterStatusToCupsPrinterStatus(printer_id, printer_status);
 
-    if (result == PrinterQueryResult::SUCCESS) {
-      // Convert printing::PrinterStatus to printing::CupsPrinterStatus
-      CupsPrinterStatus cups_printers_status =
-          PrinterStatusToCupsPrinterStatus(printer_id, printer_status);
+        // Save the PrinterStatus so it can be attached along side future
+        // Printer retrievals.
+        printers_.SavePrinterStatus(printer_id, cups_printers_status);
 
-      // Save the PrinterStatus so it can be attached along side future Printer
-      // retrievals.
-      printers_.SavePrinterStatus(printer_id, cups_printers_status);
-
-      // Send status back to the handler through PrinterStatusCallback.
-      std::move(cb).Run(std::move(cups_printers_status));
-      return;
+        // Send status back to the handler through PrinterStatusCallback.
+        std::move(cb).Run(std::move(cups_printers_status));
+        break;
+      }
     }
   }
 
@@ -562,10 +565,10 @@ class CupsPrintersManagerImpl
           // If the detected printer supports ipp-over-usb and we could not find
           // a ppd for it, then we switch to the ippusb scheme and mark it as
           // autoconf.
-          printer.set_uri(
-              base::StringPrintf("ippusb://%04x_%04x/ipp/print",
-                                 detected.ppd_search_data.usb_vendor_id,
-                                 detected.ppd_search_data.usb_product_id));
+          printer.SetUri(
+              Uri(base::StringPrintf("ippusb://%04x_%04x/ipp/print",
+                                     detected.ppd_search_data.usb_vendor_id,
+                                     detected.ppd_search_data.usb_product_id)));
           printer.mutable_ppd_reference()->autoconf = true;
           printers_.Insert(PrinterClass::kAutomatic, printer);
         } else {
@@ -709,8 +712,8 @@ class CupsPrintersManagerImpl
 
   base::ObserverList<CupsPrintersManager::Observer>::Unchecked observer_list_;
 
-  // Holds the current value of the pref |UserNativePrintersAllowed|.
-  BooleanPrefMember native_printers_allowed_;
+  // Holds the current value of the pref |UserPrintersAllowed|.
+  BooleanPrefMember user_printers_allowed_;
 
   // Holds the current value of the pref
   // |PrintingSendUsernameAndFilenameEnabled|.
@@ -762,11 +765,16 @@ std::unique_ptr<CupsPrintersManager> CupsPrintersManager::CreateForTesting(
 void CupsPrintersManager::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(
-      prefs::kUserNativePrintersAllowed, true,
+      prefs::kUserPrintersAllowed, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterBooleanPref(prefs::kPrintingSendUsernameAndFilenameEnabled,
                                 false);
   PrintServersProvider::RegisterProfilePrefs(registry);
+}
+
+// static
+void CupsPrintersManager::RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
+  PrintServersProvider::RegisterLocalStatePrefs(registry);
 }
 
 }  // namespace chromeos

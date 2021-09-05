@@ -40,7 +40,6 @@
 #include "components/crash/core/common/crash_key.h"
 #include "components/dom_distiller/core/url_constants.h"
 #include "components/embedder_support/origin_trials/origin_trial_policy_impl.h"
-#include "components/net_log/chrome_net_log.h"
 #include "components/services/heap_profiling/public/cpp/profiling_client.h"
 #include "content/public/common/cdm_info.h"
 #include "content/public/common/content_constants.h"
@@ -65,15 +64,11 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "url/url_constants.h"
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include <fcntl.h>
 #include "chrome/common/component_flash_hint_file_linux.h"
 #include "sandbox/linux/services/credentials.h"
-#endif  // defined(OS_LINUX)
-
-#if defined(OS_MACOSX)
-#include "services/service_manager/sandbox/mac/nacl_loader.sb.h"
-#endif
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
@@ -94,7 +89,7 @@
 #include "media/cdm/cdm_paths.h"  // nogncheck
 #endif
 
-#if BUILDFLAG(ENABLE_WIDEVINE) && defined(OS_LINUX)
+#if BUILDFLAG(ENABLE_WIDEVINE) && (defined(OS_LINUX) || defined(OS_CHROMEOS))
 #include "base/no_destructor.h"
 #include "chrome/common/media/cdm_manifest.h"
 #include "third_party/widevine/cdm/widevine_cdm_common.h"  // nogncheck
@@ -105,7 +100,8 @@
 #if !defined(OS_CHROMEOS)
 #include "chrome/common/media/component_widevine_cdm_hint_file_linux.h"
 #endif  // !defined(OS_CHROMEOS)
-#endif  // BUILDFLAG(ENABLE_WIDEVINE) && defined(OS_LINUX)
+#endif  // BUILDFLAG(ENABLE_WIDEVINE) && (defined(OS_LINUX) ||
+        // defined(OS_CHROMEOS))
 
 #if BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
 #include "chrome/common/media/cdm_host_file_path.h"
@@ -248,7 +244,7 @@ bool GetCommandLinePepperFlash(content::PepperPluginInfo* plugin) {
 #define VIVALDI_RETRIEVE_PLUGINVERSION
 #ifdef VIVALDI_RETRIEVE_PLUGINVERSION
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_MAC)
 
   // if no version is specified try to look for it in the library
   if (flash_version.length() == 0) {
@@ -262,7 +258,7 @@ bool GetCommandLinePepperFlash(content::PepperPluginInfo* plugin) {
     }
 
   }
-#endif // OS_WIN || OS_MACOSX
+#endif // OS_WIN || OS_MAC
 
 #endif // VIVALDI_RETRIEVE_PLUGINVERSION
 
@@ -370,7 +366,7 @@ bool GetSystemPepperFlash(content::PepperPluginInfo* plugin) {
 
 #if (BUILDFLAG(BUNDLE_WIDEVINE_CDM) ||            \
      BUILDFLAG(ENABLE_WIDEVINE_CDM_COMPONENT)) && \
-    defined(OS_LINUX)
+    (defined(OS_LINUX) || defined(OS_CHROMEOS))
 // Create a CdmInfo for a Widevine CDM, using |version|, |cdm_library_path|, and
 // |capability|.
 std::unique_ptr<content::CdmInfo> CreateWidevineCdmInfo(
@@ -409,9 +405,11 @@ std::unique_ptr<content::CdmInfo> CreateCdmInfoFromWidevineDirectory(
 }
 #endif  // !defined(OS_CHROMEOS)
 #endif  // (BUILDFLAG(BUNDLE_WIDEVINE_CDM) ||
-        // BUILDFLAG(ENABLE_WIDEVINE_CDM_COMPONENT)) && defined(OS_LINUX)
+        // BUILDFLAG(ENABLE_WIDEVINE_CDM_COMPONENT)) && (defined(OS_LINUX) ||
+        // defined(OS_CHROMEOS))
 
-#if BUILDFLAG(BUNDLE_WIDEVINE_CDM) && defined(OS_LINUX)
+#if BUILDFLAG(BUNDLE_WIDEVINE_CDM) && \
+    (defined(OS_LINUX) || defined(OS_CHROMEOS))
 // On Linux/ChromeOS we have to preload the CDM since it uses the zygote
 // sandbox. On Windows and Mac, the bundled CDM is handled by the component
 // updater.
@@ -479,9 +477,11 @@ content::CdmInfo* GetBundledWidevine() {
       }());
   return s_cdm_info->get();
 }
-#endif  // BUILDFLAG(BUNDLE_WIDEVINE_CDM) && defined(OS_LINUX)
+#endif  // BUILDFLAG(BUNDLE_WIDEVINE_CDM) && (defined(OS_LINUX) ||
+        // defined(OS_CHROMEOS))
 
-#if BUILDFLAG(ENABLE_WIDEVINE_CDM_COMPONENT) && defined(OS_LINUX)
+#if BUILDFLAG(ENABLE_WIDEVINE_CDM_COMPONENT) && \
+    (defined(OS_LINUX) || defined(OS_CHROMEOS))
 // This code checks to see if a component updated Widevine CDM can be found. If
 // there is one and it looks valid, return the CdmInfo for that CDM. Otherwise
 // return nullptr.
@@ -500,7 +500,8 @@ content::CdmInfo* GetComponentUpdatedWidevine() {
       }());
   return s_cdm_info->get();
 }
-#endif  // BUILDFLAG(ENABLE_WIDEVINE_CDM_COMPONENT) && defined(OS_LINUX)
+#endif  // BUILDFLAG(ENABLE_WIDEVINE_CDM_COMPONENT) && (defined(OS_LINUX) ||
+        // defined(OS_CHROMEOS))
 
 }  // namespace
 
@@ -580,7 +581,7 @@ void ChromeContentClient::AddPepperPlugins(
   std::vector<std::unique_ptr<content::PepperPluginInfo>> flash_versions;
 
 // Get component updated flash for desktop Linux and Chrome OS.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Depending on the sandbox configuration, the file system
   // is not always available. If it is not available, do not try and load any
   // flash plugin. The flash player, if any, preloaded before the sandbox
@@ -592,7 +593,7 @@ void ChromeContentClient::AddPepperPlugins(
   if (!disable_bundled_flash &&
       GetComponentUpdatedPepperFlash(component_flash.get()))
     flash_versions.push_back(std::move(component_flash));
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
   auto command_line_flash = std::make_unique<content::PepperPluginInfo>();
   if (GetCommandLinePepperFlash(command_line_flash.get()))
@@ -658,7 +659,7 @@ void ChromeContentClient::AddContentDecryptionModules(
     std::vector<content::CdmInfo>* cdms,
     std::vector<media::CdmHostFilePath>* cdm_host_file_paths) {
   if (cdms) {
-#if BUILDFLAG(ENABLE_WIDEVINE) && defined(OS_LINUX)
+#if BUILDFLAG(ENABLE_WIDEVINE) && (defined(OS_LINUX) || defined(OS_CHROMEOS))
     // The Widevine CDM on Linux needs to be registered (and loaded) before the
     // zygote is locked down. The CDM can be found from the version bundled with
     // Chrome (if BUNDLE_WIDEVINE_CDM = true) and/or the version downloaded by
@@ -696,7 +697,8 @@ void ChromeContentClient::AddContentDecryptionModules(
     } else {
       VLOG(1) << "Widevine enabled but no library found";
     }
-#endif  // BUILDFLAG(ENABLE_WIDEVINE) && defined(OS_LINUX)
+#endif  // BUILDFLAG(ENABLE_WIDEVINE) && (defined(OS_LINUX) ||
+        // defined(OS_CHROMEOS))
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
     // Register Clear Key CDM if specified in command line.
@@ -848,16 +850,6 @@ gfx::Image& ChromeContentClient::GetNativeImageNamed(int resource_id) {
       resource_id);
 }
 
-base::DictionaryValue ChromeContentClient::GetNetLogConstants() {
-  auto platform_dict = net_log::GetPlatformConstantsForNetLog(
-      base::CommandLine::ForCurrentProcess()->GetCommandLineString(),
-      chrome::GetChannelName());
-  if (platform_dict)
-    return std::move(*platform_dict);
-  else
-    return base::DictionaryValue();
-}
-
 std::string ChromeContentClient::GetProcessTypeNameInEnglish(int type) {
 #if BUILDFLAG(ENABLE_NACL)
   switch (type) {
@@ -870,15 +862,6 @@ std::string ChromeContentClient::GetProcessTypeNameInEnglish(int type) {
 
   NOTREACHED() << "Unknown child process type!";
   return "Unknown";
-}
-
-bool ChromeContentClient::AllowScriptExtensionForServiceWorker(
-    const url::Origin& script_origin) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  return script_origin.scheme() == extensions::kExtensionScheme;
-#else
-  return false;
-#endif
 }
 
 blink::OriginTrialPolicy* ChromeContentClient::GetOriginTrialPolicy() {

@@ -25,9 +25,8 @@ extern const base::TimeDelta
 // rotated on the local device.
 extern const size_t kNearbyShareNumPrivateCertificates;
 
-// The number of bytes that
-//     HMAC(/*key=*/|secret_key|, /*message=*/|authentication_token|)
-// is converted to via HKDF before advertising.
+// The number of bytes comprising the hash of the authentication token using the
+// secret key.
 extern const size_t kNearbyShareNumBytesAuthenticationTokenHash;
 
 // Length of key in bytes required by AES-GCM encryption.
@@ -87,5 +86,11 @@ extern const char kNearbyShareSenderVerificationPrefix;
 // The prefix prepended to the UKEY2 authentication token by the receiver before
 // signing.
 extern const char kNearbyShareReceiverVerificationPrefix;
+
+// The maximum number of attempts to initialize LevelDB in Certificate Storage.
+extern const size_t kNearbyShareCertificateStorageMaxNumInitializeAttempts;
+
+// The frequency with which to download public certificates.
+extern const base::TimeDelta kNearbySharePublicCertificateDownloadPeriod;
 
 #endif  // CHROME_BROWSER_NEARBY_SHARING_CERTIFICATES_CONSTANTS_H_

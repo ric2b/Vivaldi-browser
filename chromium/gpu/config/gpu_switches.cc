@@ -14,9 +14,9 @@ const char kDisableGpuRasterization[] = "disable-gpu-rasterization";
 // Skia GPU backend. Only valid with GPU accelerated compositing.
 const char kEnableGpuRasterization[] = "enable-gpu-rasterization";
 
-// Select a different set of GPU blacklist entries with the specified
+// Select a different set of GPU blocklist entries with the specified
 // test_group ID.
-const char kGpuBlacklistTestGroup[] = "gpu-blacklist-test-group";
+const char kGpuBlocklistTestGroup[] = "gpu-blocklist-test-group";
 
 // Enable an extra set of GPU driver bug list entries with the specified
 // test_group ID. Note the default test group (group 0) is still active.
@@ -25,7 +25,11 @@ const char kGpuDriverBugListTestGroup[] = "gpu-driver-bug-list-test-group";
 // Passes encoded GpuPreferences to GPU process.
 const char kGpuPreferences[] = "gpu-preferences";
 
-// Ignores GPU blacklist.
+// Ignores GPU blocklist.
+const char kIgnoreGpuBlocklist[] = "ignore-gpu-blocklist";
+
+// Ignores GPU blocklist.
+// TODO(crbug.com/1101491): remove in 2020Q4 in favor of --ignore-gpu-blocklist.
 const char kIgnoreGpuBlacklist[] = "ignore-gpu-blacklist";
 
 // Allows explicitly specifying the shader disk cache size for embedded devices.
@@ -33,9 +37,9 @@ const char kIgnoreGpuBlacklist[] = "ignore-gpu-blacklist";
 // devices.
 const char kShaderDiskCacheSizeKB[] = "shader-disk-cache-size-kb";
 
-// Disables the non-sandboxed GPU process for DX12 and Vulkan info collection
-const char kDisableGpuProcessForDX12VulkanInfoCollection[] =
-    "disable-gpu-process-for-dx12-vulkan-info-collection";
+// Disables the non-sandboxed GPU process for DX12 info collection
+const char kDisableGpuProcessForDX12InfoCollection[] =
+    "disable-gpu-process-for-dx12-info-collection";
 
 const char kEnableUnsafeWebGPU[] = "enable-unsafe-webgpu";
 

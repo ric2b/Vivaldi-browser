@@ -69,8 +69,6 @@ class ThreadableLoaderClient;
 class CORE_EXPORT ThreadableLoader final
     : public GarbageCollected<ThreadableLoader>,
       private RawResourceClient {
-  USING_GARBAGE_COLLECTED_MIXIN(ThreadableLoader);
-
  public:
   // ThreadableLoaderClient methods are never called before Start() call.
   //
@@ -243,7 +241,7 @@ class CORE_EXPORT ThreadableLoader final
   // Holds the original request and options for it during preflight request
   // handling phase.
   ResourceRequest actual_request_;
-  ResourceLoaderOptions actual_options_;
+  ResourceLoaderOptions actual_options_{nullptr /* world */};
   network::mojom::FetchResponseType response_tainting_ =
       network::mojom::FetchResponseType::kBasic;
 

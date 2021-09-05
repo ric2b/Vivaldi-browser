@@ -21,7 +21,7 @@ namespace blink {
 
 class LayoutObject;
 class LocalFrameView;
-class PropertyTreeState;
+class PropertyTreeStateOrAlias;
 class TracedValue;
 class Image;
 
@@ -72,6 +72,8 @@ class CORE_EXPORT ImageRecordsManager {
 
  public:
   explicit ImageRecordsManager(LocalFrameView*);
+  ImageRecordsManager(const ImageRecordsManager&) = delete;
+  ImageRecordsManager& operator=(const ImageRecordsManager&) = delete;
   ImageRecord* FindLargestPaintCandidate() const;
 
   inline void RemoveInvisibleRecordIfNeeded(const LayoutObject& object) {
@@ -133,6 +135,13 @@ class CORE_EXPORT ImageRecordsManager {
                      const StyleFetchedImage*);
   void OnImageLoadedInternal(base::WeakPtr<ImageRecord>&,
                              unsigned current_frame_index);
+
+  // Receives a candidate image painted under opacity 0 but without nested
+  // opacity. May update |largest_ignored_image_| if the new candidate has a
+  // larger size.
+  void MaybeUpdateLargestIgnoredImage(const RecordId&,
+                                      const uint64_t& visual_size);
+  void ReportLargestIgnoredImage(unsigned current_frame_index);
 
   // Compare the last frame index in queue with the last frame index that has
   // registered for assigning paint time.
@@ -202,7 +211,13 @@ class CORE_EXPORT ImageRecordsManager {
   uint64_t largest_removed_image_size_ = 0u;
   base::TimeTicks largest_removed_image_paint_time_;
 
-  DISALLOW_COPY_AND_ASSIGN(ImageRecordsManager);
+  // Image paints are ignored when they (or an ancestor) have opacity 0. This
+  // can be a problem later on if the opacity changes to nonzero but this change
+  // is composited. We solve this for the special case of documentElement by
+  // storing a record for the largest ignored image without nested opacity. We
+  // consider this an LCP candidate when the documentElement's opacity changes
+  // from zero to nonzero.
+  std::unique_ptr<ImageRecord> largest_ignored_image_;
 };
 
 // ImagePaintTimingDetector contains Largest Image Paint.
@@ -238,9 +253,9 @@ class CORE_EXPORT ImagePaintTimingDetector final
   void RecordImage(const LayoutObject&,
                    const IntSize& intrinsic_size,
                    const ImageResourceContent&,
-                   const PropertyTreeState& current_paint_chunk_properties,
+                   const PropertyTreeStateOrAlias& current_paint_properties,
                    const StyleFetchedImage*,
-                   const IntRect* image_border);
+                   const IntRect& image_border);
   void NotifyImageFinished(const LayoutObject&, const ImageResourceContent*);
   void OnPaintFinished();
   void LayoutObjectWillBeDestroyed(const LayoutObject&);
@@ -263,6 +278,11 @@ class CORE_EXPORT ImagePaintTimingDetector final
   // Return the candidate.
   ImageRecord* UpdateCandidate();
 
+  // Called when documentElement changes from zero to nonzero opacity. Makes the
+  // largest image that was hidden due to this a Largest Contentful Paint
+  // candidate.
+  void ReportLargestIgnoredImage();
+
   void Trace(Visitor*) const;
 
  private:
@@ -272,6 +292,11 @@ class CORE_EXPORT ImagePaintTimingDetector final
   void RegisterNotifySwapTime();
   void ReportCandidateToTrace(ImageRecord&);
   void ReportNoCandidateToTrace();
+  uint64_t ComputeImageRectSize(const IntRect&,
+                                const IntSize&,
+                                const PropertyTreeStateOrAlias&,
+                                const LayoutObject&,
+                                const ImageResourceContent&);
 
   // Used to find the last candidate.
   unsigned count_candidates_ = 0;

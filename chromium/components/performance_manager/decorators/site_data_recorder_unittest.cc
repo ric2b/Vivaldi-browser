@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/performance_manager/decorators/site_data_recorder.h"
+#include "components/performance_manager/public/decorators/site_data_recorder.h"
+
 #include <memory>
 
 #include "base/callback_forward.h"
@@ -40,7 +41,7 @@ class LenientMockDataWriter : public SiteDataWriter {
  public:
   LenientMockDataWriter(const url::Origin& origin,
                         scoped_refptr<internal::SiteDataImpl> impl)
-      : SiteDataWriter(impl, TabVisibility::kBackground), origin_(origin) {}
+      : SiteDataWriter(impl), origin_(origin) {}
   ~LenientMockDataWriter() override {
     if (on_destroy_indicator_)
       *on_destroy_indicator_ = true;
@@ -48,10 +49,10 @@ class LenientMockDataWriter : public SiteDataWriter {
   LenientMockDataWriter(const LenientMockDataWriter& other) = delete;
   LenientMockDataWriter& operator=(const LenientMockDataWriter&) = delete;
 
-  MOCK_METHOD0(NotifySiteLoaded, void());
-  MOCK_METHOD0(NotifySiteUnloaded, void());
-  MOCK_METHOD1(NotifySiteVisibilityChanged,
-               void(performance_manager::TabVisibility));
+  MOCK_METHOD1(NotifySiteLoaded, void(TabVisibility));
+  MOCK_METHOD1(NotifySiteUnloaded, void(TabVisibility));
+  MOCK_METHOD1(NotifySiteForegrounded, void(bool));
+  MOCK_METHOD1(NotifySiteBackgrounded, void(bool));
   MOCK_METHOD0(NotifyUpdatesFaviconInBackground, void());
   MOCK_METHOD0(NotifyUpdatesTitleInBackground, void());
   MOCK_METHOD0(NotifyUsesAudioInBackground, void());
@@ -87,14 +88,13 @@ class MockDataCache : public SiteDataCache {
     return nullptr;
   }
   std::unique_ptr<SiteDataWriter> GetWriterForOrigin(
-      const url::Origin& origin,
-      performance_manager::TabVisibility tab_visibility) override {
+      const url::Origin& origin) override {
     scoped_refptr<internal::SiteDataImpl> fake_impl = base::WrapRefCounted(
         new internal::SiteDataImpl(origin, &delegate_, &data_store_));
 
     return std::make_unique<MockDataWriter>(origin, fake_impl);
   }
-  bool IsRecordingForTesting() const override { return true; }
+  bool IsRecording() const override { return true; }
   int Size() const override { return 0; }
 
  private:
@@ -241,13 +241,11 @@ TEST_F(SiteDataRecorderTest, FeatureEventsGetForwardedWhenInBackground) {
     EXPECT_EQ(url::Origin::Create(kTestUrl1), mock_writer->Origin());
 
     node_impl = PageNodeImpl::FromNode(page_node.get());
-    EXPECT_CALL(*mock_writer, NotifySiteLoaded());
+    EXPECT_CALL(*mock_writer, NotifySiteLoaded(TabVisibility::kBackground));
     node_impl->SetIsLoading(false);
     ::testing::Mock::VerifyAndClear(mock_writer);
 
-    EXPECT_CALL(*mock_writer,
-                NotifySiteVisibilityChanged(
-                    performance_manager::TabVisibility::kForeground));
+    EXPECT_CALL(*mock_writer, NotifySiteForegrounded(true));
   }));
 
   web_contents()->WasShown();
@@ -263,9 +261,7 @@ TEST_F(SiteDataRecorderTest, FeatureEventsGetForwardedWhenInBackground) {
     node_impl->SetIsAudible(true);
     ::testing::Mock::VerifyAndClear(mock_writer);
 
-    EXPECT_CALL(*mock_writer,
-                NotifySiteVisibilityChanged(
-                    performance_manager::TabVisibility::kBackground));
+    EXPECT_CALL(*mock_writer, NotifySiteBackgrounded(true));
   }));
   web_contents()->WasHidden();
 
@@ -289,12 +285,8 @@ TEST_F(SiteDataRecorderTest, FeatureEventsGetForwardedWhenInBackground) {
     ::testing::Mock::VerifyAndClear(mock_writer);
 
     // Brievly switch the tab to foreground to reset the last backgrounded time.
-    EXPECT_CALL(*mock_writer,
-                NotifySiteVisibilityChanged(
-                    performance_manager::TabVisibility::kForeground));
-    EXPECT_CALL(*mock_writer,
-                NotifySiteVisibilityChanged(
-                    performance_manager::TabVisibility::kBackground));
+    EXPECT_CALL(*mock_writer, NotifySiteForegrounded(true));
+    EXPECT_CALL(*mock_writer, NotifySiteBackgrounded(true));
   }));
   web_contents()->WasShown();
   web_contents()->WasHidden();
@@ -320,7 +312,11 @@ TEST_F(SiteDataRecorderTest, FeatureEventsGetForwardedWhenInBackground) {
     node_impl->OnFaviconUpdated();
     node_impl->OnTitleUpdated();
     ::testing::Mock::VerifyAndClear(mock_writer);
+
+    EXPECT_CALL(*mock_writer, NotifySiteUnloaded(TabVisibility::kBackground));
   }));
+
+  NavigatePageNodeOnUIThread(web_contents(), GURL("about://blank"));
 }
 
 TEST_F(SiteDataRecorderTest, FeatureEventsIgnoredWhenLoadingInBackground) {
@@ -355,15 +351,11 @@ TEST_F(SiteDataRecorderTest, VisibilityEvent) {
 
     // Test that the visibility events get forwarded to the writer.
 
-    EXPECT_CALL(*mock_writer,
-                NotifySiteVisibilityChanged(
-                    performance_manager::TabVisibility::kForeground));
+    EXPECT_CALL(*mock_writer, NotifySiteForegrounded(false));
     node_impl->SetIsVisible(true);
     ::testing::Mock::VerifyAndClear(mock_writer);
 
-    EXPECT_CALL(*mock_writer,
-                NotifySiteVisibilityChanged(
-                    performance_manager::TabVisibility::kBackground));
+    EXPECT_CALL(*mock_writer, NotifySiteBackgrounded(false));
     node_impl->SetIsVisible(false);
     ::testing::Mock::VerifyAndClear(mock_writer);
   }));
@@ -380,11 +372,11 @@ TEST_F(SiteDataRecorderTest, LoadEvent) {
 
     // Test that the load/unload events get forwarded to the writer.
 
-    EXPECT_CALL(*mock_writer, NotifySiteLoaded());
+    EXPECT_CALL(*mock_writer, NotifySiteLoaded(TabVisibility::kBackground));
     node_impl->SetIsLoading(false);
     ::testing::Mock::VerifyAndClear(mock_writer);
 
-    EXPECT_CALL(*mock_writer, NotifySiteUnloaded());
+    EXPECT_CALL(*mock_writer, NotifySiteUnloaded(TabVisibility::kBackground));
     node_impl->SetIsLoading(true);
     ::testing::Mock::VerifyAndClear(mock_writer);
   }));

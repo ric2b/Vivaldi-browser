@@ -31,16 +31,18 @@ class MojoAudioDecoder : public AudioDecoder, public mojom::AudioDecoderClient {
                    mojo::PendingRemote<mojom::AudioDecoder> remote_decoder);
   ~MojoAudioDecoder() final;
 
-  // AudioDecoder implementation.
-  std::string GetDisplayName() const final;
+  // Decoder implementation
   bool IsPlatformDecoder() const final;
+  bool SupportsDecryption() const final;
+  std::string GetDisplayName() const final;
+
+  // AudioDecoder implementation.
   void Initialize(const AudioDecoderConfig& config,
                   CdmContext* cdm_context,
                   InitCB init_cb,
                   const OutputCB& output_cb,
                   const WaitingCB& waiting_cb) final;
-  void Decode(scoped_refptr<DecoderBuffer> buffer,
-              const DecodeCB& decode_cb) final;
+  void Decode(scoped_refptr<DecoderBuffer> buffer, DecodeCB decode_cb) final;
   void Reset(base::OnceClosure closure) final;
   bool NeedsBitstreamConversion() const final;
 

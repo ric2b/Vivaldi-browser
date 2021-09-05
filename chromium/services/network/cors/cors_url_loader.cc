@@ -28,21 +28,7 @@ namespace cors {
 
 namespace {
 
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-enum class CompletionStatusMetric {
-  kPassedWhenCorsFlagUnset = 0,
-  kFailedWhenCorsFlagUnset = 1,
-  kPassedWhenCorsFlagSet = 2,
-  kFailedWhenCorsFlagSet = 3,
-  kBlockedByCors = 4,
-
-  kMaxValue = kBlockedByCors,
-};
-
-bool NeedsPreflight(
-    const ResourceRequest& request,
-    const base::flat_set<std::string>& extra_safelisted_header_names) {
+bool NeedsPreflight(const ResourceRequest& request) {
   if (!IsCorsEnabledRequestMode(request.mode))
     return false;
 
@@ -62,24 +48,8 @@ bool NeedsPreflight(
     return true;
 
   return !CorsUnsafeNotForbiddenRequestHeaderNames(
-              request.headers.GetHeaderVector(), request.is_revalidating,
-              extra_safelisted_header_names)
+              request.headers.GetHeaderVector(), request.is_revalidating)
               .empty();
-}
-
-void ReportCompletionStatusMetric(bool fetch_cors_flag,
-                                  const URLLoaderCompletionStatus& status) {
-  CompletionStatusMetric metric;
-  if (status.error_code == net::OK) {
-    metric = fetch_cors_flag ? CompletionStatusMetric::kPassedWhenCorsFlagSet
-                             : CompletionStatusMetric::kPassedWhenCorsFlagUnset;
-  } else if (status.cors_error_status) {
-    metric = CompletionStatusMetric::kBlockedByCors;
-  } else {
-    metric = fetch_cors_flag ? CompletionStatusMetric::kFailedWhenCorsFlagSet
-                             : CompletionStatusMetric::kFailedWhenCorsFlagUnset;
-  }
-  UMA_HISTOGRAM_ENUMERATION("Net.Cors.CompletionStatus", metric);
 }
 
 constexpr const char kTimingAllowOrigin[] = "Timing-Allow-Origin";
@@ -250,9 +220,7 @@ void CorsURLLoader::FollowRedirect(
   //
   // After both OOR-CORS and network service are fully shipped, we may be able
   // to remove the logic in net/.
-  if ((fetch_cors_flag_ &&
-       NeedsPreflight(
-           request_, preflight_controller_->extra_safelisted_header_names())) ||
+  if ((fetch_cors_flag_ && NeedsPreflight(request_)) ||
       (!original_fetch_cors_flag && fetch_cors_flag_) ||
       (fetch_cors_flag_ && original_method != request_.method)) {
     DCHECK_NE(request_.mode, mojom::RequestMode::kNoCors);
@@ -388,14 +356,20 @@ void CorsURLLoader::OnReceiveRedirect(const net::RedirectInfo& redirect_info,
     tainted_ = true;
   }
 
-  // TODO(yhirano): Implement the following:
+  // TODO(crbug.com/1073353): Implement the following:
   // If either |actualResponse|’s status is 301 or 302 and |request|’s method is
   // `POST`, or |actualResponse|’s status is 303, set |request|’s method to
-  // `GET` and request’s body to null.
+  // `GET` and request’s body to null, and remove request-body-header name from
+  // request's headers. Some of them are implemented in //net, but when we
+  // create another request on exceptional redirect cases, such newly created
+  // request doesn't reflect the spec comformant request modifications. See the
+  // linked crbug for details. See also 4.4. HTTP-redirect fetch
+  // (https://fetch.spec.whatwg.org/#http-redirect-fetch), step 11.
 
-  // TODO(yhirano): Implement the following:
+  // TODO(crbug.com/1073353): Implement the following:
   // Invoke |set request’s referrer policy on redirect| on |request| and
-  // |actualResponse|.
+  // |actualResponse|. See 4.4. HTTP-redirect fetch
+  // (https://fetch.spec.whatwg.org/#http-redirect-fetch), step 14.
 
   redirect_info_ = redirect_info;
 
@@ -510,9 +484,7 @@ void CorsURLLoader::StartRequest() {
   // Note that even when |NeedsPreflight(request_)| holds we don't make a
   // preflight request when |fetch_cors_flag_| is false (e.g., when the origin
   // of the url is equal to the origin of the request.
-  if (!fetch_cors_flag_ ||
-      !NeedsPreflight(request_,
-                      preflight_controller_->extra_safelisted_header_names())) {
+  if (!fetch_cors_flag_ || !NeedsPreflight(request_)) {
     StartNetworkRequest(net::OK, base::nullopt);
     return;
   }
@@ -566,7 +538,6 @@ void CorsURLLoader::StartNetworkRequest(
 }
 
 void CorsURLLoader::HandleComplete(const URLLoaderCompletionStatus& status) {
-  ReportCompletionStatusMetric(fetch_cors_flag_, status);
   forwarding_client_->OnComplete(status);
   std::move(delete_callback_).Run(this);
   // |this| is deleted here.

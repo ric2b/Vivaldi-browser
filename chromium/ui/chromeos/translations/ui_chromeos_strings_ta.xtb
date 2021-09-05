@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">சன்கிளாசஸ்</translation>
 <translation id="115443833402798225">ஹாங்குல் ஹமாதே</translation>
 <translation id="1155759005174418845">கேட்டலன்</translation>
+<translation id="1172970565351728681">சுமார் <ph name="REMAINING_TIME" /> மீதமுள்ளது</translation>
 <translation id="1173894706177603556">மறுபெயரிடு</translation>
 <translation id="117624967391683467"><ph name="FILE_NAME" /> ஐ நகலெடுக்கிறது...</translation>
 <translation id="1178581264944972037">இடைநிறுத்து</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">"<ph name="FILENAME" />" எனப் பெயரிடப்பட்ட கோப்பானது ஏற்கனவே உள்ளது. என்ன செய்ய விரும்புகிறீர்கள்?</translation>
 <translation id="2121825465123208577">அளவு மாற்று</translation>
 <translation id="2136953289241069843">ஒலிபெயர்ப்பு (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">"<ph name="PATH" />"ஐத் திறக்க முடியவில்லை: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">செல்லாத எழுத்து: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">வியட்நாமிய விசைப்பலகை (TCVN)</translation>
 <translation id="2168214441502403371">பெர்சியன் விசைப்பலகை</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187"><ph name="DESTINATION_DOMAIN" />க்கு உரிமை மாற்றப்படும்.</translation>
 <translation id="3241720467332021590">ஐரிஷ்</translation>
 <translation id="3245321423178950146">அறியாத கலைஞர்</translation>
+<translation id="3248185426436836442">நிலுவையிலுள்ளது</translation>
 <translation id="3252266817569339921">பிரெஞ்ச்</translation>
 <translation id="3254434849914415189"><ph name="FILE_TYPE" /> கோப்புகளுக்கான இயல்புநிலை பயன்பாட்டைத் தேர்வுசெய்:</translation>
 <translation id="3264582393905923483">சூழல்</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">பதிவுசெய்த ஆண்டு</translation>
 <translation id="3338239663705455570">ஸ்லோவேனியன் விசைப்பலகை</translation>
 <translation id="3353984535370177728">பதிவேற்ற கோப்புறையைத் தேர்வுசெய்யவும்</translation>
+<translation id="3356580349448036450">முடிந்தது</translation>
 <translation id="3399597614303179694">மாஸிடோனியன் விசைப்பலகை</translation>
 <translation id="3414856743105198592">அகற்றத்தக்க மீடியாவை வடிவமைப்பதானது எல்லா தரவையும் அழிக்கும். தொடர விரும்புகிறீர்களா?</translation>
 <translation id="3437801641691368414">உருவாக்கிய நேரம்</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">'<ph name="FOLDER_NAME" />' என்ற கோப்புறைக்குக் கோப்புகளை நகர்த்த உங்களுக்கு அனுமதி இல்லை.</translation>
 <translation id="3786301125658655746">ஆஃப்லைனில் உள்ளீர்கள்</translation>
 <translation id="3789841737615482174">நிறுவுக</translation>
+<translation id="3793469551756281394">சுமார் <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /> மீதமுள்ளது</translation>
 <translation id="3798449238516105146">பதிப்பு</translation>
 <translation id="3801082500826908679">ஃபாரோயீஸ்</translation>
 <translation id="3809272675881623365">முயல்</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">இந்தக் கோப்புறையானது Windows உடன் பகிரப்பட்டுள்ளது</translation>
 <translation id="4487088045714738411">பெல்ஜியம் விசைப்பலகை</translation>
 <translation id="4522570452068850558">விவரங்கள்</translation>
+<translation id="4542387084127299777">"<ph name="PATH" />" ஐத் திறக்க முடியவில்லை</translation>
 <translation id="4552678318981539154">கூடுதல் சேமிப்பிடத்தை வாங்கு</translation>
 <translation id="4559767610552730302">பொக்கே</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> கோப்பு</translation>
@@ -511,6 +515,7 @@
 <translation id="6629841649550503054">எல்லாம் <ph name="BEGIN_LINK" />Google இயக்ககத்தில்<ph name="END_LINK" /> காப்புப் பிரதி எடுக்கப்பட்டன</translation>
 <translation id="6643016212128521049">அழி</translation>
 <translation id="6650726141019353908">பிங்க் நிறப் பட்டாம்பூச்சி</translation>
+<translation id="6657585470893396449">கடவுச்சொல்</translation>
 <translation id="6710213216561001401">முந்தையது</translation>
 <translation id="6718273304615422081">ஜிப் செய்கிறது...</translation>
 <translation id="6751256176799620176">1 கோப்புறை தேர்ந்தெடுக்கப்பட்டது</translation>
@@ -551,7 +556,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">நிறுவல் தோல்வியடைந்தது.</translation>
 <translation id="7040138676081995583">இதனுடன் திற...</translation>
-<translation id="7059566040011178088"><ph name="REMAINING_TIME" />க்கும் குறைவு</translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> உருப்படிகள் தேர்ந்தெடுக்கப்பட்டுள்ளன.</translation>
 <translation id="7106346894903675391">கூடுதல் சேமிப்பிடத்தை வாங்கு...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;இயக்ககத்தில் தேடு&lt;/em&gt;</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">சாதனத்தின் மாடல்</translation>
 <translation id="8208580316430297579">கலைப்பணி</translation>
 <translation id="8223479393428528563">இந்தக் கோப்புகளை ஆஃப்லைனில் பயன்படுத்துவதற்காகச் சேமிக்க, ஆன்லைனிற்கு சென்று, கோப்புகளில் வலது-கிளிக் செய்து, <ph name="OFFLINE_CHECKBOX_NAME" /> விருப்பத்தைத் தேர்தெடுக்கவும்.</translation>
-<translation id="8231972167769262174">இன்னும் <ph name="REMAINING_TIME" /> உள்ளது</translation>
 <translation id="8249296373107784235">கைவிடு</translation>
 <translation id="8261506727792406068">நீக்கு</translation>
 <translation id="8269755669432358899">கோப்புகள் காட்டப்படும் பேனல்களைச் சுருக்கும்</translation>
@@ -725,6 +728,7 @@
 <translation id="9065203028668620118">திருத்து</translation>
 <translation id="9099674669267916096">பக்க எண்ணிக்கை</translation>
 <translation id="9110990317705400362">உங்கள் உலாவலைத் பாதுகாப்பாக்கும் வழிகளைத் தொடர்ந்து தேடுகிறோம். முன்னர், எந்த இணையதளமும் நீட்டிப்பை உங்கள் உலாவியில் சேர்க்கக் கேட்கலாம். சமீபத்திய Google Chrome பதிப்புகளில், நீட்டிப்புகள் பக்கம் வழியாக அவற்றைச் சேர்ப்பதன் மூலம், இந்த நீட்டிப்புகளை நிறுவ விரும்புகிறீர்களா என்பதை வெளிப்படையாக Chromeக்குக் கூற வேண்டும். <ph name="BEGIN_LINK" />மேலும் அறிக<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">பூட்டைத் திற</translation>
 <translation id="912419004897138677">கோடெக்</translation>
 <translation id="9129931661813833980">கோப்புறையைப் பின் செய்</translation>
 <translation id="9130775360844693113">'<ph name="DESTINATION_NAME" />' இன் உறுப்பினர்கள் இந்தக் கோப்புகளுக்கான அணுகலைப் பெறுவார்கள்.</translation>

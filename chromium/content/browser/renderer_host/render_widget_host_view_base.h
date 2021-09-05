@@ -29,10 +29,8 @@
 #include "content/common/content_to_visible_time_reporter.h"
 #include "content/public/browser/render_frame_metadata_provider.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "content/public/common/screen_info.h"
 #include "content/public/common/widget_type.h"
 #include "services/viz/public/mojom/hit_test/hit_test_region_list.mojom.h"
-#include "third_party/blink/public/common/screen_orientation/web_screen_orientation_type.h"
 #include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom-forward.h"
 #include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
@@ -114,7 +112,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
       base::OnceCallback<void(const SkBitmap&)> callback) override;
   std::unique_ptr<viz::ClientFrameSinkVideoCapturer> CreateVideoCapturer()
       override;
-  void GetScreenInfo(ScreenInfo* screen_info) override;
+  void GetScreenInfo(blink::ScreenInfo* screen_info) override;
   void EnableAutoResize(const gfx::Size& min_size,
                         const gfx::Size& max_size) override;
   void DisableAutoResize(const gfx::Size& new_size) override;
@@ -254,7 +252,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
       BrowserAccessibilityDelegate* delegate,
       bool for_root_frame);
 
-  virtual void AccessibilityShowMenu(const gfx::Point& point);
   virtual gfx::AcceleratedWidget AccessibilityGetAcceleratedWidget();
   virtual gfx::NativeViewAccessible AccessibilityGetNativeViewAccessible();
   virtual gfx::NativeViewAccessible
@@ -543,6 +540,10 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   void reset_is_evicted() { is_evicted_ = false; }
   bool is_evicted() { return is_evicted_; }
 
+  bool is_drawing_delegated_ink_trails() const {
+    return is_drawing_delegated_ink_trails_;
+  }
+
   // Vivaldi addition:
   bool IsRenderWidgetHostViewMac() { return is_render_widget_host_view_mac_; }
 
@@ -636,6 +637,11 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
       EarlyTouchpadFlingCancelationOnInertialGSUAckNotConsumed);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostDelegatedInkMetadataTest,
                            FlagGetsSetFromRenderFrameMetadata);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostInputEventRouterTest,
+                           QueryResultAfterChildViewDead);
+  FRIEND_TEST_ALL_PREFIXES(DelegatedInkPointTest, EventForwardedToCompositor);
+  FRIEND_TEST_ALL_PREFIXES(DelegatedInkPointTest,
+                           MojoInterfaceReboundOnDisconnect);
 
   void SynchronizeVisualProperties();
 
@@ -655,6 +661,10 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
 
   bool view_stopped_flinging_for_test() const {
     return view_stopped_flinging_for_test_;
+  }
+
+  void SetIsDrawingDelegatedInkTrailsForTest(bool b) {
+    is_drawing_delegated_ink_trails_ = b;
   }
 
   gfx::Rect current_display_area_;

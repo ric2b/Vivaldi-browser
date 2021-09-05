@@ -65,9 +65,9 @@ class FakeLocationBarModelDelegate : public LocationBarModelDelegate {
     return state;
   }
 
-  bool IsInstantNTP() const override { return false; }
+  bool IsNewTabPage() const override { return false; }
 
-  bool IsNewTabPage(const GURL& url) const override { return false; }
+  bool IsNewTabPageURL(const GURL& url) const override { return false; }
 
   bool IsHomePage(const GURL& url) const override { return false; }
 
@@ -104,13 +104,108 @@ class LocationBarModelImplTest : public testing::Test {
   LocationBarModelImpl model_;
 };
 
+// A test fixture that enables the
+// #omnibox-ui-reveal-steady-state-url-path-query-and-ref-on-hover field trial.
+class LocationBarModelImplRevealOnHoverTest : public LocationBarModelImplTest {
+ public:
+  LocationBarModelImplRevealOnHoverTest() = default;
+  LocationBarModelImplRevealOnHoverTest(
+      const LocationBarModelImplRevealOnHoverTest&) = delete;
+  LocationBarModelImplRevealOnHoverTest& operator=(
+      const LocationBarModelImplRevealOnHoverTest&) = delete;
+
+ protected:
+  // testing::Test:
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(
+        omnibox::kRevealSteadyStateUrlPathQueryAndRefOnHover);
+    LocationBarModelImplTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// A test fixture that enables the
+// #omnibox-ui-hide-steady-state-url-path-query-and-ref-on-interaction field
+// trial.
+class LocationBarModelImplHideOnInteractionTest
+    : public LocationBarModelImplTest {
+ public:
+  LocationBarModelImplHideOnInteractionTest() = default;
+  LocationBarModelImplHideOnInteractionTest(
+      const LocationBarModelImplHideOnInteractionTest&) = delete;
+  LocationBarModelImplHideOnInteractionTest& operator=(
+      const LocationBarModelImplHideOnInteractionTest&) = delete;
+
+ protected:
+  // testing::Test:
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(
+        omnibox::kHideSteadyStateUrlPathQueryAndRefOnInteraction);
+    LocationBarModelImplTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Tests that in the
+// #omnibox-ui-reveal-steady-state-url-path-query-and-ref-on-hover, the display
+// URL does not elide scheme or trivial subdomains.
+TEST_F(LocationBarModelImplRevealOnHoverTest, DisplayUrl) {
+  delegate()->SetURL(GURL("http://www.example.test/foo"));
+#if defined(OS_IOS)
+  EXPECT_EQ(base::ASCIIToUTF16("http://www.example.test/TestSuffix"),
+            model()->GetURLForDisplay());
+#else   // #!defined(OS_IOS)
+  EXPECT_EQ(base::ASCIIToUTF16("http://www.example.test/foo/TestSuffix"),
+            model()->GetURLForDisplay());
+#endif  // #!defined(OS_IOS)
+  EXPECT_EQ(base::ASCIIToUTF16("http://www.example.test/foo/TestSuffix"),
+            model()->GetFormattedFullURL());
+
+  delegate()->SetURL(GURL("https://www.example.test/foo"));
+#if defined(OS_IOS)
+  EXPECT_EQ(base::ASCIIToUTF16("https://www.example.test/TestSuffix"),
+            model()->GetURLForDisplay());
+#else   // #!defined(OS_IOS)
+  EXPECT_EQ(base::ASCIIToUTF16("https://www.example.test/foo/TestSuffix"),
+            model()->GetURLForDisplay());
+#endif  // #!defined(OS_IOS)
+  EXPECT_EQ(base::ASCIIToUTF16("https://www.example.test/foo/TestSuffix"),
+            model()->GetFormattedFullURL());
+}
+
+// Tests that in the
+// #omnibox-ui-hide-steady-state-url-path-query-and-ref-on-interaction, the
+// display URL does not elide scheme or trivial subdomains.
+TEST_F(LocationBarModelImplHideOnInteractionTest, DisplayUrl) {
+  delegate()->SetURL(GURL("http://www.example.test/foo"));
+#if defined(OS_IOS)
+  EXPECT_EQ(base::ASCIIToUTF16("http://www.example.test/TestSuffix"),
+            model()->GetURLForDisplay());
+#else   // #!defined(OS_IOS)
+  EXPECT_EQ(base::ASCIIToUTF16("http://www.example.test/foo/TestSuffix"),
+            model()->GetURLForDisplay());
+#endif  // #!defined(OS_IOS)
+  EXPECT_EQ(base::ASCIIToUTF16("http://www.example.test/foo/TestSuffix"),
+            model()->GetFormattedFullURL());
+
+  delegate()->SetURL(GURL("https://www.example.test/foo"));
+#if defined(OS_IOS)
+  EXPECT_EQ(base::ASCIIToUTF16("https://www.example.test/TestSuffix"),
+            model()->GetURLForDisplay());
+#else   // #!defined(OS_IOS)
+  EXPECT_EQ(base::ASCIIToUTF16("https://www.example.test/foo/TestSuffix"),
+            model()->GetURLForDisplay());
+#endif  // #!defined(OS_IOS)
+  EXPECT_EQ(base::ASCIIToUTF16("https://www.example.test/foo/TestSuffix"),
+            model()->GetFormattedFullURL());
+}
+
 TEST_F(LocationBarModelImplTest,
        DisplayUrlAppliesFormattedStringWithEquivalentMeaning) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures({omnibox::kHideSteadyStateUrlScheme,
-                                 omnibox::kHideSteadyStateUrlTrivialSubdomains},
-                                {});
-
   delegate()->SetURL(GURL("http://www.google.com/"));
 
   // Verify that both the full formatted URL and the display URL add the test
@@ -178,17 +273,12 @@ TEST_F(LocationBarModelImplTest, FormatsReaderModeUrls) {
 
 // TODO(https://crbug.com/1010418): Fix flakes on linux_chromium_asan_rel_ng and
 // re-enable this test.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_PreventElisionWorks DISABLED_PreventElisionWorks
 #else
 #define MAYBE_PreventElisionWorks PreventElisionWorks
 #endif
 TEST_F(LocationBarModelImplTest, MAYBE_PreventElisionWorks) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures({omnibox::kHideSteadyStateUrlScheme,
-                                 omnibox::kHideSteadyStateUrlTrivialSubdomains},
-                                {});
-
   delegate()->SetShouldPreventElision(true);
   delegate()->SetURL(GURL("https://www.google.com/search?q=foo+query+unelide"));
 
@@ -243,5 +333,17 @@ TEST_F(LocationBarModelImplTest, GetVectorIcon_DangerWarning) {
   EXPECT_EQ(icon.bitmap(), expected_icon.bitmap());
 }
 #endif  // !defined(OS_IOS)
+
+#if defined(OS_IOS)
+
+// Test that blob:http://example.test/foobar is displayed as "example.test" on
+// iOS.
+TEST_F(LocationBarModelImplTest, BlobDisplayURLIOS) {
+  delegate()->SetURL(GURL("blob:http://example.test/foo"));
+  EXPECT_EQ(base::ASCIIToUTF16("example.test/TestSuffix"),
+            model()->GetURLForDisplay());
+}
+
+#endif  // defined(OS_IOS)
 
 }  // namespace

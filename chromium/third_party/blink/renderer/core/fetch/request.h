@@ -33,7 +33,6 @@ class CORE_EXPORT Request final : public ScriptWrappable,
                                   public ActiveScriptWrappable<Request>,
                                   public Body {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(Request);
 
  public:
   using ForServiceWorkerFetchEvent =
@@ -93,7 +92,7 @@ class CORE_EXPORT Request final : public ScriptWrappable,
     return Body::HasPendingActivity();
   }
 
-  FetchRequestData* PassRequestData(ScriptState*, ExceptionState&);
+  FetchRequestData* PassRequestData(ScriptState*);
   mojom::blink::FetchAPIRequestPtr CreateFetchAPIRequest() const;
   bool HasBody() const;
   BodyStreamBuffer* BodyBuffer() override { return request_->Buffer(); }

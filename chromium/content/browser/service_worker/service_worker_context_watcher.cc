@@ -201,7 +201,7 @@ void ServiceWorkerContextWatcher::RunWorkerVersionUpdatedCallback(
 void ServiceWorkerContextWatcher::RunWorkerErrorReportedCallback(
     int64_t registration_id,
     int64_t version_id,
-    std::unique_ptr<ErrorInfo> error_info) {
+    std::unique_ptr<ServiceWorkerContextObserver::ErrorInfo> error_info) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (stop_called_)
     return;
@@ -237,10 +237,12 @@ void ServiceWorkerContextWatcher::OnStarting(int64_t version_id) {
   OnRunningStateChanged(version_id, EmbeddedWorkerStatus::STARTING);
 }
 
-void ServiceWorkerContextWatcher::OnStarted(int64_t version_id,
-                                            const GURL& scope,
-                                            int process_id,
-                                            const GURL& script_url) {
+void ServiceWorkerContextWatcher::OnStarted(
+    int64_t version_id,
+    const GURL& scope,
+    int process_id,
+    const GURL& script_url,
+    const blink::ServiceWorkerToken& token) {
   OnRunningStateChanged(version_id, EmbeddedWorkerStatus::RUNNING);
 }
 
@@ -303,8 +305,10 @@ void ServiceWorkerContextWatcher::OnMainScriptResponseSet(
   SendVersionInfo(*version);
 }
 
-void ServiceWorkerContextWatcher::OnErrorReported(int64_t version_id,
-                                                  const ErrorInfo& info) {
+void ServiceWorkerContextWatcher::OnErrorReported(
+    int64_t version_id,
+    const GURL& scope,
+    const ServiceWorkerContextObserver::ErrorInfo& info) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   int64_t registration_id = blink::mojom::kInvalidServiceWorkerRegistrationId;
   auto it = version_info_map_.find(version_id);
@@ -314,11 +318,13 @@ void ServiceWorkerContextWatcher::OnErrorReported(int64_t version_id,
       FROM_HERE,
       base::BindOnce(
           &ServiceWorkerContextWatcher::RunWorkerErrorReportedCallback, this,
-          registration_id, version_id, std::make_unique<ErrorInfo>(info)));
+          registration_id, version_id,
+          std::make_unique<ServiceWorkerContextObserver::ErrorInfo>(info)));
 }
 
 void ServiceWorkerContextWatcher::OnReportConsoleMessage(
     int64_t version_id,
+    const GURL& scope,
     const ConsoleMessage& message) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   if (message.message_level != blink::mojom::ConsoleMessageLevel::kError)
@@ -333,8 +339,8 @@ void ServiceWorkerContextWatcher::OnReportConsoleMessage(
       base::BindOnce(
           &ServiceWorkerContextWatcher::RunWorkerErrorReportedCallback, this,
           registration_id, version_id,
-          std::make_unique<ErrorInfo>(message.message, message.line_number, -1,
-                                      message.source_url)));
+          std::make_unique<ServiceWorkerContextObserver::ErrorInfo>(
+              message.message, message.line_number, -1, message.source_url)));
 }
 
 void ServiceWorkerContextWatcher::OnControlleeAdded(

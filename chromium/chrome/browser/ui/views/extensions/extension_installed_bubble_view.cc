@@ -134,10 +134,6 @@ class ExtensionInstalledBubbleView : public BubbleSyncPromoDelegate,
 
  private:
   // views::BubbleDialogDelegateView:
-  base::string16 GetWindowTitle() const override;
-  gfx::ImageSkia GetWindowIcon() override;
-  bool ShouldShowWindowIcon() const override;
-  bool ShouldShowCloseButton() const override;
   void Init() override;
 
   // BubbleSyncPromoDelegate:
@@ -148,7 +144,6 @@ class ExtensionInstalledBubbleView : public BubbleSyncPromoDelegate,
 
   Browser* const browser_;
   const std::unique_ptr<ExtensionInstalledBubbleModel> model_;
-  gfx::ImageSkia icon_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionInstalledBubbleView);
 };
@@ -189,13 +184,20 @@ ExtensionInstalledBubbleView::ExtensionInstalledBubbleView(
                                    ? views::BubbleBorder::TOP_LEFT
                                    : views::BubbleBorder::TOP_RIGHT),
       browser_(browser),
-      model_(std::move(model)),
-      icon_(model_->MakeIconOfSize(kMaxIconSize)) {
+      model_(std::move(model)) {
   chrome::RecordDialogCreation(chrome::DialogIdentifier::EXTENSION_INSTALLED);
   SetButtons(ui::DIALOG_BUTTON_NONE);
   if (model_->show_sign_in_promo()) {
     SetFootnoteView(CreateSigninPromoView(browser->profile(), this));
   }
+  SetIcon(model_->MakeIconOfSize(kMaxIconSize));
+  SetShowIcon(true);
+  SetShowCloseButton(true);
+
+  base::string16 extension_name = base::UTF8ToUTF16(model_->extension_name());
+  base::i18n::AdjustStringForLocaleDirection(&extension_name);
+  SetTitle(l10n_util::GetStringFUTF16(IDS_EXTENSION_INSTALLED_HEADING,
+                                      extension_name));
 }
 
 ExtensionInstalledBubbleView::~ExtensionInstalledBubbleView() = default;
@@ -204,26 +206,6 @@ void ExtensionInstalledBubbleView::UpdateAnchorView() {
   views::View* reference_view = AnchorViewForBrowser(model_.get(), browser_);
   DCHECK(reference_view);
   SetAnchorView(reference_view);
-}
-
-base::string16 ExtensionInstalledBubbleView::GetWindowTitle() const {
-  // Add the heading (for all options).
-  base::string16 extension_name = base::UTF8ToUTF16(model_->extension_name());
-  base::i18n::AdjustStringForLocaleDirection(&extension_name);
-  return l10n_util::GetStringFUTF16(IDS_EXTENSION_INSTALLED_HEADING,
-                                    extension_name);
-}
-
-gfx::ImageSkia ExtensionInstalledBubbleView::GetWindowIcon() {
-  return icon_;
-}
-
-bool ExtensionInstalledBubbleView::ShouldShowWindowIcon() const {
-  return true;
-}
-
-bool ExtensionInstalledBubbleView::ShouldShowCloseButton() const {
-  return true;
 }
 
 void ExtensionInstalledBubbleView::Init() {
@@ -254,7 +236,7 @@ void ExtensionInstalledBubbleView::Init() {
   // Indent by the size of the icon.
   layout->set_inside_border_insets(gfx::Insets(
       0,
-      icon_.width() +
+      GetWindowIcon().width() +
           provider->GetDistanceMetric(DISTANCE_UNRELATED_CONTROL_HORIZONTAL),
       0, 0));
   layout->set_cross_axis_alignment(

@@ -29,7 +29,7 @@
 <translation id="1465176863081977902">C&amp;opiar dirección del audio</translation>
 <translation id="1476607407192946488">Ajustes de &amp;idioma</translation>
 <translation id="150411034776756821">Eliminar de <ph name="SITE" /></translation>
-<translation id="1546280085599573572">Esta extensión ha cambiado la página que se muestra al hacer clic en el botón página de inicio.</translation>
+<translation id="1546280085599573572">Esta extensión ha cambiado la página que se muestra al hacer clic en el botón de inicio.</translation>
 <translation id="15662109988763471">La impresora seleccionada no está disponible o no se instaló correctamente. Revisa tu impresora o prueba a seleccionar otra.</translation>
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1588870296199743671">Abrir enlace con...</translation>
@@ -44,7 +44,7 @@
 <translation id="1708338024780164500">(Inactivo)</translation>
 <translation id="1723824996674794290">Ventana &amp;nueva</translation>
 <translation id="1725149567830788547">Mostrar &amp;controles</translation>
-<translation id="1729533290416704613">También controla qué página se muestra al buscar desde Omnibox.</translation>
+<translation id="1729533290416704613">También controla la página que se muestra al buscar desde Omnibox.</translation>
 <translation id="1744108098763830590">página en segundo plano</translation>
 <translation id="176587472219019965">Ventana &amp;nueva</translation>
 <translation id="1769104665586091481">Abrir enlace en una &amp;ventana nueva</translation>
@@ -247,7 +247,7 @@
 <translation id="5063480226653192405">Uso</translation>
 <translation id="5068918910148307423">No permitir a los sitios recientemente cerrados terminar de enviar y recibir datos</translation>
 <translation id="5116628073786783676">G&amp;uardar audio como...</translation>
-<translation id="5143374789336132547">La extensión <ph name="EXTENSION_NAME" /> ha cambiado la página que se muestra al hacer clic en el botón página de inicio.</translation>
+<translation id="5143374789336132547">La extensión <ph name="EXTENSION_NAME" /> ha cambiado la página que se muestra al hacer clic en el botón de inicio.</translation>
 <translation id="5154108062446123722">Ajustes avanzados para <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5171343362375269016">Memoria trasladada al espacio de intercambio</translation>
 <translation id="5233019165164992427">Puerto de depuración NaCl</translation>
@@ -261,7 +261,7 @@
 <translation id="5301954838959518834">Entendido</translation>
 <translation id="5317780077021120954">Guardar</translation>
 <translation id="5334142896108694079">Caché de secuencia de comandos</translation>
-<translation id="5355926466126177564">La extensión <ph name="EXTENSION_NAME" /> ha cambiado la página que se muestra se muestra al buscar desde Omnibox.</translation>
+<translation id="5355926466126177564">La extensión <ph name="EXTENSION_NAME" /> ha cambiado la página que se muestra al buscar desde Omnibox.</translation>
 <translation id="5360150013186312835">Mostrar en la barra de herramientas</translation>
 <translation id="5362741141255528695">Selecciona un archivo de clave privada.</translation>
 <translation id="5370819323174483825">&amp;Recargar página</translation>
@@ -274,13 +274,13 @@
 <translation id="5486561344817861625">Simular reinicio del navegador</translation>
 <translation id="5487521232677179737">Borrar datos</translation>
 <translation id="5509693895992845810">Guardar &amp;como...</translation>
-<translation id="5521078259930077036">¿Es esta la página de inicio que esperabas?</translation>
+<translation id="5521078259930077036">¿Es esta la página principal que esperabas?</translation>
 <translation id="5542132724887566711">Perfil</translation>
 <translation id="5556459405103347317">Recargar</translation>
 <translation id="5575473780076478375">Extensión de incógnito: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5614553682702429503">¿Guardar la contraseña?</translation>
 <translation id="5623842676595125836">Registro</translation>
-<translation id="5627086634964711283">También controla qué página se muestra al hacer clic en el botón página de inicio.</translation>
+<translation id="5627086634964711283">También controla la página que se muestra al hacer clic en el botón de inicio.</translation>
 <translation id="563535393368633106">Preguntar antes de acceder (recomendado)</translation>
 <translation id="5649053991847567735">Descargas automáticas</translation>
 <translation id="5677928146339483299">Bloqueado</translation>
@@ -302,7 +302,7 @@
 <translation id="5910363049092958439">Guar&amp;dar imagen como...</translation>
 <translation id="5956585768868398362">¿Es esta la página de búsqueda que esperabas?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> máximo)</translation>
-<translation id="5965661248935608907">También controla qué página se muestra al hacer clic en el botón página de inicio o al buscar desde Omnibox.</translation>
+<translation id="5965661248935608907">También controla la página que se muestra al hacer clic en el botón de inicio o al buscar desde Omnibox.</translation>
 <translation id="5978277834170881274">&amp;Usar la revisión ortográfica básica</translation>
 <translation id="5979421442488174909">&amp;Traducir a <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Borrar datos de sitios</translation>
@@ -345,7 +345,6 @@
 <translation id="6639554308659482635">Memoria de SQLite</translation>
 <translation id="6686817083349815241">Guardar tu contraseña</translation>
 <translation id="6691936601825168937">Página &amp;siguiente</translation>
-<translation id="6723354935081862304">Imprimir en Google Docs y en otros destinos en la nube. <ph name="BEGIN_LINK" />Inicia sesión<ph name="END_LINK" /> para imprimir en Google Cloud Print.</translation>
 <translation id="6798954102094737107">Complemento: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Mantener cambios</translation>
 <translation id="6817174620439930047">Preguntar cuando un sitio intente usar mensajes exclusivos del sistema para acceder a dispositivos MIDI (recomendado)</translation>

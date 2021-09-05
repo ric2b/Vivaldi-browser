@@ -165,10 +165,15 @@ void FindRuntimeContext(gfx::NativeWindow owner_window,
 
 SelectFileDialogExtension::RoutingID GetRoutingID(
     content::WebContents* web_contents,
-    int android_task_id) {
-  if (android_task_id != SelectFileDialogExtension::kAndroidTaskIdNone) {
-    return base::StringPrintf("android.%d", android_task_id);
-  } else if (web_contents) {
+    const SelectFileDialogExtension::Owner& owner) {
+  if (owner.android_task_id.has_value())
+    return base::StringPrintf("android.%d", *owner.android_task_id);
+
+  // Lacros ids are already prefixed with "lacros".
+  if (owner.lacros_window_id.has_value())
+    return *owner.lacros_window_id;
+
+  if (web_contents) {
     return base::StringPrintf(
         "web.%d", web_contents->GetMainFrame()->GetFrameTreeNodeId());
   }
@@ -179,6 +184,9 @@ SelectFileDialogExtension::RoutingID GetRoutingID(
 }  // namespace
 
 /////////////////////////////////////////////////////////////////////////////
+
+SelectFileDialogExtension::Owner::Owner() = default;
+SelectFileDialogExtension::Owner::~Owner() = default;
 
 // static
 SelectFileDialogExtension* SelectFileDialogExtension::Create(
@@ -298,10 +306,8 @@ void SelectFileDialogExtension::SelectFileWithFileManagerParams(
     const base::FilePath& default_path,
     const FileTypeInfo* file_types,
     int file_type_index,
-    const base::FilePath::StringType& default_extension,
-    gfx::NativeWindow owner_window,
     void* params,
-    int owner_android_task_id,
+    const Owner& owner,
     bool show_android_picker_apps) {
   if (owner_window_) {
     LOG(ERROR) << "File dialog already in use!";
@@ -315,8 +321,8 @@ void SelectFileDialogExtension::SelectFileWithFileManagerParams(
   content::WebContents* web_contents = nullptr;
 
   // Obtain BaseWindow and WebContents if the owner window is browser.
-  if (owner_android_task_id == kAndroidTaskIdNone)
-    FindRuntimeContext(owner_window, &base_window, &web_contents);
+  if (!owner.android_task_id.has_value() && !owner.lacros_window_id.has_value())
+    FindRuntimeContext(owner.window, &base_window, &web_contents);
 
   if (web_contents)
     profile_ = Profile::FromBrowserContext(web_contents->GetBrowserContext());
@@ -330,7 +336,7 @@ void SelectFileDialogExtension::SelectFileWithFileManagerParams(
 
   // Check if we have another dialog opened for the contents. It's unlikely, but
   // possible. In such situation, discard this request.
-  RoutingID routing_id = GetRoutingID(web_contents, owner_android_task_id);
+  RoutingID routing_id = GetRoutingID(web_contents, owner);
   if (PendingExists(routing_id))
     return;
 
@@ -388,11 +394,11 @@ void SelectFileDialogExtension::SelectFileWithFileManagerParams(
       file_manager::util::GetFileManagerMainPageUrlWithParams(
           type, title, current_directory_url, selection_url,
           default_path.BaseName().value(), file_types, file_type_index,
-          default_extension, show_android_picker_apps);
+          show_android_picker_apps);
 
   ExtensionDialog::InitParams dialog_params(
       {kFileManagerWidth, kFileManagerHeight});
-  dialog_params.is_modal = (owner_window != nullptr);
+  dialog_params.is_modal = (owner.window != nullptr);
   dialog_params.min_size = {kFileManagerMinimumWidth,
                             kFileManagerMinimumHeight};
   dialog_params.title = file_manager::util::GetSelectFileDialogTitle(type);
@@ -403,7 +409,7 @@ void SelectFileDialogExtension::SelectFileWithFileManagerParams(
 
   ExtensionDialog* dialog = ExtensionDialog::Show(
       file_manager_url,
-      base_window ? base_window->GetNativeWindow() : owner_window, profile_,
+      base_window ? base_window->GetNativeWindow() : owner.window, profile_,
       web_contents, this /* ExtensionDialog::Observer */, dialog_params);
   if (!dialog) {
     LOG(ERROR) << "Unable to create extension dialog";
@@ -419,7 +425,7 @@ void SelectFileDialogExtension::SelectFileWithFileManagerParams(
   extension_dialog_ = dialog;
   params_ = params;
   routing_id_ = routing_id;
-  owner_window_ = owner_window;
+  owner_window_ = owner.window;
 }
 
 void SelectFileDialogExtension::SelectFileImpl(
@@ -431,10 +437,12 @@ void SelectFileDialogExtension::SelectFileImpl(
     const base::FilePath::StringType& default_extension,
     gfx::NativeWindow owner_window,
     void* params) {
+  // |default_extension| is ignored.
+  Owner owner;
+  owner.window = owner_window;
   SelectFileWithFileManagerParams(type, title, default_path, file_types,
-                                  file_type_index, default_extension,
-                                  owner_window, params, kAndroidTaskIdNone,
-                                  false /* show_android_picker_apps */);
+                                  file_type_index, params, owner,
+                                  /*show_android_picker_apps=*/false);
 }
 
 bool SelectFileDialogExtension::HasMultipleFileTypeChoicesImpl() {

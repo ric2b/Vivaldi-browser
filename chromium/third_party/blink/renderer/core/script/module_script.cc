@@ -7,8 +7,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/module_record.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/core/script/module_record_resolver.h"
-#include "third_party/blink/renderer/core/workers/worker_global_scope.h"
-#include "third_party/blink/renderer/core/workers/worker_reporting_proxy.h"
+#include "third_party/blink/renderer/core/workers/worker_or_worklet_global_scope.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "v8/include/v8.h"
 
@@ -101,7 +100,7 @@ void ModuleScript::Trace(Visitor* visitor) const {
   Script::Trace(visitor);
 }
 
-void ModuleScript::RunScript(LocalFrame* frame, const SecurityOrigin*) {
+void ModuleScript::RunScript(LocalFrame* frame) {
   // We need a HandleScope for the ModuleEvaluationResult that is created
   // in ::ExecuteModule(...).
   ScriptState::Scope scope(SettingsObject()->GetScriptState());
@@ -111,22 +110,23 @@ void ModuleScript::RunScript(LocalFrame* frame, const SecurityOrigin*) {
                                   Modulator::CaptureEvalErrorFlag::kReport);
 }
 
-void ModuleScript::RunScriptOnWorker(WorkerGlobalScope& worker_global_scope) {
+bool ModuleScript::RunScriptOnWorkerOrWorklet(
+    WorkerOrWorkletGlobalScope& global_scope) {
   // We need a HandleScope for the ModuleEvaluationResult that is created
   // in ::ExecuteModule(...).
   ScriptState::Scope scope(SettingsObject()->GetScriptState());
-  DCHECK(worker_global_scope.IsContextThread());
+  DCHECK(global_scope.IsContextThread());
 
-  WorkerReportingProxy& worker_reporting_proxy =
-      worker_global_scope.ReportingProxy();
-
-  worker_reporting_proxy.WillEvaluateModuleScript();
   // This |error| is always null because the second argument is |kReport|.
   // TODO(nhiroki): Catch an error when an evaluation error happens.
   // (https://crbug.com/680046)
   ModuleEvaluationResult result = SettingsObject()->ExecuteModule(
       this, Modulator::CaptureEvalErrorFlag::kReport);
-  worker_reporting_proxy.DidEvaluateModuleScript(result.IsSuccess());
+  return result.IsSuccess();
+}
+
+std::pair<size_t, size_t> ModuleScript::GetClassicScriptSizes() const {
+  return std::pair<size_t, size_t>(0, 0);
 }
 
 std::ostream& operator<<(std::ostream& stream,

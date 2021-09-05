@@ -8,31 +8,64 @@
 
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
+#include "chrome/browser/profiles/profile.h"
+#include "components/omnibox/browser/omnibox_prefs.h"
+#include "components/prefs/pref_service.h"
 #include "components/safe_browsing/core/features.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
+#include "ui/events/keycodes/keyboard_codes.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/browser/extension_registry.h"
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
+using blink::WebInputEvent;
+
+namespace {
+// Id for extension that enables users to report sites to Safe Browsing.
+const char kPreventElisionExtensionId[] = "jknemblkbdhdcpllfgbfekkdciegfboi";
+}  // namespace
 
 namespace safe_browsing {
 
-// If true, a delayed warning will be shown when the user clicks on the page.
-// If false, the warning won't be shown, but a metric will be recorded on the
-// first click.
-const base::FeatureParam<bool> kEnableMouseClicks{&kDelayedWarnings, "mouse",
-                                                  /*default_value=*/false};
-
 const char kDelayedWarningsHistogram[] = "SafeBrowsing.DelayedWarnings.Event";
+const char kDelayedWarningsTimeOnPageHistogram[] =
+    "SafeBrowsing.DelayedWarnings.TimeOnPage";
+
+const char kDelayedWarningsWithElisionDisabledHistogram[] =
+    "SafeBrowsing.DelayedWarnings.Event_UrlElisionDisabled";
+const char kDelayedWarningsTimeOnPageWithElisionDisabledHistogram[] =
+    "SafeBrowsing.DelayedWarnings.TimeOnPage_UrlElisionDisabled";
 
 namespace {
 const char kWebContentsUserDataKey[] =
     "web_contents_safe_browsing_user_interaction_observer";
 
-void RecordUMA(DelayedWarningEvent event) {
-  base::UmaHistogramEnumeration(kDelayedWarningsHistogram, event);
+bool IsUrlElisionDisabled(Profile* profile,
+                          const char* suspicious_site_reporter_extension_id) {
+  if (profile &&
+      profile->GetPrefs()->GetBoolean(omnibox::kPreventUrlElisionsInOmnibox)) {
+    return true;
+  }
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  DCHECK(suspicious_site_reporter_extension_id);
+  if (profile && extensions::ExtensionRegistry::Get(profile)
+                     ->enabled_extensions()
+                     .Contains(suspicious_site_reporter_extension_id)) {
+    return true;
+  }
+#endif
+  return false;
 }
 
 }  // namespace
+
+// static
+const char* SafeBrowsingUserInteractionObserver::
+    suspicious_site_reporter_extension_id_ = kPreventElisionExtensionId;
 
 SafeBrowsingUserInteractionObserver::SafeBrowsingUserInteractionObserver(
     content::WebContents* web_contents,
@@ -42,7 +75,9 @@ SafeBrowsingUserInteractionObserver::SafeBrowsingUserInteractionObserver(
     : content::WebContentsObserver(web_contents),
       web_contents_(web_contents),
       resource_(resource),
-      ui_manager_(ui_manager) {
+      ui_manager_(ui_manager),
+      creation_time_(base::Time::Now()),
+      clock_(base::DefaultClock::GetInstance()) {
   DCHECK(base::FeatureList::IsEnabled(kDelayedWarnings));
   key_press_callback_ =
       base::BindRepeating(&SafeBrowsingUserInteractionObserver::HandleKeyPress,
@@ -79,9 +114,6 @@ SafeBrowsingUserInteractionObserver::~SafeBrowsingUserInteractionObserver() {
       key_press_callback_);
   web_contents_->GetRenderViewHost()->GetWidget()->RemoveMouseEventCallback(
       mouse_event_callback_);
-  if (!interstitial_shown_) {
-    RecordUMA(DelayedWarningEvent::kWarningNotShown);
-  }
 }
 
 // static
@@ -114,10 +146,13 @@ SafeBrowsingUserInteractionObserver::FromWebContents(
 void SafeBrowsingUserInteractionObserver::RenderViewHostChanged(
     content::RenderViewHost* old_host,
     content::RenderViewHost* new_host) {
-  old_host->GetWidget()->RemoveKeyPressEventCallback(key_press_callback_);
+  // |old_host| can be nullptr if the old RVH was shut down.
+  if (old_host)
+    old_host->GetWidget()->RemoveKeyPressEventCallback(key_press_callback_);
   new_host->GetWidget()->AddKeyPressEventCallback(key_press_callback_);
 
-  old_host->GetWidget()->RemoveMouseEventCallback(mouse_event_callback_);
+  if (old_host)
+    old_host->GetWidget()->RemoveMouseEventCallback(mouse_event_callback_);
   new_host->GetWidget()->AddMouseEventCallback(mouse_event_callback_);
 }
 
@@ -162,7 +197,21 @@ void SafeBrowsingUserInteractionObserver::DidFinishNavigation(
 }
 
 void SafeBrowsingUserInteractionObserver::Detach() {
+  if (!interstitial_shown_) {
+    RecordUMA(DelayedWarningEvent::kWarningNotShown);
+  }
+  base::TimeDelta time_on_page = clock_->Now() - creation_time_;
+  if (IsUrlElisionDisabled(
+          Profile::FromBrowserContext(web_contents()->GetBrowserContext()),
+          suspicious_site_reporter_extension_id_)) {
+    base::UmaHistogramLongTimes(
+        kDelayedWarningsTimeOnPageWithElisionDisabledHistogram, time_on_page);
+  } else {
+    base::UmaHistogramLongTimes(kDelayedWarningsTimeOnPageHistogram,
+                                time_on_page);
+  }
   web_contents()->RemoveUserData(kWebContentsUserDataKey);
+  // DO NOT add code past this point. |this| is destroyed.
 }
 
 void SafeBrowsingUserInteractionObserver::DidToggleFullscreenModeForTab(
@@ -224,11 +273,62 @@ void SafeBrowsingUserInteractionObserver::OnDesktopCaptureRequest() {
   // DO NOT add code past this point. |this| is destroyed.
 }
 
+// static
+void SafeBrowsingUserInteractionObserver::
+    SetSuspiciousSiteReporterExtensionIdForTesting(const char* extension_id) {
+  suspicious_site_reporter_extension_id_ = extension_id;
+}
+
+// static
+void SafeBrowsingUserInteractionObserver::
+    ResetSuspiciousSiteReporterExtensionIdForTesting() {
+  suspicious_site_reporter_extension_id_ = kPreventElisionExtensionId;
+}
+
+void SafeBrowsingUserInteractionObserver::SetClockForTesting(
+    base::Clock* clock) {
+  clock_ = clock;
+}
+
+base::Time SafeBrowsingUserInteractionObserver::GetCreationTimeForTesting()
+    const {
+  return creation_time_;
+}
+
+void SafeBrowsingUserInteractionObserver::RecordUMA(DelayedWarningEvent event) {
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+  if (IsUrlElisionDisabled(profile, suspicious_site_reporter_extension_id_)) {
+    base::UmaHistogramEnumeration(kDelayedWarningsWithElisionDisabledHistogram,
+                                  event);
+  } else {
+    base::UmaHistogramEnumeration(kDelayedWarningsHistogram, event);
+  }
+}
+
+bool IsAllowedModifier(const content::NativeWebKeyboardEvent& event) {
+  const int key_modifiers =
+      event.GetModifiers() & blink::WebInputEvent::kKeyModifiers;
+  // If the only modifier is shift, the user may be typing uppercase
+  // letters.
+  if (key_modifiers == WebInputEvent::kShiftKey) {
+    return event.windows_key_code == ui::VKEY_SHIFT;
+  }
+  // Disallow CTRL+C and CTRL+V.
+  if (key_modifiers == WebInputEvent::kControlKey &&
+      (event.windows_key_code == ui::VKEY_C ||
+       event.windows_key_code == ui::VKEY_V)) {
+    return false;
+  }
+  return key_modifiers != 0;
+}
+
 bool SafeBrowsingUserInteractionObserver::HandleKeyPress(
     const content::NativeWebKeyboardEvent& event) {
   // Allow non-character keys such as ESC. These can be used to exit fullscreen,
   // for example.
-  if (!event.IsCharacterKey()) {
+  if (!event.IsCharacterKey() || event.is_browser_shortcut ||
+      IsAllowedModifier(event)) {
     return false;
   }
   ShowInterstitial(DelayedWarningEvent::kWarningShownOnKeypress);
@@ -243,7 +343,7 @@ bool SafeBrowsingUserInteractionObserver::HandleMouseEvent(
   }
   // If warning isn't enabled for mouse clicks, still record the first time when
   // the user clicks.
-  if (!kEnableMouseClicks.Get()) {
+  if (!kDelayedWarningsEnableMouseClicks.Get()) {
     if (!mouse_click_with_no_warning_recorded_) {
       RecordUMA(DelayedWarningEvent::kWarningNotTriggeredOnMouseClick);
       mouse_click_with_no_warning_recorded_ = true;

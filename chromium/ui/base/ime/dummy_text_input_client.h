@@ -25,7 +25,7 @@ class DummyTextInputClient : public TextInputClient {
 
   // Overriden from TextInputClient.
   void SetCompositionText(const CompositionText& composition) override;
-  void ConfirmCompositionText(bool) override;
+  uint32_t ConfirmCompositionText(bool keep_selection) override;
   void ClearCompositionText() override;
   void InsertText(const base::string16& text) override;
   void InsertChar(const KeyEvent& event) override;
@@ -63,9 +63,11 @@ class DummyTextInputClient : public TextInputClient {
 #endif
 
 #if defined(OS_CHROMEOS)
-  // Set the autocorrect range
+  gfx::Range GetAutocorrectRange() const override;
+  gfx::Rect GetAutocorrectCharacterBounds() const override;
   bool SetAutocorrectRange(const base::string16& autocorrect_text,
                            const gfx::Range& range) override;
+  void ClearAutocorrectRange() override;
 #endif
 
 #if defined(OS_WIN)
@@ -101,6 +103,7 @@ class DummyTextInputClient : public TextInputClient {
   std::vector<base::string16> insert_text_history_;
   std::vector<CompositionText> composition_history_;
   std::vector<gfx::Range> selection_history_;
+  gfx::Range autocorrect_range_;
 };
 
 }  // namespace ui

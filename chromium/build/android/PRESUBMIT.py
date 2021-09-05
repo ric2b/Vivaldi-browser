@@ -28,8 +28,9 @@ def CommonChecks(input_api, output_api):
           input_api,
           output_api,
           pylintrc='pylintrc',
-          black_list=[
+          block_list=[
               r'.*_pb2\.py',
+              r'.*list_java_targets\.py',  # crbug.com/1100664
           ] + build_pys,
           extra_paths_list=[
               J(),
@@ -49,8 +50,9 @@ def CommonChecks(input_api, output_api):
       input_api.canned_checks.GetPylint(
           input_api,
           output_api,
-          white_list=build_pys,
-          black_list=[
+          allow_list=build_pys,
+          block_list=[
+              r'.*_pb2\.py',
               r'.*_pb2\.py',
           ],
           extra_paths_list=[J('gyp'), J('gn')]))
@@ -73,6 +75,7 @@ def CommonChecks(input_api, output_api):
               J('.', 'emma_coverage_stats_test.py'),
               J('.', 'list_class_verification_failures_test.py'),
               J('gyp', 'util', 'build_utils_test.py'),
+              J('gyp', 'util', 'manifest_utils_test.py'),
               J('gyp', 'util', 'md5_check_test.py'),
               J('gyp', 'util', 'resource_utils_test.py'),
               J('pylib', 'constants', 'host_paths_unittest.py'),

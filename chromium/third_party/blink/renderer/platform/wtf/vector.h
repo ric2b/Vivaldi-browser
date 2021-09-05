@@ -79,6 +79,7 @@ class Deque;
 // capacity as accessible. With concurrent marking enabled, annotating size
 // changes could conflict with marking the whole store as accessible, causing
 // a race.
+#if defined(ADDRESS_SANITIZER)
 #define MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, buffer, capacity,      \
                                            old_size, new_size)               \
   if (Allocator::kIsGarbageCollected && Allocator::IsIncrementalMarking()) { \
@@ -86,6 +87,11 @@ class Deque;
   } else {                                                                   \
     ANNOTATE_CHANGE_SIZE(buffer, capacity, old_size, new_size)               \
   }
+#else
+#define MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, buffer, capacity, \
+                                           old_size, new_size)          \
+  ANNOTATE_CHANGE_SIZE(buffer, capacity, old_size, new_size)
+#endif  // defined(ADDRESS_SANITIZER)
 
 template <bool needsDestruction, typename T>
 struct VectorDestructor;
@@ -722,7 +728,7 @@ class VectorBuffer : protected VectorBufferBase<T, Allocator> {
   inline bool ShrinkBuffer(wtf_size_t new_capacity) {
     DCHECK_LT(new_capacity, capacity());
     if (new_capacity <= inlineCapacity) {
-      // We need to switch to inlineBuffer.  Vector::shrinkCapacity will
+      // We need to switch to inlineBuffer.  Vector::ShrinkCapacity will
       // handle it.
       return false;
     }
@@ -1236,6 +1242,10 @@ class Vector
   // the vector is default-constructed.
   void ReserveInitialCapacity(wtf_size_t initial_capacity);
 
+  // Shrink the backing buffer to |new_capacity|. This function may cause a
+  // reallocation.
+  void ShrinkCapacity(wtf_size_t new_capacity);
+
   // Shrink the backing buffer so it can contain exactly |size()| elements.
   // This function may cause a reallocation.
   void ShrinkToFit() { ShrinkCapacity(size()); }
@@ -1433,7 +1443,6 @@ class Vector
 
   template <typename U>
   U* ExpandCapacity(wtf_size_t new_min_capacity, U*);
-  void ShrinkCapacity(wtf_size_t new_capacity);
   template <typename U>
   void AppendSlowCase(U&&);
 
@@ -2115,28 +2124,38 @@ inline bool operator!=(const Vector<T, inlineCapacityA, Allocator>& a,
   return !(a == b);
 }
 
+namespace internal {
+template <typename Allocator, typename VisitorDispatcher, typename T>
+void TraceInlinedBuffer(VisitorDispatcher visitor,
+                        const T* buffer_begin,
+                        size_t capacity) {
+  const T* buffer_end = buffer_begin + capacity;
+  for (const T* buffer_entry = buffer_begin; buffer_entry != buffer_end;
+       buffer_entry++) {
+    Allocator::template Trace<T, VectorTraits<T>>(visitor, *buffer_entry);
+  }
+}
+}  // namespace internal
+
 // Only defined for HeapAllocator. Used when visiting vector object.
 template <typename T, wtf_size_t inlineCapacity, typename Allocator>
 template <typename VisitorDispatcher, typename A>
 std::enable_if_t<A::kIsGarbageCollected>
 Vector<T, inlineCapacity, Allocator>::Trace(VisitorDispatcher visitor) const {
-  // Bail out for concurrent marking.
-  if (!VectorTraits<T>::kCanTraceConcurrently) {
-    if (visitor->DeferredTraceIfConcurrent(
-            {this, [](blink::Visitor* visitor, const void* object) {
-               reinterpret_cast<const Vector<T, inlineCapacity, Allocator>*>(
-                   object)
-                   ->Trace(visitor);
-             }}))
-      return;
-  }
-
   static_assert(Allocator::kIsGarbageCollected,
                 "Garbage collector must be enabled.");
   static_assert(IsTraceableInCollectionTrait<VectorTraits<T>>::value,
                 "Type must be traceable in collection");
 
   const T* buffer = BufferSafe();
+
+  if (!buffer) {
+    // Register the slot for heap compaction.
+    Allocator::TraceVectorBacking(visitor, static_cast<T*>(nullptr),
+                                  Base::BufferSlot());
+    return;
+  }
+
   if (Base::IsOutOfLineBuffer(buffer)) {
     Allocator::TraceVectorBacking(visitor, buffer, Base::BufferSlot());
   } else {
@@ -2144,15 +2163,22 @@ Vector<T, inlineCapacity, Allocator>::Trace(VisitorDispatcher visitor) const {
     // slot for heap compaction. So, we pass nullptr to this method.
     Allocator::TraceVectorBacking(visitor, static_cast<T*>(nullptr),
                                   Base::BufferSlot());
-    if (!buffer)
-      return;
-    // Inline buffer requires tracing immediately.
-    const T* buffer_begin = buffer;
-    const T* buffer_end = buffer + inlineCapacity;
-    for (const T* buffer_entry = buffer_begin; buffer_entry != buffer_end;
-         buffer_entry++) {
-      Allocator::template Trace<T, VectorTraits<T>>(visitor, *buffer_entry);
+
+    // Bail out for concurrent marking.
+    if (!VectorTraits<T>::kCanTraceConcurrently) {
+      if (visitor->DeferredTraceIfConcurrent(
+              {buffer,
+               [](blink::Visitor* visitor, const void* object) {
+                 const T* buffer = reinterpret_cast<const T*>(object);
+                 internal::TraceInlinedBuffer<Allocator>(visitor, buffer,
+                                                         inlineCapacity);
+               }},
+              inlineCapacity * sizeof(T)))
+        return;
     }
+
+    // Inline buffer requires tracing immediately.
+    internal::TraceInlinedBuffer<Allocator>(visitor, buffer, inlineCapacity);
   }
 }
 

@@ -34,9 +34,12 @@
 #include "chrome/common/pref_names.h"
 #include "components/crx_file/id_util.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/common/api/extension_action/action_info.h"
+#include "extensions/common/api/extension_action/action_info_test_util.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
+#include "extensions/common/features/feature_channel.h"
 #include "extensions/common/permissions/permission_message.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
@@ -307,8 +310,7 @@ TEST_F(ExtensionInfoGeneratorUnitTest, BasicInfoTest) {
   EXPECT_FALSE(info->file_access.is_active);
   EXPECT_TRUE(info->incognito_access.is_enabled);
   EXPECT_FALSE(info->incognito_access.is_active);
-  EXPECT_TRUE(
-      base::StringPiece(info->icon_url).starts_with("data:image/png;base64,"));
+  EXPECT_TRUE(base::StartsWith(info->icon_url, "data:image/png;base64,"));
 
   // Strip out the kHostReadWrite permission created by the extension requesting
   // host permissions above; runtime host permissions mean these are always
@@ -760,24 +762,6 @@ TEST_F(ExtensionInfoGeneratorUnitTest,
   }
 }
 
-// Test that file:// access checkbox does not show up when the user can't
-// modify an extension's settings. https://crbug.com/173640.
-TEST_F(ExtensionInfoGeneratorUnitTest, ExtensionInfoLockedAllUrls) {
-  // Force installed extensions aren't user modifyable.
-  scoped_refptr<const Extension> locked_extension =
-      CreateExtension("locked", ListBuilder().Append("file://*/*").Build(),
-                      Manifest::EXTERNAL_POLICY_DOWNLOAD);
-
-  std::unique_ptr<developer::ExtensionInfo> info =
-      GenerateExtensionInfo(locked_extension->id());
-
-  // Extension wants file:// access but the checkbox will not appear
-  // in chrome://extensions.
-  EXPECT_TRUE(locked_extension->wants_file_access());
-  EXPECT_FALSE(info->file_access.is_enabled);
-  EXPECT_FALSE(info->file_access.is_active);
-}
-
 // Tests that file:// access checkbox shows up for extensions with activeTab
 // permission. See crbug.com/850643.
 TEST_F(ExtensionInfoGeneratorUnitTest, ActiveTabFileUrls) {
@@ -792,8 +776,8 @@ TEST_F(ExtensionInfoGeneratorUnitTest, ActiveTabFileUrls) {
   EXPECT_FALSE(info->file_access.is_active);
 }
 
-// Tests that blacklisted extensions are returned by the ExtensionInfoGenerator.
-TEST_F(ExtensionInfoGeneratorUnitTest, Blacklisted) {
+// Tests that blocklisted extensions are returned by the ExtensionInfoGenerator.
+TEST_F(ExtensionInfoGeneratorUnitTest, Blocklisted) {
   const scoped_refptr<const Extension> extension1 = CreateExtension(
       "test1", std::make_unique<base::ListValue>(), Manifest::INTERNAL);
   const scoped_refptr<const Extension> extension2 = CreateExtension(
@@ -812,7 +796,7 @@ TEST_F(ExtensionInfoGeneratorUnitTest, Blacklisted) {
   EXPECT_EQ(developer::EXTENSION_STATE_ENABLED, info1->state);
   EXPECT_EQ(developer::EXTENSION_STATE_ENABLED, info2->state);
 
-  service()->BlacklistExtensionForTest(id1);
+  service()->BlocklistExtensionForTest(id1);
 
   info_list = GenerateExtensionsInfo();
   info1 = GetInfoFromList(info_list, id1);
@@ -821,6 +805,47 @@ TEST_F(ExtensionInfoGeneratorUnitTest, Blacklisted) {
   ASSERT_NE(nullptr, info2);
   EXPECT_EQ(developer::EXTENSION_STATE_BLACKLISTED, info1->state);
   EXPECT_EQ(developer::EXTENSION_STATE_ENABLED, info2->state);
+}
+
+// Test generating extension action commands properly.
+TEST_F(ExtensionInfoGeneratorUnitTest, ExtensionActionCommands) {
+  auto channel_override =
+      GetOverrideChannelForActionType(ActionInfo::TYPE_ACTION);
+  struct {
+    const char* name;
+    const char* command_key;
+    ExtensionBuilder::ActionType action_type;
+  } test_cases[] = {
+      {"browser action", "_execute_browser_action",
+       ExtensionBuilder::ActionType::BROWSER_ACTION},
+      {"page action", "_execute_page_action",
+       ExtensionBuilder::ActionType::PAGE_ACTION},
+      {"action", "_execute_action", ExtensionBuilder::ActionType::ACTION},
+  };
+
+  for (const auto& test_case : test_cases) {
+    SCOPED_TRACE(test_case.name);
+    std::unique_ptr<base::Value> command_dict =
+        DictionaryBuilder()
+            .Set("suggested_key",
+                 DictionaryBuilder().Set("default", "Ctrl+Shift+P").Build())
+            .Set("description", "Execute!")
+            .Build();
+    scoped_refptr<const Extension> extension =
+        ExtensionBuilder(test_case.name)
+            .SetAction(test_case.action_type)
+            .SetManifestKey("commands", DictionaryBuilder()
+                                            .Set(test_case.command_key,
+                                                 std::move(command_dict))
+                                            .Build())
+            .Build();
+    service()->AddExtension(extension.get());
+    auto info = GenerateExtensionInfo(extension->id());
+    ASSERT_TRUE(info);
+    ASSERT_EQ(1u, info->commands.size());
+    EXPECT_EQ(test_case.command_key, info->commands[0].name);
+    EXPECT_TRUE(info->commands[0].is_extension_action);
+  }
 }
 
 // Tests that the parent_disabled_permissions disable reason is never set for

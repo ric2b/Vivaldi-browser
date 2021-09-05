@@ -15,7 +15,7 @@
 #include "base/allocator/partition_allocator/partition_direct_map_extent.h"
 #include "base/allocator/partition_allocator/partition_oom.h"
 #include "base/allocator/partition_allocator/partition_page.h"
-
+#include "base/allocator/partition_allocator/partition_tag_bitmap.h"
 #include "base/check.h"
 #include "build/build_config.h"
 
@@ -47,7 +47,10 @@ ALWAYS_INLINE PartitionPage<thread_safe>* PartitionDirectMap(
   map_size &= kPageAllocationGranularityBaseMask;
 
   char* ptr = nullptr;
-  if (IsPartitionAllocGigaCageEnabled()) {
+  // Allocate from GigaCage, if enabled. However, the exception to this is when
+  // tags aren't allowed, as CheckedPtr assumes that everything inside GigaCage
+  // uses tags (specifically, inside the GigaCage's normal bucket pool).
+  if (root->allow_extras && IsPartitionAllocGigaCageEnabled()) {
 #if defined(ARCH_CPU_64_BITS) && !defined(OS_NACL)
     ptr = internal::AddressPoolManager::GetInstance()->Alloc(GetDirectMapPool(),
                                                              map_size);
@@ -236,6 +239,31 @@ ALWAYS_INLINE void* PartitionBucket<thread_safe>::AllocNewSlotSpan(
 
     root->next_partition_page += total_size;
     root->IncreaseCommittedPages(total_size);
+
+#if ENABLE_TAG_FOR_MTE_CHECKED_PTR
+    PA_DCHECK(root->next_tag_bitmap_page);
+    char* next_tag_bitmap_page = reinterpret_cast<char*>(
+        bits::Align(reinterpret_cast<uintptr_t>(
+                        PartitionTagPointer(root->next_partition_page)),
+                    kSystemPageSize));
+    if (root->next_tag_bitmap_page < next_tag_bitmap_page) {
+#if DCHECK_IS_ON()
+      char* super_page = reinterpret_cast<char*>(
+          reinterpret_cast<uintptr_t>(ret) & kSuperPageBaseMask);
+      char* tag_bitmap = super_page + kPartitionPageSize;
+      PA_DCHECK(next_tag_bitmap_page <= tag_bitmap + kActualTagBitmapSize);
+      PA_DCHECK(next_tag_bitmap_page > tag_bitmap);
+#endif
+      SetSystemPagesAccess(root->next_tag_bitmap_page,
+                           next_tag_bitmap_page - root->next_tag_bitmap_page,
+                           PageReadWrite);
+      root->next_tag_bitmap_page = next_tag_bitmap_page;
+    }
+#if MTE_CHECKED_PTR_SET_TAG_AT_FREE
+    // TODO(tasak): Consider initializing each slot with a different tag.
+    PartitionTagSetValue(ret, total_size, root->GetNewPartitionTag());
+#endif
+#endif
     return ret;
   }
 
@@ -245,7 +273,10 @@ ALWAYS_INLINE void* PartitionBucket<thread_safe>::AllocNewSlotSpan(
   // architectures.
   char* requested_address = root->next_super_page;
   char* super_page = nullptr;
-  if (IsPartitionAllocGigaCageEnabled()) {
+  // Allocate from GigaCage, if enabled. However, the exception to this is when
+  // tags aren't allowed, as CheckedPtr assumes that everything inside GigaCage
+  // uses tags (specifically, inside the GigaCage's normal bucket pool).
+  if (root->allow_extras && IsPartitionAllocGigaCageEnabled()) {
 #if defined(ARCH_CPU_64_BITS) && !defined(OS_NACL)
     super_page = AddressPoolManager::GetInstance()->Alloc(GetNormalBucketPool(),
                                                           kSuperPageSize);
@@ -269,7 +300,10 @@ ALWAYS_INLINE void* PartitionBucket<thread_safe>::AllocNewSlotSpan(
   //
   // TODO(ajwong): Introduce a DCHECK.
   root->next_super_page = super_page + kSuperPageSize;
-  char* ret = super_page + kPartitionPageSize;
+  // TODO(tasak): Consider starting the bitmap right after metadata to save
+  // space.
+  char* tag_bitmap = super_page + kPartitionPageSize;
+  char* ret = tag_bitmap + kReservedTagBitmapSize;
   root->next_partition_page = ret + total_size;
   root->next_partition_page_end = root->next_super_page - kPartitionPageSize;
   // Make the first partition page in the super page a guard page, but leave a
@@ -280,6 +314,26 @@ ALWAYS_INLINE void* PartitionBucket<thread_safe>::AllocNewSlotSpan(
   SetSystemPagesAccess(super_page + (kSystemPageSize * 2),
                        kPartitionPageSize - (kSystemPageSize * 2),
                        PageInaccessible);
+#if ENABLE_TAG_FOR_MTE_CHECKED_PTR
+  // Make the first |total_size| region of the tag bitmap accessible.
+  // The rest of the region is set to inaccessible.
+  char* next_tag_bitmap_page = reinterpret_cast<char*>(
+      bits::Align(reinterpret_cast<uintptr_t>(
+                      PartitionTagPointer(root->next_partition_page)),
+                  kSystemPageSize));
+  PA_DCHECK(next_tag_bitmap_page <= tag_bitmap + kActualTagBitmapSize);
+  PA_DCHECK(next_tag_bitmap_page > tag_bitmap);
+  // |ret| points at the end of the tag bitmap.
+  PA_DCHECK(next_tag_bitmap_page <= ret);
+  SetSystemPagesAccess(next_tag_bitmap_page, ret - next_tag_bitmap_page,
+                       PageInaccessible);
+#if MTE_CHECKED_PTR_SET_TAG_AT_FREE
+  // TODO(tasak): Consider initializing each slot with a different tag.
+  PartitionTagSetValue(ret, total_size, root->GetNewPartitionTag());
+#endif
+  root->next_tag_bitmap_page = next_tag_bitmap_page;
+#endif
+
   //  SetSystemPagesAccess(super_page + (kSuperPageSize -
   //  kPartitionPageSize),
   //                             kPartitionPageSize, PageInaccessible);
@@ -289,9 +343,11 @@ ALWAYS_INLINE void* PartitionBucket<thread_safe>::AllocNewSlotSpan(
   //
   // TODO(ajwong): Refactor Page Allocator API so the SuperPage comes in
   // decommited initially.
-  SetSystemPagesAccess(super_page + kPartitionPageSize + total_size,
-                       (kSuperPageSize - kPartitionPageSize - total_size),
-                       PageInaccessible);
+  SetSystemPagesAccess(
+      super_page + kPartitionPageSize + kReservedTagBitmapSize + total_size,
+      (kSuperPageSize - kPartitionPageSize - kReservedTagBitmapSize -
+       total_size),
+      PageInaccessible);
 
   // If we were after a specific address, but didn't get it, assume that
   // the system chose a lousy address. Here most OS'es have a default
@@ -496,9 +552,14 @@ void* PartitionBucket<thread_safe>::SlowPathAlloc(
   PA_DCHECK(!active_pages_head->freelist_head);
 
   PartitionPage<thread_safe>* new_page = nullptr;
+  // |new_page->bucket| will always be |this|, except when |this| is the
+  // sentinel bucket, which is used to signal a direct mapped allocation.  In
+  // this case |new_page_bucket| will be set properly later. This avoids a read
+  // for most allocations.
+  PartitionBucket* new_page_bucket = this;
   *is_already_zeroed = false;
 
-  // For the PartitionRootGeneric::Alloc() API, we have a bunch of buckets
+  // For the PartitionRoot::Alloc() API, we have a bunch of buckets
   // marked as special cases. We bounce them through to the slow path so that
   // we can still have a blazing fast hot path due to lack of corner-case
   // branches.
@@ -509,16 +570,19 @@ void* PartitionBucket<thread_safe>::SlowPathAlloc(
   // the empty or decommitted lists which affects the subsequent conditional.
   bool return_null = flags & PartitionAllocReturnNull;
   if (UNLIKELY(is_direct_mapped())) {
-    PA_DCHECK(size > kGenericMaxBucketed);
+    PA_DCHECK(size > kMaxBucketed);
     PA_DCHECK(this == get_sentinel_bucket());
     PA_DCHECK(active_pages_head ==
               PartitionPage<thread_safe>::get_sentinel_page());
-    if (size > kGenericMaxDirectMapped) {
+    if (size > kMaxDirectMapped) {
       if (return_null)
         return nullptr;
       PartitionExcessiveAllocationSize(size);
     }
     new_page = PartitionDirectMap(root, flags, size);
+    if (new_page)
+      new_page_bucket = new_page->bucket;
+    // New pages from PageAllocator are always zeroed.
     *is_already_zeroed = true;
   } else if (LIKELY(SetNewActivePage())) {
     // First, did we find an active page in the active pages list?
@@ -550,9 +614,7 @@ void* PartitionBucket<thread_safe>::SlowPathAlloc(
       void* addr = PartitionPage<thread_safe>::ToPointer(new_page);
       root->RecommitSystemPages(addr, new_page->bucket->get_bytes_per_span());
       new_page->Reset();
-      // TODO(https://crbug.com/890752): Optimizing here might cause pages to
-      // not be zeroed.
-      // *is_already_zeroed = true;
+      *is_already_zeroed = kDecommittedPagesAreAlwaysZeroed;
     }
     PA_DCHECK(new_page);
   } else {
@@ -563,9 +625,8 @@ void* PartitionBucket<thread_safe>::SlowPathAlloc(
       new_page =
           PartitionPage<thread_safe>::FromPointerNoAlignmentCheck(raw_pages);
       InitializeSlotSpan(new_page);
-      // TODO(https://crbug.com/890752): Optimizing here causes pages to not be
-      // zeroed on at least macOS.
-      // *is_already_zeroed = true;
+      // New pages from PageAllocator are always zeroed.
+      *is_already_zeroed = true;
     }
   }
 
@@ -578,12 +639,8 @@ void* PartitionBucket<thread_safe>::SlowPathAlloc(
     root->OutOfMemory(size);
   }
 
-  // TODO(ajwong): Is there a way to avoid the reading of bucket here?
-  // It seems like in many of the conditional branches above, |this| ==
-  // |new_page->bucket|. Maybe pull this into another function?
-  PartitionBucket* bucket = new_page->bucket;
-  PA_DCHECK(bucket != get_sentinel_bucket());
-  bucket->active_pages_head = new_page;
+  PA_DCHECK(new_page_bucket != get_sentinel_bucket());
+  new_page_bucket->active_pages_head = new_page;
   new_page->set_raw_size(size);
 
   // If we found an active page with free slots, or an empty page, we have a

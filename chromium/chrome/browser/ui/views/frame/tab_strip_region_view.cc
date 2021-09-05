@@ -5,13 +5,12 @@
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 
 #include "base/bind.h"
-#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/view_class_properties.h"
 
-TabStripRegionView::TabStripRegionView() {
+TabStripRegionView::TabStripRegionView(std::unique_ptr<TabStrip> tab_strip) {
   views::FlexLayout* layout_manager =
       SetLayoutManager(std::make_unique<views::FlexLayout>());
 
@@ -20,11 +19,8 @@ TabStripRegionView::TabStripRegionView() {
           views::kFlexBehaviorKey,
           views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
                                    views::MaximumFlexSizeRule::kUnbounded));
-}
 
-TabStripRegionView::~TabStripRegionView() = default;
-
-TabStrip* TabStripRegionView::AddTabStrip(std::unique_ptr<TabStrip> tab_strip) {
+  tab_strip_ = tab_strip.get();
   tab_strip->SetAvailableWidthCallback(
       base::BindRepeating(&TabStripRegionView::CalculateTabStripAvailableWidth,
                           base::Unretained(this)));
@@ -33,15 +29,14 @@ TabStrip* TabStripRegionView::AddTabStrip(std::unique_ptr<TabStrip> tab_strip) {
         AddChildView(std::make_unique<views::ScrollView>());
     tab_strip_scroll_container->SetBackgroundColor(base::nullopt);
     tab_strip_scroll_container->SetHideHorizontalScrollBar(true);
-    tab_strip_scroll_container->ClipHeightTo(0, GetLayoutConstant(TAB_HEIGHT));
     tab_strip_container_ = tab_strip_scroll_container;
-    return tab_strip_scroll_container->SetContents(std::move(tab_strip));
+    tab_strip_scroll_container->SetContents(std::move(tab_strip));
   } else {
-    TabStrip* raw_tab_strip = AddChildView(std::move(tab_strip));
-    tab_strip_container_ = raw_tab_strip;
-    return raw_tab_strip;
+    tab_strip_container_ = AddChildView(std::move(tab_strip));
   }
 }
+
+TabStripRegionView::~TabStripRegionView() = default;
 
 const char* TabStripRegionView::GetClassName() const {
   return "TabStripRegionView";
@@ -49,6 +44,16 @@ const char* TabStripRegionView::GetClassName() const {
 
 void TabStripRegionView::ChildPreferredSizeChanged(views::View* child) {
   PreferredSizeChanged();
+}
+
+gfx::Size TabStripRegionView::GetMinimumSize() const {
+  gfx::Size tab_strip_min_size = tab_strip_->GetMinimumSize();
+  // Cap the tabstrip minimum width to a reasonable value so browser windows
+  // aren't forced to grow arbitrarily wide.
+  const int max_min_width = 520;
+  tab_strip_min_size.set_width(
+      std::min(max_min_width, tab_strip_min_size.width()));
+  return tab_strip_min_size;
 }
 
 int TabStripRegionView::CalculateTabStripAvailableWidth() {

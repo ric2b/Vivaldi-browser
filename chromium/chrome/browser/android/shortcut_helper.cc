@@ -45,7 +45,7 @@ int g_ideal_homescreen_icon_size = -1;
 int g_minimum_homescreen_icon_size = -1;
 int g_ideal_splash_image_size = -1;
 int g_minimum_splash_image_size = -1;
-int g_ideal_badge_icon_size = -1;
+int g_ideal_monochrome_icon_size = -1;
 int g_ideal_adaptive_launcher_icon_size = -1;
 int g_ideal_shortcut_icon_size = -1;
 
@@ -68,7 +68,7 @@ void GetIconSizes() {
   g_minimum_homescreen_icon_size = sizes[1];
   g_ideal_splash_image_size = sizes[2];
   g_minimum_splash_image_size = sizes[3];
-  g_ideal_badge_icon_size = sizes[4];
+  g_ideal_monochrome_icon_size = sizes[4];
   g_ideal_adaptive_launcher_icon_size = sizes[5];
   g_ideal_shortcut_icon_size = sizes[6];
 
@@ -118,8 +118,9 @@ void AddWebappWithSkBitmap(const ShortcutInfo& info,
   Java_ShortcutHelper_addWebapp(
       env, java_webapp_id, java_url, java_scope_url, java_user_title, java_name,
       java_short_name, java_best_primary_icon_url, java_bitmap,
-      is_icon_maskable, static_cast<int>(info.display), info.orientation,
-      info.source, OptionalSkColorToJavaColor(info.theme_color),
+      is_icon_maskable, static_cast<int>(info.display),
+      static_cast<int>(info.orientation), info.source,
+      OptionalSkColorToJavaColor(info.theme_color),
       OptionalSkColorToJavaColor(info.background_color), callback_pointer);
 }
 
@@ -142,9 +143,7 @@ void AddShortcutWithSkBitmap(content::WebContents* web_contents,
   ScopedJavaLocalRef<jobject> java_bitmap;
   if (!icon_bitmap.drawsNothing())
     java_bitmap = gfx::ConvertToJavaBitmap(&icon_bitmap);
-  TabAndroid* tab = TabAndroid::FromWebContents(web_contents);
-  Java_ShortcutHelper_addShortcut(env, tab ? tab->GetJavaObject() : nullptr,
-                                  java_id, java_url, java_user_title,
+  Java_ShortcutHelper_addShortcut(env, java_id, java_url, java_user_title,
                                   java_bitmap, is_icon_maskable, info.source,
                                   java_best_primary_icon_url);
 }

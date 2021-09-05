@@ -21,6 +21,7 @@
 #include "ipc/ipc_message_utils.h"
 #include "ipc/ipc_sync_channel.h"
 #include "ipc/ipc_sync_message.h"
+#include "printing/mojom/print.mojom-shared.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "tools/ipc_fuzzer/fuzzer/fuzzer.h"
 #include "tools/ipc_fuzzer/fuzzer/rand_util.h"
@@ -663,14 +664,11 @@ struct FuzzTraits<base::UnsafeSharedMemoryRegion> {
 };
 
 template <>
-struct FuzzTraits<blink::WebDeviceEmulationParams::ScreenPosition> {
-  static bool Fuzz(blink::WebDeviceEmulationParams::ScreenPosition* p,
-                   Fuzzer* fuzzer) {
-    int screen_position = RandInRange(
-        blink::WebDeviceEmulationParams::ScreenPosition::kScreenPositionLast +
-        1);
-    *p = static_cast<blink::WebDeviceEmulationParams::ScreenPosition>(
-        screen_position);
+struct FuzzTraits<blink::mojom::EmulatedScreenType> {
+  static bool Fuzz(blink::mojom::EmulatedScreenType* p, Fuzzer* fuzzer) {
+    int screen_type = RandInRange(
+        static_cast<int>(blink::mojom::EmulatedScreenType::kMaxValue) + 1);
+    *p = static_cast<blink::mojom::EmulatedScreenType>(screen_type);
     return true;
   }
 };
@@ -827,11 +825,13 @@ struct FuzzTraits<content::PageState> {
 };
 
 template <>
-struct FuzzTraits<content::ScreenOrientationValues> {
-  static bool Fuzz(content::ScreenOrientationValues* p, Fuzzer* fuzzer) {
+struct FuzzTraits<device::mojom::ScreenOrientationLockType> {
+  static bool Fuzz(device::mojom::ScreenOrientationLockType* p,
+                   Fuzzer* fuzzer) {
     int value = RandInRange(
-        content::ScreenOrientationValues::SCREEN_ORIENTATION_VALUES_LAST + 1);
-    *p = static_cast<content::ScreenOrientationValues>(value);
+        static_cast<int>(device::mojom::ScreenOrientationLockType::kMaxValue) +
+        1);
+    *p = static_cast<device::mojom::ScreenOrientationLockType>(value);
     return true;
   }
 };
@@ -1818,10 +1818,11 @@ struct FuzzTraits<ppapi::SocketOptionData> {
 };
 
 template <>
-struct FuzzTraits<printing::MarginType> {
-  static bool Fuzz(printing::MarginType* p, Fuzzer* fuzzer) {
-    int type = RandInRange(printing::MarginType::MARGIN_TYPE_LAST + 1);
-    *p = static_cast<printing::MarginType>(type);
+struct FuzzTraits<printing::mojom::MarginType> {
+  static bool Fuzz(printing::mojom::MarginType* p, Fuzzer* fuzzer) {
+    int type = RandInRange(
+        static_cast<int>(printing::mojom::MarginType::kMaxValue) + 1);
+    *p = static_cast<printing::mojom::MarginType>(type);
     return true;
   }
 };

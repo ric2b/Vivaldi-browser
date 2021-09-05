@@ -1398,8 +1398,8 @@ TEST_F(ScrollbarsTest, CustomScrollbarChangeToMobileByEmulator) {
   DCHECK(!div_scrollable->VerticalScrollbar()->GetTheme().IsMockTheme());
 
   // Turn on mobile emulator.
-  WebDeviceEmulationParams params;
-  params.screen_position = WebDeviceEmulationParams::kMobile;
+  DeviceEmulationParams params;
+  params.screen_type = mojom::EmulatedScreenType::kMobile;
   WebView().EnableDeviceEmulation(params);
 
   // For root Scrollbar, mobile emulator will change them to page VisualViewport
@@ -1578,6 +1578,59 @@ TEST_F(ScrollbarsTestWithVirtualTimer, TestNonCompositedOverlayScrollbarsFade) {
   mock_overlay_theme.SetOverlayScrollbarFadeOutDelay(base::TimeDelta());
 }
 
+TEST_F(ScrollbarsTestWithVirtualTimer, TestCompositedOverlayScrollbarsNoFade) {
+  ENABLE_OVERLAY_SCROLLBARS(true);
+
+  WebView().MainFrameWidget()->Resize(WebSize(640, 480));
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+    <style>
+      #space {
+        width: 1000px;
+        height: 1000px;
+      }
+      #container {
+        /* Force composited scrolling */
+        will-change: transform;
+        width: 200px;
+        height: 200px;
+        overflow: scroll;
+      }
+      div { height:1000px; width: 200px; }
+    </style>
+    <div id='container'>
+      <div id='space'></div>
+    </div>
+  )HTML");
+  Compositor().BeginFrame();
+
+  Document& document = GetDocument();
+  Element* container = document.getElementById("container");
+  ScrollableArea* scrollable_area =
+      ToLayoutBox(container->GetLayoutObject())->GetScrollableArea();
+
+  DCHECK(scrollable_area->UsesCompositedScrolling());
+  EXPECT_TRUE(scrollable_area->HasOverlayScrollbars());
+
+  EXPECT_TRUE(scrollable_area->HasLayerForVerticalScrollbar());
+  Scrollbar* vertical_scrollbar = scrollable_area->VerticalScrollbar();
+
+  scrollable_area->MouseEnteredScrollbar(*vertical_scrollbar);
+  EXPECT_FALSE(scrollable_area->NeedsShowScrollbarLayers());
+
+  scrollable_area->MouseExitedScrollbar(*vertical_scrollbar);
+  EXPECT_FALSE(scrollable_area->NeedsShowScrollbarLayers());
+
+  scrollable_area->MouseCapturedScrollbar();
+  EXPECT_FALSE(scrollable_area->NeedsShowScrollbarLayers());
+
+  scrollable_area->MouseReleasedScrollbar();
+  EXPECT_FALSE(scrollable_area->NeedsShowScrollbarLayers());
+}
+
 class ScrollbarAppearanceTest
     : public ScrollbarsTest,
       public testing::WithParamInterface</*use_overlay_scrollbars=*/bool> {};
@@ -1652,8 +1705,8 @@ TEST_P(ScrollbarAppearanceTest, NativeScrollbarChangeToMobileByEmulator) {
   DCHECK(!div_scrollable->VerticalScrollbar()->GetTheme().IsMockTheme());
 
   // Turn on mobile emulator.
-  WebDeviceEmulationParams params;
-  params.screen_position = WebDeviceEmulationParams::kMobile;
+  DeviceEmulationParams params;
+  params.screen_type = mojom::EmulatedScreenType::kMobile;
   WebView().EnableDeviceEmulation(params);
 
   // For root Scrollbar, mobile emulator will change them to page VisualViewport
@@ -1682,7 +1735,7 @@ TEST_P(ScrollbarAppearanceTest, NativeScrollbarChangeToMobileByEmulator) {
   EXPECT_FALSE(div_scrollable->VerticalScrollbar()->GetTheme().IsMockTheme());
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 // Ensure that the minimum length for a scrollbar thumb comes from the
 // WebThemeEngine. Note, Mac scrollbars differ from all other platforms so this
 // test doesn't apply there. https://crbug.com/682209.
@@ -1738,11 +1791,12 @@ TEST_P(ScrollbarAppearanceTest, HugeScrollingThumbPosition) {
   Scrollbar* scrollbar = scrollable_area->VerticalScrollbar();
   ASSERT_TRUE(scrollbar);
 
-  int maximumThumbPosition = WebView().MainFrameWidget()->Size().height -
-                             StubWebThemeEngine::kMinimumVerticalLength;
-  maximumThumbPosition -= scrollbar->GetTheme().ScrollbarMargin() * 2;
+  int max_thumb_position = WebView().MainFrameWidget()->Size().height -
+                           StubWebThemeEngine::kMinimumVerticalLength;
+  max_thumb_position -=
+      scrollbar->GetTheme().ScrollbarMargin(scrollbar->ScaleFromDIP()) * 2;
 
-  EXPECT_EQ(maximumThumbPosition,
+  EXPECT_EQ(max_thumb_position,
             scrollbar->GetTheme().ThumbPosition(*scrollbar));
 }
 #endif
@@ -2060,7 +2114,7 @@ TEST_F(ScrollbarsTest, AutosizeTest) {
 
   // Enable auto size mode where the frame is resized such that the content
   // doesn't need scrollbars (up to a maximum).
-  WebView().EnableAutoResizeMode(WebSize(100, 100), WebSize(100, 200));
+  WebView().EnableAutoResizeMode(gfx::Size(100, 100), gfx::Size(100, 200));
 
   // Note, the frame autosizer doesn't work correctly with subpixel sizes so
   // even though the container is a fraction larger than the frame, we don't
@@ -2098,7 +2152,7 @@ TEST_F(ScrollbarsTest, AutosizeTest) {
 TEST_F(ScrollbarsTest, AutosizeAlmostRemovableScrollbar) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
-  WebView().EnableAutoResizeMode(WebSize(25, 25), WebSize(800, 600));
+  WebView().EnableAutoResizeMode(gfx::Size(25, 25), gfx::Size(800, 600));
 
   SimRequest resource("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -2946,7 +3000,7 @@ INSTANTIATE_TEST_SUITE_P(NonOverlay,
                          ScrollbarColorSchemeTest,
                          testing::Values(false));
 
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MAC)
 // Not able to paint non-overlay scrollbars through ThemeEngine on Android or
 // Mac.
 #define MAYBE_ThemeEnginePaint DISABLED_ThemeEnginePaint

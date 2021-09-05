@@ -49,7 +49,7 @@ if (android_channel != "default") {
 
 declare_args() {
   # Android package name to use when compiling the public chrome targets
-  # (chrome_modern_public_apk, monochrome_public_apk, etc. as well as the
+  # (chrome_public_apk, monochrome_public_apk, etc. as well as the
   # *_bundle variants). This is particularly useful when using
   # monochrome_public_apk for WebView development, as the OS only accepts
   # WebView providers which declare one of a handful of package names. See
@@ -64,8 +64,6 @@ chrome_public_jinja_variables =
     [ "manifest_package=$chrome_public_manifest_package" ]
 chrome_public_android_manifest =
     "$target_gen_dir/chrome_public_apk/AndroidManifest.xml"
-chrome_modern_public_android_manifest =
-    "$target_gen_dir/chrome_modern_public_apk/AndroidManifest.xml"
 trichrome_library_android_manifest =
     "$target_gen_dir/trichrome_library_apk/AndroidManifest.xml"
 trichrome_library_64_32_android_manifest =
@@ -112,16 +110,6 @@ jinja_template("chrome_public_android_manifest") {
   ]
 }
 
-jinja_template("chrome_modern_public_android_manifest") {
-  input = "java/AndroidManifest.xml"
-  output = chrome_modern_public_android_manifest
-  variables = chrome_public_jinja_variables
-  variables += [
-    "min_sdk_version=21",
-    "target_sdk_version=$android_sdk_version",
-  ]
-}
-
 jinja_template("trichrome_library_android_manifest") {
   input = "java/AndroidManifest_trichrome_library.xml"
   output = trichrome_library_android_manifest
@@ -138,6 +126,7 @@ if (android_64bit_target_cpu) {
     variables = trichrome_jinja_variables + [
                   "trichrome_version=$trichrome_64_32_version_code",
                   "manifest_package=$trichrome_library_package",
+                  "use32bitAbi=",
                 ]
   }
   jinja_template("trichrome_library_64_android_manifest") {
@@ -146,6 +135,7 @@ if (android_64bit_target_cpu) {
     variables = trichrome_jinja_variables + [
                   "trichrome_version=$trichrome_64_version_code",
                   "manifest_package=$trichrome_library_package",
+                  "use32bitAbi=",
                 ]
   }
   jinja_template("trichrome_library_32_android_manifest") {
@@ -187,6 +177,8 @@ android_resources("chrome_app_java_resources") {
     ":ui_locale_string_resources",
     "//chrome/android/webapk/libs/common:splash_resources",
     "//chrome/app:java_strings_grd",
+    "//chrome/browser/feedback/android:java_resources",
+    "//chrome/browser/password_check/android:java_resources",
     "//chrome/browser/ui/android/appmenu:java_resources",
     "//chrome/browser/ui/android/default_browser_promo:java_resources",
     "//chrome/browser/ui/android/favicon:java_resources",
@@ -203,8 +195,10 @@ android_resources("chrome_app_java_resources") {
     "//components/browser_ui/widget/android:java_resources",
     "//components/find_in_page/android:java_resources",
     "//components/javascript_dialogs/android:java_resources",
+    "//components/messages/android:java_resources",
     "//components/omnibox/browser:java_resources",
     "//components/page_info/android:java_resources",
+    "//components/payments/content/android:java_resources",
     "//components/permissions/android:java_resources",
     "//components/policy:app_restrictions_resources",
     "//components/strings:components_locale_settings_grd",
@@ -216,9 +210,9 @@ android_resources("chrome_app_java_resources") {
     "//third_party/android_deps:androidx_gridlayout_gridlayout_java",
     "//third_party/android_deps:androidx_preference_preference_java",
     "//third_party/android_deps:androidx_recyclerview_recyclerview_java",
-    "//third_party/android_deps:com_google_android_material_material_java",
+    "//third_party/android_deps:material_design_java",
   ]
-  custom_package = "org.chromium.chrome"
+  create_srcjar = false
 }
 
 if (enable_vr) {
@@ -269,7 +263,6 @@ android_library("chrome_java") {
     ":chrome_public_android_manifest",
     ":chrome_public_apk_template_resources",
     ":chrome_version_constants",
-    ":critical_persisted_tab_data_proto_java",
     ":partner_location_descriptor_proto_java",
     ":update_proto_java",
     ":usage_stats_proto_java",
@@ -299,14 +292,14 @@ android_library("chrome_java") {
     "//chrome/android/webapk/libs/runtime_library:webapk_service_aidl_java",
     "//chrome/browser/android/crypto:java",
     "//chrome/browser/android/lifecycle:java",
-    "//chrome/browser/android/thin_webview:factory_java",
-    "//chrome/browser/android/thin_webview:java",
     "//chrome/browser/browser_controls/android:java",
     "//chrome/browser/contextmenu:java",
     "//chrome/browser/download/android:factory_java",
     "//chrome/browser/download/android:java",
     "//chrome/browser/download/android:java_resources",
+    "//chrome/browser/engagement/android:java",
     "//chrome/browser/enterprise/util:java",
+    "//chrome/browser/feedback/android:java",
     "//chrome/browser/flags:java",
     "//chrome/browser/fullscreen/android:java",
     "//chrome/browser/image_editor/public:java",
@@ -314,17 +307,24 @@ android_library("chrome_java") {
     "//chrome/browser/notifications/chime/android:java",
     "//chrome/browser/offline_pages/android:java",
     "//chrome/browser/optimization_guide/android:java",
+    "//chrome/browser/paint_preview/android:java",
+    "//chrome/browser/password_check:public_java",
+    "//chrome/browser/password_manager/android:java",
     "//chrome/browser/performance_hints/android:java",
+    "//chrome/browser/policy/android:java",
     "//chrome/browser/preferences:java",
+    "//chrome/browser/privacy:java",
     "//chrome/browser/profiles/android:java",
     "//chrome/browser/safe_browsing/android:java",
     "//chrome/browser/safety_check/android:java",
     "//chrome/browser/settings:java",
+    "//chrome/browser/share:java",
     "//chrome/browser/share/android:java_resources",
+    "//chrome/browser/signin/android:java",
     "//chrome/browser/tab:java",
     "//chrome/browser/tabmodel:java",
+    "//chrome/browser/tabpersistence:java",
     "//chrome/browser/thumbnail:java",
-    "//chrome/browser/ui:infobar_android_enums_java",
     "//chrome/browser/ui/android/appmenu:factory_java",
     "//chrome/browser/ui/android/appmenu:java",
     "//chrome/browser/ui/android/default_browser_promo:java",
@@ -332,6 +332,8 @@ android_library("chrome_java") {
     "//chrome/browser/ui/android/native_page:java",
     "//chrome/browser/ui/messages/android:java",
     "//chrome/browser/util:java",
+    "//chrome/browser/video_tutorials:java",
+    "//chrome/browser/webauthn/android:java",
     "//chrome/browser/xsurface:java",
     "//components/autofill/android:autofill_java",
     "//components/autofill_assistant/browser:proto_java",
@@ -341,7 +343,9 @@ android_library("chrome_java") {
     "//components/browser_ui/android/bottomsheet:factory_java",
     "//components/browser_ui/android/bottomsheet:java",
     "//components/browser_ui/android/bottomsheet:manager_java",
+    "//components/browser_ui/banners/android:java",
     "//components/browser_ui/client_certificate/android:java",
+    "//components/browser_ui/display_cutout/android:java",
     "//components/browser_ui/http_auth/android:java",
     "//components/browser_ui/media/android:java",
     "//components/browser_ui/modaldialog/android:java",
@@ -349,6 +353,7 @@ android_library("chrome_java") {
     "//components/browser_ui/settings/android:java",
     "//components/browser_ui/share/android:java",
     "//components/browser_ui/site_settings/android:java",
+    "//components/browser_ui/sms/android:java",
     "//components/browser_ui/styles/android:java",
     "//components/browser_ui/util/android:java",
     "//components/browser_ui/webshare/android:java",
@@ -379,12 +384,14 @@ android_library("chrome_java") {
     "//components/find_in_page/android:java",
     "//components/gcm_driver/android:gcm_driver_java",
     "//components/gcm_driver/instance_id/android:instance_id_driver_java",
+    "//components/infobars/android:infobar_android_enums_java",
     "//components/infobars/android:java",
     "//components/infobars/core:infobar_enums_java",
     "//components/javascript_dialogs/android:java",
     "//components/language/android:language_bridge_java",
     "//components/location/android:location_java",
     "//components/location/android:settings_java",
+    "//components/messages/android:java",
     "//components/minidump_uploader:minidump_uploader_java",
     "//components/module_installer/android:module_installer_java",
     "//components/module_installer/android:module_interface_java",
@@ -394,6 +401,7 @@ android_library("chrome_java") {
     "//components/page_info/android:java",
     "//components/paint_preview/browser/android:java",
     "//components/paint_preview/player/android:java",
+    "//components/password_manager/core/browser:password_manager_java_enums",
     "//components/payments/content/android:java",
     "//components/payments/mojom:mojom_java",
     "//components/permissions/android:java",
@@ -406,12 +414,18 @@ android_library("chrome_java") {
     "//components/security_interstitials/content/android:java",
     "//components/security_state/content/android:java",
     "//components/security_state/core:security_state_enums_java",
+    "//components/signin/core/browser:signin_enums_java",
     "//components/signin/core/browser/android:java",
     "//components/signin/public/android:java",
     "//components/spellcheck/browser/android:java",
+    "//components/strictmode/android:java",
     "//components/subresource_filter/android:java",
     "//components/sync/android:sync_java",
     "//components/sync/protocol:protocol_java",
+    "//components/thin_webview:factory_java",
+    "//components/thin_webview:java",
+    "//components/translate/content/android:java",
+    "//components/translate/content/android:translate_android_enums_java",
     "//components/url_formatter/android:url_formatter_java",
     "//components/user_prefs/android:java",
     "//components/variations/android:variations_java",
@@ -435,6 +449,7 @@ android_library("chrome_java") {
     "//printing:printing_java",
     "//services/data_decoder/public/cpp/android:safe_json_java",
     "//services/device/public/java:device_feature_list_java",
+    "//services/device/public/mojom:mojom_java",
     "//services/media_session/public/cpp/android:media_session_java",
     "//services/media_session/public/mojom:mojom_java",
     "//services/network/public/mojom:mojom_java",
@@ -461,12 +476,12 @@ android_library("chrome_java") {
     "//third_party/android_deps:androidx_preference_preference_java",
     "//third_party/android_deps:androidx_recyclerview_recyclerview_java",
     "//third_party/android_deps:androidx_viewpager_viewpager_java",
-    "//third_party/android_deps:com_google_android_material_material_java",
     "//third_party/android_deps:com_google_code_findbugs_jsr305_java",
     "//third_party/android_deps:com_google_dagger_dagger_java",
     "//third_party/android_deps:com_google_guava_listenablefuture_java",
-    "//third_party/android_deps:com_google_protobuf_protobuf_javalite_java",
     "//third_party/android_deps:javax_inject_javax_inject_java",
+    "//third_party/android_deps:material_design_java",
+    "//third_party/android_deps:protobuf_lite_runtime_java",
     "//third_party/android_media:android_media_java",
     "//third_party/android_sdk:android_gcm_java",
     "//third_party/android_sdk/androidx_browser:androidx_browser_java",
@@ -474,8 +489,6 @@ android_library("chrome_java") {
     "//third_party/blink/public:blink_headers_java",
     "//third_party/blink/public/mojom:android_mojo_bindings_java",
     "//third_party/blink/public/mojom:mojom_platform_java",
-    "//third_party/cacheinvalidation:cacheinvalidation_javalib",
-    "//third_party/cacheinvalidation:cacheinvalidation_proto_java",
     "//third_party/gif_player:gif_player_java",
     "//third_party/google_android_play_core:com_google_android_play_core_java",
     "//ui/android:ui_java",
@@ -492,6 +505,7 @@ android_library("chrome_java") {
     ":chrome_android_java_enums_srcjar",
     ":chrome_android_java_google_api_keys_srcjar",
     ":chrome_product_config",
+    ":chrome_strict_mode_switch",
     ":photo_picker_aidl",
     ":resource_id_javagen",
     ":sync_user_settings_enums_java",
@@ -504,7 +518,6 @@ android_library("chrome_java") {
     "//chrome:supervised_user_url_filter_enum_javagen",
     "//chrome/browser:sharing_dialog_type_generated_enum",
     "//chrome/browser:sharing_send_message_result_generated_enum",
-    "//chrome/browser/net:secure_dns_management_mode_generated_enum",
     "//chrome/browser/notifications/scheduler/public:jni_enums",
     "//chrome/browser/supervised_user/supervised_user_error_page:enums_srcjar",
     "//chrome/browser/updates/announcement_notification:jni_enums",
@@ -517,14 +530,11 @@ android_library("chrome_java") {
     "//components/ntp_snippets:ntp_snippets_java_enums_srcjar",
     "//components/ntp_tiles:ntp_tiles_enums_java",
     "//components/offline_pages/core:offline_page_model_enums_java",
-    "//components/password_manager/core/browser:password_manager_java_enums_srcjar",
     "//components/payments/content/android:method_strings_generated_srcjar",
     "//components/search_engines:search_engine_type_java",
-    "//components/signin/core/browser:signin_enums_javagen",
     "//components/ui_metrics:ui_metrics_enums_java",
     "//content/public/browser:contacts_picker_properties_requested_javagen",
     "//net:effective_connection_type_java",
-    "//net/dns:secure_dns_mode_generated_enum",
   ]
 
   # From java_sources.gni.
@@ -547,9 +557,6 @@ android_library("chrome_java") {
   }
 
   srcjar_deps += [ ":chrome_vr_android_java_enums_srcjar" ]
-  if (enable_feed_in_chrome) {
-    deps += [ "//chrome/android/feed:chrome_feed_java_resources" ]
-  }
 
   # Add the actual implementation where necessary so that downstream targets
   # can provide their own implementations.
@@ -566,9 +573,28 @@ android_library("chrome_java") {
 
   processor_args_javac = [ "dagger.fastInit=enabled" ]
 
+  resources_package = "org.chromium.chrome"
+
   # TODO(crbug/1022172): Instead of adding source files, add it as a separate
   # dependency when circular deps is resolved.
   sources += share_java_sources
+}
+
+# Template for strict mode detection enabling/disabling so that proguard strips out
+# strict mode code when detection is disabled.
+java_cpp_template("chrome_strict_mode_switch") {
+  sources =
+      [ "java/src/org/chromium/chrome/browser/ChromeStrictModeSwitch.template" ]
+  package_path = "org/chromium/chrome/browser"
+
+  # Strict mode detection is disabled for canary channel in order to catch bugs
+  # related to strict mode detection being turned off early (before beta
+  # channel). Strict mode detection is enabled for dev channel because dev
+  # channel has more users than canary channel.
+  if (is_java_debug || android_channel == "default" ||
+      android_channel == "dev") {
+    defines = [ "STRICT_MODE_CHECKING" ]
+  }
 }
 
 generate_product_config_srcjar("chrome_product_config") {
@@ -584,6 +610,7 @@ java_group("chrome_all_java") {
     "//chrome/android/features/media_router:java",
     "//chrome/android/modules/extra_icu/provider:java",
     "//chrome/browser/download/internal/android:java",
+    "//chrome/browser/password_check:internal_java",
     "//chrome/browser/test_dummy/internal:base_module_java",
     "//chrome/browser/touch_to_fill/android/internal:java",
     "//chrome/browser/ui/android/appmenu/internal:java",
@@ -624,11 +651,14 @@ group("jni_headers") {
     "//chrome/browser/image_fetcher:jni_headers",
     "//chrome/browser/performance_hints/android:jni_headers",
     "//chrome/browser/preferences:jni_headers",
+    "//chrome/browser/privacy:jni_headers",
     "//chrome/browser/profiles/android:jni_headers",
+    "//chrome/browser/tab:jni_headers",
     "//chrome/browser/touch_to_fill/android:jni_headers",
     "//chrome/browser/ui/android/favicon:jni_headers",
     "//chrome/browser/ui/messages/android:jni_headers",
     "//chrome/browser/util:jni_headers",
+    "//chrome/browser/webauthn/android:jni_headers",
   ]
 }
 
@@ -665,14 +695,12 @@ java_cpp_enum("chrome_android_java_enums_srcjar") {
     "//chrome/browser/notifications/notification_platform_bridge_android.cc",
     "//chrome/browser/ntp_snippets/ntp_snippets_metrics.h",
     "//chrome/browser/profiles/profile_metrics.h",
-    "//chrome/browser/translate/android/translate_utils.h",
   ]
 }
 
 java_cpp_enum("chrome_vr_android_java_enums_srcjar") {
   sources = [
-    "//chrome/browser/android/vr/vr_core_info.h",
-    "//chrome/browser/android/vr/vr_shell_delegate.h",
+    "//chrome/browser/android/vr/vrcore_install_helper.h",
     "//chrome/browser/vr/text_edit_action.h",
     "//chrome/browser/vr/ui_test_input.h",
     "//chrome/browser/vr/ui_unsupported_mode.h",
@@ -686,11 +714,6 @@ java_cpp_enum("sync_user_settings_enums_java") {
 proto_java_library("partner_location_descriptor_proto_java") {
   proto_path = "java/src/org/chromium/chrome/browser/omnibox/geo"
   sources = [ "$proto_path/partner_location_descriptor.proto" ]
-}
-
-proto_java_library("critical_persisted_tab_data_proto_java") {
-  proto_path = "java/src/org/chromium/chrome/browser/tab/state/proto"
-  sources = [ "$proto_path/critical_persisted_tab_data.proto" ]
 }
 
 proto_java_library("update_proto_java") {
@@ -711,6 +734,7 @@ java_cpp_template("resource_id_javagen") {
     "//components/resources/android/blocked_content_resource_id.h",
     "//components/resources/android/page_info_resource_id.h",
     "//components/resources/android/permissions_resource_id.h",
+    "//components/resources/android/sms_resource_id.h",
   ]
 }
 
@@ -752,6 +776,7 @@ junit_binary("chrome_junit_tests") {
     "//chrome/browser/browser_controls/android:junit",
     "//chrome/browser/download/android:java",
     "//chrome/browser/download/android:junit_tests",
+    "//chrome/browser/enterprise/util:java",
     "//chrome/browser/flags:flags_junit_tests",
     "//chrome/browser/flags:java",
     "//chrome/browser/fullscreen/android:java",
@@ -763,6 +788,7 @@ junit_binary("chrome_junit_tests") {
     "//chrome/browser/profiles/android:java",
     "//chrome/browser/safety_check/android:java",
     "//chrome/browser/safety_check/android:junit",
+    "//chrome/browser/share:java",
     "//chrome/browser/tab:java",
     "//chrome/browser/tabmodel:java",
     "//chrome/browser/thumbnail:java",
@@ -781,6 +807,7 @@ junit_binary("chrome_junit_tests") {
     "//components/background_task_scheduler:background_task_scheduler_task_ids_java",
     "//components/bookmarks/common/android:bookmarks_java",
     "//components/browser_ui/android/bottomsheet:java",
+    "//components/browser_ui/display_cutout/android:java",
     "//components/browser_ui/media/android:java",
     "//components/browser_ui/notifications/android:java",
     "//components/browser_ui/share/android:java",
@@ -797,6 +824,7 @@ junit_binary("chrome_junit_tests") {
     "//components/feature_engagement/public:public_java",
     "//components/feed/core/proto:proto_java",
     "//components/feed/core/proto:proto_java_v2",
+    "//components/infobars/android:java",
     "//components/minidump_uploader:minidump_uploader_java",
     "//components/module_installer/android:module_installer_java",
     "//components/offline_items_collection/core:core_java",
@@ -804,11 +832,13 @@ junit_binary("chrome_junit_tests") {
     "//components/page_info/android:java",
     "//components/payments/content/android:java",
     "//components/payments/mojom:mojom_java",
+    "//components/policy/android:policy_java",
     "//components/prefs/android:java",
     "//components/schema_org/common:mojom_java",
     "//components/search_engines/android:java",
     "//components/security_state/content/android:java",
     "//components/security_state/core:security_state_enums_java",
+    "//components/signin/core/browser:signin_enums_java",
     "//components/signin/core/browser/android:java",
     "//components/signin/core/browser/android:signin_java_test_support",
     "//components/signin/public/android:java",
@@ -824,6 +854,7 @@ junit_binary("chrome_junit_tests") {
     "//mojo/public/java:bindings_java",
     "//mojo/public/java:system_java",
     "//net/android:net_java",
+    "//services/device/public/mojom:mojom_java",
     "//services/media_session/public/cpp/android:media_session_java",
     "//services/media_session/public/mojom:mojom_java",
     "//third_party/android_deps:android_support_v7_appcompat_java",
@@ -834,14 +865,16 @@ junit_binary("chrome_junit_tests") {
     "//third_party/android_deps:androidx_recyclerview_recyclerview_java",
     "//third_party/android_deps:androidx_swiperefreshlayout_swiperefreshlayout_java",
     "//third_party/android_deps:androidx_test_core_java",
+    "//third_party/android_deps:androidx_test_runner_java",
     "//third_party/android_deps:com_google_dagger_dagger_java",
-    "//third_party/android_deps:com_google_protobuf_protobuf_javalite_java",
     "//third_party/android_deps:com_googlecode_java_diff_utils_diffutils_java",
+    "//third_party/android_deps:protobuf_lite_runtime_java",
     "//third_party/android_sdk/androidx_browser:androidx_browser_java",
+    "//third_party/android_support_test_runner:rules_java",
+    "//third_party/android_support_test_runner:runner_java",
     "//third_party/blink/public:blink_headers_java",
     "//third_party/blink/public/mojom:android_mojo_bindings_java",
     "//third_party/blink/public/mojom:mojom_platform_java",
-    "//third_party/cacheinvalidation:cacheinvalidation_javalib",
     "//third_party/gif_player:gif_player_java",
     "//third_party/google-truth:google_truth_java",
     "//third_party/guava:guava_android_java",
@@ -894,12 +927,14 @@ android_library("chrome_test_util_java") {
     "//third_party/android_media:android_media_resources",
     "//third_party/android_sdk/androidx_browser:androidx_browser_java",
     "//third_party/android_support_test_runner:runner_java",
+    "//third_party/hamcrest:hamcrest_java",
     "//third_party/junit:junit",
   ]
 }
 
 android_library("chrome_test_java") {
   testonly = true
+  resources_package = "org.chromium.chrome.test"
 
   # From java_sources.gni.
   sources = chrome_test_java_sources
@@ -925,7 +960,9 @@ android_library("chrome_test_java") {
     "//chrome/android:app_hooks_java",
     "//chrome/android:chrome_java",
     "//chrome/android/features/start_surface/internal:java",
+    "//chrome/android/features/start_surface/internal:java_resources",
     "//chrome/android/features/tab_ui:java",
+    "//chrome/android/features/tab_ui:java_resources",
     "//chrome/android/third_party/compositor_animator:compositor_animator_java",
     "//chrome/android/webapk/libs/client:client_java",
     "//chrome/android/webapk/libs/common:common_java",
@@ -933,20 +970,32 @@ android_library("chrome_test_java") {
     "//chrome/browser/android/lifecycle:java",
     "//chrome/browser/browser_controls/android:java",
     "//chrome/browser/download/android:java",
+    "//chrome/browser/engagement/android:java",
     "//chrome/browser/enterprise/util:java",
     "//chrome/browser/flags:java",
     "//chrome/browser/fullscreen/android:java",
+    "//chrome/browser/image_fetcher:java",
     "//chrome/browser/offline_pages/android:java",
+    "//chrome/browser/paint_preview/android:java",
+    "//chrome/browser/password_check:public_java",
+    "//chrome/browser/password_manager/android:java",
     "//chrome/browser/password_manager/android_test_helpers:test_support_java",
     "//chrome/browser/performance_hints/android:java",
+    "//chrome/browser/policy/android:java",
     "//chrome/browser/preferences:java",
     "//chrome/browser/profiles/android:java",
+    "//chrome/browser/safe_browsing/android:java",
+    "//chrome/browser/safe_browsing/android:javatests",
     "//chrome/browser/safety_check/android:java",
+    "//chrome/browser/safety_check/android:javatests",
     "//chrome/browser/settings:java",
     "//chrome/browser/settings:javatests",
     "//chrome/browser/settings:test_support_java",
+    "//chrome/browser/share:java",
+    "//chrome/browser/share/android:java_resources",
     "//chrome/browser/tab:java",
     "//chrome/browser/tabmodel:java",
+    "//chrome/browser/tabpersistence:java",
     "//chrome/browser/thumbnail:java",
     "//chrome/browser/thumbnail:javatests",
     "//chrome/browser/ui/android/appmenu:java",
@@ -968,6 +1017,8 @@ android_library("chrome_test_java") {
     "//components/bookmarks/common/android:bookmarks_java",
     "//components/browser_ui/android/bottomsheet:java",
     "//components/browser_ui/android/bottomsheet/test:java",
+    "//components/browser_ui/display_cutout/android:java",
+    "//components/browser_ui/media/android:java",
     "//components/browser_ui/modaldialog/android:java",
     "//components/browser_ui/modaldialog/android:javatests",
     "//components/browser_ui/notifications/android:java",
@@ -977,6 +1028,7 @@ android_library("chrome_test_java") {
     "//components/browser_ui/share/android:javatests",
     "//components/browser_ui/site_settings/android:java",
     "//components/browser_ui/site_settings/android:javatests",
+    "//components/browser_ui/sms/android:java",
     "//components/browser_ui/styles/android:java",
     "//components/browser_ui/util/android:java",
     "//components/browser_ui/widget/android:java",
@@ -1007,6 +1059,8 @@ android_library("chrome_test_java") {
     "//components/infobars/core:infobar_enums_java",
     "//components/javascript_dialogs/android:java",
     "//components/location/android:location_java",
+    "//components/messages/android:java",
+    "//components/messages/android:javatests",
     "//components/metrics:metrics_java",
     "//components/minidump_uploader:minidump_uploader_java",
     "//components/minidump_uploader:minidump_uploader_javatests",
@@ -1017,6 +1071,7 @@ android_library("chrome_test_java") {
     "//components/page_info/android:java",
     "//components/page_info/android:page_info_action_enum_java",
     "//components/paint_preview/player/android:javatests",
+    "//components/password_manager/core/browser:password_manager_java_enums",
     "//components/payments/content/android:java",
     "//components/payments/mojom:mojom_java",
     "//components/permissions/android:java",
@@ -1030,14 +1085,16 @@ android_library("chrome_test_java") {
     "//components/search_engines/android:java",
     "//components/security_interstitials/content/android:java",
     "//components/security_state/core:security_state_enums_java",
+    "//components/signin/core/browser:signin_enums_java",
     "//components/signin/core/browser/android:java",
     "//components/signin/core/browser/android:signin_java_test_support",
     "//components/signin/core/browser/android:signin_javatests",
     "//components/signin/public/android:java",
+    "//components/strictmode/android:javatests",
     "//components/sync:sync_java_test_support",
     "//components/sync/android:sync_java",
-    "//components/sync/android:sync_javatests",
     "//components/sync/protocol:protocol_java",
+    "//components/translate/content/android:javatests",
     "//components/url_formatter/android:url_formatter_java",
     "//components/user_prefs/android:java",
     "//components/webapk/android/libs/client:java",
@@ -1051,9 +1108,10 @@ android_library("chrome_test_java") {
     "//net/android:net_java",
     "//net/android:net_java_test_support",
     "//printing:printing_java",
-    "//services:service_javatests",
+    "//services:services_javatests",
     "//services/device/public/java:geolocation_java",
     "//services/device/public/java:geolocation_java_test_support",
+    "//services/device/public/mojom:mojom_java",
     "//services/network/public/mojom:mojom_java",
     "//services/service_manager/public/java:service_manager_java",
     "//third_party/android_data_chart:android_data_chart_java",
@@ -1064,16 +1122,17 @@ android_library("chrome_test_java") {
     "//third_party/android_deps:androidx_lifecycle_lifecycle_common_java",
     "//third_party/android_deps:androidx_preference_preference_java",
     "//third_party/android_deps:androidx_recyclerview_recyclerview_java",
+    "//third_party/android_deps:androidx_test_runner_java",
     "//third_party/android_deps:androidx_viewpager_viewpager_java",
     "//url:origin_java",
 
     # TODO (bjoyce): Remove recyclerview_v7 when espresso tests are migrated
     # to androidx.
     "//third_party/android_deps:com_android_support_recyclerview_v7_java",
-    "//third_party/android_deps:com_google_android_material_material_java",
     "//third_party/android_deps:com_google_code_findbugs_jsr305_java",
-    "//third_party/android_deps:com_google_protobuf_protobuf_javalite_java",
     "//third_party/android_deps:espresso_java",
+    "//third_party/android_deps:material_design_java",
+    "//third_party/android_deps:protobuf_lite_runtime_java",
     "//third_party/android_sdk:android_test_base_java",
     "//third_party/android_sdk:android_test_mock_java",
     "//third_party/android_sdk:android_test_runner_java",
@@ -1084,11 +1143,11 @@ android_library("chrome_test_java") {
     "//third_party/blink/public/mojom:android_mojo_bindings_java",
     "//third_party/blink/public/mojom:mojom_mhtml_load_result_java",
     "//third_party/blink/public/mojom:mojom_platform_java",
-    "//third_party/cacheinvalidation:cacheinvalidation_javalib",
     "//third_party/hamcrest:hamcrest_java",
     "//third_party/junit",
     "//third_party/mockito:mockito_java",
     "//third_party/ub-uiautomator:ub_uiautomator_java",
+    "//ui/android:clipboard_java_test_support",
     "//ui/android:ui_java",
     "//ui/android:ui_java_test_support",
     "//ui/android:ui_javatests",
@@ -1122,7 +1181,6 @@ android_library("chrome_test_java") {
     "//chrome/test/data/translate/",
     "//chrome/test/media_router/resources/",
     "//components/test/data/autofill/",
-    "//components/test/data/paint_preview/",
     "//components/test/data/payments/",
     "//content/test/data/browsing_data/",
     "//content/test/data/android/authenticator.html",
@@ -1169,7 +1227,9 @@ if (enable_vr || enable_arcore) {
     "//chrome/android:app_hooks_java",
     "//chrome/android:chrome_java",
     "//chrome/android/features/vr:java",
+    "//chrome/browser/flags:java",
     "//chrome/browser/tab:java",
+    "//chrome/browser/tabmodel:java",
     "//chrome/browser/ui/messages/android:java",
     "//chrome/browser/util:java",
     "//chrome/test/android:chrome_java_test_support",
@@ -1183,6 +1243,7 @@ if (enable_vr || enable_arcore) {
     "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_deps:androidx_lifecycle_lifecycle_common_java",
     "//third_party/android_deps:androidx_recyclerview_recyclerview_java",
+    "//third_party/android_deps:androidx_test_runner_java",
     "//third_party/android_sdk/androidx_browser:androidx_browser_java",
     "//third_party/android_support_test_runner:rules_java",
     "//third_party/android_support_test_runner:runner_java",
@@ -1260,6 +1321,7 @@ if (enable_vr || enable_arcore) {
             "//components/module_installer/android:module_installer_java",
             "//components/browser_ui/site_settings/android:java",
             "//components/content_settings/android:content_settings_enums_java",
+            "//components/infobars/android:java",
             "//chrome/browser/profiles/android:java",
             "//chrome/browser/settings:java",
             "//chrome/browser/tabmodel:java",
@@ -1286,6 +1348,8 @@ if (enable_vr || enable_arcore) {
       testonly = true
 
       sources = [
+        "javatests/src/org/chromium/chrome/browser/vr/WebXrArAnchorsTest.java",
+        "javatests/src/org/chromium/chrome/browser/vr/WebXrArCameraAccessTest.java",
         "javatests/src/org/chromium/chrome/browser/vr/WebXrArHitTestTest.java",
         "javatests/src/org/chromium/chrome/browser/vr/WebXrArSessionTest.java",
         "javatests/src/org/chromium/chrome/browser/vr/WebXrArTestFramework.java",
@@ -1344,8 +1408,8 @@ process_version("version_xml") {
 
 android_resources("product_version_resources") {
   sources = [ version_resource_file ]
-  custom_package = "org.chromium.base"
   deps = [ ":version_xml" ]
+  create_srcjar = false
 }
 
 java_group("chrome_public_non_pak_assets") {
@@ -1578,7 +1642,7 @@ if (current_toolchain == default_toolchain) {
           deps = [
             ":$_resource_whitelist_target",
             ":$_system_webview_locale_whitelist_target",
-            "//android_webview:system_webview_pak_whitelist",
+            "//android_webview:system_webview_pak_allowlist",
           ]
 
           args = [
@@ -1826,7 +1890,8 @@ android_library("browser_java_test_support") {
     "//components/sync/protocol:protocol_java",
     "//content/public/android:content_java",
     "//content/public/test/android:content_java_test_support",
-    "//third_party/android_deps:com_google_protobuf_protobuf_javalite_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
+    "//third_party/android_deps:protobuf_lite_runtime_java",
     "//third_party/junit",
   ]
 }
@@ -1854,9 +1919,8 @@ static_library("browser_test_support") {
 }
 
 # Defines a target that derives from the chrome public application. This
-# can be either an APK or an app bundle module. This supports both the
-# chrome_public_xxx targets (for Android J-K) and chrome_modern_public_xxx
-# ones (for Android L-M). For Android N+, see instead
+# can be either an APK or an app bundle module. This supports
+# chrome_public_xxx targets (for Android L-M). For Android N+, see instead
 # monochrome_public_apk_or_module_tmpl() below.
 #
 # Variables:
@@ -1867,10 +1931,7 @@ static_library("browser_test_support") {
 #  is_base_module: For 'android_app_bundle_module' target types only,
 #     set to true to indicate that this is a base application module
 #     (instead of a feature module).
-#  is_modern: Optional. Set to true to indicate that this is a Chrome-modern
-#    target, intended for Android L and M only.
 template("chrome_public_apk_or_module_tmpl") {
-  _is_modern = defined(invoker.is_modern) && invoker.is_modern
   _is_bundle_module = invoker.target_type == "android_app_bundle_module"
   chrome_public_common_apk_or_module_tmpl(target_name) {
     forward_variables_from(invoker,
@@ -1879,16 +1940,12 @@ template("chrome_public_apk_or_module_tmpl") {
                              "bundle_target",
                              "is_base_module",
                              "jni_registration_header",
-                             "is_modern",
                              "target_type",
                              "enable_multidex",
+                             "enable_lint",
+                             "lint_baseline_file",
                              "lint_suppressions_dep",
                              "lint_suppressions_file",
-
-                             # TODO(crbug.com/1076896): remove
-                             # "disable_library_rename" when we remove chrome
-                             # public apk.
-                             "disable_library_rename",
                            ])
     deps = _chrome_public_shared_deps
     if (_is_bundle_module) {
@@ -1897,13 +1954,8 @@ template("chrome_public_apk_or_module_tmpl") {
       deps += [ ":chrome_apk_pak_assets" ]
     }
 
-    if (_is_modern) {
-      android_manifest = chrome_modern_public_android_manifest
-      android_manifest_dep = ":chrome_modern_public_android_manifest"
-    } else {
-      android_manifest = chrome_public_android_manifest
-      android_manifest_dep = ":chrome_public_android_manifest"
-    }
+    android_manifest = chrome_public_android_manifest
+    android_manifest_dep = ":chrome_public_android_manifest"
 
     shared_libraries = [ ":libchrome" ]
 
@@ -1912,38 +1964,21 @@ template("chrome_public_apk_or_module_tmpl") {
     # platform bug, where overzealous SELinux settings prevent mapping some apk
     # file segments with PROT_EXEC (see http://crbug.com/398425). This was
     # fixed for Android L by adding proper CTS tests.
-    load_library_from_apk = _is_modern && chromium_linker_supported
+    load_library_from_apk = chromium_linker_supported
 
     version_name = chrome_version_name
   }
 }
 
-# The chrome_public and chrome_modern_public APKs and bundle modules
-
 chrome_public_apk_or_module_tmpl("chrome_public_apk") {
   target_type = "android_apk"
   apk_name = "ChromePublic"
   enable_multidex = is_java_debug
-  if (android_64bit_target_cpu) {
-    disable_library_rename = true
-  }
-}
-
-android_resource_sizes_test("resource_sizes_chrome_public_apk") {
-  apk_name = "ChromePublic"
-  data_deps = [ ":chrome_public_apk" ]
-}
-
-chrome_public_apk_or_module_tmpl("chrome_modern_public_apk") {
-  target_type = "android_apk"
-  apk_name = "ChromeModernPublic"
-  is_modern = true
 }
 
 chrome_public_apk_or_module_tmpl("chrome_modern_public_base_bundle_module") {
   target_type = "android_app_bundle_module"
   is_base_module = true
-  is_modern = true
   bundle_target = ":chrome_modern_public_bundle"
 }
 
@@ -2050,7 +2085,7 @@ template("monochrome_public_apk_or_module_tmpl") {
     android_manifest = _android_manifest
     android_manifest_dep = ":${target_name}__android_manifest"
 
-    if (public_android_sdk && !_is_trichrome) {
+    if (!_is_trichrome) {
       # Resource allowlist used when generating R.java files and causes
       # only the webview subset of resources to be marked as non-final.
       # Strings in this target will also be kept in the base apk rather than placed in the language splits.
@@ -2077,18 +2112,14 @@ template("monochrome_public_apk_or_module_tmpl") {
   }
 }
 
-# Public webview targets don't work with non-public sdks.
-# https://crbug.com/1000763
-if (public_android_sdk) {
-  monochrome_public_apk_or_module_tmpl("monochrome_public_apk") {
-    version_code = monochrome_version_code
-    version_name = chrome_version_name
-    apk_name = "MonochromePublic"
-    target_type = "android_apk"
-    if (android_64bit_target_cpu) {
-      is_64_bit_browser = false
-      include_64_bit_webview = true
-    }
+monochrome_public_apk_or_module_tmpl("monochrome_public_apk") {
+  version_code = monochrome_version_code
+  version_name = chrome_version_name
+  apk_name = "MonochromePublic"
+  target_type = "android_apk"
+  if (android_64bit_target_cpu) {
+    is_64_bit_browser = false
+    include_64_bit_webview = true
   }
 }
 
@@ -2145,8 +2176,8 @@ if (android_64bit_target_cpu) {
 # TODO(agrieve): Remove this once we switch to using bundle targets to
 # generate APK stubs.
 android_resources("trichrome_dummy_resources") {
-  custom_package = "org.chromium.trichromelibrary"
   sources = [ "trichrome/res_dummy/values/strings.xml" ]
+  create_srcjar = false
 }
 
 chrome_public_test_apk_manifest =
@@ -2234,7 +2265,7 @@ template("chrome_test_apk_tmpl") {
     }
     if (!is_java_debug) {
       proguard_enabled = true
-      proguard_configs = [ "//chrome/android/java/apk_for_test.flags" ]
+      proguard_configs = [ "//chrome/android/proguard/apk_for_test.flags" ]
     }
 
     # TODO(crbug.com/993340): Update test goldens with webp versions of images.
@@ -2286,13 +2317,15 @@ template("monochrome_test_apk_tmpl") {
         proguard_configs = []
       }
       proguard_enabled = true
-      proguard_configs += [ "//chrome/android/java/apk_for_test.flags" ]
+      proguard_configs += [ "//chrome/android/proguard/apk_for_test.flags" ]
     }
   }
 }
 
 chrome_test_apk_tmpl("chrome_public_test_apk") {
-  enable_lint = true
+  # TODO(wnwen): Re-enable when new lint failures are disabled for test targets.
+  #enable_lint = true
+
   apk_name = "ChromePublicTest"
   android_manifest = chrome_public_test_apk_manifest
   android_manifest_dep = ":chrome_public_test_apk_manifest"
@@ -2306,7 +2339,9 @@ chrome_test_apk_tmpl("chrome_public_test_apk") {
     "//chrome/android/webapk/libs/runtime_library:runtime_library_javatests",
     "//chrome/android/webapk/shell_apk:shell_apk_javatests",
     "//chrome/browser/download/android:download_java_tests",
+    "//chrome/browser/engagement/android:javatests",
     "//chrome/browser/flags:javatests",
+    "//chrome/browser/password_check/android:test_java",
     "//chrome/browser/subresource_filter:subresource_filter_javatests",
     "//chrome/browser/touch_to_fill/android:test_java",
     "//chrome/browser/ui/android/appmenu/internal:javatests",
@@ -2416,6 +2451,7 @@ android_test_apk("chrome_smoke_test_apk") {
     "//base:base_java_test_support",
     "//chrome/test/android:chrome_java_test_pagecontroller",
     "//content/public/test/android:content_java_test_support",
+    "//third_party/android_deps:androidx_test_runner_java",
     "//third_party/android_support_test_runner:runner_java",
     "//third_party/junit",
     "//third_party/ub-uiautomator:ub_uiautomator_java",
@@ -2428,21 +2464,13 @@ instrumentation_test_runner("chrome_public_smoke_test") {
   android_test_apk_name = "ChromeSmokeTest"
 }
 
-instrumentation_test_runner("chrome_modern_public_smoke_test") {
-  apk_under_test = ":chrome_modern_public_apk"
-  android_test_apk = ":chrome_smoke_test_apk"
-  android_test_apk_name = "ChromeSmokeTest"
-}
-
 # Public webview targets don't work with non-public sdks.
 # https://crbug.com/1000763
-if (public_android_sdk) {
-  instrumentation_test_runner("monochrome_public_smoke_test") {
-    apk_under_test = ":monochrome_public_apk"
-    android_test_apk = ":chrome_smoke_test_apk"
-    android_test_apk_name = "ChromeSmokeTest"
-    never_incremental = true
-  }
+instrumentation_test_runner("monochrome_public_smoke_test") {
+  apk_under_test = ":monochrome_public_apk"
+  android_test_apk = ":chrome_smoke_test_apk"
+  android_test_apk_name = "ChromeSmokeTest"
+  never_incremental = true
 }
 
 android_test_apk("chrome_bundle_smoke_test_apk") {
@@ -2464,6 +2492,7 @@ android_test_apk("chrome_bundle_smoke_test_apk") {
     "//base:base_java_test_support",
     "//chrome/test/android:chrome_java_test_pagecontroller",
     "//content/public/test/android:content_java_test_support",
+    "//third_party/android_deps:androidx_test_runner_java",
     "//third_party/android_support_test_runner:runner_java",
     "//third_party/junit",
   ]
@@ -2506,67 +2535,62 @@ instrumentation_test_runner(
       _bundle_smoke_test_extra_args + _bundle_fake_modules_smoke_test_extra_args
 }
 
-# Public webview targets don't work with non-public sdks.
-# https://crbug.com/1000763
-if (public_android_sdk) {
-  instrumentation_test_runner("monochrome_public_bundle_smoke_test") {
-    apk_under_test = "//chrome/android:monochrome_public_bundle_apks"
-    android_test_apk = ":chrome_bundle_smoke_test_apk"
-    android_test_apk_name = "ChromeBundleSmokeTest"
-    never_incremental = true
-    modules = [ "test_dummy" ]
-    extra_args = _bundle_smoke_test_extra_args
-  }
+instrumentation_test_runner("monochrome_public_bundle_smoke_test") {
+  apk_under_test = "//chrome/android:monochrome_public_bundle_apks"
+  android_test_apk = ":chrome_bundle_smoke_test_apk"
+  android_test_apk_name = "ChromeBundleSmokeTest"
+  never_incremental = true
+  modules = [ "test_dummy" ]
+  extra_args = _bundle_smoke_test_extra_args
+}
 
-  instrumentation_test_runner(
-      "monochrome_public_bundle_fake_modules_smoke_test") {
-    apk_under_test = "//chrome/android:monochrome_public_bundle_apks"
-    android_test_apk = ":chrome_bundle_smoke_test_apk"
-    android_test_apk_name = "ChromeBundleSmokeTest"
-    never_incremental = true
-    fake_modules = [ "test_dummy" ]
-    extra_args = _bundle_smoke_test_extra_args +
-                 _bundle_fake_modules_smoke_test_extra_args
-  }
+instrumentation_test_runner(
+    "monochrome_public_bundle_fake_modules_smoke_test") {
+  apk_under_test = "//chrome/android:monochrome_public_bundle_apks"
+  android_test_apk = ":chrome_bundle_smoke_test_apk"
+  android_test_apk_name = "ChromeBundleSmokeTest"
+  never_incremental = true
+  fake_modules = [ "test_dummy" ]
+  extra_args =
+      _bundle_smoke_test_extra_args + _bundle_fake_modules_smoke_test_extra_args
+}
 
-  if (defined(expected_static_initializer_count)) {
-    action_with_pydeps("monochrome_static_initializers") {
-      script = "//build/android/gyp/assert_static_initializers.py"
-      inputs = [ "$root_build_dir/apks/MonochromePublic.aab" ]
-      outputs = [ "$target_gen_dir/$target_name.stamp" ]
-      deps = [ ":monochrome_public_bundle" ]
-      args = [
-        "--expected-count=$expected_static_initializer_count",
-        "--tool-prefix",
-        rebase_path(android_tool_prefix, root_build_dir),
-        "--touch",
-        rebase_path(outputs[0], root_build_dir),
-        rebase_path(inputs[0], root_build_dir),
-      ]
-    }
+if (defined(expected_static_initializer_count)) {
+  action_with_pydeps("monochrome_static_initializers") {
+    script = "//build/android/gyp/assert_static_initializers.py"
+    inputs = [ "$root_build_dir/apks/MonochromePublic.aab" ]
+    outputs = [ "$target_gen_dir/$target_name.stamp" ]
+    deps = [ ":monochrome_public_bundle" ]
+    args = [
+      "--expected-count=$expected_static_initializer_count",
+      "--tool-prefix",
+      rebase_path(android_tool_prefix, root_build_dir),
+      "--touch",
+      rebase_path(outputs[0], root_build_dir),
+      rebase_path(inputs[0], root_build_dir),
+    ]
   }
+}
 
-  instrumentation_test_runner("trichrome_chrome_bundle_smoke_test") {
-    apk_under_test = "//chrome/android:trichrome_chrome_bundle_apks"
-    android_test_apk = ":chrome_bundle_smoke_test_apk"
-    android_test_apk_name = "ChromeBundleSmokeTest"
-    never_incremental = true
-    modules = [ "test_dummy" ]
-    additional_apks = [ "//chrome/android:trichrome_library_apk" ]
-    extra_args = _bundle_smoke_test_extra_args
-  }
+instrumentation_test_runner("trichrome_chrome_bundle_smoke_test") {
+  apk_under_test = "//chrome/android:trichrome_chrome_bundle_apks"
+  android_test_apk = ":chrome_bundle_smoke_test_apk"
+  android_test_apk_name = "ChromeBundleSmokeTest"
+  never_incremental = true
+  modules = [ "test_dummy" ]
+  additional_apks = [ "//chrome/android:trichrome_library_apk" ]
+  extra_args = _bundle_smoke_test_extra_args
+}
 
-  instrumentation_test_runner(
-      "trichrome_chrome_bundle_fake_modules_smoke_test") {
-    apk_under_test = "//chrome/android:trichrome_chrome_bundle_apks"
-    android_test_apk = ":chrome_bundle_smoke_test_apk"
-    android_test_apk_name = "ChromeBundleSmokeTest"
-    never_incremental = true
-    fake_modules = [ "test_dummy" ]
-    additional_apks = [ "//chrome/android:trichrome_library_apk" ]
-    extra_args = _bundle_smoke_test_extra_args +
-                 _bundle_fake_modules_smoke_test_extra_args
-  }
+instrumentation_test_runner("trichrome_chrome_bundle_fake_modules_smoke_test") {
+  apk_under_test = "//chrome/android:trichrome_chrome_bundle_apks"
+  android_test_apk = ":chrome_bundle_smoke_test_apk"
+  android_test_apk_name = "ChromeBundleSmokeTest"
+  never_incremental = true
+  fake_modules = [ "test_dummy" ]
+  additional_apks = [ "//chrome/android:trichrome_library_apk" ]
+  extra_args =
+      _bundle_smoke_test_extra_args + _bundle_fake_modules_smoke_test_extra_args
 }
 
 python_library("chrome_public_wpt") {
@@ -2693,9 +2717,11 @@ template("monochrome_or_trichrome_public_bundle_tmpl") {
   chrome_bundle(target_name) {
     forward_variables_from(invoker,
                            [
+                             "enable_lint",
                              "include_32_bit_webview",
                              "include_64_bit_webview",
                              "is_64_bit_browser",
+                             "lint_min_sdk_version",
                              "static_library_provider",
                              "static_library_synchronized_proguard",
                              "expected_libs_and_assets",
@@ -2715,142 +2741,148 @@ template("monochrome_or_trichrome_public_bundle_tmpl") {
   }
 }
 
+group("android_lint") {
+  if (!disable_android_lint) {
+    if (defined(default_chrome_lint_targets)) {
+      deps = default_chrome_lint_targets
+    } else {
+      deps = [ ":monochrome_public_bundle__lint" ]
+    }
+  }
+}
+
 # Public webview targets don't work with non-public sdks.
 # https://crbug.com/1000763
-if (public_android_sdk) {
-  monochrome_or_trichrome_public_bundle_tmpl("monochrome_public_bundle") {
-    bundle_suffix = ""
+monochrome_or_trichrome_public_bundle_tmpl("monochrome_public_bundle") {
+  # Monochrome bundle is used as our unified lint target, so it needs to set the
+  # lowest shipping minSdkVersion to catch all potential NewApi errors.
+  lint_min_sdk_version = default_min_sdk_version
+  enable_lint = true
 
-    if (android_64bit_target_cpu) {
-      is_64_bit_browser = false
-      include_64_bit_webview = true
-    }
-
-    if (_enable_manifest_verification) {
-      expected_android_manifest =
-          "expectations/monochrome_public_bundle.AndroidManifest.expected"
-      expected_proguard_config =
-          "expectations/monochrome_public_bundle.proguard_flags.expected"
-    }
-    if (_enable_libs_and_assets_verification) {
-      expected_libs_and_assets = "expectations/monochrome_public_bundle.$target_cpu.libs_and_assets.expected"
-    }
-  }
-
-  if (is_official_build) {
-    # Used for binary size monitoring.
-    create_app_bundle_minimal_apks("monochrome_public_minimal_apks") {
-      deps = [ ":monochrome_public_bundle" ]
-      bundle_path = "$root_build_dir/apks/MonochromePublic.aab"
-    }
-    android_resource_sizes_test(
-        "resource_sizes_monochrome_public_minimal_apks") {
-      file_path = "$root_build_dir/apks/MonochromePublic.minimal.apks"
-      data_deps = [ ":monochrome_public_minimal_apks" ]
-    }
-  }
-
-  monochrome_or_trichrome_public_bundle_tmpl("trichrome_chrome_bundle") {
-    bundle_suffix = ""
-    use_trichrome_library = true
-    static_library_provider = ":trichrome_library_apk"
-    if (!is_java_debug) {
-      static_library_synchronized_proguard = trichrome_synchronized_proguard
-      if (trichrome_synchronized_proguard) {
-        resource_ids_provider_dep = "//android_webview:trichrome_webview_apk"
-      }
-    }
-    if (android_64bit_target_cpu) {
-      is_64_bit_browser = false
-      include_64_bit_webview = true
-    }
-
-    if (_enable_manifest_verification) {
-      expected_android_manifest =
-          "expectations/trichrome_chrome_bundle.AndroidManifest.expected"
-    }
-    if (_enable_libs_and_assets_verification) {
-      expected_libs_and_assets = "expectations/trichrome_chrome_bundle.$target_cpu.libs_and_assets.expected"
-    }
-  }
-
-  if (is_official_build) {
-    _trichrome_library_basename = "TrichromeLibrary.apk"
-    _trichrome_chrome_basename = "TrichromeChrome.minimal.apks"
-    _trichrome_webview_basename = "TrichromeWebView.minimal.apks"
-
-    write_ssargs_trichrome("ssargs_trichrome") {
-      ssargs_path = "$root_build_dir/apks/Trichrome.ssargs"
-      trichrome_library_basename = _trichrome_library_basename
-      trichrome_chrome_basename = _trichrome_chrome_basename
-      trichrome_webview_basename = _trichrome_webview_basename
-    }
-
-    # Used for binary size monitoring.
-    create_app_bundle_minimal_apks("trichrome_chrome_minimal_apks") {
-      deps = [ ":trichrome_chrome_bundle" ]
-      bundle_path = "$root_build_dir/apks/TrichromeChrome.aab"
-    }
-
-    android_resource_sizes_test("resource_sizes_trichrome") {
-      apk_name = "Trichrome"
-      trichrome_library_path =
-          "$root_build_dir/apks/$_trichrome_library_basename"
-      trichrome_chrome_path = "$root_build_dir/apks/$_trichrome_chrome_basename"
-      trichrome_webview_path =
-          "$root_build_dir/apks/$_trichrome_webview_basename"
-      data_deps = [
-        ":trichrome_chrome_minimal_apks",
-        ":trichrome_library_apk",
-        "//android_webview:trichrome_webview_minimal_apks",
-      ]
-    }
-  }
-
+  bundle_suffix = ""
   if (android_64bit_target_cpu) {
-    monochrome_or_trichrome_public_bundle_tmpl("monochrome_32_public_bundle") {
-      bundle_suffix = "32"
-      is_64_bit_browser = false
-      include_64_bit_webview = false
-    }
+    is_64_bit_browser = false
+    include_64_bit_webview = true
+  }
+  if (_enable_manifest_verification) {
+    expected_android_manifest =
+        "expectations/monochrome_public_bundle.AndroidManifest.expected"
+    expected_proguard_config =
+        "expectations/monochrome_public_bundle.proguard_flags.expected"
+  }
+  if (_enable_libs_and_assets_verification) {
+    expected_libs_and_assets = "expectations/monochrome_public_bundle.$target_cpu.libs_and_assets.expected"
+  }
+}
 
-    monochrome_or_trichrome_public_bundle_tmpl("monochrome_64_public_bundle") {
-      bundle_suffix = "64"
-      is_64_bit_browser = true
-      include_32_bit_webview = false
-    }
+if (is_official_build) {
+  # Used for binary size monitoring.
+  create_app_bundle_minimal_apks("monochrome_public_minimal_apks") {
+    deps = [ ":monochrome_public_bundle" ]
+    bundle_path = "$root_build_dir/apks/MonochromePublic.aab"
+  }
+  android_resource_sizes_test("resource_sizes_monochrome_public_minimal_apks") {
+    file_path = "$root_build_dir/apks/MonochromePublic.minimal.apks"
+    data_deps = [ ":monochrome_public_minimal_apks" ]
+  }
+}
 
-    monochrome_or_trichrome_public_bundle_tmpl(
-        "monochrome_64_32_public_bundle") {
-      bundle_suffix = "6432"
-      is_64_bit_browser = true
-      include_32_bit_webview = true
+monochrome_or_trichrome_public_bundle_tmpl("trichrome_chrome_bundle") {
+  bundle_suffix = ""
+  use_trichrome_library = true
+  static_library_provider = ":trichrome_library_apk"
+  if (!is_java_debug) {
+    static_library_synchronized_proguard = trichrome_synchronized_proguard
+    if (trichrome_synchronized_proguard) {
+      resource_ids_provider_dep = "//android_webview:trichrome_webview_apk"
     }
+  }
+  if (android_64bit_target_cpu) {
+    is_64_bit_browser = false
+    include_64_bit_webview = true
+  }
 
-    monochrome_or_trichrome_public_bundle_tmpl("trichrome_chrome_64_bundle") {
-      bundle_suffix = "64"
-      is_64_bit_browser = true
-      include_32_bit_webview = false
-      use_trichrome_library = true
-      static_library_provider = ":trichrome_library_64_apk"
-    }
+  if (_enable_manifest_verification) {
+    expected_android_manifest =
+        "expectations/trichrome_chrome_bundle.AndroidManifest.expected"
+  }
+  if (_enable_libs_and_assets_verification) {
+    expected_libs_and_assets = "expectations/trichrome_chrome_bundle.$target_cpu.libs_and_assets.expected"
+  }
+}
 
-    monochrome_or_trichrome_public_bundle_tmpl(
-        "trichrome_chrome_64_32_bundle") {
-      bundle_suffix = "6432"
-      is_64_bit_browser = true
-      include_32_bit_webview = true
-      use_trichrome_library = true
-      static_library_provider = ":trichrome_library_64_32_apk"
-    }
+if (is_official_build) {
+  _trichrome_library_basename = "TrichromeLibrary.apk"
+  _trichrome_chrome_basename = "TrichromeChrome.minimal.apks"
+  _trichrome_webview_basename = "TrichromeWebView.minimal.apks"
 
-    monochrome_or_trichrome_public_bundle_tmpl("trichrome_chrome_32_bundle") {
-      bundle_suffix = "32"
-      is_64_bit_browser = false
-      include_64_bit_webview = false
-      use_trichrome_library = true
-      static_library_provider = ":trichrome_library_32_apk"
-    }
+  write_ssargs_trichrome("ssargs_trichrome") {
+    ssargs_path = "$root_build_dir/apks/Trichrome.ssargs"
+    trichrome_library_basename = _trichrome_library_basename
+    trichrome_chrome_basename = _trichrome_chrome_basename
+    trichrome_webview_basename = _trichrome_webview_basename
+  }
+
+  # Used for binary size monitoring.
+  create_app_bundle_minimal_apks("trichrome_chrome_minimal_apks") {
+    deps = [ ":trichrome_chrome_bundle" ]
+    bundle_path = "$root_build_dir/apks/TrichromeChrome.aab"
+  }
+
+  android_resource_sizes_test("resource_sizes_trichrome") {
+    apk_name = "Trichrome"
+    trichrome_library_path = "$root_build_dir/apks/$_trichrome_library_basename"
+    trichrome_chrome_path = "$root_build_dir/apks/$_trichrome_chrome_basename"
+    trichrome_webview_path = "$root_build_dir/apks/$_trichrome_webview_basename"
+    data_deps = [
+      ":trichrome_chrome_minimal_apks",
+      ":trichrome_library_apk",
+      "//android_webview:trichrome_webview_minimal_apks",
+    ]
+  }
+}
+
+if (android_64bit_target_cpu) {
+  monochrome_or_trichrome_public_bundle_tmpl("monochrome_32_public_bundle") {
+    bundle_suffix = "32"
+    is_64_bit_browser = false
+    include_64_bit_webview = false
+  }
+
+  monochrome_or_trichrome_public_bundle_tmpl("monochrome_64_public_bundle") {
+    bundle_suffix = "64"
+    is_64_bit_browser = true
+    include_32_bit_webview = false
+  }
+
+  monochrome_or_trichrome_public_bundle_tmpl("monochrome_64_32_public_bundle") {
+    bundle_suffix = "6432"
+    is_64_bit_browser = true
+    include_32_bit_webview = true
+  }
+
+  monochrome_or_trichrome_public_bundle_tmpl("trichrome_chrome_64_bundle") {
+    bundle_suffix = "64"
+    is_64_bit_browser = true
+    include_32_bit_webview = false
+    use_trichrome_library = true
+    static_library_provider = ":trichrome_library_64_apk"
+  }
+
+  monochrome_or_trichrome_public_bundle_tmpl("trichrome_chrome_64_32_bundle") {
+    bundle_suffix = "6432"
+    is_64_bit_browser = true
+    include_32_bit_webview = true
+    use_trichrome_library = true
+    static_library_provider = ":trichrome_library_64_32_apk"
+  }
+
+  monochrome_or_trichrome_public_bundle_tmpl("trichrome_chrome_32_bundle") {
+    bundle_suffix = "32"
+    is_64_bit_browser = false
+    include_64_bit_webview = false
+    use_trichrome_library = true
+    static_library_provider = ":trichrome_library_32_apk"
   }
 }
 
@@ -2865,7 +2897,7 @@ generate_jni("chrome_jni_headers") {
     "java/src/org/chromium/chrome/browser/ChromeBackupWatcher.java",
     "java/src/org/chromium/chrome/browser/ChromeVersionInfo.java",
     "java/src/org/chromium/chrome/browser/DevToolsServer.java",
-    "java/src/org/chromium/chrome/browser/IntentHeadersRecorder.java",
+    "java/src/org/chromium/chrome/browser/IntentHandler.java",
     "java/src/org/chromium/chrome/browser/IntentHelper.java",
     "java/src/org/chromium/chrome/browser/NearOomMonitor.java",
     "java/src/org/chromium/chrome/browser/SearchGeolocationDisclosureTabHelper.java",
@@ -2876,6 +2908,7 @@ generate_jni("chrome_jni_headers") {
     "java/src/org/chromium/chrome/browser/about_settings/AboutSettingsBridge.java",
     "java/src/org/chromium/chrome/browser/accessibility/FontSizePrefs.java",
     "java/src/org/chromium/chrome/browser/announcement/AnnouncementNotificationManager.java",
+    "java/src/org/chromium/chrome/browser/app/send_tab_to_self/SendTabToSelfNotificationReceiver.java",
     "java/src/org/chromium/chrome/browser/app/tab_activity_glue/ReparentingTask.java",
     "java/src/org/chromium/chrome/browser/autofill/AutofillExpirationDateFixFlowBridge.java",
     "java/src/org/chromium/chrome/browser/autofill/AutofillLogger.java",
@@ -2910,6 +2943,7 @@ generate_jni("chrome_jni_headers") {
     "java/src/org/chromium/chrome/browser/compositor/LayerTitleCache.java",
     "java/src/org/chromium/chrome/browser/compositor/bottombar/OverlayPanelContent.java",
     "java/src/org/chromium/chrome/browser/compositor/layouts/content/TabContentManager.java",
+    "java/src/org/chromium/chrome/browser/compositor/overlays/toolbar/TopToolbarSceneLayer.java",
     "java/src/org/chromium/chrome/browser/compositor/resources/ResourceFactory.java",
     "java/src/org/chromium/chrome/browser/compositor/scene_layer/ContextualSearchSceneLayer.java",
     "java/src/org/chromium/chrome/browser/compositor/scene_layer/SceneLayer.java",
@@ -2917,7 +2951,6 @@ generate_jni("chrome_jni_headers") {
     "java/src/org/chromium/chrome/browser/compositor/scene_layer/StaticTabSceneLayer.java",
     "java/src/org/chromium/chrome/browser/compositor/scene_layer/TabListSceneLayer.java",
     "java/src/org/chromium/chrome/browser/compositor/scene_layer/TabStripSceneLayer.java",
-    "java/src/org/chromium/chrome/browser/compositor/scene_layer/ToolbarSceneLayer.java",
     "java/src/org/chromium/chrome/browser/consent_auditor/ConsentAuditorBridge.java",
     "java/src/org/chromium/chrome/browser/content/ContentUtils.java",
     "java/src/org/chromium/chrome/browser/contextmenu/ChromeContextMenuPopulator.java",
@@ -2947,7 +2980,6 @@ generate_jni("chrome_jni_headers") {
     "java/src/org/chromium/chrome/browser/download/items/OfflineContentAggregatorFactory.java",
     "java/src/org/chromium/chrome/browser/download/service/DownloadBackgroundTask.java",
     "java/src/org/chromium/chrome/browser/download/service/DownloadTaskScheduler.java",
-    "java/src/org/chromium/chrome/browser/engagement/SiteEngagementService.java",
     "java/src/org/chromium/chrome/browser/explore_sites/ExploreSitesBridge.java",
     "java/src/org/chromium/chrome/browser/explore_sites/ExploreSitesBridgeExperimental.java",
     "java/src/org/chromium/chrome/browser/explore_sites/ExploreSitesCategory.java",
@@ -2960,7 +2992,7 @@ generate_jni("chrome_jni_headers") {
     "java/src/org/chromium/chrome/browser/feedback/SystemInfoFeedbackSource.java",
     "java/src/org/chromium/chrome/browser/firstrun/FirstRunUtils.java",
     "java/src/org/chromium/chrome/browser/flags/ChromeSessionState.java",
-    "java/src/org/chromium/chrome/browser/gesturenav/CompositorNavigationGlow.java",
+    "java/src/org/chromium/chrome/browser/gesturenav/OverscrollSceneLayer.java",
     "java/src/org/chromium/chrome/browser/history/BrowsingHistoryBridge.java",
     "java/src/org/chromium/chrome/browser/history/HistoryDeletionBridge.java",
     "java/src/org/chromium/chrome/browser/history/HistoryDeletionInfo.java",
@@ -3028,7 +3060,6 @@ generate_jni("chrome_jni_headers") {
     "java/src/org/chromium/chrome/browser/ntp/snippets/SnippetsLauncher.java",
     "java/src/org/chromium/chrome/browser/offlinepages/AutoFetchNotifier.java",
     "java/src/org/chromium/chrome/browser/offlinepages/BackgroundSchedulerBridge.java",
-    "java/src/org/chromium/chrome/browser/offlinepages/CCTRequestStatus.java",
     "java/src/org/chromium/chrome/browser/offlinepages/CctOfflinePageModelObserver.java",
     "java/src/org/chromium/chrome/browser/offlinepages/OfflinePageArchivePublisherBridge.java",
     "java/src/org/chromium/chrome/browser/offlinepages/OfflinePageBridge.java",
@@ -3047,10 +3078,6 @@ generate_jni("chrome_jni_headers") {
     "java/src/org/chromium/chrome/browser/omnibox/OmniboxViewUtil.java",
     "java/src/org/chromium/chrome/browser/omnibox/geo/GeolocationHeader.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/AutocompleteController.java",
-    "java/src/org/chromium/chrome/browser/paint_preview/services/PaintPreviewDemoService.java",
-    "java/src/org/chromium/chrome/browser/paint_preview/services/PaintPreviewDemoServiceFactory.java",
-    "java/src/org/chromium/chrome/browser/paint_preview/services/PaintPreviewTabService.java",
-    "java/src/org/chromium/chrome/browser/paint_preview/services/PaintPreviewTabServiceFactory.java",
     "java/src/org/chromium/chrome/browser/partnerbookmarks/PartnerBookmarksReader.java",
     "java/src/org/chromium/chrome/browser/partnercustomizations/PartnerBrowserCustomizations.java",
     "java/src/org/chromium/chrome/browser/password_manager/AccountChooserDialog.java",
@@ -3101,20 +3128,20 @@ generate_jni("chrome_jni_headers") {
     "java/src/org/chromium/chrome/browser/signin/SigninPromoUtil.java",
     "java/src/org/chromium/chrome/browser/signin/SigninUtils.java",
     "java/src/org/chromium/chrome/browser/signin/UnifiedConsentServiceBridge.java",
+    "java/src/org/chromium/chrome/browser/signin/WebSigninBridge.java",
     "java/src/org/chromium/chrome/browser/site_settings/CookieControlsServiceBridge.java",
-    "java/src/org/chromium/chrome/browser/sms/SmsReceiverInfoBar.java",
     "java/src/org/chromium/chrome/browser/status_indicator/StatusIndicatorSceneLayer.java",
     "java/src/org/chromium/chrome/browser/suggestions/SuggestionsEventReporterBridge.java",
     "java/src/org/chromium/chrome/browser/suggestions/mostvisited/MostVisitedSites.java",
     "java/src/org/chromium/chrome/browser/suggestions/mostvisited/MostVisitedSitesBridge.java",
     "java/src/org/chromium/chrome/browser/sync/ProfileSyncService.java",
     "java/src/org/chromium/chrome/browser/sync/TrustedVaultClient.java",
+    "java/src/org/chromium/chrome/browser/tab/HistoricalTabSaver.java",
     "java/src/org/chromium/chrome/browser/tab/TabBrowserControlsConstraintsHelper.java",
     "java/src/org/chromium/chrome/browser/tab/TabFavicon.java",
     "java/src/org/chromium/chrome/browser/tab/TabImpl.java",
     "java/src/org/chromium/chrome/browser/tab/TabWebContentsDelegateAndroidImpl.java",
     "java/src/org/chromium/chrome/browser/tab/TrustedCdn.java",
-    "java/src/org/chromium/chrome/browser/tab/WebContentsStateBridge.java",
     "java/src/org/chromium/chrome/browser/tabmodel/TabModelJniBridge.java",
     "java/src/org/chromium/chrome/browser/tabmodel/TabModelObserverJniBridge.java",
     "java/src/org/chromium/chrome/browser/toolbar/LocationBarModel.java",
@@ -3151,6 +3178,7 @@ generate_jni("chrome_jni_headers") {
       "feed/core/java/src/org/chromium/chrome/browser/feed/FeedNetworkBridge.java",
       "feed/core/java/src/org/chromium/chrome/browser/feed/FeedOfflineBridge.java",
       "feed/core/java/src/org/chromium/chrome/browser/feed/FeedSchedulerBridge.java",
+      "feed/core/java/src/org/chromium/chrome/browser/feed/v2/FeedImageFetchClient.java",
       "feed/core/java/src/org/chromium/chrome/browser/feed/v2/FeedServiceBridge.java",
       "feed/core/java/src/org/chromium/chrome/browser/feed/v2/FeedStreamSurface.java",
     ]
@@ -3165,19 +3193,6 @@ native_java_unittests_tests = [
   "native_java_unittests/src/org/chromium/chrome/browser/contextmenu/ChromeContextMenuPopulatorTest.java",
   "native_java_unittests/src/org/chromium/chrome/browser/installedapp/InstalledAppProviderTest.java",
   "native_java_unittests/src/org/chromium/chrome/browser/notifications/NotificationPlatformBridgeUnitTest.java",
-  "native_java_unittests/src/org/chromium/chrome/browser/omnibox/suggestions/AutocompleteMediatorUnitTest.java",
-  "native_java_unittests/src/org/chromium/chrome/browser/omnibox/suggestions/AutocompleteResultUnitTest.java",
-  "native_java_unittests/src/org/chromium/chrome/browser/omnibox/suggestions/DropdownItemViewInfoListBuilderUnitTest.java",
-  "native_java_unittests/src/org/chromium/chrome/browser/omnibox/suggestions/DropdownItemViewInfoListManagerUnitTest.java",
-  "native_java_unittests/src/org/chromium/chrome/browser/omnibox/suggestions/basic/BasicSuggestionProcessorUnitTest.java",
-  "native_java_unittests/src/org/chromium/chrome/browser/omnibox/suggestions/clipboard/ClipboardSuggestionProcessorTest.java",
-  "native_java_unittests/src/org/chromium/chrome/browser/omnibox/status/StatusMediatorUnitTest.java",
-  "native_java_unittests/src/org/chromium/chrome/browser/omnibox/suggestions/base/BaseSuggestionProcessorTest.java",
-  "native_java_unittests/src/org/chromium/chrome/browser/omnibox/suggestions/answer/AnswerSuggestionProcessorUnitTest.java",
-  "native_java_unittests/src/org/chromium/chrome/browser/omnibox/suggestions/editurl/EditUrlSuggestionUnitTest.java",
-  "native_java_unittests/src/org/chromium/chrome/browser/omnibox/suggestions/entity/EntitySuggestionProcessorUnitTest.java",
-  "native_java_unittests/src/org/chromium/chrome/browser/omnibox/suggestions/tiles/TileSuggestionProcessorUnitTest.java",
-  "native_java_unittests/src/org/chromium/chrome/browser/omnibox/suggestions/CachedZeroSuggestionsManagerUnitTest.java",
   "native_java_unittests/src/org/chromium/chrome/browser/partnercustomizations/PartnerBrowserCustomizationsUnitTest.java",
   "native_java_unittests/src/org/chromium/chrome/browser/payments/AndroidPaymentAppFinderUnitTest.java",
   "native_java_unittests/src/org/chromium/chrome/browser/payments/AndroidPaymentAppUnitTest.java",
@@ -3229,12 +3244,12 @@ android_library("native_java_unittests_java") {
     "//ui/android:ui_java",
     "//ui/android:ui_java_test_support",
     "//url:gurl_java",
+    "//url:origin_java",
     "//url/mojom:url_mojom_gurl_java",
   ]
 
   sources = [
     "native_java_unittests/src/org/chromium/chrome/browser/UnitTestUtils.java",
-    "native_java_unittests/src/org/chromium/chrome/browser/omnibox/suggestions/OmniboxSuggestionBuilderForTest.java",
   ]
 
   sources += native_java_unittests_tests
@@ -3250,25 +3265,27 @@ generate_jni("native_j_unittests_jni_headers") {
   feature_list_file = "//chrome/browser/flags/android/java/src/org/chromium/chrome/browser/flags/ChromeFeatureList.java"
 }
 
-# Used by android-binary-size trybot to know which expectations to validate.
-group("validate_expectations") {
-  deps = []
-  if (_enable_libs_and_assets_verification) {
-    deps += [
-      ":chrome_modern_public_bundle_validate_libs_and_assets",
-      ":monochrome_public_bundle_validate_libs_and_assets",
-      ":trichrome_chrome_bundle_validate_libs_and_assets",
-      ":trichrome_library_apk_validate_libs_and_assets",
-    ]
-  }
-  if (_enable_manifest_verification) {
-    deps += [
-      ":monochrome_public_bundle__base_bundle_module_validate_android_manifest",
-      ":monochrome_public_bundle_validate_proguard_config",
-      ":trichrome_chrome_bundle__base_bundle_module_validate_android_manifest",
-      ":trichrome_library_apk_validate_android_manifest",
-      "//android_webview:system_webview_base_bundle_module_validate_android_manifest",
-      "//android_webview:trichrome_webview_base_bundle_module_validate_android_manifest",
-    ]
+# Used by android-binary-size trybot to validate expectations.
+if (_enable_libs_and_assets_verification || _enable_manifest_verification) {
+  group("validate_expectations") {
+    deps = []
+    if (_enable_libs_and_assets_verification) {
+      deps += [
+        ":chrome_modern_public_bundle_validate_libs_and_assets",
+        ":monochrome_public_bundle_validate_libs_and_assets",
+        ":trichrome_chrome_bundle_validate_libs_and_assets",
+        ":trichrome_library_apk_validate_libs_and_assets",
+      ]
+    }
+    if (_enable_manifest_verification) {
+      deps += [
+        ":monochrome_public_bundle__base_bundle_module_validate_android_manifest",
+        ":monochrome_public_bundle_validate_proguard_config",
+        ":trichrome_chrome_bundle__base_bundle_module_validate_android_manifest",
+        ":trichrome_library_apk_validate_android_manifest",
+        "//android_webview:system_webview_base_bundle_module_validate_android_manifest",
+        "//android_webview:trichrome_webview_base_bundle_module_validate_android_manifest",
+      ]
+    }
   }
 }

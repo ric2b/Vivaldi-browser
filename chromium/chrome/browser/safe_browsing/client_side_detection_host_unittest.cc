@@ -295,8 +295,8 @@ class ClientSideDetectionHostTestBase : public ChromeRenderViewHostTestHarness {
 
     csd_host_ = ClientSideDetectionHost::Create(web_contents());
     csd_host_->set_client_side_detection_service(csd_service_.get());
-    csd_host_->set_safe_browsing_managers(ui_manager_.get(),
-                                          database_manager_.get());
+    csd_host_->set_ui_manager(ui_manager_.get());
+    csd_host_->set_database_manager(database_manager_.get());
     csd_host_->set_tick_clock_for_testing(&clock_);
 
     // We need to create this here since we don't call DidStopLanding in
@@ -1207,6 +1207,7 @@ TEST_F(ClientSideDetectionHostTest, ClearsScreenshotData) {
   verdict.set_url("http://phishingurl.com/");
   verdict.set_client_score(1.0f);
   verdict.set_is_phishing(true);
+  verdict.set_screenshot_digest("screenshot_digest");
   verdict.set_screenshot_phash("screenshot_phash");
   verdict.set_phash_dimension_size(48);
 
@@ -1224,6 +1225,7 @@ TEST_F(ClientSideDetectionHostTest, ClearsScreenshotData) {
   EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
   EXPECT_FALSE(request->has_phash_dimension_size());
   EXPECT_FALSE(request->has_screenshot_phash());
+  EXPECT_FALSE(request->has_screenshot_digest());
   delete request;
 }
 
@@ -1239,6 +1241,7 @@ TEST_F(ClientSideDetectionHostTest, AllowsScreenshotDataForSBER) {
   verdict.set_url("http://phishingurl.com/");
   verdict.set_client_score(1.0f);
   verdict.set_is_phishing(true);
+  verdict.set_screenshot_digest("screenshot_digest");
   verdict.set_screenshot_phash("screenshot_phash");
   verdict.set_phash_dimension_size(48);
 
@@ -1256,6 +1259,7 @@ TEST_F(ClientSideDetectionHostTest, AllowsScreenshotDataForSBER) {
   EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
   EXPECT_TRUE(request->has_phash_dimension_size());
   EXPECT_TRUE(request->has_screenshot_phash());
+  EXPECT_TRUE(request->has_screenshot_digest());
   delete request;
 }
 

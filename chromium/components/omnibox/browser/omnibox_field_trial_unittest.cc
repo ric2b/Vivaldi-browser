@@ -8,13 +8,13 @@
 #include <utility>
 
 #include "base/command_line.h"
-#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "components/history/core/browser/url_database.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/search/search.h"
 #include "components/variations/variations_associated_data.h"
@@ -28,6 +28,8 @@ class OmniboxFieldTrialTest : public testing::Test {
   OmniboxFieldTrialTest() {
     ResetFieldTrialList();
   }
+  OmniboxFieldTrialTest(const OmniboxFieldTrialTest&) = delete;
+  OmniboxFieldTrialTest& operator=(const OmniboxFieldTrialTest&) = delete;
 
   void ResetFieldTrialList() {
     scoped_feature_list_.Reset();
@@ -79,8 +81,6 @@ class OmniboxFieldTrialTest : public testing::Test {
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(OmniboxFieldTrialTest);
 };
 
 // static
@@ -353,6 +353,40 @@ TEST_F(OmniboxFieldTrialTest, GetValueForRuleInContext) {
     ExpectRuleValue("",
                     "rule5", OmniboxEventProto::OTHER);    // no rule at all
   }
+}
+
+TEST_F(OmniboxFieldTrialTest, LocalZeroSuggestAgeThreshold) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  // The default value can be overridden.
+  scoped_feature_list_.InitWithFeaturesAndParameters(
+      {{omnibox::kOmniboxLocalZeroSuggestAgeThreshold,
+        {{OmniboxFieldTrial::kOmniboxLocalZeroSuggestAgeThresholdParam, "7"}}}},
+      {});
+  base::Time age_threshold =
+      OmniboxFieldTrial::GetLocalHistoryZeroSuggestAgeThreshold();
+  EXPECT_EQ(7, base::TimeDelta(base::Time::Now() - age_threshold).InDays());
+
+  // If the age threshold is not parsable to an unsigned integer, the default
+  // value is used.
+  scoped_feature_list_.Reset();
+  scoped_feature_list_.InitWithFeaturesAndParameters(
+      {{omnibox::kOmniboxLocalZeroSuggestAgeThreshold,
+        {{OmniboxFieldTrial::kOmniboxLocalZeroSuggestAgeThresholdParam, "j"}}}},
+      {});
+  age_threshold = OmniboxFieldTrial::GetLocalHistoryZeroSuggestAgeThreshold();
+  EXPECT_EQ(history::kLowQualityMatchAgeLimitInDays,
+            base::TimeDelta(base::Time::Now() - age_threshold).InDays());
+
+  // If new search features are disabled, the default value is used.
+  scoped_feature_list_.Reset();
+  scoped_feature_list_.InitWithFeaturesAndParameters(
+      {{omnibox::kOmniboxLocalZeroSuggestAgeThreshold,
+        {{OmniboxFieldTrial::kOmniboxLocalZeroSuggestAgeThresholdParam, "7"}}}},
+      {omnibox::kNewSearchFeatures});
+  age_threshold = OmniboxFieldTrial::GetLocalHistoryZeroSuggestAgeThreshold();
+  EXPECT_EQ(history::kLowQualityMatchAgeLimitInDays,
+            base::TimeDelta(base::Time::Now() - age_threshold).InDays());
 }
 
 TEST_F(OmniboxFieldTrialTest, GetZeroSuggestVariantsCanUseMultipleFeatures) {

@@ -16,6 +16,7 @@
 #include "ash/ambient/ambient_controller.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/assistant/model/assistant_ui_model.h"
+#include "ash/capture_mode/capture_mode_controller.h"
 #include "ash/debug.h"
 #include "ash/display/display_configuration_controller.h"
 #include "ash/display/display_move_window_util.h"
@@ -743,15 +744,42 @@ void HandleShowKeyboardShortcutViewer() {
   NewWindowDelegate::GetInstance()->ShowKeyboardShortcutViewer();
 }
 
+bool CanHandleScreenshot() {
+  // The old screenshot code will handle the different sessions in its own code.
+  if (!features::IsCaptureModeEnabled())
+    return true;
+
+  return !Shell::Get()->session_controller()->IsUserSessionBlocked();
+}
+
+// Tries to enter capture mode image type with |source|. Returns false if
+// unsuccessful (capture mode disabled).
+bool MaybeEnterImageCaptureMode(CaptureModeSource source) {
+  if (!features::IsCaptureModeEnabled())
+    return false;
+
+  auto* capture_mode_controller = CaptureModeController::Get();
+  capture_mode_controller->SetSource(source);
+  capture_mode_controller->SetType(CaptureModeType::kImage);
+  capture_mode_controller->Start();
+  return true;
+}
+
 void HandleTakeWindowScreenshot() {
   base::RecordAction(UserMetricsAction("Accel_Take_Window_Screenshot"));
+  if (MaybeEnterImageCaptureMode(CaptureModeSource::kWindow))
+    return;
+
   Shell::Get()->screenshot_controller()->StartWindowScreenshotSession();
 }
 
 void HandleTakePartialScreenshot() {
   base::RecordAction(UserMetricsAction("Accel_Take_Partial_Screenshot"));
+  if (MaybeEnterImageCaptureMode(CaptureModeSource::kRegion))
+    return;
+
   Shell::Get()->screenshot_controller()->StartPartialScreenshotSession(
-      true /* draw_overlay_immediately */);
+      /*draw_overlay_immediately=*/true);
 }
 
 void HandleTakeScreenshot() {
@@ -842,7 +870,11 @@ void HandleToggleAppList(const ui::Accelerator& accelerator,
 void HandleToggleFullscreen(const ui::Accelerator& accelerator) {
   if (accelerator.key_code() == ui::VKEY_MEDIA_LAUNCH_APP2)
     base::RecordAction(UserMetricsAction("Accel_Fullscreen_F4"));
-  accelerators::ToggleFullscreen();
+  OverviewController* overview_controller = Shell::Get()->overview_controller();
+  // Disable fullscreen while overview animation is running due to
+  // http://crbug.com/1094739
+  if (!overview_controller->IsInStartAnimation())
+    accelerators::ToggleFullscreen();
 }
 
 void HandleToggleOverview() {
@@ -1766,8 +1798,11 @@ void AcceleratorControllerImpl::Init() {
   RegisterAccelerators(kAcceleratorData, kAcceleratorDataLength);
 
   if (::features::IsNewShortcutMappingEnabled()) {
-    RegisterAccelerators(kNewAdditionalAcceleratorData,
-                         kNewAdditionalAcceleratorDataLength);
+    RegisterAccelerators(kEnableWithNewMappingAcceleratorData,
+                         kEnableWithNewMappingAcceleratorDataLength);
+  } else {
+    RegisterAccelerators(kDisableWithNewMappingAcceleratorData,
+                         kDisableWithNewMappingAcceleratorDataLength);
   }
 
   RegisterDeprecatedAccelerators();
@@ -1934,6 +1969,10 @@ bool AcceleratorControllerImpl::CanPerformAction(
       return !!FindPipWidget();
     case MINIMIZE_TOP_WINDOW_ON_BACK:
       return window_util::ShouldMinimizeTopWindowOnBack();
+    case TAKE_PARTIAL_SCREENSHOT:
+    case TAKE_SCREENSHOT:
+    case TAKE_WINDOW_SCREENSHOT:
+      return CanHandleScreenshot();
 
     // The following are always enabled.
     case BRIGHTNESS_DOWN:
@@ -1978,9 +2017,6 @@ bool AcceleratorControllerImpl::CanPerformAction(
     case SHOW_SHORTCUT_VIEWER:
     case SHOW_TASK_MANAGER:
     case SUSPEND:
-    case TAKE_PARTIAL_SCREENSHOT:
-    case TAKE_SCREENSHOT:
-    case TAKE_WINDOW_SCREENSHOT:
     case TOGGLE_FULLSCREEN:
     case TOGGLE_HIGH_CONTRAST:
     case TOGGLE_MAXIMIZED:

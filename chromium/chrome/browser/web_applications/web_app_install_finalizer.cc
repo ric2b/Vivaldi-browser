@@ -23,13 +23,17 @@
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_icon_generator.h"
 #include "chrome/browser/web_applications/components/web_app_prefs_utils.h"
+#include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/components/web_app_shortcuts_menu.h"
+#include "chrome/browser/web_applications/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/web_application_info.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
+#include "components/services/app_service/public/cpp/protocol_handler_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "third_party/skia/include/core/SkColor.h"
 
@@ -135,6 +139,20 @@ void SetWebAppFileHandlers(
   }
 
   web_app->SetFileHandlers(std::move(web_app_file_handlers));
+}
+
+void SetWebAppProtocolHandlers(
+    const std::vector<blink::Manifest::ProtocolHandler>& protocol_handlers,
+    WebApp* web_app) {
+  std::vector<apps::ProtocolHandlerInfo> web_app_protocol_handlers;
+  for (const auto& handler : protocol_handlers) {
+    apps::ProtocolHandlerInfo protocol_handler_info;
+    protocol_handler_info.protocol = base::UTF16ToUTF8(handler.protocol);
+    protocol_handler_info.url = handler.url;
+    web_app_protocol_handlers.push_back(std::move(protocol_handler_info));
+  }
+
+  web_app->SetProtocolHandlers(web_app_protocol_handlers);
 }
 
 }  // namespace
@@ -340,7 +358,7 @@ void WebAppInstallFinalizer::FinalizeUpdate(
   CommitCallback commit_callback = base::BindOnce(
       &WebAppInstallFinalizer::OnDatabaseCommitCompletedForUpdate,
       weak_ptr_factory_.GetWeakPtr(), std::move(callback), app_id,
-      existing_web_app->name());
+      existing_web_app->name(), web_app_info);
 
   SetWebAppManifestFieldsAndWriteData(web_app_info, std::move(web_app),
                                       std::move(commit_callback));
@@ -351,6 +369,10 @@ void WebAppInstallFinalizer::FinalizeUpdate(
 
 void WebAppInstallFinalizer::RemoveLegacyInstallFinalizerForTesting() {
   legacy_finalizer_ = nullptr;
+}
+
+InstallFinalizer* WebAppInstallFinalizer::legacy_finalizer_for_testing() {
+  return legacy_finalizer_.get();
 }
 
 void WebAppInstallFinalizer::Start() {
@@ -365,11 +387,9 @@ void WebAppInstallFinalizer::Shutdown() {
 void WebAppInstallFinalizer::UninstallWebApp(const AppId& app_id,
                                              UninstallWebAppCallback callback) {
   registrar().NotifyWebAppUninstalled(app_id);
-
-  // TODO(https://crbug.com/1069306): We should do UnregisterShortcutsMenuWithOs
-  // on local uninstall as well.
-  if (ShouldRegisterShortcutsMenuWithOs())
-    UnregisterShortcutsMenuWithOs(app_id, profile_->GetPath());
+  WebAppProviderBase::GetProviderBase(profile_)
+      ->os_integration_manager()
+      .UninstallOsHooks(app_id, base::DoNothing());
 
   ScopedRegistryUpdate update(registry_controller().AsWebAppSyncBridge());
   update->DeleteApp(app_id);
@@ -409,13 +429,21 @@ void WebAppInstallFinalizer::SetWebAppManifestFieldsAndWriteData(
     const WebApplicationInfo& web_app_info,
     std::unique_ptr<WebApp> web_app,
     CommitCallback commit_callback) {
+  DCHECK(!web_app_info.title.empty());
   web_app->SetName(base::UTF16ToUTF8(web_app_info.title));
+
   web_app->SetDisplayMode(web_app_info.display_mode);
+  web_app->SetDisplayModeOverride(web_app_info.display_override);
+
   web_app->SetDescription(base::UTF16ToUTF8(web_app_info.description));
   web_app->SetScope(web_app_info.scope);
   if (web_app_info.theme_color) {
-    web_app->SetThemeColor(
-        SkColorSetA(*web_app_info.theme_color, SK_AlphaOPAQUE));
+    DCHECK_EQ(SkColorGetA(*web_app_info.theme_color), SK_AlphaOPAQUE);
+    web_app->SetThemeColor(web_app_info.theme_color);
+  }
+  if (web_app_info.background_color) {
+    DCHECK_EQ(SkColorGetA(*web_app_info.background_color), SK_AlphaOPAQUE);
+    web_app->SetBackgroundColor(*web_app_info.background_color);
   }
 
   WebApp::SyncFallbackData sync_fallback_data;
@@ -426,18 +454,34 @@ void WebAppInstallFinalizer::SetWebAppManifestFieldsAndWriteData(
   web_app->SetSyncFallbackData(std::move(sync_fallback_data));
 
   web_app->SetIconInfos(web_app_info.icon_infos);
-  web_app->SetDownloadedIconSizes(GetSquareSizePxs(web_app_info.icon_bitmaps));
+  web_app->SetDownloadedIconSizes(
+      IconPurpose::ANY, GetSquareSizePxs(web_app_info.icon_bitmaps_any));
+  web_app->SetDownloadedIconSizes(
+      IconPurpose::MASKABLE,
+      GetSquareSizePxs(web_app_info.icon_bitmaps_maskable));
+  web_app->SetIsGeneratedIcon(web_app_info.is_generated_icon);
 
-  web_app->SetShortcutInfos(web_app_info.shortcut_infos);
+  web_app->SetShortcutsMenuItemInfos(web_app_info.shortcuts_menu_item_infos);
   web_app->SetDownloadedShortcutsMenuIconsSizes(
       GetDownloadedShortcutsMenuIconsSizes(
           web_app_info.shortcuts_menu_icons_bitmaps));
 
   SetWebAppFileHandlers(web_app_info.file_handlers, web_app.get());
+  SetWebAppProtocolHandlers(web_app_info.protocol_handlers, web_app.get());
+
+  if (base::FeatureList::IsEnabled(features::kDesktopPWAsRunOnOsLogin) &&
+      web_app_info.run_on_os_login) {
+    // TODO(crbug.com/1091964): Obtain actual mode, currently set to the default
+    // (windowed).
+    web_app->SetRunOnOsLoginMode(RunOnOsLoginMode::kWindowed);
+  }
 
   AppId app_id = web_app->app_id();
+  IconBitmaps icon_bitmaps;
+  icon_bitmaps.any = web_app_info.icon_bitmaps_any;
+  icon_bitmaps.maskable = web_app_info.icon_bitmaps_maskable;
   icon_manager_->WriteData(
-      std::move(app_id), web_app_info.icon_bitmaps,
+      std::move(app_id), std::move(icon_bitmaps),
       base::BindOnce(&WebAppInstallFinalizer::OnIconsDataWritten,
                      weak_ptr_factory_.GetWeakPtr(), std::move(commit_callback),
                      std::move(web_app),
@@ -518,6 +562,7 @@ void WebAppInstallFinalizer::OnDatabaseCommitCompletedForUpdate(
     InstallFinalizedCallback callback,
     AppId app_id,
     std::string old_name,
+    const WebApplicationInfo& web_app_info,
     bool success) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!success) {
@@ -525,23 +570,12 @@ void WebAppInstallFinalizer::OnDatabaseCommitCompletedForUpdate(
     return;
   }
 
+  WebAppProviderBase::GetProviderBase(profile_)
+      ->os_integration_manager()
+      .UpdateOsHooks(app_id, old_name, web_app_info);
+
   registrar().NotifyWebAppManifestUpdated(app_id, old_name);
   std::move(callback).Run(app_id, InstallResultCode::kSuccessAlreadyInstalled);
-}
-
-void WebAppInstallFinalizer::OnFallbackInstallFinalized(
-    const AppId& app_in_sync_install_id,
-    InstallFinalizedCallback callback,
-    const AppId& installed_app_id,
-    InstallResultCode code) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  UMA_HISTOGRAM_ENUMERATION("Webapp.SyncInitiatedFallbackInstallResult", code);
-  if (!IsSuccess(code)) {
-    DLOG(ERROR) << "Installation failed for app in sync install. app_id="
-                << app_in_sync_install_id << " code=" << static_cast<int>(code);
-  }
-
-  std::move(callback).Run(installed_app_id, code);
 }
 
 WebAppRegistrar& WebAppInstallFinalizer::GetWebAppRegistrar() const {

@@ -173,6 +173,7 @@ i like that.")
 Ideally, sheriffs should reproduce each bug before triaging, but being efficient
 is also important. It's fine to delegate reproducing bugs in the following
 cases:
+
 * A bug comes from an automated infrastructure (such as ClusterFuzz or Vomit).
 * A bug comes from a reporter with a solid track record of vulnerabilities (e.g.
   prolific external researchers or Google Project Zero team).
@@ -206,10 +207,15 @@ help.
 
 Tips for reproducing bugs:
 
-* Plan A is always to [use ClusterFuzz](clusterfuzz-for-sheriffs.md). As well
-  as reproducing bugs, ClusterFuzz will help you with lots of subsequent
-  bisection and labelling tasks. If it's any kind of crash, DCHECK or
-  memory safety problem, try really hard to get ClusterFuzz to reproduce it.
+* For any sort of a crash, CHECK/DCHECK or memory safety problem
+  [use ClusterFuzz](clusterfuzz-for-sheriffs.md). As well as reproducing bugs,
+  ClusterFuzz will help you with lots of subsequent bisection and labelling
+  tasks.
+* Assume that test cases may be malicious. You should only reproduce bugs
+  on your local machine if you're completely certain that you understand
+  100% of the test case. If not, use a disposable virtual machine. If you're
+  inside Google, a good way to do this is using
+  [Redshell](https://goto.google.com/redshell-for-chrome-sheriffs).
 * When you can't just build from a specific branch locally, check out
   [https://dev.chromium.org/getting-involved/dev-channel](https://dev.chromium.org/getting-involved/dev-channel)
   or
@@ -255,24 +261,39 @@ the regular `Security_Severity-*` label. If the bug is not exploitable, or is
 mitigated, the V8 team will reduce the security severity (to avoid unnecessary
 risk of merging the bug into stable branches).
 
-#### Step 3. [Label, label, label](security-labels.md).
+#### Step 3. Set Impact
+
+Identify the earliest affected branch (stable, beta or head) and set either
+`Security_Impact-Stable`, `Security_Impact-Beta` or `Security_Impact-Head`.
+If you reproduced the bug with ClusterFuzz, it should do this on your behalf.
+
+#### Step 4. [Check other labels](security-labels.md).
 
 Much of Chrome's development and release process depends on bugs having the
 right labels and components. Labels and components are vitally important for
-our metrics, the visibility of bugs, and tracking our progress over time.
+merging the fix to the right releases, and ensuring reporters are credited
+correctly. They also help with metrics and visibility.
 
-Labels to **double-check** (that should already be there if the bug was filed
-using the Security template):
+Labels to **double-check** (the first two should already be there if the bug
+was filed using the Security template):
 
 * **Restrict-View-SecurityTeam**
 * **Type-Bug-Security**
 * **If the reporter wants to remain anonymous or if the bug description or
   comments contain PII**, add **Restrict-View-SecurityEmbargo**.
+* **Security_Severity** - your responsibility as Sheriff.
+* **Security_Impact** - your responsibility as Sheriff.
 
-Generally, see [the Security Labels document](security-labels.md).
+You can expect Sheriffbot to fill in lots of other labels; for example,
+the `M-` label to indicate the target milestone. It's best to allow
+Sheriffbot to add the rest, as its rules have congealed from years of
+accumulated security wisdom. See
+[the Security Labels document](security-labels.md) for an explanation of what
+the labels mean.
 
-**Ensure the comment adequately explains any status changes.** Severity,
-  milestone, and priority assignment generally require explanatory text.
+**If you change anything, add a comment which explains any status
+changes.** Severity, milestone, and priority assignment generally require
+explanatory text.
 
 * Report suspected malicious URLs to SafeBrowsing:
   * Public URL:
@@ -288,7 +309,7 @@ Generally, see [the Security Labels document](security-labels.md).
 ##### Labeling For Chrome On iOS
 
 * Reproduce using iOS device or desktop Safari.
-* Assign severity, impact, milestone, and component labels.
+* Assign severity, impact, and component labels.
 * Label **ExternalDependency**.
 * Label **Hotlist-WebKit**. This label is monitored by Apple friends.
 * File a security bug at [bugs.webkit.org](https://bugs.webkit.org), and CC

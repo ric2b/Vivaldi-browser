@@ -220,9 +220,10 @@ class TrackMainFrameSignal final : public AgentSchedulingStrategy {
       return ShouldUpdatePolicy::kYes;
     }
 
-    if (signal_ == PerAgentSignal::kDelayOnly) {
+    if (signal_ == PerAgentSignal::kDelayOnly)
       delegate_.OnSetTimer(frame_scheduler, delay_);
-    }
+    else if (signal_ == PerAgentSignal::kFirstMeaningfulPaint)
+      SetWaitingForInput(true);
 
     main_frames_.insert(&frame_scheduler);
 
@@ -230,9 +231,6 @@ class TrackMainFrameSignal final : public AgentSchedulingStrategy {
     // non-ordinary ones don't report any signals.
     if (frame_scheduler.IsOrdinary())
       main_frames_waiting_for_signal_.insert(&frame_scheduler);
-
-    if (signal_ == PerAgentSignal::kFirstMeaningfulPaint)
-      SetWaitingForInput(true);
 
     return ShouldUpdatePolicy::kYes;
   }

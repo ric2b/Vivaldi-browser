@@ -19,7 +19,6 @@ class FilePath;
 
 namespace installer {
 
-class InstallationState;
 class InstallerState;
 struct ModifyParams;
 
@@ -70,17 +69,22 @@ installer::InstallStatus UninstallProduct(const ModifyParams& modify_params,
 // installer archive may be deleted. Empty directories will be pruned (or
 // scheduled for pruning after reboot, if necessary).
 //
-// original_state: The installation state of all products on the system.
-// installer_state: State associated with this operation.
+// target_path: Installation directory.
 // setup_exe: The path to the currently running setup.exe, which will be moved
 //     into a temporary directory to allow for deletion of the installation
 //     directory.
 // uninstall_status: the uninstall status so far (may change during invocation).
 void CleanUpInstallationDirectoryAfterUninstall(
-    const InstallationState& original_state,
-    const InstallerState& installer_state,
+    const base::FilePath& target_path,
     const base::FilePath& setup_exe,
     InstallStatus* uninstall_status);
+
+// Moves |setup_exe| to a temporary file, outside of the install folder.
+// Also attempts to change the current directory to the TMP directory.
+// On Windows, each process has a handle to its CWD. If |setup.exe|'s CWD
+// happens to be within the install directory, deletion will fail as a result
+// of the open handle.
+bool MoveSetupOutOfInstallFolder(const base::FilePath& setup_exe);
 
 }  // namespace installer
 

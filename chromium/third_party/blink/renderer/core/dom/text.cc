@@ -254,7 +254,7 @@ static inline bool CanHaveWhitespaceChildren(
   const LayoutObject& parent = *context.parent;
   // <button> and <fieldset> should allow whitespace even though
   // LayoutFlexibleBox doesn't.
-  if (parent.IsLayoutButton() || parent.IsFieldset())
+  if (parent.IsButtonOrNGButton() || parent.IsFieldset())
     return true;
 
   if (parent.IsTable() || parent.IsTableRow() || parent.IsTableSection() ||
@@ -387,7 +387,7 @@ bool NeedsWhitespaceLayoutObject(const ComputedStyle& style) {
 
 void Text::RecalcTextStyle(const StyleRecalcChange change) {
   scoped_refptr<const ComputedStyle> new_style =
-      GetDocument().EnsureStyleResolver().StyleForText(this);
+      GetDocument().GetStyleResolver().StyleForText(this);
   if (LayoutText* layout_text = GetLayoutObject()) {
     const ComputedStyle* layout_parent_style =
         GetLayoutObject()->Parent()->Style();

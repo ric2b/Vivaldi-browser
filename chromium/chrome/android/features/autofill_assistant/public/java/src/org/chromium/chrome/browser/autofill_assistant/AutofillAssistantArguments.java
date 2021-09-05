@@ -93,6 +93,18 @@ public class AutofillAssistantArguments {
     /** Special parameter for user email. */
     private static final String PARAMETER_USER_EMAIL = "USER_EMAIL";
 
+    /** Special parameter for first time user script path. */
+    static final String PARAMETER_TRIGGER_FIRST_TIME_USER = "TRIGGER_FIRST_TIME_USER";
+
+    /** Special parameter for returning user script path. */
+    static final String PARAMETER_TRIGGER_RETURNING_TIME_USER = "TRIGGER_RETURNING_USER";
+
+    /** Special output parameter that should hold which of the trigger scripts was used, if any. */
+    static final String PARAMETER_TRIGGER_SCRIPT_USED = "TRIGGER_SCRIPT_USED";
+
+    /** Special parameter for declaring a user to be in a lite script experiment. */
+    static final String PARAMETER_LITE_SCRIPT_EXPERIMENT = "TRIGGER_SCRIPT_EXPERIMENT";
+
     /**
      * Identifier used by parameters/or special intent that indicates experiments passed from
      * the caller.
@@ -184,6 +196,11 @@ public class AutofillAssistantArguments {
         return mExperimentIds.toString();
     }
 
+    /** Returns whether the lite-script experiment flag is set to true. */
+    public boolean isLiteScriptExperiment() {
+        return getBooleanParameter(PARAMETER_LITE_SCRIPT_EXPERIMENT);
+    }
+
     /**
      * Finds the caller account from the CALLER_ACCOUNT entry.
      * @return caller account or null.
@@ -215,5 +232,10 @@ public class AutofillAssistantArguments {
 
     public String getInitialUrl() {
         return mInitialUrl;
+    }
+
+    public boolean containsTriggerScript() {
+        return !TextUtils.isEmpty(getStringParameter(PARAMETER_TRIGGER_FIRST_TIME_USER))
+                && !TextUtils.isEmpty(getStringParameter(PARAMETER_TRIGGER_RETURNING_TIME_USER));
     }
 }

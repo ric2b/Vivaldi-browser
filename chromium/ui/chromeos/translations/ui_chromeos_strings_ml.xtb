@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">സൺഗ്ലാസുകൾ</translation>
 <translation id="115443833402798225">ഹംഗുൽ അൻമാറ്റീ</translation>
 <translation id="1155759005174418845">കാറ്റലൻ</translation>
+<translation id="1172970565351728681">ഏകദേശം <ph name="REMAINING_TIME" /> ശേഷിക്കുന്നു</translation>
 <translation id="1173894706177603556">പേരുമാറ്റുക</translation>
 <translation id="117624967391683467"><ph name="FILE_NAME" /> പകർത്തുന്നു...</translation>
 <translation id="1178581264944972037">അല്പംനിര്‍ത്തൂ</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">"<ph name="FILENAME" />" എന്ന പേരിൽ ഒരു ഫയൽ ഇതിനകം നിലവിലുണ്ട്. നിങ്ങൾ എന്തുചെയ്യാൻ പോകുന്നു?</translation>
 <translation id="2121825465123208577">വലുപ്പംമാറ്റുക</translation>
 <translation id="2136953289241069843">ലിപ്യന്തരണം (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">"<ph name="PATH" />" തുറക്കാനായില്ല: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">അസാധുവായ പ്രതീകം: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">വിയറ്റ്‌നാമീസ് കീബോർഡ് (TCVN)</translation>
 <translation id="2168214441502403371">പേർഷ്യൻ കീബോർഡ്</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">ഉടമസ്ഥാവകാശം <ph name="DESTINATION_DOMAIN" /> എന്നതിലേക്ക് കൈമാറ്റം ചെയ്യുന്നതാണ്.</translation>
 <translation id="3241720467332021590">ഐറിഷ്</translation>
 <translation id="3245321423178950146">അറിയപ്പെടാത്ത കലാകാരൻ</translation>
+<translation id="3248185426436836442">തീര്‍‌ച്ചപ്പെടുത്തിയിട്ടില്ല</translation>
 <translation id="3252266817569339921">ഫ്രഞ്ച്</translation>
 <translation id="3254434849914415189"><ph name="FILE_TYPE" /> ഫയലുകൾക്കായി ഡിഫോൾട്ട് ആപ്പ് തിരഞ്ഞെടുക്കുക:</translation>
 <translation id="3264582393905923483">സന്ദർഭം</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">റെക്കോർഡ് ചെയ്‌ത വർഷം</translation>
 <translation id="3338239663705455570">സ്ലൊവേനിയന്‍ കീബോര്‍ഡ്</translation>
 <translation id="3353984535370177728">അപ്‌ലോഡുചെയ്യുന്നതിന് ഒരു ഫോൾഡർ തിരഞ്ഞെടുക്കുക</translation>
+<translation id="3356580349448036450">പൂര്‍ത്തിയാക്കൂ</translation>
 <translation id="3399597614303179694">മാസിഡോണിയൻ കീബോർഡ്</translation>
 <translation id="3414856743105198592">നീക്കം ചെയ്യാവുന്ന മീഡിയയിലെ ഫോർമാറ്റിംഗ് എല്ലാ ഡാറ്റയും മായ്‍ക്കും. തുടരാൻ നിങ്ങൾ ആഗ്രഹിക്കുന്നുണ്ടോ?</translation>
 <translation id="3437801641691368414">സൃഷ്‌ടിച്ച സമയം</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">'<ph name="FOLDER_NAME" />'-ലേക്ക് ഫയലുകൾ നീക്കാൻ നിങ്ങൾക്ക് അനുമതിയില്ല.</translation>
 <translation id="3786301125658655746">നിങ്ങൾ ഓഫ്‌ലൈനിലാണ്</translation>
 <translation id="3789841737615482174">ഇന്‍സ്റ്റാൾ ചെയ്യുക</translation>
+<translation id="3793469551756281394">ഏകദേശം <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /> ശേഷിക്കുന്നു</translation>
 <translation id="3798449238516105146">പതിപ്പ്</translation>
 <translation id="3801082500826908679">ഫാറോസി</translation>
 <translation id="3809272675881623365">മുയൽ</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">ഈ ഫോൾഡർ Windows-മായി പങ്കിട്ടു</translation>
 <translation id="4487088045714738411">ബല്‍ജിയന്‍ കീബോര്‍ഡ്</translation>
 <translation id="4522570452068850558">വിശദാംശങ്ങൾ‌</translation>
+<translation id="4542387084127299777">"<ph name="PATH" />" തുറക്കാനായില്ല</translation>
 <translation id="4552678318981539154">കൂടുതൽ സംഭരണം വാങ്ങുക</translation>
 <translation id="4559767610552730302">ബൊക്കെ</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> ഫയൽ</translation>
@@ -511,6 +515,7 @@
 <translation id="6629841649550503054">എല്ലാം <ph name="BEGIN_LINK" />Google ഡ്രൈവിലേക്ക്<ph name="END_LINK" /> ബാക്കപ്പുചെയ്‌തു!</translation>
 <translation id="6643016212128521049">മായ്‌ക്കുക</translation>
 <translation id="6650726141019353908">പിങ്ക് ചിത്രശലഭം</translation>
+<translation id="6657585470893396449">പാസ്‌വേഡ്</translation>
 <translation id="6710213216561001401">മുമ്പത്തേത്</translation>
 <translation id="6718273304615422081">Zip ചെയ്യുന്നു...</translation>
 <translation id="6751256176799620176">ഒരു ഫോൾഡർ തിരഞ്ഞെടുത്തു</translation>
@@ -551,7 +556,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">ഇന്‍സ്റ്റാളേഷന്‍ പരാജയപ്പെട്ടു.</translation>
 <translation id="7040138676081995583">ഇത് ഉപയോഗിച്ച് തുറക്കുക...</translation>
-<translation id="7059566040011178088"><ph name="REMAINING_TIME" />-ൽ കുറവ്</translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> ഇനങ്ങൾ തിരഞ്ഞെടുത്തു</translation>
 <translation id="7106346894903675391">കൂടുതൽ സംഭരണം വാങ്ങുക...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;തിരയൽ ഡ്രൈവ്&lt;/em&gt;</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">ഉപകരണ മോഡൽ</translation>
 <translation id="8208580316430297579">കലാസൃഷ്‌ടി</translation>
 <translation id="8223479393428528563">ഓഫ്‌ലൈൻ ഉപയോഗത്തിനായി ഈ ഫയലുകൾ സംരക്ഷിക്കാൻ, ഓൺലൈനിൽ തിരികെ വന്ന് ഫയലുകൾ റൈറ്റ് ക്ലിക്ക് ചെയ്‌ത്, <ph name="OFFLINE_CHECKBOX_NAME" /> ഓപ്‌ഷൻ തിരഞ്ഞെടുക്കുക.</translation>
-<translation id="8231972167769262174">ഏകദേശം <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">ഉപേക്ഷിക്കുക</translation>
 <translation id="8261506727792406068">ഇല്ലാതാക്കുക</translation>
 <translation id="8269755669432358899">ഫയലുകളുടെ ഫീഡ്ബാക്ക് പാനലുകൾ ചുരുക്കുക</translation>
@@ -725,6 +728,7 @@
 <translation id="9065203028668620118">എഡിറ്റ് ചെയ്യുക</translation>
 <translation id="9099674669267916096">പേജിന്റെ എണ്ണം</translation>
 <translation id="9110990317705400362">നിങ്ങളുടെ ബ്രൗസിംഗ് സുരക്ഷിതമാക്കുന്നതിനുള്ള മാർഗങ്ങൾക്കായി ഞങ്ങൾ സ്ഥിരമായി തിരയുന്നു. മുമ്പ്, എല്ലാ വെബ്‌സൈറ്റും നിങ്ങളുടെ ബ്രൗസറിൽ ഒരു വിപുലീകരണം ചേർക്കുന്നതിന് ആവശ്യപ്പെടുമായിരുന്നു. Google Chrome-ന്റെ ഏറ്റവും പുതിയ പതിപ്പുകളിൽ, വിപുലീകരണങ്ങളുടെ പേജ് മുഖേന ഈ വിപുലീകരണങ്ങൾ ചേർത്ത് അവ ഇൻസ്റ്റാൾ ചെയ്യണമെന്ന് നിങ്ങൾ Chrome-നോട് സ്പഷ്‌ടമായി പറയേണ്ടതുണ്ട്. <ph name="BEGIN_LINK" />കൂടുതലറിയുക<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">അണ്‍ലോക്ക് ചെയ്യുക</translation>
 <translation id="912419004897138677">കൊഡെക്</translation>
 <translation id="9129931661813833980">ഫോൾഡർ പിൻ ചെയ്യൂ</translation>
 <translation id="9130775360844693113">'<ph name="DESTINATION_NAME" />' എന്നതിലെ അംഗങ്ങൾ ഈ ഇനങ്ങളിലേക്ക് ആക്‌സസ് ‌കരസ്ഥമാക്കും.</translation>

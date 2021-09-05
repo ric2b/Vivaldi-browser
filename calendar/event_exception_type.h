@@ -15,20 +15,19 @@
 
 namespace calendar {
 
+class EventRow;
+
 // EventException
 // Holds all information associated with a event exception.
 // Used during event creation
 class EventExceptionType {
  public:
-  EventExceptionType();  // = default;
-  ~EventExceptionType() = default;
-  EventExceptionType(const EventExceptionType& other);  // = default;
+  EventExceptionType();
+  ~EventExceptionType();
+  EventExceptionType(const EventExceptionType& other);
 
-  base::string16 title;
-  base::string16 description;
+  std::shared_ptr<EventRow> event;
   base::Time exception_date;
-  base::Time start;
-  base::Time end;
   bool cancelled;
 };
 

@@ -34,8 +34,6 @@ class VisualRectMappingTest : public PaintTestConfigurations,
       const LayoutObject& object,
       const LayoutBoxModelObject& ancestor,
       const PhysicalRect& expected_visual_rect_in_ancestor) {
-    if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-      EXPECT_EQ(&ancestor, &object.ContainerForPaintInvalidation());
     CheckVisualRect(object, ancestor, object.LocalVisualRect(),
                     expected_visual_rect_in_ancestor);
   }
@@ -691,6 +689,14 @@ TEST_P(VisualRectMappingTest, ContainerAndTargetDifferentFlippedWritingMode) {
   EXPECT_EQ(PhysicalRect(-2, 3, 140, 110), rect);
 }
 
+static const LayoutBoxModelObject& EnclosingCompositedContainer(
+    const LayoutObject& layout_object) {
+  DCHECK(!RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
+  return layout_object.PaintingLayer()
+      ->EnclosingLayerForPaintInvalidationCrossingFrameBoundaries()
+      ->GetLayoutObject();
+}
+
 TEST_P(VisualRectMappingTest,
        DifferentPaintInvalidaitionContainerForAbsolutePosition) {
   GetDocument().GetFrame()->GetSettings()->SetPreferCompositingToLCDTextEnabled(
@@ -719,14 +725,13 @@ TEST_P(VisualRectMappingTest,
   auto* normal_flow =
       To<LayoutBlock>(GetLayoutObjectByElementId("normal-flow"));
   if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    EXPECT_EQ(scroller, &normal_flow->ContainerForPaintInvalidation());
+    EXPECT_EQ(scroller, &EnclosingCompositedContainer(*normal_flow));
 
   PhysicalRect normal_flow_visual_rect = normal_flow->LocalVisualRect();
   EXPECT_EQ(PhysicalRect(0, 0, 2000, 2000), normal_flow_visual_rect);
   PhysicalRect rect = normal_flow_visual_rect;
   EXPECT_TRUE(normal_flow->MapToVisualRectInAncestorSpace(scroller, rect));
   EXPECT_EQ(PhysicalRect(0, 0, 2000, 2000), rect);
-  EXPECT_EQ(EnclosingIntRect(rect), normal_flow->FirstFragment().VisualRect());
 
   auto* stacking_context =
       To<LayoutBlock>(GetLayoutObjectByElementId("stacking-context"));
@@ -762,7 +767,7 @@ TEST_P(VisualRectMappingTest,
   auto* absolute = To<LayoutBlock>(GetLayoutObjectByElementId("absolute"));
   auto* container = To<LayoutBlock>(GetLayoutObjectByElementId("container"));
   if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    EXPECT_EQ(absolute->View(), &absolute->ContainerForPaintInvalidation());
+    EXPECT_EQ(absolute->View(), &EnclosingCompositedContainer(*absolute));
   EXPECT_EQ(container, absolute->Container());
 
   PhysicalRect absolute_visual_rect = absolute->LocalVisualRect();
@@ -833,15 +838,13 @@ TEST_P(VisualRectMappingTest, FloatUnderInline) {
   } else {
     EXPECT_EQ(PhysicalRect(66, 55, 33, 44), rect);
   }
-  EXPECT_EQ(EnclosingIntRect(rect), target->FirstFragment().VisualRect());
 
   rect = target_visual_rect;
 
-  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    CheckVisualRect(*target, *span, rect, PhysicalRect(0, 0, 33, 44));
-  } else {
+  if (RuntimeEnabledFeatures::LayoutNGEnabled())
+    CheckVisualRect(*target, *span, rect, PhysicalRect(200, 100, 33, 44));
+  else
     CheckVisualRect(*target, *span, rect, PhysicalRect(-200, -100, 33, 44));
-  }
 }
 
 TEST_P(VisualRectMappingTest, FloatUnderInlineVerticalRL) {
@@ -871,14 +874,13 @@ TEST_P(VisualRectMappingTest, FloatUnderInlineVerticalRL) {
   } else {
     EXPECT_EQ(PhysicalRect(66 + 600 - 33, 55, 33, 44), rect);
   }
-  EXPECT_EQ(EnclosingIntRect(rect), target->FirstFragment().VisualRect());
 
   // An inline object's coordinate space is its containing block's coordinate
   // space shifted by the inline's relative offset. |target|'s left is 100 from
   // the right edge of the coordinate space whose width is 600.
   rect = target_visual_rect;
   if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    CheckVisualRect(*target, *span, rect, PhysicalRect(600 - 33, 0, 33, 44));
+    CheckVisualRect(*target, *span, rect, PhysicalRect(367, 100, 33, 44));
   } else {
     CheckVisualRect(*target, *span, rect,
                     PhysicalRect(600 + 200 - 33, -100, 33, 44));
@@ -905,10 +907,12 @@ TEST_P(VisualRectMappingTest, InlineBlock) {
   auto rect = target_visual_rect;
   EXPECT_TRUE(target->MapToVisualRectInAncestorSpace(&GetLayoutView(), rect));
   EXPECT_EQ(PhysicalRect(266, 155, 33, 44), rect);
-  EXPECT_EQ(EnclosingIntRect(rect), target->FirstFragment().VisualRect());
 
   rect = target_visual_rect;
-  CheckVisualRect(*target, *span, rect, PhysicalRect(0, 0, 33, 44));
+  if (RuntimeEnabledFeatures::LayoutNGEnabled())
+    CheckVisualRect(*target, *span, rect, PhysicalRect(200, 100, 33, 44));
+  else
+    CheckVisualRect(*target, *span, rect, PhysicalRect(0, 0, 33, 44));
 }
 
 TEST_P(VisualRectMappingTest, InlineBlockVerticalRL) {
@@ -932,13 +936,15 @@ TEST_P(VisualRectMappingTest, InlineBlockVerticalRL) {
   auto rect = target_visual_rect;
   EXPECT_TRUE(target->MapToVisualRectInAncestorSpace(&GetLayoutView(), rect));
   EXPECT_EQ(PhysicalRect(66 + 600 - 200 - 33, 155, 33, 44), rect);
-  EXPECT_EQ(EnclosingIntRect(rect), target->FirstFragment().VisualRect());
 
   // An inline object's coordinate space is its containing block's coordinate
   // space shifted by the inline's relative offset. |target|'s left is -33 from
   // the right edge of the coordinate space whose width is 600.
   rect = target_visual_rect;
-  CheckVisualRect(*target, *span, rect, PhysicalRect(600 - 33, 0, 33, 44));
+  if (RuntimeEnabledFeatures::LayoutNGEnabled())
+    CheckVisualRect(*target, *span, rect, PhysicalRect(367, 100, 33, 44));
+  else
+    CheckVisualRect(*target, *span, rect, PhysicalRect(600 - 33, 0, 33, 44));
 }
 
 TEST_P(VisualRectMappingTest, AbsoluteUnderRelativeInline) {
@@ -961,10 +967,12 @@ TEST_P(VisualRectMappingTest, AbsoluteUnderRelativeInline) {
   auto rect = target_visual_rect;
   EXPECT_TRUE(target->MapToVisualRectInAncestorSpace(&GetLayoutView(), rect));
   EXPECT_EQ(PhysicalRect(66 + 200 + 100, 55 + 100 + 50, 33, 44), rect);
-  EXPECT_EQ(EnclosingIntRect(rect), target->FirstFragment().VisualRect());
 
   rect = target_visual_rect;
-  CheckVisualRect(*target, *span, rect, PhysicalRect(100, 50, 33, 44));
+  if (RuntimeEnabledFeatures::LayoutNGEnabled())
+    CheckVisualRect(*target, *span, rect, PhysicalRect(300, 150, 33, 44));
+  else
+    CheckVisualRect(*target, *span, rect, PhysicalRect(100, 50, 33, 44));
 }
 
 TEST_P(VisualRectMappingTest, AbsoluteUnderRelativeInlineVerticalRL) {
@@ -988,13 +996,15 @@ TEST_P(VisualRectMappingTest, AbsoluteUnderRelativeInlineVerticalRL) {
   auto rect = target_visual_rect;
   EXPECT_TRUE(target->MapToVisualRectInAncestorSpace(&GetLayoutView(), rect));
   EXPECT_EQ(PhysicalRect(66 + 600 - 200 + 100, 55 + 100 + 50, 33, 44), rect);
-  EXPECT_EQ(EnclosingIntRect(rect), target->FirstFragment().VisualRect());
 
   // An inline object's coordinate space is its containing block's coordinate
   // space shifted by the inline's relative offset. |target|'s left is 100 from
   // the right edge of the coordinate space whose width is 600.
   rect = target_visual_rect;
-  CheckVisualRect(*target, *span, rect, PhysicalRect(600 + 100, 50, 33, 44));
+  if (RuntimeEnabledFeatures::LayoutNGEnabled())
+    CheckVisualRect(*target, *span, rect, PhysicalRect(500, 150, 33, 44));
+  else
+    CheckVisualRect(*target, *span, rect, PhysicalRect(600 + 100, 50, 33, 44));
 }
 
 TEST_P(VisualRectMappingTest, ShouldAccountForPreserve3d) {

@@ -8,6 +8,7 @@ import android.support.test.InstrumentationRegistry;
 
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -15,10 +16,13 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.safe_browsing.SafeBrowsingApiBridge;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
@@ -28,13 +32,12 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.base.PageTransition;
 
-import java.util.concurrent.Callable;
-
 /**
  * Test integration with the SafeBrowsingApiHandler.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@Features.DisableFeatures({ChromeFeatureList.SAFE_BROWSING_DELAYED_WARNINGS})
 public final class SafeBrowsingTest {
     @Rule
     public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
@@ -48,16 +51,19 @@ public final class SafeBrowsingTest {
      * that would indicate this, unfortunately.
      */
     private void waitForInterstitial(final boolean shouldBeShown) {
-        CriteriaHelper.pollUiThread(Criteria.equals(shouldBeShown, new Callable<Boolean>() {
-            @Override
-            public Boolean call() {
-                // TODO(carlosil): For now, we check the presence of an interstitial through the
-                // title since isShowingInterstitialPage does not work with committed interstitials.
-                // Once we fully migrate to committed interstitials, this should be changed to a
-                // more robust check.
-                return getWebContents().getTitle().equals("Security error");
+        CriteriaHelper.pollUiThread(() -> {
+            // TODO(carlosil): For now, we check the presence of an interstitial through the
+            // title since isShowingInterstitialPage does not work with committed interstitials.
+            // Once we fully migrate to committed interstitials, this should be changed to a
+            // more robust check.
+            String title = getWebContents().getTitle();
+            String errorTitle = "Security error";
+            if (shouldBeShown) {
+                Criteria.checkThat(title, Matchers.is(errorTitle));
+            } else {
+                Criteria.checkThat(title, Matchers.not(errorTitle));
             }
-        }));
+        });
     }
 
     private WebContents getWebContents() {

@@ -9,16 +9,17 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "content/browser/loader/navigation_loader_interceptor.h"
 #include "content/browser/loader/single_request_url_loader_factory.h"
 #include "content/browser/navigation_subresource_loader_params.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/dedicated_worker_id.h"
-#include "content/public/browser/shared_worker_id.h"
+#include "content/public/browser/service_worker_client_info.h"
 #include "content/public/common/child_process_host.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_provider.mojom.h"
 
@@ -49,8 +50,7 @@ class CONTENT_EXPORT ServiceWorkerMainResourceLoaderInterceptor final
   static std::unique_ptr<NavigationLoaderInterceptor> CreateForWorker(
       const network::ResourceRequest& resource_request,
       int process_id,
-      DedicatedWorkerId dedicated_worker_id,
-      SharedWorkerId shared_worker_id,
+      const DedicatedOrSharedWorkerToken& worker_token,
       base::WeakPtr<ServiceWorkerMainResourceHandle> navigation_handle);
 
   ~ServiceWorkerMainResourceLoaderInterceptor() override;
@@ -90,8 +90,7 @@ class CONTENT_EXPORT ServiceWorkerMainResourceLoaderInterceptor final
       bool are_ancestors_secure,
       int frame_tree_node_id,
       int process_id,
-      DedicatedWorkerId dedicated_worker_id,
-      SharedWorkerId shared_worker_id);
+      const DedicatedOrSharedWorkerToken* worker_token);
 
   // Returns true if a ServiceWorkerMainResourceLoaderInterceptor should be
   // created for a navigation to |url|.
@@ -118,16 +117,21 @@ class CONTENT_EXPORT ServiceWorkerMainResourceLoaderInterceptor final
   const blink::mojom::ResourceType resource_type_;
   const bool skip_service_worker_;
 
-  // For windows:
+  // For window clients:
   // Whether all ancestor frames of the frame that is navigating have a secure
   // origin. True for main frames.
   const bool are_ancestors_secure_;
+  // If the intercepted resource load is on behalf
+  // of a window, the |frame_tree_node_id_| will be set, |worker_token_| will be
+  // base::nullopt, and |process_id_| will be invalid.
   const int frame_tree_node_id_;
 
-  // For web workers:
+  // For web worker clients:
+  // If the intercepted resource load is on behalf of a worker the
+  // |frame_tree_node_id_| will be invalid, and both |process_id_| and
+  // |worker_token_| will be set.
   const int process_id_;
-  const DedicatedWorkerId dedicated_worker_id_;
-  const SharedWorkerId shared_worker_id_;
+  const base::Optional<DedicatedOrSharedWorkerToken> worker_token_;
 
   base::Optional<SubresourceLoaderParams> subresource_loader_params_;
 

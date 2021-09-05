@@ -20,11 +20,15 @@ public @interface SettingType {
     /**
      * Allows the embedder to set whether it wants to disable/enable the Safe Browsing functionality
      * (which checks that the loaded URLs are safe). Safe Browsing is enabled by default.
+     *
+     * @since 84
      */
     int BASIC_SAFE_BROWSING_ENABLED =
             org.chromium.weblayer_private.interfaces.SettingType.BASIC_SAFE_BROWSING_ENABLED;
     /**
      * Allows the embedder to enable URL-Keyed Metrics. Disabled by default.
+     *
+     * @since 85
      */
     int UKM_ENABLED = org.chromium.weblayer_private.interfaces.SettingType.UKM_ENABLED;
 
@@ -58,4 +62,12 @@ public @interface SettingType {
      */
     int REAL_TIME_SAFE_BROWSING_ENABLED =
             org.chromium.weblayer_private.interfaces.SettingType.REAL_TIME_SAFE_BROWSING_ENABLED;
+
+    /**
+     * Allows the embedder to enable/disable NoStatePrefetch. Enabled by default.
+     *
+     * @since 86
+     */
+    int NETWORK_PREDICTION_ENABLED =
+            org.chromium.weblayer_private.interfaces.SettingType.NETWORK_PREDICTION_ENABLED;
 }

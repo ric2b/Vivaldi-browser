@@ -9,6 +9,10 @@ from base_generator import Color, Modes, BaseGenerator, VariableType
 class ViewsStyleGenerator(BaseGenerator):
     '''Generator for Views Variables'''
 
+    @staticmethod
+    def GetName():
+        return 'Views'
+
     def Render(self):
         self.Validate()
         return self.ApplyTemplate(self, 'views_generator_h.tmpl',
@@ -30,7 +34,7 @@ class ViewsStyleGenerator(BaseGenerator):
             'Modes': Modes,
             'out_file_path': None,
             'namespace_name': None,
-            'in_files': self.in_files,
+            'in_files': self.in_file_to_context.keys(),
         }
         if self.out_file_path:
             globals['out_file_path'] = self.out_file_path

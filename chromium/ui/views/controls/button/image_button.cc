@@ -172,7 +172,7 @@ gfx::ImageSkia ImageButton::GetImageToPaint() {
         images_[STATE_NORMAL], images_[STATE_HOVERED],
         hover_animation().GetCurrentValue());
   } else {
-    img = images_[state()];
+    img = images_[GetState()];
   }
 
   return !img.isNull() ? img : images_[STATE_NORMAL];
@@ -233,7 +233,7 @@ void ToggleImageButton::SetToggledImage(ButtonState image_state,
                                         const gfx::ImageSkia* image) {
   if (toggled_) {
     images_[image_state] = image ? *image : gfx::ImageSkia();
-    if (state() == image_state)
+    if (GetState() == image_state)
       SchedulePaint();
   } else {
     alternate_images_[image_state] = image ? *image : gfx::ImageSkia();
@@ -242,6 +242,10 @@ void ToggleImageButton::SetToggledImage(ButtonState image_state,
 
 void ToggleImageButton::SetToggledTooltipText(const base::string16& tooltip) {
   toggled_tooltip_text_ = tooltip;
+}
+
+void ToggleImageButton::SetToggledAccessibleName(const base::string16& name) {
+  toggled_accessible_name_ = name;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -260,7 +264,7 @@ void ToggleImageButton::SetImage(ButtonState image_state,
     alternate_images_[image_state] = image;
   } else {
     images_[image_state] = image;
-    if (state() == image_state)
+    if (GetState() == image_state)
       SchedulePaint();
   }
   PreferredSizeChanged();
@@ -277,7 +281,13 @@ base::string16 ToggleImageButton::GetTooltipText(const gfx::Point& p) const {
 
 void ToggleImageButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   ImageButton::GetAccessibleNodeData(node_data);
-  node_data->SetName(GetTooltipText(gfx::Point()));
+  if (!toggled_)
+    return;
+
+  if (!toggled_accessible_name_.empty())
+    node_data->SetName(toggled_accessible_name_);
+  else if (!toggled_tooltip_text_.empty())
+    node_data->SetName(toggled_tooltip_text_);
 
   // Use the visual pressed image as a cue for making this control into an
   // accessible toggle button.
@@ -287,10 +297,6 @@ void ToggleImageButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
     node_data->SetCheckedState(toggled_ ? ax::mojom::CheckedState::kTrue
                                         : ax::mojom::CheckedState::kFalse);
   }
-}
-
-bool ToggleImageButton::toggled_for_testing() const {
-  return toggled_;
 }
 
 DEFINE_ENUM_CONVERTERS(ImageButton::HorizontalAlignment,

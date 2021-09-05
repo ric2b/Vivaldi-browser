@@ -13,6 +13,7 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/request_filter/request_filter.h"
 #include "content/public/browser/content_browser_client.h"
+#include "net/base/completion_once_callback.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/public/mojom/websocket.mojom-forward.h"
 

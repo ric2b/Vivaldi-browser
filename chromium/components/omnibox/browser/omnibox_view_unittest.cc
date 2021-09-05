@@ -77,8 +77,8 @@ TEST_F(OmniboxViewTest, TestStripSchemasUnsafeForPaste) {
       "javAscript:alert(1)",                          // Unsafe JS URL.
       "javAscript:javascript:alert(2)",               // Single strip unsafe.
       "jaVascript:\njavaScript:\x01 alert(3) \x01",   // Single strip unsafe.
-      "\x01\x02\x03\x04\x05\x06\x07\x08\x09\x10\x11\x12\x13\x14\x15\x16\x17"
-      "\x18\x19 JavaScript:alert(4)",  // Leading control chars unsafe.
+      ("\x01\x02\x03\x04\x05\x06\x07\x08\x09\x10\x11\x12\x13\x14\x15\x16\x17"
+       "\x18\x19 JavaScript:alert(4)"),  // Leading control chars unsafe.
       "\x01\x02javascript:\x03\x04JavaScript:alert(5)"  // Embedded control
                                                         // characters unsafe.
   };
@@ -272,7 +272,8 @@ TEST_F(OmniboxViewTest, GetStateChanges_DeletedText_RichAutocompletion) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeatureWithParameters(
       omnibox::kRichAutocompletion,
-      {{OmniboxFieldTrial::kRichAutocompletionAutocompleteNonPrefix, "true"}});
+      {{OmniboxFieldTrial::kRichAutocompletionAutocompleteNonPrefixParam,
+        "true"}});
 
   // Cases with single selection
 

@@ -84,12 +84,16 @@ cbor::Value AsCBOR(const AuthenticatorSupportedOptions& options) {
   }
 
   if (options.supports_pin_uv_auth_token) {
-    option_map.emplace(kUvTokenMapKey, true);
+    option_map.emplace(kPinUvTokenMapKey, true);
   }
 
   if (options.default_cred_protect != CredProtect::kUVOptional) {
     option_map.emplace(kDefaultCredProtectKey,
                        static_cast<int64_t>(options.default_cred_protect));
+  }
+
+  if (options.enterprise_attestation) {
+    option_map.emplace(kEnterpriseAttestationKey, true);
   }
 
   return cbor::Value(std::move(option_map));

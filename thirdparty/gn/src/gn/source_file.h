@@ -33,6 +33,7 @@ class SourceFile {
     SOURCE_H,
     SOURCE_M,
     SOURCE_MM,
+    SOURCE_MODULEMAP,
     SOURCE_S,
     SOURCE_RC,
     SOURCE_O,  // Object files can be inputs, too. Also counts .obj.
@@ -40,6 +41,8 @@ class SourceFile {
 
     SOURCE_RS,
     SOURCE_GO,
+    SOURCE_SWIFT,
+    SOURCE_SWIFTMODULE,
 
     // Must be last.
     SOURCE_NUMTYPES,
@@ -163,6 +166,7 @@ class SourceFileTypeSet {
   bool CSourceUsed() const;
   bool RustSourceUsed() const;
   bool GoSourceUsed() const;
+  bool SwiftSourceUsed() const;
 
   bool MixedSourceUsed() const;
 

@@ -384,8 +384,8 @@ interesting attributes supported today.
     a response. This makes it so that callers of the method can wait
     synchronously for a response. See
     [Synchronous Calls](/mojo/public/cpp/bindings/README.md#Synchronous-Calls)
-    in the C++ bindings documentation. Note that sync calls are not currently
-    supported in other target languages.
+    in the C++ bindings documentation. Note that sync methods are only actually
+    synchronous when called from C++.
 
 **`[Extensible]`**
 :   The `Extensible` attribute may be specified for any enum definition. This
@@ -589,7 +589,9 @@ the following hard constraints:
     an ordinal value, all fields or methods must explicitly specify an ordinal
     value.
 * For an *N*-field struct or *N*-method interface, the set of explicitly
-    assigned ordinal values must be limited to the range *[0, N-1]*.
+    assigned ordinal values must be limited to the range *[0, N-1]*. Interfaces
+    should include placeholder methods to fill the ordinal positions of removed
+    methods (for example "Unused_Message_7@7()" or "RemovedMessage@42()", etc).
 
 You may reorder fields, but you must ensure that the ordinal values of existing
 fields remain unchanged. For example, the following struct remains

@@ -55,7 +55,6 @@ namespace {
 void LaunchApp(Profile* profile, std::string app_id) {
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile);
-  DCHECK(proxy);
 
   proxy->Launch(app_id, ui::EventFlags::EF_NONE,
                 apps::mojom::LaunchSource::kFromChromeInternal,
@@ -143,6 +142,8 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   // See crbug.com/752361
   registry->RegisterBooleanPref(prefs::kFirstRunTutorialShown, false);
   registry->RegisterBooleanPref(prefs::kHelpAppShouldShowGetStarted, false);
+  registry->RegisterBooleanPref(prefs::kHelpAppShouldShowParentalControl,
+                                false);
   registry->RegisterBooleanPref(prefs::kHelpAppTabletModeDuringOobe, false);
 }
 
@@ -155,6 +156,9 @@ bool ShouldLaunchHelpApp(Profile* profile) {
                                   ShouldShowGetStarted(profile, user_manager));
   profile->GetPrefs()->SetBoolean(prefs::kHelpAppTabletModeDuringOobe,
                                   ash::TabletMode::Get()->InTabletMode());
+
+  if (WizardController::default_controller())
+    WizardController::default_controller()->PrepareFirstRunPrefs();
 
   if (!IsRegularUserOrSupervisedChild(user_manager))
     return false;
@@ -196,12 +200,7 @@ bool ShouldLaunchHelpApp(Profile* profile) {
 }
 
 void LaunchHelpApp(Profile* profile) {
-  if (base::FeatureList::IsEnabled(chromeos::features::kHelpAppV2)) {
-    AppLauncher::LaunchHelpAfterSWALoad(profile);
-    return;
-  }
-
-  LaunchApp(profile, extension_misc::kGeniusAppId);
+  AppLauncher::LaunchHelpAfterSWALoad(profile);
 }
 
 void LaunchTutorial() {

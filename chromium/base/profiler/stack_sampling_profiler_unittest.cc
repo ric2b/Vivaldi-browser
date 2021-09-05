@@ -47,7 +47,8 @@
 
 // STACK_SAMPLING_PROFILER_SUPPORTED is used to conditionally enable the tests
 // below for supported platforms (currently Win x64 and Mac x64).
-#if defined(_WIN64) || (defined(OS_MACOSX) && !defined(OS_IOS)) || \
+#if (defined(OS_WIN) && defined(ARCH_CPU_X86_64)) || \
+    (defined(OS_MAC) && defined(ARCH_CPU_X86_64)) || \
     (defined(OS_ANDROID) && BUILDFLAG(ENABLE_ARM_CFI_TABLE))
 #define STACK_SAMPLING_PROFILER_SUPPORTED 1
 #endif
@@ -187,7 +188,7 @@ void SynchronousUnloadNativeLibrary(NativeLibrary library) {
          ::GetLastError() != ERROR_MOD_NOT_FOUND) {
     PlatformThread::Sleep(TimeDelta::FromMilliseconds(1));
   }
-#elif defined(OS_MACOSX) || defined(OS_ANDROID)
+#elif defined(OS_APPLE) || defined(OS_ANDROID)
 // Unloading a library on Mac and Android is synchronous.
 #else
   NOTIMPLEMENTED();
@@ -215,6 +216,7 @@ struct TestProfilerInfo {
                        completed.Signal();
                      })),
                  CreateCoreUnwindersForTesting(module_cache),
+                 RepeatingClosure(),
                  delegate) {}
 
   // The order here is important to ensure objects being referenced don't get
@@ -348,7 +350,8 @@ void TestLibraryUnload(bool wait_until_unloaded, ModuleCache* module_cache) {
                 profile = std::move(result_profile);
                 sampling_thread_completed.Signal();
               })),
-      CreateCoreUnwindersForTesting(module_cache), &test_delegate);
+      CreateCoreUnwindersForTesting(module_cache), RepeatingClosure(),
+      &test_delegate);
 
   profiler.Start();
 
@@ -444,10 +447,14 @@ class StackSamplingProfilerTest : public testing::Test {
 // Checks that the basic expected information is present in sampled frames.
 //
 // macOS ASAN is not yet supported - crbug.com/718628.
-#if !(defined(ADDRESS_SANITIZER) && defined(OS_MACOSX))
-#define MAYBE_Basic Basic
-#else
+//
+// TODO(https://crbug.com/1100175): Enable this test again for Android with
+// ASAN. This is now disabled because the android-asan bot fails.
+#if (defined(ADDRESS_SANITIZER) && defined(OS_APPLE)) || \
+    (defined(ADDRESS_SANITIZER) && defined(OS_ANDROID))
 #define MAYBE_Basic DISABLED_Basic
+#else
+#define MAYBE_Basic Basic
 #endif
 PROFILER_TEST_F(StackSamplingProfilerTest, MAYBE_Basic) {
   UnwindScenario scenario(BindRepeating(&CallWithPlainFunction));
@@ -491,7 +498,7 @@ class TestAuxUnwinder : public Unwinder {
 // macOS ASAN is not yet supported - crbug.com/718628.
 // Android is not supported since Chrome unwind tables don't support dynamic
 // frames.
-#if (defined(ADDRESS_SANITIZER) && defined(OS_MACOSX)) || defined(OS_ANDROID)
+#if (defined(ADDRESS_SANITIZER) && defined(OS_APPLE)) || defined(OS_ANDROID)
 #define MAYBE_Alloca DISABLED_Alloca
 #else
 #define MAYBE_Alloca Alloca
@@ -511,8 +518,11 @@ PROFILER_TEST_F(StackSamplingProfilerTest, MAYBE_Alloca) {
 // macOS ASAN is not yet supported - crbug.com/718628.
 // Android is not supported when EXCLUDE_UNWIND_TABLES |other_library| doesn't
 // have unwind tables.
-#if (defined(ADDRESS_SANITIZER) && defined(OS_MACOSX)) || \
-    (defined(OS_ANDROID) && BUILDFLAG(EXCLUDE_UNWIND_TABLES))
+// TODO(https://crbug.com/1100175): Enable this test again for Android with
+// ASAN. This is now disabled because the android-asan bot fails.
+#if (defined(ADDRESS_SANITIZER) && defined(OS_APPLE)) ||         \
+    (defined(OS_ANDROID) && BUILDFLAG(EXCLUDE_UNWIND_TABLES)) || \
+    (defined(OS_ANDROID) && defined(ADDRESS_SANITIZER))
 #define MAYBE_OtherLibrary DISABLED_OtherLibrary
 #else
 #define MAYBE_OtherLibrary OtherLibrary
@@ -534,8 +544,11 @@ PROFILER_TEST_F(StackSamplingProfilerTest, MAYBE_OtherLibrary) {
 // Unloading is synchronous on the Mac, so this test is inapplicable.
 // Android is not supported when EXCLUDE_UNWIND_TABLES |other_library| doesn't
 // have unwind tables.
-#if defined(OS_MACOSX) || \
-    (defined(OS_ANDROID) && BUILDFLAG(EXCLUDE_UNWIND_TABLES))
+// TODO(https://crbug.com/1100175): Enable this test again for Android with
+// ASAN. This is now disabled because the android-asan bot fails.
+#if defined(OS_APPLE) ||                                         \
+    (defined(OS_ANDROID) && BUILDFLAG(EXCLUDE_UNWIND_TABLES)) || \
+    (defined(OS_ANDROID) && defined(ADDRESS_SANITIZER))
 #define MAYBE_UnloadingLibrary DISABLED_UnloadingLibrary
 #else
 #define MAYBE_UnloadingLibrary UnloadingLibrary
@@ -548,7 +561,7 @@ PROFILER_TEST_F(StackSamplingProfilerTest, MAYBE_UnloadingLibrary) {
 // produces a stack, and doesn't crash.
 // macOS ASAN is not yet supported - crbug.com/718628.
 // Android is not supported since modules are found before unwinding.
-#if (defined(ADDRESS_SANITIZER) && defined(OS_MACOSX)) || defined(OS_ANDROID)
+#if (defined(ADDRESS_SANITIZER) && defined(OS_APPLE)) || defined(OS_ANDROID)
 #define MAYBE_UnloadedLibrary DISABLED_UnloadedLibrary
 #else
 #define MAYBE_UnloadedLibrary UnloadedLibrary
@@ -1445,7 +1458,7 @@ PROFILER_TEST_F(StackSamplingProfilerTest,
                       profile = std::move(result_profile);
                     })),
                 CreateCoreUnwindersForTesting(module_cache()),
-                &post_sample_invoker);
+                RepeatingClosure(), &post_sample_invoker);
             profiler.Start();
             // Wait for 5 samples to be collected.
             for (int i = 0; i < 5; ++i)

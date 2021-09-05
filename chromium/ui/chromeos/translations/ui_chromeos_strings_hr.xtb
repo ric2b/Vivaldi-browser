@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Sunčane naočale</translation>
 <translation id="115443833402798225">hangul ahnmatae</translation>
 <translation id="1155759005174418845">Katalanski</translation>
+<translation id="1172970565351728681">Preostalo je oko <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Preimenuj</translation>
 <translation id="117624967391683467">Kopiranje datoteke <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">Pauziraj</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Datoteka pod nazivom "<ph name="FILENAME" />" već postoji. Što želite napraviti?</translation>
 <translation id="2121825465123208577">Promijeni veličinu</translation>
 <translation id="2136953289241069843">transliteracija (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Nije moguće otvoriti "<ph name="PATH" />": <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Nevažeći znak: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">vijetnamska tipkovnica (TCVN)</translation>
 <translation id="2168214441502403371">perzijska tipkovnica</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Vlasništvo će se prenijeti na domenu <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">Irski</translation>
 <translation id="3245321423178950146">Nepoznati izvođač</translation>
+<translation id="3248185426436836442">Na čekanju</translation>
 <translation id="3252266817569339921">Francuski</translation>
 <translation id="3254434849914415189">Odaberite zadanu aplikaciju za <ph name="FILE_TYPE" /> datoteke:</translation>
 <translation id="3264582393905923483">Kontekst</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Godina snimanja</translation>
 <translation id="3338239663705455570">Slovenska tipkovnica</translation>
 <translation id="3353984535370177728">Odaberite mapu za prijenos</translation>
+<translation id="3356580349448036450">Dovršeno</translation>
 <translation id="3399597614303179694">Makedonska tipkovnica</translation>
 <translation id="3414856743105198592">Formatiranjem izmjenjivih medija izbrisat će se svi podaci. Želite li nastaviti?</translation>
 <translation id="3437801641691368414">Vrijeme izrade</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Nemate dopuštenje za premještanje datoteka u mapu "<ph name="FOLDER_NAME" />".</translation>
 <translation id="3786301125658655746">Izvan mreže ste</translation>
 <translation id="3789841737615482174">Instaliraj</translation>
+<translation id="3793469551756281394">Preostalo je oko <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /></translation>
 <translation id="3798449238516105146">Verzija</translation>
 <translation id="3801082500826908679">Farerska</translation>
 <translation id="3809272675881623365">Zec</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Mapa se dijeli s Windowsima</translation>
 <translation id="4487088045714738411">Belgijska tipkovnica</translation>
 <translation id="4522570452068850558">Detalji</translation>
+<translation id="4542387084127299777">Otvaranje puta "<ph name="PATH" />" nije uspjelo</translation>
 <translation id="4552678318981539154">Kupite još prostora za pohranu</translation>
 <translation id="4559767610552730302">Bokeh</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> datoteka</translation>
@@ -511,6 +515,7 @@
 <translation id="6629841649550503054">Sve je sigurnosno spremljeno na <ph name="BEGIN_LINK" />Google disk!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Izbriši</translation>
 <translation id="6650726141019353908">Ružičasti leptir</translation>
+<translation id="6657585470893396449">Zaporka</translation>
 <translation id="6710213216561001401">Prethodno</translation>
 <translation id="6718273304615422081">Komprimiranje...</translation>
 <translation id="6751256176799620176">Odabrana je 1 mapa</translation>
@@ -551,7 +556,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Instalacija nije uspjela.</translation>
 <translation id="7040138676081995583">Otvori aplikacijom...</translation>
-<translation id="7059566040011178088">Manje od <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923">Broj odabranih stavki: <ph name="COUNT" /></translation>
 <translation id="7106346894903675391">Kupite još prostora za pohranu...</translation>
 <translation id="7126604456862387217">"&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;" – &lt;em&gt;pretraži Disk&lt;/em&gt;</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">Model uređaja</translation>
 <translation id="8208580316430297579">Slika</translation>
 <translation id="8223479393428528563">Da biste spremili te datoteke za izvanmrežnu upotrebu, ponovo se povežite s internetom, kliknite datoteke desnom tipkom i odaberite opciju <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Približno <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Prekini</translation>
 <translation id="8261506727792406068">Izbriši</translation>
 <translation id="8269755669432358899">Sažmi ploče povratnih informacija o datotekama</translation>
@@ -725,6 +728,7 @@
 <translation id="9065203028668620118">Uredi</translation>
 <translation id="9099674669267916096">Broj stranica</translation>
 <translation id="9110990317705400362">Neprestano nastojimo učiniti pregledavanje interneta sigurnijim. Ranije je bilo koja web-lokacija mogla tražiti da dodate proširenje u preglednik. Najnovije verzije Google Chromea traže da izričito odobrite instalaciju ovih proširenja tako da ih dodate na stranici Proširenja. <ph name="BEGIN_LINK" />Saznajte više<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Otključaj</translation>
 <translation id="912419004897138677">Kodek</translation>
 <translation id="9129931661813833980">Prikvači mapu</translation>
 <translation id="9130775360844693113">Članovi grupe "<ph name="DESTINATION_NAME" />" dobit će pristup tim stavkama.</translation>

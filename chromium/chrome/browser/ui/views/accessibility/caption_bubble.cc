@@ -13,6 +13,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/accessibility/caption_controller.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/grit/generated_resources.h"
@@ -43,19 +44,21 @@
 #include "ui/views/view_class_properties.h"
 
 namespace {
+
 // Formatting constants
 static constexpr int kLineHeightDip = 24;
-static constexpr int kNumLines = 2;
-static constexpr int kCornerRadiusDip = 8;
-static constexpr int kHorizontalMarginsDip = 6;
-static constexpr int kVerticalMarginsDip = 8;
-static constexpr int kCloseButtonMargin = 4;
+static constexpr int kNumLinesCollapsed = 2;
+static constexpr int kNumLinesExpanded = 8;
+static constexpr int kCornerRadiusDip = 4;
+static constexpr int kSidePaddingDip = 18;
+static constexpr int kButtonDip = 16;
+static constexpr int kButtonCircleHighlightPaddingDip = 2;
+// The preferred width of the bubble within its anchor.
 static constexpr double kPreferredAnchorWidthPercentage = 0.8;
-static constexpr int kMaxWidthDip = 548;
-static constexpr int kButtonPaddingDip = 48;
-static constexpr int kSideMarginDip = 20;
-// 90% opacity.
-static constexpr int kCaptionBubbleAlpha = 230;
+static constexpr int kMaxWidthDip = 536;
+// Margin of the bubble with respect to the anchor window.
+static constexpr int kMinAnchorMarginDip = 20;
+static constexpr int kCaptionBubbleAlpha = 230;  // 90% opacity
 static constexpr char kPrimaryFont[] = "Roboto";
 static constexpr char kSecondaryFont[] = "Arial";
 static constexpr char kTertiaryFont[] = "sans-serif";
@@ -63,6 +66,7 @@ static constexpr int kFontSizePx = 16;
 static constexpr double kDefaultRatioInParentX = 0.5;
 static constexpr double kDefaultRatioInParentY = 1;
 static constexpr int kErrorImageSizeDip = 20;
+static constexpr int kErrorMessageBetweenChildSpacingDip = 16;
 static constexpr int kFocusRingInnerInsetDip = 3;
 static constexpr int kWidgetDisplacementWithArrowKeyDip = 16;
 
@@ -74,9 +78,13 @@ namespace captions {
 // Caption Bubble is focused.
 class CaptionBubbleFrameView : public views::BubbleFrameView {
  public:
-  explicit CaptionBubbleFrameView(views::View* close_button)
+  explicit CaptionBubbleFrameView(views::View* close_button,
+                                  views::View* expand_button,
+                                  views::View* collapse_button)
       : views::BubbleFrameView(gfx::Insets(), gfx::Insets()),
-        close_button_(close_button) {
+        close_button_(close_button),
+        expand_button_(expand_button),
+        collapse_button_(collapse_button) {
     // The focus ring is drawn on CaptionBubbleFrameView because it has the
     // correct bounds, but focused state is taken from the CaptionBubble.
     focus_ring_ = views::FocusRing::Install(this);
@@ -85,7 +93,7 @@ class CaptionBubbleFrameView : public views::BubbleFrameView {
         views::BubbleBorder::FLOAT, views::BubbleBorder::DIALOG_SHADOW,
         gfx::kPlaceholderColor);
     border->SetCornerRadius(kCornerRadiusDip);
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     // Inset the border so that there's space to draw a focus ring on Mac
     // without clipping by the system window.
     border->set_insets(border->GetBorderAndShadowInsets() + gfx::Insets(1));
@@ -123,11 +131,15 @@ class CaptionBubbleFrameView : public views::BubbleFrameView {
 
     // |point| is in coordinates relative to CaptionBubbleFrameView, i.e.
     // (0,0) is the upper left corner of this view. Convert it to screen
-    // coordinates to see whether the close button contains this point.
+    // coordinates to see whether one of the buttons contains this point.
+    // If it is, return HTCLIENT, so that the click is sent through to be
+    // handled by CaptionBubble::BubblePressed().
     gfx::Point point_in_screen =
         GetBoundsInScreen().origin() + gfx::Vector2d(point.x(), point.y());
-    if (close_button_->GetBoundsInScreen().Contains(point_in_screen))
-      return HTCLOSE;
+    if (close_button_->GetBoundsInScreen().Contains(point_in_screen) ||
+        expand_button_->GetBoundsInScreen().Contains(point_in_screen) ||
+        collapse_button_->GetBoundsInScreen().Contains(point_in_screen))
+      return HTCLIENT;
 
     // Ensure it's within the BubbleFrameView. This takes into account the
     // rounded corners and drop shadow of the BubbleBorder.
@@ -150,6 +162,8 @@ class CaptionBubbleFrameView : public views::BubbleFrameView {
 
  private:
   views::View* close_button_;
+  views::View* expand_button_;
+  views::View* collapse_button_;
   views::FocusRing* focus_ring_ = nullptr;
   bool contents_focused_ = false;
 };
@@ -194,7 +208,7 @@ gfx::Rect CaptionBubble::GetBubbleBounds() {
   gfx::Rect anchor_rect = GetAnchorView()->GetBoundsInScreen();
   // Calculate the desired width based on the original bubble's width (which is
   // the max allowed per the spec).
-  int min_width = anchor_rect.width() - kSideMarginDip * 2;
+  int min_width = anchor_rect.width() - kMinAnchorMarginDip * 2;
   int desired_width = anchor_rect.width() * kPreferredAnchorWidthPercentage;
   int width = std::max(min_width, desired_width);
   if (width > original_bounds.width())
@@ -209,7 +223,7 @@ gfx::Rect CaptionBubble::GetBubbleBounds() {
                  height / 2.0;
   latest_bounds_ = gfx::Rect(target_x, target_y, width, height);
   latest_anchor_bounds_ = GetAnchorView()->GetBoundsInScreen();
-  anchor_rect.Inset(kSideMarginDip, 0, kSideMarginDip, kButtonPaddingDip);
+  anchor_rect.Inset(gfx::Insets(kMinAnchorMarginDip));
   if (!anchor_rect.Contains(latest_bounds_)) {
     latest_bounds_.AdjustToFit(anchor_rect);
   }
@@ -240,7 +254,8 @@ void CaptionBubble::OnWidgetBoundsChanged(views::Widget* widget,
     SizeToContents();
     return;
   }
-  // Check the widget which changed size is our widget. It's possible for
+
+  // Check that the widget which changed size is our widget. It's possible for
   // this to be called when another widget resizes.
   // Also check that our widget is visible. If it is not visible then
   // the user has not explicitly moved it (because the user can't see it),
@@ -251,7 +266,7 @@ void CaptionBubble::OnWidgetBoundsChanged(views::Widget* widget,
   // The widget has moved within the window. Recalculate the desired ratio
   // within the parent.
   gfx::Rect bounds_rect = GetAnchorView()->GetBoundsInScreen();
-  bounds_rect.Inset(kSideMarginDip, 0, kSideMarginDip, kButtonPaddingDip);
+  bounds_rect.Inset(gfx::Insets(kMinAnchorMarginDip));
 
   bool out_of_bounds = false;
   if (!bounds_rect.Contains(widget_bounds)) {
@@ -269,27 +284,22 @@ void CaptionBubble::OnWidgetBoundsChanged(views::Widget* widget,
 }
 
 void CaptionBubble::Init() {
-  int content_top_bottom_margin = kHorizontalMarginsDip - kCloseButtonMargin;
-  int content_sides_margin = kVerticalMarginsDip - kCloseButtonMargin;
-
   views::View* content_container = new views::View();
-  views::FlexLayout* layout = content_container->SetLayoutManager(
-      std::make_unique<views::FlexLayout>());
-  layout->SetOrientation(views::LayoutOrientation::kVertical);
-  layout->SetMainAxisAlignment(views::LayoutAlignment::kEnd);
-  layout->SetInteriorMargin(
-      gfx::Insets(content_top_bottom_margin, content_sides_margin));
-  layout->SetDefault(
-      views::kFlexBehaviorKey,
-      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
-                               views::MaximumFlexSizeRule::kPreferred,
-                               /*adjust_height_for_width*/ true));
+  content_container->SetLayoutManager(std::make_unique<views::FlexLayout>())
+      ->SetOrientation(views::LayoutOrientation::kVertical)
+      .SetMainAxisAlignment(views::LayoutAlignment::kEnd)
+      .SetCrossAxisAlignment(views::LayoutAlignment::kStretch)
+      .SetInteriorMargin(gfx::Insets(0, kSidePaddingDip))
+      .SetDefault(
+          views::kFlexBehaviorKey,
+          views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
+                                   views::MaximumFlexSizeRule::kPreferred,
+                                   /*adjust_height_for_width*/ true));
 
-  views::BoxLayout* main_layout =
-      SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kVertical, gfx::Insets(0), 0));
-  main_layout->set_cross_axis_alignment(
-      views::BoxLayout::CrossAxisAlignment::kEnd);
+  SetLayoutManager(std::make_unique<views::BoxLayout>(
+                       views::BoxLayout::Orientation::kVertical))
+      ->set_cross_axis_alignment(views::BoxLayout::CrossAxisAlignment::kEnd);
+  UseCompactMargins();
 
   // TODO(crbug.com/1055150): Use system caption color scheme rather than
   // hard-coding the colors.
@@ -300,12 +310,12 @@ void CaptionBubble::Init() {
 
   auto label = std::make_unique<views::Label>();
   label->SetMultiLine(true);
-  label->SetMaximumWidth(kMaxWidthDip - kVerticalMarginsDip);
+  label->SetMaximumWidth(kMaxWidthDip - kSidePaddingDip * 2);
   label->SetEnabledColor(SK_ColorWHITE);
   label->SetBackgroundColor(SK_ColorTRANSPARENT);
   label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
+  label->SetVerticalAlignment(gfx::VerticalAlignment::ALIGN_TOP);
   label->SetTooltipText(base::string16());
-
   // Render text truncates the end of text that is greater than 10000 chars.
   // While it is unlikely that the text will exceed 10000 chars, it is not
   // impossible, if the speech service sends a very long transcription_result.
@@ -314,59 +324,86 @@ void CaptionBubble::Init() {
   // set the truncate_length to 0 to ensure that it never truncates.
   label->SetTruncateLength(0);
 
-  auto title = std::make_unique<views::Label>();
-  title->SetEnabledColor(gfx::kGoogleGrey500);
-  title->SetBackgroundColor(SK_ColorTRANSPARENT);
-  title->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_CENTER);
-  title->SetText(l10n_util::GetStringUTF16(IDS_LIVE_CAPTION_BUBBLE_TITLE));
+  auto wait_text = std::make_unique<views::Label>();
+  wait_text->SetEnabledColor(gfx::kGoogleGrey500);
+  wait_text->SetBackgroundColor(SK_ColorTRANSPARENT);
+  wait_text->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
+  wait_text->SetText(
+      l10n_util::GetStringUTF16(IDS_LIVE_CAPTION_BUBBLE_WAIT_TEXT));
 
-  auto error_message = std::make_unique<views::Label>();
-  error_message->SetEnabledColor(SK_ColorWHITE);
-  error_message->SetBackgroundColor(SK_ColorTRANSPARENT);
-  error_message->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_CENTER);
-  error_message->SetText(
-      l10n_util::GetStringUTF16(IDS_LIVE_CAPTION_BUBBLE_ERROR));
-  error_message->SetVisible(false);
+  auto error_text = std::make_unique<views::Label>();
+  error_text->SetEnabledColor(SK_ColorWHITE);
+  error_text->SetBackgroundColor(SK_ColorTRANSPARENT);
+  error_text->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
+  error_text->SetText(l10n_util::GetStringUTF16(IDS_LIVE_CAPTION_BUBBLE_ERROR));
 
   auto error_icon = std::make_unique<views::ImageView>();
-  error_icon->SetImage(gfx::CreateVectorIcon(
-      vector_icons::kErrorOutlineIcon, kErrorImageSizeDip, SK_ColorWHITE));
-  error_icon->SetVisible(false);
+  error_icon->SetImage(
+      gfx::CreateVectorIcon(vector_icons::kErrorOutlineIcon, SK_ColorWHITE));
 
-  auto close_button = views::CreateVectorImageButton(this);
-  views::SetImageFromVectorIcon(close_button.get(),
-                                vector_icons::kCloseRoundedIcon, SK_ColorWHITE);
-  // TODO(crbug.com/1055150): Use a custom string explaining we dismiss from the
-  // current tab on close, but leave the feature enabled.
-  close_button->SetTooltipText(l10n_util::GetStringUTF16(IDS_APP_CLOSE));
-  close_button->SizeToPreferredSize();
-  close_button->SetFocusForPlatform();
-  views::InstallCircleHighlightPathGenerator(close_button.get());
+  auto error_message = std::make_unique<views::View>();
+  error_message
+      ->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
+          kErrorMessageBetweenChildSpacingDip))
+      ->set_cross_axis_alignment(views::BoxLayout::CrossAxisAlignment::kCenter);
+  error_message->SetVisible(false);
 
-  set_margins(gfx::Insets(kCloseButtonMargin));
+  auto expand_button =
+      BuildImageButton(kCaretDownIcon, IDS_LIVE_CAPTION_BUBBLE_EXPAND);
+  expand_button->SetVisible(!is_expanded_);
 
-  title_ = content_container->AddChildView(std::move(title));
+  auto collapse_button =
+      BuildImageButton(kCaretUpIcon, IDS_LIVE_CAPTION_BUBBLE_COLLAPSE);
+  collapse_button->SetVisible(is_expanded_);
+
+  auto close_button = BuildImageButton(vector_icons::kCloseRoundedIcon,
+                                       IDS_LIVE_CAPTION_BUBBLE_CLOSE);
+
+  wait_text_ = content_container->AddChildView(std::move(wait_text));
   label_ = content_container->AddChildView(std::move(label));
 
-  error_icon_ = content_container->AddChildView(std::move(error_icon));
+  error_icon_ = error_message->AddChildView(std::move(error_icon));
+  error_text_ = error_message->AddChildView(std::move(error_text));
   error_message_ = content_container->AddChildView(std::move(error_message));
 
+  expand_button_ = content_container->AddChildView(std::move(expand_button));
+  collapse_button_ =
+      content_container->AddChildView(std::move(collapse_button));
+
   close_button_ = AddChildView(std::move(close_button));
-  content_container_ = AddChildView(content_container);
+  content_container_ = AddChildView(std::move(content_container));
 
   UpdateTextSize();
+  UpdateContentSize();
+}
+
+std::unique_ptr<views::ImageButton> CaptionBubble::BuildImageButton(
+    const gfx::VectorIcon& icon,
+    const int tooltip_text_id) {
+  auto button = views::CreateVectorImageButton(this);
+  views::SetImageFromVectorIcon(button.get(), icon, kButtonDip, SK_ColorWHITE);
+  button->SetTooltipText(l10n_util::GetStringUTF16(tooltip_text_id));
+  button->set_ink_drop_base_color(SkColor(gfx::kGoogleGrey600));
+  button->SizeToPreferredSize();
+  button->SetFocusForPlatform();
+  views::InstallCircleHighlightPathGenerator(
+      button.get(), gfx::Insets(kButtonCircleHighlightPaddingDip));
+  return button;
 }
 
 bool CaptionBubble::ShouldShowCloseButton() const {
-  // We draw our own close button so that we could show/hide it when the
-  // mouse moves, and so that in the future we can add an expand button.
+  // We draw our own close button so that we can capture the button presses and
+  // so we can customize its appearance.
   return false;
 }
 
-views::NonClientFrameView* CaptionBubble::CreateNonClientFrameView(
-    views::Widget* widget) {
-  frame_ = new CaptionBubbleFrameView(close_button_);
-  return frame_;
+std::unique_ptr<views::NonClientFrameView>
+CaptionBubble::CreateNonClientFrameView(views::Widget* widget) {
+  auto frame = std::make_unique<CaptionBubbleFrameView>(
+      close_button_, expand_button_, collapse_button_);
+  frame_ = frame.get();
+  return frame;
 }
 
 void CaptionBubble::OnKeyEvent(ui::KeyEvent* event) {
@@ -431,16 +468,16 @@ void CaptionBubble::OnBlur() {
 // focused and does not announce when text changes.
 void CaptionBubble::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   if (model_ && model_->HasError()) {
-    node_data->SetName(error_message_->GetText());
+    node_data->SetName(error_text_->GetText());
     node_data->SetNameFrom(ax::mojom::NameFrom::kContents);
   } else if (label_->GetText().size()) {
     node_data->SetName(label_->GetText());
     node_data->SetNameFrom(ax::mojom::NameFrom::kContents);
   } else {
-    node_data->SetName(title_->GetText());
-    node_data->SetNameFrom(ax::mojom::NameFrom::kTitle);
+    node_data->SetName(wait_text_->GetText());
+    node_data->SetNameFrom(ax::mojom::NameFrom::kContents);
   }
-  node_data->SetDescription(title_->GetText());
+  node_data->SetDescription(wait_text_->GetText());
   node_data->role = ax::mojom::Role::kCaption;
 }
 
@@ -466,6 +503,15 @@ void CaptionBubble::ButtonPressed(views::Button* sender,
         CaptionController::SessionEvent::kCloseButtonClicked);
     if (model_)
       model_->Close();
+  } else if (sender == expand_button_ || sender == collapse_button_) {
+    is_expanded_ = !is_expanded_;
+    bool button_had_focus = sender->HasFocus();
+    views::Button* new_button =
+        is_expanded_ ? collapse_button_ : expand_button_;
+    OnIsExpandedChanged();
+    // TODO(crbug.com/1055150): Ensure that the button keeps focus on mac.
+    if (button_had_focus)
+      new_button->RequestFocus();
   }
 }
 
@@ -477,32 +523,49 @@ void CaptionBubble::SetModel(CaptionBubbleModel* model) {
     model_->SetObserver(this);
 }
 
-void CaptionBubble::OnTextChange() {
+void CaptionBubble::OnTextChanged() {
   DCHECK(model_);
-  label_->SetText(base::ASCIIToUTF16(model_->GetFullText()));
-  UpdateBubbleAndTitleVisibility();
+  label_->SetText(base::UTF8ToUTF16(model_->GetFullText()));
+  UpdateBubbleAndWaitTextVisibility();
 }
 
-void CaptionBubble::OnErrorChange() {
+void CaptionBubble::OnErrorChanged() {
   DCHECK(model_);
   bool has_error = model_->HasError();
   label_->SetVisible(!has_error);
-
-  // The error icon height may be different from the line height, so update the
-  // bubble content height accordingly.
-  UpdateContentSize();
-  UpdateBubbleAndTitleVisibility();
-
-  error_icon_->SetVisible(has_error);
   error_message_->SetVisible(has_error);
+
+  // The error is only 1 line, so redraw the bubble.
+  Redraw();
 }
 
-void CaptionBubble::UpdateBubbleAndTitleVisibility() {
+void CaptionBubble::OnReadyChanged() {
   DCHECK(model_);
-  // Show the title if there is room for it and no error.
-  title_->SetVisible(!model_->HasError() &&
-                     label_->GetPreferredSize().height() <
-                         kLineHeightDip * kNumLines * GetTextScaleFactor());
+  // There is a bug in RenderText in which the label text must not be empty when
+  // it is displayed, or otherwise subsequent calculation of the number of lines
+  // (CaptionBubble::GetNumLinesInLabel) will be incorrect. The label text here
+  // is set to a space character.
+  // TODO(1055150): Fix the bug in RenderText and then remove this workaround.
+  if (model_->IsReady()) {
+    label_->SetText(base::ASCIIToUTF16("\u0020"));
+    UpdateBubbleAndWaitTextVisibility();
+  }
+}
+
+void CaptionBubble::OnIsExpandedChanged() {
+  expand_button_->SetVisible(!is_expanded_);
+  collapse_button_->SetVisible(is_expanded_);
+
+  // The change of expanded state may cause the title to change visibility, and
+  // it surely causes the content height to change, so redraw the bubble.
+  Redraw();
+}
+
+void CaptionBubble::UpdateBubbleAndWaitTextVisibility() {
+  // Show the wait text if there is room for it and no error.
+  wait_text_->SetVisible(model_ && !model_->HasError() &&
+                         GetNumLinesInLabel() <
+                             static_cast<size_t>(GetNumLinesVisible()));
   UpdateBubbleVisibility();
 }
 
@@ -516,14 +579,14 @@ void CaptionBubble::UpdateBubbleVisibility() {
     // Hide the widget if there is no room for it or the model is closed.
     if (GetWidget()->IsVisible())
       GetWidget()->Hide();
-  } else if (label_->GetText().size() > 0 || model_->HasError()) {
-    // Show the widget if it has text or an error to display. Only show the
-    // widget if it isn't already visible. Always calling Widget::Show() will
-    // mean the widget gets focus each time.
+  } else if (model_->IsReady() || model_->HasError()) {
+    // Show the widget if it is ready to receive transcriptions or it has an
+    // error to display. Only show the widget if it isn't already visible.
+    // Always calling Widget::Show() will mean the widget gets focus each time.
     if (!GetWidget()->IsVisible())
       GetWidget()->Show();
   } else if (GetWidget()->IsVisible()) {
-    // No text and no error. Hide it.
+    // Not ready and no error. Hide it.
     GetWidget()->Hide();
   }
 }
@@ -532,7 +595,7 @@ void CaptionBubble::UpdateCaptionStyle(
     base::Optional<ui::CaptionStyle> caption_style) {
   caption_style_ = caption_style;
   UpdateTextSize();
-  SizeToContents();
+  Redraw();
 }
 
 size_t CaptionBubble::GetTextIndexOfLineInLabel(size_t line) const {
@@ -543,8 +606,8 @@ size_t CaptionBubble::GetNumLinesInLabel() const {
   return label_->GetRequiredLines();
 }
 
-const char* CaptionBubble::GetClassName() const {
-  return "CaptionBubble";
+int CaptionBubble::GetNumLinesVisible() {
+  return is_expanded_ ? kNumLinesExpanded : kNumLinesCollapsed;
 }
 
 double CaptionBubble::GetTextScaleFactor() {
@@ -567,29 +630,43 @@ void CaptionBubble::UpdateTextSize() {
                     gfx::Font::FontStyle::NORMAL, kFontSizePx * textScaleFactor,
                     gfx::Font::Weight::NORMAL);
   label_->SetFontList(font_list);
-  title_->SetFontList(font_list);
-  error_message_->SetFontList(font_list);
+  wait_text_->SetFontList(font_list);
+  error_text_->SetFontList(font_list);
 
   label_->SetLineHeight(kLineHeightDip * textScaleFactor);
-  title_->SetLineHeight(kLineHeightDip * textScaleFactor);
-  error_message_->SetLineHeight(kLineHeightDip * textScaleFactor);
-  UpdateContentSize();
+  wait_text_->SetLineHeight(kLineHeightDip * textScaleFactor);
+  error_text_->SetLineHeight(kLineHeightDip * textScaleFactor);
+  error_icon_->SetImageSize(gfx::Size(kErrorImageSizeDip * textScaleFactor,
+                                      kErrorImageSizeDip * textScaleFactor));
 }
 
 void CaptionBubble::UpdateContentSize() {
-  double textScaleFactor = GetTextScaleFactor();
-
+  double text_scale_factor = GetTextScaleFactor();
   int content_height =
       (model_ && model_->HasError())
-          ? kLineHeightDip * textScaleFactor + kErrorImageSizeDip
-          : kLineHeightDip * kNumLines * textScaleFactor;
-  content_container_->SetPreferredSize(
-      gfx::Size(kMaxWidthDip, content_height + kVerticalMarginsDip));
-  // TODO(crbug.com/1055150): On hover, show/hide the close button. At that
-  // time remove the height of close button size from SetPreferredSize.
+          ? kLineHeightDip * text_scale_factor
+          : kLineHeightDip * GetNumLinesVisible() * text_scale_factor;
+  // The wait text takes up 1 line.
+  int label_height = wait_text_->GetVisible()
+                         ? content_height - kLineHeightDip * text_scale_factor
+                         : content_height;
+  label_->SetPreferredSize(
+      gfx::Size(kMaxWidthDip - kSidePaddingDip, label_height));
+  content_container_->SetPreferredSize(gfx::Size(kMaxWidthDip, content_height));
   SetPreferredSize(
-      gfx::Size(kMaxWidthDip, content_height + kCloseButtonMargin +
-                                  close_button_->GetPreferredSize().height()));
+      gfx::Size(kMaxWidthDip, content_height +
+                                  close_button_->GetPreferredSize().height() +
+                                  expand_button_->GetPreferredSize().height()));
+}
+
+void CaptionBubble::Redraw() {
+  UpdateBubbleAndWaitTextVisibility();
+  UpdateContentSize();
+  SizeToContents();
+}
+
+const char* CaptionBubble::GetClassName() const {
+  return "CaptionBubble";
 }
 
 std::string CaptionBubble::GetLabelTextForTesting() {

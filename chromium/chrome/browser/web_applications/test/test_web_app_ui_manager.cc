@@ -17,6 +17,9 @@ TestWebAppUiManager::TestWebAppUiManager() = default;
 
 TestWebAppUiManager::~TestWebAppUiManager() = default;
 
+void TestWebAppUiManager::SetSubsystems(
+    AppRegistryController* app_registry_controller) {}
+
 void TestWebAppUiManager::Start() {}
 
 void TestWebAppUiManager::Shutdown() {}
@@ -65,8 +68,8 @@ bool TestWebAppUiManager::CanAddAppToQuickLaunchBar() const {
 
 void TestWebAppUiManager::AddAppToQuickLaunchBar(const AppId& app_id) {}
 
-bool TestWebAppUiManager::IsInAppWindow(
-    content::WebContents* web_contents) const {
+bool TestWebAppUiManager::IsInAppWindow(content::WebContents* web_contents,
+                                        const AppId* app_id) const {
   return false;
 }
 

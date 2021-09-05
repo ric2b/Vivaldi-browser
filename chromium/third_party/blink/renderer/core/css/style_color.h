@@ -43,46 +43,49 @@ class StyleColor {
 
  public:
   StyleColor() : color_keyword_(CSSValueID::kCurrentcolor) {}
-  StyleColor(Color color)
+  explicit StyleColor(Color color)
       : color_(color), color_keyword_(CSSValueID::kInvalid) {}
   explicit StyleColor(RGBA32 color)
       : color_(color), color_keyword_(CSSValueID::kInvalid) {}
+  explicit StyleColor(CSSValueID keyword) : color_keyword_(keyword) {}
   static StyleColor CurrentColor() { return StyleColor(); }
 
   bool IsCurrentColor() const {
     return color_keyword_ == CSSValueID::kCurrentcolor;
   }
   Color GetColor() const {
-    DCHECK(!IsCurrentColor());
+    DCHECK(IsNumeric());
     return color_;
   }
 
-  Color Resolve(Color current_color) const {
-    return IsCurrentColor() ? current_color : color_;
-  }
+  Color Resolve(Color current_color, WebColorScheme color_scheme) const;
 
-  bool HasAlpha() const { return !IsCurrentColor() && color_.HasAlpha(); }
+  bool IsNumeric() const { return color_keyword_ == CSSValueID::kInvalid; }
 
   static Color ColorFromKeyword(CSSValueID, WebColorScheme color_scheme);
   static bool IsColorKeyword(CSSValueID);
   static bool IsSystemColor(CSSValueID);
 
- private:
-  explicit StyleColor(CSSValueID keyword) : color_keyword_(keyword) {}
+  inline bool operator==(const StyleColor& other) const {
+    DCHECK(IsValid());
+    DCHECK(other.IsValid());
+    return color_ == other.color_ && color_keyword_ == other.color_keyword_;
+  }
+
+  inline bool operator!=(const StyleColor& other) const {
+    return !(*this == other);
+  }
+
+ protected:
+  inline bool IsValid() const {
+    // At least one of color_keyword_ and color_ should retain its default
+    // value.
+    return color_keyword_ == CSSValueID::kInvalid || color_ == Color();
+  }
 
   Color color_;
   CSSValueID color_keyword_;
 };
-
-inline bool operator==(const StyleColor& a, const StyleColor& b) {
-  if (a.IsCurrentColor() || b.IsCurrentColor())
-    return a.IsCurrentColor() && b.IsCurrentColor();
-  return a.GetColor() == b.GetColor();
-}
-
-inline bool operator!=(const StyleColor& a, const StyleColor& b) {
-  return !(a == b);
-}
 
 }  // namespace blink
 

@@ -209,14 +209,16 @@ std::string BrowserSavePasswordProgressLogger::FormStructureToFieldsLogString(
           ", autocomplete=" + ScrubElementID(field->autocomplete_attribute);
 
     if (field->server_type() != autofill::NO_SERVER_DATA) {
-      field_info +=
-          ", SERVER_PREDICTION: " +
-          autofill::AutofillType::ServerFieldTypeToString(field->server_type());
+      base::StrAppend(&field_info,
+                      {", SERVER_PREDICTION: ",
+                       autofill::AutofillType::ServerFieldTypeToString(
+                           field->server_type())});
     }
 
     for (ServerFieldType type : field->possible_types())
-      field_info +=
-          ", VOTE: " + autofill::AutofillType::ServerFieldTypeToString(type);
+      base::StrAppend(
+          &field_info,
+          {", VOTE: ", autofill::AutofillType::ServerFieldTypeToString(type)});
 
     if (field->vote_type())
       field_info += ", vote_type=" + VoteTypeToString(field->vote_type());
@@ -289,32 +291,22 @@ void BrowserSavePasswordProgressLogger::LogPasswordForm(
   log.SetString(GetStringFromID(STRING_ACTION), ScrubURL(form.action));
   log.SetString(GetStringFromID(STRING_USERNAME_ELEMENT),
                 ScrubElementID(form.username_element));
-  if (form.has_renderer_ids) {
-    log.SetString(GetStringFromID(STRING_USERNAME_ELEMENT_RENDERER_ID),
-                  NumberToString(form.username_element_renderer_id.value()));
-  }
+  log.SetString(GetStringFromID(STRING_USERNAME_ELEMENT_RENDERER_ID),
+                NumberToString(form.username_element_renderer_id.value()));
   log.SetString(GetStringFromID(STRING_PASSWORD_ELEMENT),
                 ScrubElementID(form.password_element));
-  if (form.has_renderer_ids) {
-    log.SetString(GetStringFromID(STRING_PASSWORD_ELEMENT_RENDERER_ID),
-                  NumberToString(form.password_element_renderer_id.value()));
-  }
+  log.SetString(GetStringFromID(STRING_PASSWORD_ELEMENT_RENDERER_ID),
+                NumberToString(form.password_element_renderer_id.value()));
   log.SetString(GetStringFromID(STRING_NEW_PASSWORD_ELEMENT),
                 ScrubElementID(form.new_password_element));
-  if (form.has_renderer_ids) {
-    log.SetString(
-        GetStringFromID(STRING_NEW_PASSWORD_ELEMENT_RENDERER_ID),
-        NumberToString(form.new_password_element_renderer_id.value()));
-  }
+  log.SetString(GetStringFromID(STRING_NEW_PASSWORD_ELEMENT_RENDERER_ID),
+                NumberToString(form.new_password_element_renderer_id.value()));
   if (!form.confirmation_password_element.empty()) {
     log.SetString(GetStringFromID(STRING_CONFIRMATION_PASSWORD_ELEMENT),
                   ScrubElementID(form.confirmation_password_element));
-    if (form.has_renderer_ids) {
-      log.SetString(
-          GetStringFromID(STRING_CONFIRMATION_PASSWORD_ELEMENT_RENDERER_ID),
-          NumberToString(
-              form.confirmation_password_element_renderer_id.value()));
-    }
+    log.SetString(
+        GetStringFromID(STRING_CONFIRMATION_PASSWORD_ELEMENT_RENDERER_ID),
+        NumberToString(form.confirmation_password_element_renderer_id.value()));
   }
   log.SetBoolean(GetStringFromID(STRING_PASSWORD_GENERATED),
                  form.type == PasswordForm::Type::kGenerated);

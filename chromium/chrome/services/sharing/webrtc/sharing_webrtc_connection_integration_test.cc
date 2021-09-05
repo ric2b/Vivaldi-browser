@@ -35,8 +35,8 @@ class SharingClient {
       base::OnceCallback<void(sharing::SharingWebRtcConnection*)> on_disconnect)
       : connection_(pc_factory,
                     /*ice_servers=*/{},
-                    host_.signalling_sender.BindNewPipeAndPassRemote(),
-                    host_.signalling_receiver.BindNewPipeAndPassReceiver(),
+                    host_.signaling_sender.BindNewPipeAndPassRemote(),
+                    host_.signaling_receiver.BindNewPipeAndPassReceiver(),
                     host_.delegate.BindNewPipeAndPassRemote(),
                     host_.connection.BindNewPipeAndPassReceiver(),
                     host_.socket_manager.BindNewPipeAndPassRemote(),

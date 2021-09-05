@@ -18,7 +18,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/certificate_viewer.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings_delegate.h"
+#include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -323,17 +323,17 @@ void BubbleHeaderView::AddPasswordReuseButtons(bool is_saved_password) {
 
   std::unique_ptr<views::MdTextButton> change_password_button;
   if (change_password_template) {
-    change_password_button = views::MdTextButton::Create(
+    change_password_button = std::make_unique<views::MdTextButton>(
         button_listener_, l10n_util::GetStringUTF16(change_password_template));
     change_password_button->SetProminent(true);
     change_password_button->SetID(
         PageInfoBubbleView::VIEW_ID_PAGE_INFO_BUTTON_CHANGE_PASSWORD);
   }
-  auto whitelist_password_reuse_button = views::MdTextButton::Create(
+  auto allowlist_password_reuse_button = std::make_unique<views::MdTextButton>(
       button_listener_,
-      l10n_util::GetStringUTF16(IDS_PAGE_INFO_WHITELIST_PASSWORD_REUSE_BUTTON));
-  whitelist_password_reuse_button->SetID(
-      PageInfoBubbleView::VIEW_ID_PAGE_INFO_BUTTON_WHITELIST_PASSWORD_REUSE);
+      l10n_util::GetStringUTF16(IDS_PAGE_INFO_ALLOWLIST_PASSWORD_REUSE_BUTTON));
+  allowlist_password_reuse_button->SetID(
+      PageInfoBubbleView::VIEW_ID_PAGE_INFO_BUTTON_ALLOWLIST_PASSWORD_REUSE);
 
   int kSpacingBetweenButtons = 8;
   int change_password_button_size =
@@ -345,7 +345,7 @@ void BubbleHeaderView::AddPasswordReuseButtons(bool is_saved_password) {
   bool can_fit_in_one_line =
       (password_reuse_button_container_->width() - kSpacingBetweenButtons) >=
       (change_password_button_size +
-       whitelist_password_reuse_button->CalculatePreferredSize().width());
+       allowlist_password_reuse_button->CalculatePreferredSize().width());
   auto layout = std::make_unique<views::BoxLayout>(
       can_fit_in_one_line ? views::BoxLayout::Orientation::kHorizontal
                           : views::BoxLayout::Orientation::kVertical,
@@ -361,10 +361,10 @@ void BubbleHeaderView::AddPasswordReuseButtons(bool is_saved_password) {
         std::move(change_password_button));
   }
   password_reuse_button_container_->AddChildView(
-      std::move(whitelist_password_reuse_button));
+      std::move(allowlist_password_reuse_button));
 #else
   password_reuse_button_container_->AddChildView(
-      std::move(whitelist_password_reuse_button));
+      std::move(allowlist_password_reuse_button));
   if (change_password_button) {
     password_reuse_button_container_->AddChildView(
         std::move(change_password_button));
@@ -585,7 +585,7 @@ void PageInfoBubbleView::ButtonPressed(views::Button* button,
     case PageInfoBubbleView::VIEW_ID_PAGE_INFO_BUTTON_CHANGE_PASSWORD:
       presenter_->OnChangePasswordButtonPressed(web_contents());
       break;
-    case PageInfoBubbleView::VIEW_ID_PAGE_INFO_BUTTON_WHITELIST_PASSWORD_REUSE:
+    case PageInfoBubbleView::VIEW_ID_PAGE_INFO_BUTTON_ALLOWLIST_PASSWORD_REUSE:
       GetWidget()->Close();
       presenter_->OnWhitelistPasswordReuseButtonPressed(web_contents());
       break;
@@ -872,8 +872,8 @@ void PageInfoBubbleView::SetPageFeatureInfo(const PageFeatureInfo& info) {
   auto icon = std::make_unique<NonAccessibleImageView>();
   icon->SetImage(PageInfoUI::GetVrSettingsIcon(GetRelatedTextColor()));
 
-  std::unique_ptr<views::MdTextButton> exit_button(views::MdTextButton::Create(
-      this, l10n_util::GetStringUTF16(IDS_PAGE_INFO_VR_TURN_OFF_BUTTON_TEXT)));
+  auto exit_button = std::make_unique<views::MdTextButton>(
+      this, l10n_util::GetStringUTF16(IDS_PAGE_INFO_VR_TURN_OFF_BUTTON_TEXT));
   exit_button->SetID(VIEW_ID_PAGE_INFO_BUTTON_END_VR);
   exit_button->SetProminent(true);
 

@@ -16,7 +16,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -25,6 +24,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
+#include "components/prerender/browser/prerender_manager.h"
 #include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/render_view_host.h"
@@ -54,9 +54,7 @@ class NeverRunsExternalProtocolHandlerDelegate
     : public ExternalProtocolHandler::Delegate {
  public:
   scoped_refptr<shell_integration::DefaultProtocolClientWorker>
-  CreateShellWorker(
-      const shell_integration::DefaultWebClientWorkerCallback& callback,
-      const std::string& protocol) override {
+  CreateShellWorker(const std::string& protocol) override {
     NOTREACHED();
     // This will crash, but it shouldn't get this far with BlockState::BLOCK
     // anyway.
@@ -139,15 +137,16 @@ void FakeSafeBrowsingDatabaseManager::OnCheckBrowseURLDone(const GURL& gurl,
 
 TestPrerenderContents::TestPrerenderContents(
     PrerenderManager* prerender_manager,
-    Profile* profile,
+    content::BrowserContext* browser_context,
     const GURL& url,
     const content::Referrer& referrer,
     const base::Optional<url::Origin>& initiator_origin,
     Origin origin,
     FinalStatus expected_final_status,
     bool ignore_final_status)
-    : PrerenderContents(prerender_manager,
-                        profile,
+    : PrerenderContents(std::make_unique<ChromePrerenderContentsDelegate>(),
+                        prerender_manager,
+                        browser_context,
                         url,
                         referrer,
                         initiator_origin,
@@ -390,8 +389,9 @@ void TestPrerenderContentsFactory::IgnorePrerenderContents() {
 }
 
 PrerenderContents* TestPrerenderContentsFactory::CreatePrerenderContents(
+    std::unique_ptr<PrerenderContentsDelegate> delegate,
     PrerenderManager* prerender_manager,
-    Profile* profile,
+    content::BrowserContext* browser_context,
     const GURL& url,
     const content::Referrer& referrer,
     const base::Optional<url::Origin>& initiator_origin,
@@ -402,8 +402,8 @@ PrerenderContents* TestPrerenderContentsFactory::CreatePrerenderContents(
     expected_contents_queue_.pop_front();
   }
   TestPrerenderContents* contents = new TestPrerenderContents(
-      prerender_manager, profile, url, referrer, initiator_origin, origin,
-      expected.final_status, expected.ignore);
+      prerender_manager, browser_context, url, referrer, initiator_origin,
+      origin, expected.final_status, expected.ignore);
   if (expected.handle)
     expected.handle->OnPrerenderCreated(contents);
   return contents;

@@ -5,7 +5,10 @@
 #include "cc/trees/proxy_main.h"
 
 #include <algorithm>
+#include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/trace_event/trace_event.h"
@@ -147,6 +150,10 @@ void ProxyMain::BeginMainFrame(
   // after tab becomes visible again.
   if (!layer_tree_host_->IsVisible()) {
     TRACE_EVENT_INSTANT0("cc", "EarlyOut_NotVisible", TRACE_EVENT_SCOPE_THREAD);
+
+    // In this case, since the commit is deferred to a later time, gathered
+    // events metrics are not discarded so that they can be reported if the
+    // commit happens in the future.
     std::vector<std::unique_ptr<SwapPromise>> empty_swap_promises;
     ImplThreadTaskRunner()->PostTask(
         FROM_HERE, base::BindOnce(&ProxyImpl::BeginMainFrameAbortedOnImpl,
@@ -177,6 +184,10 @@ void ProxyMain::BeginMainFrame(
   if (skip_full_pipeline) {
     TRACE_EVENT_INSTANT0("cc", "EarlyOut_DeferCommit",
                          TRACE_EVENT_SCOPE_THREAD);
+
+    // In this case, since the commit is deferred to a later time, gathered
+    // events metrics are not discarded so that they can be reported if the
+    // commit happens in the future.
     std::vector<std::unique_ptr<SwapPromise>> empty_swap_promises;
     ImplThreadTaskRunner()->PostTask(
         FROM_HERE,
@@ -210,8 +221,8 @@ void ProxyMain::BeginMainFrame(
     // the compositor thread to the main thread for both cc and and its client
     // (e.g. Blink). Do not do this if we explicitly plan to not commit the
     // layer tree, to prevent scroll offsets getting out of sync.
-    layer_tree_host_->ApplyScrollAndScale(
-        begin_main_frame_state->scroll_info.get());
+    layer_tree_host_->ApplyCompositorChanges(
+        begin_main_frame_state->commit_data.get());
   }
 
   layer_tree_host_->ApplyMutatorEvents(
@@ -260,6 +271,10 @@ void ProxyMain::BeginMainFrame(
     layer_tree_host_->RecordEndOfFrameMetrics(
         begin_main_frame_start_time,
         begin_main_frame_state->active_sequence_trackers);
+
+    // In this case, since the commit is deferred to a later time, gathered
+    // events metrics are not discarded so that they can be reported if the
+    // commit happens in the future.
     std::vector<std::unique_ptr<SwapPromise>> empty_swap_promises;
     ImplThreadTaskRunner()->PostTask(
         FROM_HERE, base::BindOnce(&ProxyImpl::BeginMainFrameAbortedOnImpl,
@@ -309,8 +324,9 @@ void ProxyMain::BeginMainFrame(
     std::vector<std::unique_ptr<SwapPromise>> swap_promises =
         layer_tree_host_->GetSwapPromiseManager()->TakeSwapPromises();
 
-    // Since the BeginMainFrame has been aborted, handling of events on the main
-    // frame had no effect and no metrics should be reported for such events.
+    // Since the commit has been aborted due to no updates, handling of events
+    // on the main frame had no effect and no metrics should be reported for
+    // such events.
     layer_tree_host_->ClearEventsMetrics();
 
     ImplThreadTaskRunner()->PostTask(
@@ -697,6 +713,14 @@ void ProxyMain::SetRenderFrameObserver(
       FROM_HERE,
       base::BindOnce(&ProxyImpl::SetRenderFrameObserver,
                      base::Unretained(proxy_impl_.get()), std::move(observer)));
+}
+
+void ProxyMain::SetEnableFrameRateThrottling(
+    bool enable_frame_rate_throttling) {
+  ImplThreadTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(&ProxyImpl::SetEnableFrameRateThrottling,
+                                base::Unretained(proxy_impl_.get()),
+                                enable_frame_rate_throttling));
 }
 
 }  // namespace cc

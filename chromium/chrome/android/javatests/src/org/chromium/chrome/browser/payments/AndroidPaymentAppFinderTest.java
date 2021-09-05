@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.payments;
 
 import android.support.test.InstrumentationRegistry;
 
+import androidx.annotation.Nullable;
 import androidx.test.filters.MediumTest;
 
 import org.junit.After;
@@ -17,22 +18,25 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.payments.PaymentApp;
+import org.chromium.components.payments.PaymentAppFactoryParams;
 import org.chromium.components.payments.PaymentFeatureList;
 import org.chromium.components.payments.PaymentManifestDownloader;
 import org.chromium.components.payments.PaymentManifestParser;
+import org.chromium.components.payments.PaymentManifestWebDataService;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.payments.mojom.PaymentDetailsModifier;
+import org.chromium.payments.mojom.PaymentItem;
 import org.chromium.payments.mojom.PaymentMethodData;
+import org.chromium.payments.mojom.PaymentOptions;
 import org.chromium.url.GURL;
 import org.chromium.url.Origin;
 
@@ -68,7 +72,7 @@ public class AndroidPaymentAppFinderTest
         private GURL mTestServerUrl;
 
         /**
-         * @param uri The URL of the test server.
+         * @param url The URL of the test server.
          */
         /* package */ void setTestServerUrl(GURL url) {
             assert mTestServerUrl == null : "Test server URL should be set only once";
@@ -106,7 +110,7 @@ public class AndroidPaymentAppFinderTest
     private List<PaymentApp> mPaymentApps;
     private boolean mAllPaymentAppsCreated;
     private Map<String, PaymentMethodData> mMethodData;
-    private boolean mRequestShippingOrPayerContact;
+    private PaymentOptions mPaymentOptions;
 
     // PaymentAppFactoryDelegate implementation.
     @Override
@@ -144,7 +148,7 @@ public class AndroidPaymentAppFinderTest
 
     // PaymentAppFactoryParams implementation.
     @Override
-    public Map<String, PaymentDetailsModifier> getModifiers() {
+    public Map<String, PaymentDetailsModifier> getUnmodifiableModifiers() {
         return Collections.unmodifiableMap(new HashMap<String, PaymentDetailsModifier>());
     }
 
@@ -174,8 +178,26 @@ public class AndroidPaymentAppFinderTest
 
     // PaymentAppFactoryParams implementation.
     @Override
-    public boolean requestShippingOrPayerContact() {
-        return mRequestShippingOrPayerContact;
+    public PaymentItem getRawTotal() {
+        // This test doesn't need this value.
+        return null;
+    }
+
+    // PaymentAppFactoryParams implementation.
+    @Override
+    public PaymentOptions getPaymentOptions() {
+        return mPaymentOptions;
+    }
+
+    public void setRequestShipping(boolean requestShipping) {
+        mPaymentOptions.requestShipping = requestShipping;
+    }
+
+    // PaymentAppFactoryParams implementation.
+    @Override
+    @Nullable
+    public String getTwaPackageName() {
+        return mTwaPackageManager.getTwaPackageName(mRule.getActivity());
     }
 
     @Before
@@ -186,6 +208,7 @@ public class AndroidPaymentAppFinderTest
         mDownloader.setTestServerUrl(new GURL(mServer.getURL("/components/test/data/payments/")));
         mPaymentApps = new ArrayList<>();
         mAllPaymentAppsCreated = false;
+        mPaymentOptions = new PaymentOptions();
     }
 
     @After
@@ -1299,7 +1322,7 @@ public class AndroidPaymentAppFinderTest
         Set<String> methods = new HashSet<>();
         methods.add("https://play.google.com/billing");
         methods.add("https://bobpay.com/webpay");
-        mRequestShippingOrPayerContact = true;
+        setRequestShipping(true);
         mPackageManager.installPaymentApp("MerchantTwaApp", "com.merchant.twa",
                 "https://play.google.com/billing",
                 /*signature=*/"01020304050607080900");
@@ -1318,7 +1341,7 @@ public class AndroidPaymentAppFinderTest
 
     /**
      * For finding app store billing app, test that the TWA's installer app store must be a
-     * whitelisted one. The test setting sets the twa installer app store to be an unsupported one.
+     * allowlisted one. The test setting sets the twa installer app store to be an unsupported one.
      */
     @Test
     @Feature({"Payments"})
@@ -1492,6 +1515,25 @@ public class AndroidPaymentAppFinderTest
         Assert.assertFalse(mPaymentApps.get(0).handlesPayerPhone());
     }
 
+    /**
+     * Test that the Play Billing app store payment app is marked as preferred.
+     */
+    @Test
+    @Feature({"Payments"})
+    public void testPreferredPaymentApp() throws Throwable {
+        Set<String> methods = new HashSet<>();
+        methods.add("https://play.google.com/billing");
+        mPackageManager.installPaymentApp("MerchantTwaApp", "com.merchant.twa",
+                "https://play.google.com/billing", /*signature=*/"01020304050607080900");
+
+        setMockTrustedWebActivity("com.merchant.twa", "com.android.vending");
+        findApps(methods);
+
+        assertPaymentAppsCreated("com.merchant.twa");
+
+        Assert.assertTrue(mPaymentApps.get(0).isPreferred());
+    }
+
     private void findApps(Set<String> methodNames) throws Throwable {
         addAppStoreMethodAndFindApps(
                 /*appStorePackageName=*/null, /*appStorePaymentMethod=*/null, methodNames);
@@ -1513,12 +1555,7 @@ public class AndroidPaymentAppFinderTest
             }
             finder.findAndroidPaymentApps();
         });
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return mAllPaymentAppsCreated;
-            }
-        });
+        CriteriaHelper.pollInstrumentationThread(() -> mAllPaymentAppsCreated);
     }
 
     private static Map<String, PaymentMethodData> buildMethodData(Set<String> methodNames) {

@@ -16,6 +16,7 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.widget.Toolbar;
 import androidx.fragment.app.FragmentManager;
@@ -29,13 +30,19 @@ import org.chromium.base.StrictModeContext;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
+import org.chromium.chrome.browser.password_check.PasswordCheck;
+import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
+import org.chromium.chrome.browser.password_check.PasswordCheckPreference;
+import org.chromium.chrome.browser.password_check.PasswordCheckReferrer;
+import org.chromium.chrome.browser.password_manager.ManagePasswordsReferrer;
+import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
 import org.chromium.chrome.browser.password_manager.PasswordManagerLauncher;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
 import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
-import org.chromium.chrome.modules.cablev2_authenticator.CableAuthenticatorModuleProvider;
+import org.chromium.chrome.browser.webauthn.CableAuthenticatorModuleProvider;
 import org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference;
 import org.chromium.components.browser_ui.settings.ChromeBasePreference;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
@@ -102,10 +109,13 @@ public class PasswordSettings
     private Preference mSecurityKey;
     private ChromeSwitchPreference mSavePasswordsSwitch;
     private ChromeBaseCheckBoxPreference mAutoSignInSwitch;
-    private ChromeBasePreference mCheckPasswords;
+    private PasswordCheckPreference mCheckPasswords;
     private TextMessagePreference mEmptyView;
     private boolean mSearchRecorded;
     private Menu mMenu;
+
+    private @Nullable PasswordCheck mPasswordCheck;
+    private @ManagePasswordsReferrer int mManagePasswordsReferrer;
 
     /**
      * For controlling the UX flow of exporting passwords.
@@ -140,12 +150,34 @@ public class PasswordSettings
 
         setHasOptionsMenu(true); // Password Export might be optional but Search is always present.
 
+        mManagePasswordsReferrer = getReferrerFromInstanceStateOrLaunchBundle(savedInstanceState);
+
         if (savedInstanceState == null) return;
 
         if (savedInstanceState.containsKey(SAVED_STATE_SEARCH_QUERY)) {
             mSearchQuery = savedInstanceState.getString(SAVED_STATE_SEARCH_QUERY);
             mSearchRecorded = mSearchQuery != null; // We record a search when a query is set.
         }
+    }
+
+    private @ManagePasswordsReferrer int getReferrerFromInstanceStateOrLaunchBundle(
+            Bundle savedInstanceState) {
+        if (savedInstanceState != null
+                && savedInstanceState.containsKey(
+                        PasswordManagerHelper.MANAGE_PASSWORDS_REFERRER)) {
+            return savedInstanceState.getInt(PasswordManagerHelper.MANAGE_PASSWORDS_REFERRER);
+        }
+        Bundle extras = getArguments();
+        assert extras.containsKey(PasswordManagerHelper.MANAGE_PASSWORDS_REFERRER)
+            : "PasswordSettings must be launched with a manage-passwords-referrer fragment"
+                + "argument, but none was provided.";
+        return extras.getInt(PasswordManagerHelper.MANAGE_PASSWORDS_REFERRER);
+    }
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        mPasswordCheck = PasswordCheckFactory.getOrCreate();
     }
 
     @Override
@@ -239,7 +271,7 @@ public class PasswordSettings
         if (mSearchQuery == null) {
             createSavePasswordsSwitch();
             createAutoSignInCheckbox();
-            if (ChromeFeatureList.isEnabled(ChromeFeatureList.PASSWORD_CHECK)) {
+            if (mPasswordCheck != null) {
                 createCheckPasswords();
             }
         }
@@ -397,12 +429,20 @@ public class PasswordSettings
         if (mSearchQuery != null) {
             outState.putString(SAVED_STATE_SEARCH_QUERY, mSearchQuery);
         }
+        outState.putInt(PasswordManagerHelper.MANAGE_PASSWORDS_REFERRER, mManagePasswordsReferrer);
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
         PasswordManagerHandlerProvider.getInstance().removeObserver(this);
+        // The component should only be destroyed when the activity has been closed by the user
+        // (e.g. by pressing on the back button) and not when the activity is temporarily destroyed
+        // by the system.
+        if (getActivity().isFinishing() && mPasswordCheck != null
+                && mManagePasswordsReferrer != ManagePasswordsReferrer.CHROME_SETTINGS) {
+            PasswordCheckFactory.destroy();
+        }
     }
 
     /**
@@ -473,13 +513,22 @@ public class PasswordSettings
     }
 
     private void createCheckPasswords() {
-        mCheckPasswords = new ChromeBasePreference(getStyledContext(), null);
+        final int numCheckLaunched =
+                getPrefService().getInteger(Pref.SETTINGS_LAUNCHED_PASSWORD_CHECKS);
+        mCheckPasswords = new PasswordCheckPreference(getStyledContext(), numCheckLaunched < 3);
         mCheckPasswords.setKey(PREF_CHECK_PASSWORDS);
         mCheckPasswords.setTitle(R.string.passwords_check_title);
         mCheckPasswords.setOrder(ORDER_CHECK_PASSWORDS);
         mCheckPasswords.setSummary(R.string.passwords_check_description);
-        // Add a stub listener which returns true to notify the click was handled
-        mCheckPasswords.setOnPreferenceClickListener(preference -> true);
+        // Add a listener which launches a settings page for the leak password check
+        mCheckPasswords.setOnPreferenceClickListener(preference -> {
+            getPrefService().setInteger(
+                    Pref.SETTINGS_LAUNCHED_PASSWORD_CHECKS, numCheckLaunched + 1);
+            PasswordCheck passwordCheck = PasswordCheckFactory.getOrCreate();
+            passwordCheck.showUi(getStyledContext(), PasswordCheckReferrer.PASSWORD_SETTINGS);
+            // Return true to notify the click was handled
+            return true;
+        });
         getPreferenceScreen().addPreference(mCheckPasswords);
     }
 

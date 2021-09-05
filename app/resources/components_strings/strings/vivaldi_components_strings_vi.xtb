@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">tên không biết</translation>
 <translation id="1089439967362294234">Đổi Mật khẩu</translation>
 <translation id="1110994991967754504">Chọn quyền cho <ph name="PERMISSION_NAME" /></translation>
-<translation id="1152921474424827756">Truy cập <ph name="BEGIN_LINK" />bản sao được lưu trong bộ nhớ cache<ph name="END_LINK" /> của <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> đã bất ngờ đóng kết nối.</translation>
 <translation id="1161325031994447685">Kết nối lại với Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;In...</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">Trang web này có chứa các chương trình độc hại</translation>
 <translation id="1916770123977586577">Để áp dụng các cài đặt đã cập nhật cho trang web này, hãy tải lại trang</translation>
 <translation id="1919345977826869612">Quảng cáo</translation>
-<translation id="194030505837763158">Truy cập <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Nâng cao</translation>
-<translation id="2030481566774242610">Ý của bạn là <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kiểm tra proxy và tường lửa<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Âm thanh</translation>
 <translation id="2119505898009119320">Cấp cho: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -124,7 +121,6 @@
 <translation id="5287240709317226393">Hiển thị cookie</translation>
 <translation id="5355557959165512791">Bạn không thể truy cập vào <ph name="SITE" /> ngay bây giờ vì chứng chỉ của trang này đã bị thu hồi. Lỗi mạng và các cuộc tấn công mạng thường chỉ là tạm thời nên trang này có thể sẽ hoạt động lại sau.</translation>
 <translation id="5386426401304769735">Chuỗi chứng chỉ cho trang web này có chứa một chứng chỉ đã ký bằng SHA-1.</translation>
-<translation id="5431657950005405462">Không tìm thấy tệp của bạn</translation>
 <translation id="5452270690849572955">Không thể tìm thấy trang <ph name="HOST_NAME" /> này</translation>
 <translation id="5457113250005438886">Không hợp lệ</translation>
 <translation id="5492298309214877701">Trang web trên mạng nội bộ của công ty, tổ chức hoặc trường học này có URL tương tự như trang web bên ngoài.
@@ -170,7 +166,6 @@
 <translation id="6897140037006041989">Tác nhân Người dùng</translation>
 <translation id="7053983685419859001">Chặn</translation>
 <translation id="7079718277001814089">Trang web này có chứa phần mềm độc hại</translation>
-<translation id="7090678807593890770">Tìm kiếm <ph name="LINK" /> trên Google</translation>
 <translation id="7108819624672055576">Được một tiện ích cho phép</translation>
 <translation id="7111012039238467737">(Hợp lệ)</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> không tuân thủ các tiêu chuẩn bảo mật.</translation>
@@ -192,7 +187,6 @@
 <translation id="7716424297397655342">Không thể tải trang web này từ bộ nhớ cache</translation>
 <translation id="7758069387465995638">Tường lửa hoặc phần mềm diệt vi-rút có thể đã chặn kết nối.</translation>
 <translation id="7800304661137206267">Kết nối được mã hóa bằng <ph name="CIPHER" />, với <ph name="MAC" /> để xác thực thư và <ph name="KX" /> là cơ chế trao đổi chính.</translation>
-<translation id="7802523362929240268">Trang web hợp pháp</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> thường sử dụng mã hóa để bảo vệ thông tin của bạn. Khi Vivaldi cố gắng kết nối với <ph name="SITE" /> tại thời điểm này, trang web đã gửi lại thông tin đăng nhập không chính xác và bất thường. Điều này có thể xảy ra khi kẻ tấn công đang cố gắng giả mạo là <ph name="SITE" /> hoặc màn hình đăng nhập Wi-Fi đã làm gián đoạn kết nối. Thông tin của bạn vẫn an toàn do Vivaldi đã ngừng kết nối trước khi bất kỳ dữ liệu nào được trao đổi.</translation>
 <translation id="7878562273885520351">Mật khẩu của bạn có thể bị xâm phạm</translation>
 <translation id="7951415247503192394">(32 bit)</translation>

@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">onbekende naam</translation>
 <translation id="1089439967362294234">Verander Wagwoord</translation>
 <translation id="1110994991967754504">Kies toestemming vir <ph name="PERMISSION_NAME" /></translation>
-<translation id="1152921474424827756">Open ’n <ph name="BEGIN_LINK" />gekasde kopie<ph name="END_LINK" /> van <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> het die verbinding onverwags gesluit.</translation>
 <translation id="1161325031994447685">Herverbind tans aan Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Druk Af…</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">Hierdie werf bevat skadelike programmatuur</translation>
 <translation id="1916770123977586577">Herlaai die blad om u bygewerkte werfinstellings toe te pas</translation>
 <translation id="1919345977826869612">Advertensies</translation>
-<translation id="194030505837763158">Gaan na <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Gevorderd</translation>
-<translation id="2030481566774242610">Het u bedoel <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Gaan tans die instaanbediener en brandmuur na<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Geluid</translation>
 <translation id="2119505898009119320">Uitgereik aan: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -124,7 +121,6 @@
 <translation id="5287240709317226393">Toon koekies</translation>
 <translation id="5355557959165512791">U kan nie nou <ph name="SITE" /> besoek nie omdat die sertifikaat herroep is. Netwerkfoute en -aanvalle is gewoonlik tydelik, dus sal hierdie blad waarskynlik later werk.</translation>
 <translation id="5386426401304769735">Die sertifikaatketting vir hierdie werf bevat ’n sertifikaat wat met SHA-1 onderteken is.</translation>
-<translation id="5431657950005405462">U lêer is nie gevind nie</translation>
 <translation id="5452270690849572955">Hierdie <ph name="HOST_NAME" /> blad kan nie gevind word nie</translation>
 <translation id="5457113250005438886">Ongeldig</translation>
 <translation id="5492298309214877701">Hierdie werf op die maatskappy, organisasie of skool se intranet het dieselfde bronadres as ’n eksterne webwerf.
@@ -170,7 +166,6 @@
 <translation id="6897140037006041989">Gebruikeragent</translation>
 <translation id="7053983685419859001">Versper</translation>
 <translation id="7079718277001814089">Hierdie werf bevat skadelike programmatuur</translation>
-<translation id="7090678807593890770">Deursoek Google vir <ph name="LINK" /></translation>
 <translation id="7108819624672055576">Deur ’n uitbreiding toegelaat</translation>
 <translation id="7111012039238467737">(Geldig)</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> voldoen nie aan sekuriteitstandaarde nie.</translation>
@@ -192,7 +187,6 @@
 <translation id="7716424297397655342">Hierdie werf kan nie vanuit die kasgeheue gelaai word nie</translation>
 <translation id="7758069387465995638">Brandmuur of antivirusprogrammatuur het dalk die verbinding geblokkeer.</translation>
 <translation id="7800304661137206267">Die verbinding is geënkripteer deur <ph name="CIPHER" />, met <ph name="MAC" /> vir boodskapbekragtiging en <ph name="KX" /> as die sleuteluitruilmeganisme.</translation>
-<translation id="7802523362929240268">Werf is geregverdig</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> gebruik gewoonlik enkripsie om u inligting te beskerm. Toe Vivaldi hierdie keer ’n verbinding met <ph name="SITE" /> gepoog het, het die webwerf ongewone en verkeerde aantekengegewens teruggestuur. Dit kan gebeur wanneer ’n aanvaller homself as <ph name="SITE" /> probeer voorhou, of wanneer ’n Wi-Fi-aantekenskerm die verbinding onderbreek het. U inligting is steeds veilig omdat Vivaldi die verbinding gestop het voor enige data uitgeruil is.</translation>
 <translation id="7878562273885520351">U wagwoord is dalk gekompromitteer</translation>
 <translation id="7951415247503192394">(32-bis)</translation>

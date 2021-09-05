@@ -47,19 +47,20 @@ class CompositorFrameReporterTest : public testing::Test {
 
   std::unique_ptr<BeginMainFrameMetrics> BuildBlinkBreakdown() {
     auto breakdown = std::make_unique<BeginMainFrameMetrics>();
-    breakdown->handle_input_events = base::TimeDelta::FromMicroseconds(10);
-    breakdown->animate = base::TimeDelta::FromMicroseconds(9);
-    breakdown->style_update = base::TimeDelta::FromMicroseconds(8);
-    breakdown->layout_update = base::TimeDelta::FromMicroseconds(7);
+    breakdown->handle_input_events = base::TimeDelta::FromMicroseconds(11);
+    breakdown->animate = base::TimeDelta::FromMicroseconds(10);
+    breakdown->style_update = base::TimeDelta::FromMicroseconds(9);
+    breakdown->layout_update = base::TimeDelta::FromMicroseconds(8);
+    breakdown->compositing_inputs = base::TimeDelta::FromMicroseconds(7);
     breakdown->prepaint = base::TimeDelta::FromMicroseconds(6);
-    breakdown->composite = base::TimeDelta::FromMicroseconds(5);
+    breakdown->compositing_assignments = base::TimeDelta::FromMicroseconds(5);
     breakdown->paint = base::TimeDelta::FromMicroseconds(4);
     breakdown->scrolling_coordinator = base::TimeDelta::FromMicroseconds(3);
     breakdown->composite_commit = base::TimeDelta::FromMicroseconds(2);
     breakdown->update_layers = base::TimeDelta::FromMicroseconds(1);
 
     // Advance now by the sum of the breakdowns.
-    AdvanceNowByMs(10 + 9 + 8 + 7 + 6 + 5 + 4 + 3 + 2 + 1);
+    AdvanceNowByMs(11 + 10 + 9 + 8 + 7 + 6 + 5 + 4 + 3 + 2 + 1);
 
     return breakdown;
   }
@@ -269,10 +270,13 @@ TEST_F(CompositorFrameReporterTest,
   histogram_tester.ExpectTotalCount("EventLatency.TouchPressed.TotalLatency",
                                     1);
   histogram_tester.ExpectTotalCount("EventLatency.TouchMoved.TotalLatency", 2);
+  histogram_tester.ExpectTotalCount("EventLatency.TotalLatency", 3);
   histogram_tester.ExpectBucketCount("EventLatency.TouchPressed.TotalLatency",
                                      latency_ms, 1);
   histogram_tester.ExpectBucketCount("EventLatency.TouchMoved.TotalLatency",
                                      latency_ms, 2);
+  histogram_tester.ExpectBucketCount("EventLatency.TotalLatency", latency_ms,
+                                     3);
 }
 
 // Tests that when a frame is presented to the user, event latency breakdown
@@ -357,10 +361,13 @@ TEST_F(CompositorFrameReporterTest,
        blink_breakdown_copy.style_update},
       {"EventLatency.TouchPressed.SendBeginMainFrameToCommit.LayoutUpdate",
        blink_breakdown_copy.layout_update},
+      {"EventLatency.TouchPressed.SendBeginMainFrameToCommit.CompositingInputs",
+       blink_breakdown_copy.compositing_inputs},
       {"EventLatency.TouchPressed.SendBeginMainFrameToCommit.Prepaint",
        blink_breakdown_copy.prepaint},
-      {"EventLatency.TouchPressed.SendBeginMainFrameToCommit.Composite",
-       blink_breakdown_copy.composite},
+      {"EventLatency.TouchPressed.SendBeginMainFrameToCommit"
+       ".CompositingAssignments",
+       blink_breakdown_copy.compositing_assignments},
       {"EventLatency.TouchPressed.SendBeginMainFrameToCommit.Paint",
        blink_breakdown_copy.paint},
       {"EventLatency.TouchPressed.SendBeginMainFrameToCommit."
@@ -407,6 +414,8 @@ TEST_F(CompositorFrameReporterTest,
        viz_breakdown.presentation_feedback.timestamp -
            viz_breakdown.swap_timings.swap_end},
       {"EventLatency.TouchPressed.TotalLatency",
+       viz_breakdown.presentation_feedback.timestamp - event_time},
+      {"EventLatency.TotalLatency",
        viz_breakdown.presentation_feedback.timestamp - event_time},
   };
 
@@ -465,8 +474,8 @@ TEST_F(CompositorFrameReporterTest,
   const int total_latency_ms =
       (viz_breakdown.presentation_feedback.timestamp - event_time)
           .InMicroseconds();
-  const int swap_end_latency_ms =
-      (viz_breakdown.swap_timings.swap_end - event_time).InMicroseconds();
+  const int swap_begin_latency_ms =
+      (viz_breakdown.swap_timings.swap_start - event_time).InMicroseconds();
   struct {
     const char* name;
     const int64_t latency_ms;
@@ -474,12 +483,12 @@ TEST_F(CompositorFrameReporterTest,
   } expected_counts[] = {
       {"EventLatency.GestureScrollBegin.Wheel.TotalLatency", total_latency_ms,
        1},
-      {"EventLatency.GestureScrollBegin.Wheel.TotalLatencyToSwapEnd",
-       swap_end_latency_ms, 1},
+      {"EventLatency.GestureScrollBegin.Wheel.TotalLatencyToSwapBegin",
+       swap_begin_latency_ms, 1},
       {"EventLatency.GestureScrollUpdate.Wheel.TotalLatency", total_latency_ms,
        2},
-      {"EventLatency.GestureScrollUpdate.Wheel.TotalLatencyToSwapEnd",
-       swap_end_latency_ms, 2},
+      {"EventLatency.GestureScrollUpdate.Wheel.TotalLatencyToSwapBegin",
+       swap_begin_latency_ms, 2},
   };
   for (const auto& expected_count : expected_counts) {
     histogram_tester.ExpectTotalCount(expected_count.name,
@@ -487,6 +496,7 @@ TEST_F(CompositorFrameReporterTest,
     histogram_tester.ExpectBucketCount(
         expected_count.name, expected_count.latency_ms, expected_count.count);
   }
+  histogram_tester.ExpectTotalCount("EventLatency.TotalLatency", 3);
 }
 
 // Tests that when the frame is not presented to the user, event latency metrics

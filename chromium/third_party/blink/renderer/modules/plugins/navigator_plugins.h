@@ -17,8 +17,6 @@ class Navigator;
 
 class NavigatorPlugins final : public GarbageCollected<NavigatorPlugins>,
                                public Supplement<Navigator> {
-  USING_GARBAGE_COLLECTED_MIXIN(NavigatorPlugins);
-
  public:
   static const char kSupplementName[];
 
@@ -39,8 +37,6 @@ class NavigatorPlugins final : public GarbageCollected<NavigatorPlugins>,
 
   mutable Member<DOMPluginArray> plugins_;
   mutable Member<DOMMimeTypeArray> mime_types_;
-
-  base::span<const uint8_t> StringToBytesSafe(String str) const;
 };
 
 }  // namespace blink

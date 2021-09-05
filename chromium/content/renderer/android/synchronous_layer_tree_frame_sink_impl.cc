@@ -9,6 +9,7 @@
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/check.h"
+#include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/notreached.h"
@@ -30,9 +31,9 @@
 #include "components/viz/service/display/texture_deleter.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "content/common/android/sync_compositor_statics.h"
 #include "content/common/view_messages.h"
-#include "content/renderer/frame_swap_message_queue.h"
-#include "content/renderer/input/synchronous_compositor_registry.h"
+#include "content/public/common/content_switches.h"
 #include "content/renderer/render_thread_impl.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -111,7 +112,6 @@ class SynchronousLayerTreeFrameSinkImpl::SoftwareOutputSurface
   void EnsureBackbuffer() override {}
   void DiscardBackbuffer() override {}
   void BindFramebuffer() override {}
-  void SetDrawRectangle(const gfx::Rect& rect) override {}
   void SwapBuffers(viz::OutputSurfaceFrame frame) override {}
   void Reshape(const gfx::Size& size,
                float scale_factor,
@@ -152,8 +152,7 @@ SynchronousLayerTreeFrameSinkImpl::SynchronousLayerTreeFrameSinkImpl(
     IPC::Sender* sender,
     uint32_t layer_tree_frame_sink_id,
     std::unique_ptr<viz::BeginFrameSource> synthetic_begin_frame_source,
-    SynchronousCompositorRegistry* registry,
-    scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue,
+    blink::SynchronousCompositorRegistry* registry,
     mojo::PendingRemote<viz::mojom::CompositorFrameSink>
         compositor_frame_sink_remote,
     mojo::PendingReceiver<viz::mojom::CompositorFrameSinkClient>
@@ -166,12 +165,13 @@ SynchronousLayerTreeFrameSinkImpl::SynchronousLayerTreeFrameSinkImpl(
       registry_(registry),
       sender_(sender),
       memory_policy_(0u),
-      frame_swap_message_queue_(frame_swap_message_queue),
       unbound_compositor_frame_sink_(std::move(compositor_frame_sink_remote)),
       unbound_client_(std::move(client_receiver)),
       synthetic_begin_frame_source_(std::move(synthetic_begin_frame_source)),
       viz_frame_submission_enabled_(
-          features::IsUsingVizFrameSubmissionForWebView()) {
+          features::IsUsingVizFrameSubmissionForWebView()),
+      use_zero_copy_sw_draw_(base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kSingleProcess)) {
   DCHECK(registry_);
   DCHECK(sender_);
   thread_checker_.DetachFromThread();
@@ -183,7 +183,7 @@ SynchronousLayerTreeFrameSinkImpl::~SynchronousLayerTreeFrameSinkImpl() =
     default;
 
 void SynchronousLayerTreeFrameSinkImpl::SetSyncClient(
-    SynchronousLayerTreeFrameSinkClient* compositor) {
+    blink::SynchronousLayerTreeFrameSinkClient* compositor) {
   sync_client_ = compositor;
 }
 
@@ -246,8 +246,8 @@ bool SynchronousLayerTreeFrameSinkImpl::BindToClient(
   // TODO(crbug.com/692814): The Display never sends its resources out of
   // process so there is no reason for it to use a SharedBitmapManager.
   display_ = std::make_unique<viz::Display>(
-      &shared_bitmap_manager_, software_renderer_settings, kRootFrameSinkId,
-      std::move(output_surface), std::move(overlay_processor),
+      &shared_bitmap_manager_, software_renderer_settings, &debug_settings_,
+      kRootFrameSinkId, std::move(output_surface), std::move(overlay_processor),
       nullptr /* scheduler */, nullptr /* current_task_runner */);
   display_->Initialize(&display_client_,
                        frame_sink_manager_->surface_manager());
@@ -354,7 +354,7 @@ void SynchronousLayerTreeFrameSinkImpl::SubmitCompositorFrame(
 
     // The embedding RenderPass covers the entire Display's area.
     const auto& embed_render_pass = embed_frame.render_pass_list.back();
-    embed_render_pass->SetNew(1, gfx::Rect(display_size),
+    embed_render_pass->SetNew(viz::RenderPassId{1}, gfx::Rect(display_size),
                               gfx::Rect(display_size), gfx::Transform());
     embed_render_pass->has_transparent_background = false;
 
@@ -459,6 +459,11 @@ void SynchronousLayerTreeFrameSinkImpl::DemandDrawHw(
   InvokeComposite(gfx::Transform(), gfx::Rect(viewport_size));
 }
 
+void SynchronousLayerTreeFrameSinkImpl::DemandDrawSwZeroCopy() {
+  DCHECK(use_zero_copy_sw_draw_);
+  DemandDrawSw(SynchronousCompositorGetSkCanvas());
+}
+
 void SynchronousLayerTreeFrameSinkImpl::DemandDrawSw(SkCanvas* canvas) {
   DCHECK(CalledOnValidThread());
   DCHECK(canvas);
@@ -483,6 +488,10 @@ void SynchronousLayerTreeFrameSinkImpl::DemandDrawSw(SkCanvas* canvas) {
 void SynchronousLayerTreeFrameSinkImpl::WillSkipDraw() {
   client_->OnDraw(gfx::Transform(), gfx::Rect(), in_software_draw_,
                   true /*skip_draw*/);
+}
+
+bool SynchronousLayerTreeFrameSinkImpl::UseZeroCopySoftwareDraw() {
+  return use_zero_copy_sw_draw_;
 }
 
 void SynchronousLayerTreeFrameSinkImpl::InvokeComposite(
@@ -543,17 +552,6 @@ void SynchronousLayerTreeFrameSinkImpl::DidActivatePendingTree() {
   DCHECK(CalledOnValidThread());
   if (sync_client_)
     sync_client_->DidActivatePendingTree();
-  DeliverMessages();
-}
-
-void SynchronousLayerTreeFrameSinkImpl::DeliverMessages() {
-  std::vector<std::unique_ptr<IPC::Message>> messages;
-  std::unique_ptr<FrameSwapMessageQueue::SendMessageScope> send_message_scope =
-      frame_swap_message_queue_->AcquireSendMessageScope();
-  frame_swap_message_queue_->DrainMessages(&messages);
-  for (auto& msg : messages) {
-    Send(msg.release());
-  }
 }
 
 bool SynchronousLayerTreeFrameSinkImpl::Send(IPC::Message* message) {

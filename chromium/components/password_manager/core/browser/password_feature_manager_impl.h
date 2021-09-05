@@ -28,7 +28,8 @@ class PasswordFeatureManagerImpl : public PasswordFeatureManager {
 
   bool IsOptedInForAccountStorage() const override;
   bool ShouldShowAccountStorageOptIn() const override;
-  bool ShouldShowAccountStorageReSignin() const override;
+  bool ShouldShowAccountStorageReSignin(
+      const GURL& current_page_url) const override;
   void OptInToAccountStorage() override;
   void OptOutOfAccountStorageAndClearSettings() override;
 
@@ -39,6 +40,9 @@ class PasswordFeatureManagerImpl : public PasswordFeatureManager {
   autofill::PasswordForm::Store GetDefaultPasswordStore() const override;
   metrics_util::PasswordAccountStorageUsageLevel
   ComputePasswordAccountStorageUsageLevel() const override;
+
+  void RecordMoveOfferedToNonOptedInUser() override;
+  int GetMoveOfferedToNonOptedInUserCount() const override;
 
  private:
   PrefService* const pref_service_;

@@ -109,7 +109,7 @@ DownloadProtectionService::DownloadProtectionService(
       binary_feature_extractor_(new BinaryFeatureExtractor()),
       download_request_timeout_ms_(kDownloadRequestTimeoutMs),
       feedback_service_(new DownloadFeedbackService(
-          sb_service_ ? sb_service_->GetURLLoaderFactory() : nullptr,
+          this,
           base::ThreadPool::CreateSequencedTaskRunner(
               {base::MayBlock(), base::TaskPriority::BEST_EFFORT})
               .get())),
@@ -411,7 +411,7 @@ void DownloadProtectionService::MaybeSendDangerousDownloadOpenedReport(
     report.set_show_download_in_folder(show_download_in_folder);
     std::string serialized_report;
     if (report.SerializeToString(&serialized_report)) {
-      sb_service_->SendSerializedDownloadReport(serialized_report);
+      sb_service_->SendSerializedDownloadReport(profile, serialized_report);
     } else {
       DCHECK(false)
           << "Unable to serialize the dangerous download opened report.";
@@ -569,7 +569,8 @@ bool DownloadProtectionService::MaybeBeginFeedbackForDownload(
   bool is_extended_reporting =
       ExtendedReportingPrefExists(*prefs) && IsExtendedReportingEnabled(*prefs);
   if (!profile->IsOffTheRecord() && is_extended_reporting) {
-    feedback_service_->BeginFeedbackForDownload(download, download_command);
+    feedback_service_->BeginFeedbackForDownload(profile, download,
+                                                download_command);
     return true;
   }
   return false;

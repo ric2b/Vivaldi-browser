@@ -3,8 +3,7 @@
      Use of this source code is governed by a BSD-style license that can be
      found in the LICENSE file. -->
 
-<!-- TODO(crbug.com/1017190): Remove the UnusedResources workaround. -->
-<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="UnusedResources">
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Theme shared between Chrome and embedders. -->
     <style name="Theme.BrowserUI" parent="Theme.AppCompat.DayNight.NoActionBar">
         <!-- Text colors -->
@@ -95,5 +94,18 @@
         <item name="colorControlActivated">@color/default_control_color_active_dark</item>
         <item name="colorControlHighlight">@color/default_control_color_highlight_dark</item>
         <item name="android:colorForeground">@color/modern_grey_100</item>
+    </style>
+
+    <!-- Styling for an app menu item row. -->
+    <style name="AppMenuItem">
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:background">?attr/listChoiceBackgroundIndicator</item>
+    </style>
+
+    <!-- Checkbox styles. -->
+    <style name="DefaultCheckboxStyle" parent="TextAppearance.TextMedium.Secondary">
+        <!-- The space between the checkbox and text. -->
+        <item name="android:paddingStart">16dp</item>
     </style>
 </resources>

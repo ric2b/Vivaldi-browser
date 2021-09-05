@@ -25,11 +25,7 @@ class FakeCompositorDependencies : public CompositorDependencies {
   ~FakeCompositorDependencies() override;
 
   // CompositorDependencies implementation.
-  int GetGpuRasterizationMSAASampleCount() override;
   bool IsLcdTextEnabled() override;
-  bool IsZeroCopyEnabled() override;
-  bool IsPartialRasterEnabled() override;
-  bool IsGpuMemoryBufferCompositorResourcesEnabled() override;
   bool IsElasticOverscrollEnabled() override;
   bool IsUseZoomForDSFEnabled() override;
   bool IsSingleThreaded() override;
@@ -40,13 +36,9 @@ class FakeCompositorDependencies : public CompositorDependencies {
   std::unique_ptr<cc::UkmRecorderFactory> CreateUkmRecorderFactory() override;
   void RequestNewLayerTreeFrameSink(
       RenderWidget* render_widget,
-      scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue,
       const GURL& url,
       LayerTreeFrameSinkCallback callback,
       const char* client_name) override;
-#ifdef OS_ANDROID
-  bool UsingSynchronousCompositing() override;
-#endif
 
   void set_use_zoom_for_dsf_enabled(bool enabled) {
     use_zoom_for_dsf_ = enabled;

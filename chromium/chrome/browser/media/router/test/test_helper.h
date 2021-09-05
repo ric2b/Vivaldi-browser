@@ -15,6 +15,7 @@
 #include "chrome/browser/media/router/issues_observer.h"
 #include "chrome/browser/media/router/media_routes_observer.h"
 #include "chrome/browser/media/router/media_sinks_observer.h"
+#include "chrome/common/media_router/mojom/logger.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/public/mojom/presentation/presentation.mojom.h"
 
@@ -27,6 +28,7 @@
 #include "chrome/browser/media/router/providers/dial/dial_activity_manager.h"
 #include "chrome/browser/media/router/providers/dial/dial_internal_message_util.h"
 #include "chrome/common/media_router/discovery/media_sink_internal.h"
+#include "chrome/common/media_router/mojom/logger.mojom.h"
 #include "net/base/ip_endpoint.h"
 #include "services/network/test/test_url_loader_factory.h"
 #endif  // !defined(OS_ANDROID)
@@ -93,6 +95,7 @@ class MockDialMediaSinkService : public DialMediaSinkService {
 
   MOCK_METHOD1(Start, void(const OnSinksDiscoveredCallback&));
   MOCK_METHOD0(OnUserGesture, void());
+  MOCK_METHOD1(BindLogger, void(mojo::PendingRemote<mojom::Logger>));
 };
 
 class MockCastMediaSinkService : public CastMediaSinkService {
@@ -103,6 +106,7 @@ class MockCastMediaSinkService : public CastMediaSinkService {
   MOCK_METHOD2(Start,
                void(const OnSinksDiscoveredCallback&, MediaSinkServiceBase*));
   MOCK_METHOD0(OnUserGesture, void());
+  MOCK_METHOD1(BindLogger, void(mojo::PendingRemote<mojom::Logger>));
   MOCK_METHOD0(StartMdnsDiscovery, void());
 };
 
@@ -114,8 +118,10 @@ class MockCastAppDiscoveryService : public CastAppDiscoveryService {
   Subscription StartObservingMediaSinks(
       const CastMediaSource& source,
       const SinkQueryCallback& callback) override;
+  scoped_refptr<base::SequencedTaskRunner> task_runner() override;
   MOCK_METHOD1(DoStartObservingMediaSinks, void(const CastMediaSource&));
   MOCK_METHOD0(Refresh, void());
+  MOCK_METHOD1(BindLogger, void(mojo::PendingRemote<mojom::Logger>));
 
   SinkQueryCallbackList& callbacks() { return callbacks_; }
 

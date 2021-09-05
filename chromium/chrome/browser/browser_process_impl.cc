@@ -147,7 +147,7 @@
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 #include "chrome/browser/chrome_browser_main_mac.h"
 #include "chrome/browser/media/webrtc/system_media_capture_permissions_stats_mac.h"
 #endif
@@ -194,8 +194,8 @@
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
 #include "chrome/browser/first_run/upgrade_util.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
-#include "chrome/browser/policy/chrome_browser_cloud_management_controller.h"
 #include "chrome/browser/ui/user_manager.h"
+#include "components/enterprise/browser/controller/chrome_browser_cloud_management_controller.h"
 #endif
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
@@ -226,18 +226,16 @@ rappor::RapporService* GetBrowserRapporService() {
   return nullptr;
 }
 
-BrowserProcessImpl::BrowserProcessImpl(StartupData* startup_data) {
+BrowserProcessImpl::BrowserProcessImpl(StartupData* startup_data)
+    : startup_data_(startup_data),
+      browser_policy_connector_(startup_data->chrome_feature_list_creator()
+                                    ->TakeChromeBrowserPolicyConnector()),
+      local_state_(
+          startup_data->chrome_feature_list_creator()->TakePrefService()),
+      platform_part_(std::make_unique<BrowserProcessPlatformPart>()) {
   g_browser_process = this;
 
   DCHECK(startup_data);
-  startup_data_ = startup_data;
-
-  chrome_feature_list_creator_ = startup_data->chrome_feature_list_creator();
-  browser_policy_connector_ =
-      chrome_feature_list_creator_->TakeChromeBrowserPolicyConnector();
-  created_browser_policy_connector_ = true;
-
-  platform_part_ = std::make_unique<BrowserProcessPlatformPart>();
   // Most work should be done in Init().
 }
 
@@ -270,7 +268,7 @@ void BrowserProcessImpl::Init() {
   ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
       chrome::kChromeSearchScheme);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   ui::InitIdleMonitor();
 #endif
 
@@ -318,20 +316,20 @@ void BrowserProcessImpl::Init() {
   // Initialize the notification for the default browser setting policy.
   pref_change_registrar_.Add(
       prefs::kDefaultBrowserSettingEnabled,
-      base::Bind(&BrowserProcessImpl::ApplyDefaultBrowserPolicy,
-                 base::Unretained(this)));
+      base::BindRepeating(&BrowserProcessImpl::ApplyDefaultBrowserPolicy,
+                          base::Unretained(this)));
 
 #if !defined(OS_ANDROID)
   // This preference must be kept in sync with external values; update them
   // whenever the preference or its controlling policy changes.
   pref_change_registrar_.Add(metrics::prefs::kMetricsReportingEnabled,
-                             base::Bind(&ApplyMetricsReportingPolicy));
+                             base::BindRepeating(&ApplyMetricsReportingPolicy));
 #endif
 
   DCHECK(!webrtc_event_log_manager_);
   webrtc_event_log_manager_ = WebRtcEventLogManager::CreateSingletonInstance();
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   system_media_permissions::LogSystemMediaPermissionsStartupStats();
 #endif
 }
@@ -345,7 +343,7 @@ void BrowserProcessImpl::SetQuitClosure(base::OnceClosure quit_closure) {
 }
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 void BrowserProcessImpl::ClearQuitClosure() {
   quit_closure_.Reset();
 }
@@ -700,8 +698,6 @@ ProfileManager* BrowserProcessImpl::profile_manager() {
 
 PrefService* BrowserProcessImpl::local_state() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!local_state_)
-    CreateLocalState();
   return local_state_.get();
 }
 
@@ -749,11 +745,6 @@ NotificationPlatformBridge* BrowserProcessImpl::notification_platform_bridge() {
 policy::ChromeBrowserPolicyConnector*
 BrowserProcessImpl::browser_policy_connector() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!created_browser_policy_connector_) {
-    DCHECK(!browser_policy_connector_);
-    browser_policy_connector_ = platform_part_->CreateBrowserPolicyConnector();
-    created_browser_policy_connector_ = true;
-  }
   return browser_policy_connector_.get();
 }
 
@@ -1115,13 +1106,6 @@ void BrowserProcessImpl::CreateProfileManager() {
   profile_manager_ = std::make_unique<ProfileManager>(user_data_dir);
 }
 
-void BrowserProcessImpl::CreateLocalState() {
-  DCHECK(!local_state_);
-
-  local_state_ = chrome_feature_list_creator_->TakePrefService();
-  DCHECK(local_state_);
-}
-
 void BrowserProcessImpl::PreCreateThreads(
     const base::CommandLine& command_line) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -1370,13 +1354,12 @@ void BrowserProcessImpl::ApplyDefaultBrowserPolicy() {
     // message loops of the FILE and UI thread will hold references to it
     // and it will be automatically freed once all its tasks have finished.
     auto set_browser_worker =
-        base::MakeRefCounted<shell_integration::DefaultBrowserWorker>(
-            shell_integration::DefaultWebClientWorkerCallback());
+        base::MakeRefCounted<shell_integration::DefaultBrowserWorker>();
     // The user interaction must always be disabled when applying the default
     // browser policy since it is done at each browser startup and the result
     // of the interaction cannot be forced.
     set_browser_worker->set_interactive_permitted(false);
-    set_browser_worker->StartSetAsDefault();
+    set_browser_worker->StartSetAsDefault(base::NullCallback());
   }
 }
 
@@ -1421,7 +1404,7 @@ void BrowserProcessImpl::Unpin() {
 
   CHECK(base::RunLoop::IsRunningOnCurrentThread());
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::BindOnce(ChromeBrowserMainPartsMac::DidEndMainMessageLoop));

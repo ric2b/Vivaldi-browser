@@ -140,9 +140,6 @@ class PLATFORM_EXPORT V8PerIsolateData {
     is_handling_recursion_level_error_ = value;
   }
 
-  bool IsReportingException() const { return is_reporting_exception_; }
-  void SetReportingException(bool value) { is_reporting_exception_ = value; }
-
   bool IsUseCounterDisabled() const { return use_counter_disabled_; }
 
   V8PrivateProperty* PrivateProperty() { return private_property_.get(); }
@@ -266,12 +263,6 @@ class PLATFORM_EXPORT V8PerIsolateData {
   // Contains lists of eternal names, such as dictionary keys.
   HashMap<const void*, Vector<v8::Eternal<v8::Name>>> eternal_name_cache_;
 
-  // When taking a V8 context snapshot, we can't keep V8 objects with eternal
-  // handles. So we use a special interface map that doesn't use eternal handles
-  // instead of the default V8FunctionTemplateMap.
-  V8GlobalValueMap<const WrapperTypeInfo*, v8::FunctionTemplate>
-      interface_template_map_for_v8_context_snapshot_;
-
   std::unique_ptr<StringCache> string_cache_;
   std::unique_ptr<V8PrivateProperty> private_property_;
   Persistent<ScriptState> script_regexp_script_state_;
@@ -283,7 +274,6 @@ class PLATFORM_EXPORT V8PerIsolateData {
   friend class UseCounterDisabledScope;
 
   bool is_handling_recursion_level_error_;
-  bool is_reporting_exception_;
 
   Vector<base::OnceClosure> end_of_scope_tasks_;
   std::unique_ptr<Data> thread_debugger_;

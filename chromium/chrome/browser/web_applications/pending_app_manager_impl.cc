@@ -100,8 +100,8 @@ std::unique_ptr<PendingAppInstallTask>
 PendingAppManagerImpl::CreateInstallationTask(
     ExternalInstallOptions install_options) {
   return std::make_unique<PendingAppInstallTask>(
-      profile_, registrar(), shortcut_manager(), file_handler_manager(),
-      ui_manager(), finalizer(), install_manager(), std::move(install_options));
+      profile_, registrar(), os_integration_manager(), ui_manager(),
+      finalizer(), install_manager(), std::move(install_options));
 }
 
 std::unique_ptr<PendingAppRegistrationTaskBase>
@@ -215,8 +215,13 @@ void PendingAppManagerImpl::StartInstallationTask(
     pending_registrations_.push_front(current_registration_->launch_url());
     current_registration_.reset();
   }
-
   current_install_ = std::move(task);
+
+  if (!current_install_->task->install_options().app_info_factory.is_null()) {
+    current_install_->task->InstallFromInfo(base::BindOnce(
+        &PendingAppManagerImpl::OnInstalled, weak_ptr_factory_.GetWeakPtr()));
+    return;
+  }
 
   CreateWebContentsIfNecessary();
 
@@ -276,7 +281,13 @@ void PendingAppManagerImpl::CurrentInstallationFinished(
     bool is_local_resource =
         launch_url.scheme() == content::kChromeUIScheme ||
         launch_url.scheme() == content::kChromeUIUntrustedScheme;
-    if (!launch_url.is_empty() && !is_local_resource)
+    // TODO(crbug.com/809304): Call CreateWebContentsIfNecessary() instead of
+    // checking web_contents_ once major migration of default hosted apps to web
+    // apps has completed.
+    // Temporarily using offline manifest migrations (in which |web_contents_|
+    // is nullptr) in order to avoid overwhelming migrated-to web apps with hits
+    // for service worker registrations.
+    if (!launch_url.is_empty() && !is_local_resource && web_contents_)
       pending_registrations_.push_back(launch_url);
   }
 

@@ -16,16 +16,16 @@ class NavigationManager {
     this.group_ = DesktopNode.build(this.desktop_);
 
     /** @private {!SAChildNode} */
+    // TODO(crbug.com/1106080): It is possible for the firstChild to be a
+    // window which is occluded, for example if Switch Access is turned on
+    // when the user has several browser windows opened. We should either
+    // dynamically pick this.node_'s initial value based on an occlusion check,
+    // or ensure that we move away from occluded children as quickly as soon
+    // as they are detected using an interval set in DesktopNode.
     this.node_ = this.group_.firstChild;
 
     /** @private {!FocusHistory} */
     this.history_ = new FocusHistory();
-
-    /**
-     * Callback for testing use only.
-     * @private {?function()}
-     */
-    this.onMoveForwardForTesting_ = null;
 
     this.init_();
   }
@@ -41,8 +41,6 @@ class NavigationManager {
       return;
     }
 
-    SwitchAccessMetrics.recordMenuAction('EnterGroup');
-
     const newGroup = navigator.node_.asRootNode();
     if (newGroup) {
       navigator.history_.save(new FocusData(navigator.group_, navigator.node_));
@@ -57,8 +55,8 @@ class NavigationManager {
    */
   static enterKeyboard() {
     const navigator = NavigationManager.instance;
-    const keyboard = KeyboardRootNode.buildTree();
     navigator.node_.automationNode.focus();
+    const keyboard = KeyboardRootNode.buildTree();
     navigator.jumpTo_(keyboard);
   }
 
@@ -106,7 +104,10 @@ class NavigationManager {
    */
   static forceFocusedNode(node) {
     const navigator = NavigationManager.instance;
-    if (!navigator.node_.equals(node)) {
+    // Check if they are exactly the same instance. Checking contents
+    // equality is not sufficient in case the node has been repopulated
+    // after a refresh.
+    if (navigator.node_ !== node) {
       navigator.setNode_(node);
     }
   }
@@ -148,7 +149,12 @@ class NavigationManager {
    */
   static moveBackward() {
     const navigator = NavigationManager.instance;
-    navigator.setNode_(navigator.node_.previous);
+    if (navigator.node_.isValidAndVisible()) {
+      NavigationManager.tryMoving(
+          navigator.node_.previous, (node) => node.previous, navigator.node_);
+    } else {
+      NavigationManager.moveToValidNode();
+    }
   }
 
   /**
@@ -156,12 +162,66 @@ class NavigationManager {
    */
   static moveForward() {
     const navigator = NavigationManager.instance;
-
-    if (navigator.onMoveForwardForTesting_) {
-      navigator.onMoveForwardForTesting_();
+    if (navigator.node_.isValidAndVisible()) {
+      NavigationManager.tryMoving(
+          navigator.node_.next, (node) => node.next, navigator.node_);
+    } else {
+      NavigationManager.moveToValidNode();
     }
+  }
 
-    navigator.setNode_(navigator.node_.next);
+  /**
+   * Tries to move to another node, |node|, but if |node| is a window that's not
+   * in the foreground it will use |getNext| to find the next node to try.
+   * Checks against |startingNode| to ensure we don't get stuck in an infinite
+   * loop.
+   * @param {!SAChildNode} node The node to try to move into.
+   * @param {function(!SAChildNode): !SAChildNode} getNext gets the next node to
+   *     try if we cannot move to |next|. Takes |next| as a parameter.
+   * @param {!SAChildNode} startingNode The first node in the sequence. If we
+   *     loop back to this node, stop trying to move, as there are no other
+   *     nodes we can move to.
+   */
+  static tryMoving(node, getNext, startingNode) {
+    if (node == startingNode) {
+      // This should only happen if the desktop contains exactly one interesting
+      // child and all other children are windows which are occluded.
+      // Unlikely to happen since we can always access the shelf.
+      return;
+    }
+    const navigator = NavigationManager.instance;
+    const baseNode = node.automationNode;
+    if (!(node instanceof NodeWrapper) || !baseNode) {
+      navigator.setNode_(node);
+      return;
+    }
+    if (!SwitchAccessPredicate.isWindow(baseNode)) {
+      navigator.setNode_(node);
+      return;
+    }
+    const location = node.location;
+    if (!location) {
+      // Closure compiler doesn't realize we already checked isValidAndVisible
+      // before calling tryMoving, so we need to explicitly check location here
+      // so that RectHelper.center does not cause a closure error.
+      NavigationManager.moveToValidNode();
+      return;
+    }
+    const center = RectHelper.center(location);
+    // Check if the top center is visible as a proxy for occlusion. It's
+    // possible that other parts of the window are occluded, but in Chrome we
+    // can't drag windows off the top of the screen.
+    navigator.desktop_.hitTestWithReply(center.x, location.top, (hitNode) => {
+      if (AutomationUtil.isDescendantOf(
+              hitNode,
+              /** @type {!AutomationNode} */ (baseNode))) {
+        navigator.setNode_(node);
+      } else if (node.isValidAndVisible()) {
+        NavigationManager.tryMoving(getNext(node), getNext, startingNode);
+      } else {
+        NavigationManager.moveToValidNode();
+      }
+    });
   }
 
   /**
@@ -178,7 +238,7 @@ class NavigationManager {
       return;
     }
 
-    if (nodeIsValid) {
+    if (nodeIsValid && !(navigator.node_ instanceof BackButtonNode)) {
       // Our group has been invalidated. Move to navigator node to repair the
       // group stack.
       const node = navigator.node_.automationNode;
@@ -188,8 +248,12 @@ class NavigationManager {
       }
     }
 
-    if (groupIsValid) {
-      navigator.setNode_(navigator.group_.firstChild);
+    // Make sure the menu isn't open.
+    MenuManager.exit();
+
+    const child = navigator.group_.firstValidChild();
+    if (groupIsValid && child) {
+      navigator.setNode_(child);
       return;
     }
 
@@ -224,10 +288,29 @@ class NavigationManager {
    * @private
    */
   onFocusChange_(event) {
+    // Ignore focus changes from our own actions.
+    if (event.eventFrom == 'action') {
+      return;
+    }
+
     if (this.node_.isEquivalentTo(event.target)) {
       return;
     }
     this.moveTo_(event.target);
+  }
+
+  /**
+   * When scroll position changes, ensure that the focus ring is in the
+   * correct place and that the focused node / node group are valid.
+   * @private
+   */
+  onScrollChange_() {
+    if (this.node_.isValidAndVisible()) {
+      // Update focus ring.
+      FocusRingManager.setFocusedNode(this.node_);
+    }
+    this.group_.refresh();
+    MenuManager.refreshMenu();
   }
 
   /**
@@ -236,19 +319,27 @@ class NavigationManager {
    * @private
    */
   onModalDialog_(event) {
-    const menuRoot = ModalDialogRootNode.buildTree(event.target);
-    this.jumpTo_(menuRoot);
+    const modalRoot = ModalDialogRootNode.buildTree(event.target);
+    if (modalRoot.isValidGroup()) {
+      this.jumpTo_(modalRoot);
+    }
   }
 
   /**
-   * When the automation tree changes, check if it affects any nodes we are
-   *     currently listening to.
+   * When the automation tree changes, ensure the group and node we are
+   * currently listening to are fresh. This is only called when the tree change
+   * occurred on the node or group which are currently active.
    * @param {!chrome.automation.TreeChange} treeChange
    * @private
    */
   onTreeChange_(treeChange) {
     if (treeChange.type === chrome.automation.TreeChangeType.NODE_REMOVED) {
+      this.group_.refresh();
       NavigationManager.moveToValidNode();
+    } else if (
+        treeChange.type ===
+        chrome.automation.TreeChangeType.SUBTREE_UPDATE_END) {
+      this.group_.refresh();
     }
   }
 
@@ -269,16 +360,27 @@ class NavigationManager {
         this.desktop_, chrome.automation.EventType.FOCUS,
         this.onFocusChange_.bind(this));
 
-    // The status tray fires a SHOW event when it opens.
-    this.desktop_.addEventListener(
-        chrome.automation.EventType.SHOW, this.onModalDialog_.bind(this),
-        false);
-    this.desktop_.addEventListener(
-        chrome.automation.EventType.MENU_START, this.onModalDialog_.bind(this),
-        false);
-    chrome.automation.addTreeChangeObserver(
+    new RepeatedEventHandler(
+        this.desktop_, chrome.automation.EventType.SCROLL_POSITION_CHANGED,
+        this.onScrollChange_.bind(this));
+
+    new RepeatedTreeChangeHandler(
         chrome.automation.TreeChangeObserverFilter.ALL_TREE_CHANGES,
-        this.onTreeChange_.bind(this));
+        this.onTreeChange_.bind(this), {
+          predicate: (treeChange) =>
+              this.group_.findChild(treeChange.target) != null ||
+              this.group_.isEquivalentTo(treeChange.target)
+        });
+
+    // The status tray fires a SHOW event when it opens.
+    new EventHandler(
+        this.desktop_,
+        [
+          chrome.automation.EventType.MENU_START,
+          chrome.automation.EventType.SHOW
+        ],
+        this.onModalDialog_.bind(this))
+        .start();
   }
 
   /**
@@ -338,7 +440,13 @@ class NavigationManager {
     this.group_.onUnfocus();
     this.group_ = group;
     this.group_.onFocus();
-    this.setNode_(opt_focus || this.group_.firstChild);
+
+    const node = opt_focus || this.group_.firstValidChild();
+    if (!node) {
+      NavigationManager.moveToValidNode();
+      return;
+    }
+    this.setNode_(node);
   }
 
   /**
@@ -347,6 +455,10 @@ class NavigationManager {
    * @private
    */
   setNode_(node) {
+    if (!node.isValidAndVisible()) {
+      NavigationManager.moveToValidNode();
+      return;
+    }
     this.node_.onUnfocus();
     this.node_ = node;
     this.node_.onFocus();

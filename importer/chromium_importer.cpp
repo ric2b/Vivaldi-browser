@@ -121,7 +121,7 @@ bool ChromiumImporter::ReadAndParseSignons(
     const std::string& cipher_text = s2.ColumnString(5);
     base::string16 plain_text;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     const std::string service_name = "Chrome Safe Storage";
     const std::string account_name = "Chrome";
     OSCrypt::DecryptImportedString16(cipher_text, &plain_text, service_name,
@@ -137,7 +137,7 @@ bool ChromiumImporter::ReadAndParseSignons(
 
     forms->push_back(form);
   }
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   OSCrypt::ResetImportCache();
 #endif
 

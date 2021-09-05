@@ -177,8 +177,8 @@ void V8SetReturnValue(const CallbackInfo& info, double value) {
 // the IDL type because Blink is not always respectful to IDL types.  These
 // functions fix such a type mismatch.
 template <typename CallbackInfo, typename BlinkType, typename IdlType>
-typename std::enable_if_t<std::is_arithmetic<BlinkType>::value ||
-                          std::is_enum<BlinkType>::value>
+inline typename std::enable_if_t<std::is_arithmetic<BlinkType>::value ||
+                                 std::is_enum<BlinkType>::value>
 V8SetReturnValue(const CallbackInfo& info,
                  BlinkType value,
                  V8ReturnValue::PrimitiveType<IdlType>) {
@@ -186,9 +186,9 @@ V8SetReturnValue(const CallbackInfo& info,
 }
 
 template <typename CallbackInfo, typename BlinkType>
-void V8SetReturnValue(const CallbackInfo& info,
-                      BlinkType* value,
-                      V8ReturnValue::PrimitiveType<bool>) {
+inline void V8SetReturnValue(const CallbackInfo& info,
+                             BlinkType* value,
+                             V8ReturnValue::PrimitiveType<bool>) {
   V8SetReturnValue(info, bool(value));
 }
 
@@ -351,12 +351,11 @@ PLATFORM_EXPORT v8::Local<v8::Value> GetInterfaceObjectExposedOnGlobal(
     v8::Local<v8::Object> creation_context,
     const WrapperTypeInfo* wrapper_type_info);
 
-template <typename CallbackInfo>
-void V8SetReturnValue(const CallbackInfo& info,
-                      const WrapperTypeInfo* wrapper_type_info,
-                      V8ReturnValue::InterfaceObject) {
+inline void V8SetReturnValue(const v8::PropertyCallbackInfo<v8::Value>& info,
+                             const WrapperTypeInfo* wrapper_type_info,
+                             V8ReturnValue::InterfaceObject) {
   info.GetReturnValue().Set(GetInterfaceObjectExposedOnGlobal(
-      info.GetIsolate(), info.This(), wrapper_type_info));
+      info.GetIsolate(), info.Holder(), wrapper_type_info));
 }
 
 // Nullable types

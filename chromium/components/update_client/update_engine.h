@@ -37,7 +37,7 @@ struct UpdateContext;
 // Handles updates for a group of components. Updates for different groups
 // are run concurrently but within the same group of components, updates are
 // applied one at a time.
-class UpdateEngine : public base::RefCounted<UpdateEngine> {
+class UpdateEngine : public base::RefCountedThreadSafe<UpdateEngine> {
  public:
   using Callback = base::OnceCallback<void(Error error)>;
   using NotifyObserversCallback =
@@ -47,7 +47,6 @@ class UpdateEngine : public base::RefCounted<UpdateEngine> {
 
   UpdateEngine(scoped_refptr<Configurator> config,
                UpdateChecker::Factory update_checker_factory,
-               CrxDownloader::Factory crx_downloader_factory,
                scoped_refptr<PingManager> ping_manager,
                const NotifyObserversCallback& notify_observers_callback);
   UpdateEngine(const UpdateEngine&) = delete;
@@ -69,8 +68,12 @@ class UpdateEngine : public base::RefCounted<UpdateEngine> {
                          int reason,
                          Callback update_callback);
 
+  void SendRegistrationPing(const std::string& id,
+                            const base::Version& version,
+                            Callback update_callback);
+
  private:
-  friend class base::RefCounted<UpdateEngine>;
+  friend class base::RefCountedThreadSafe<UpdateEngine>;
   ~UpdateEngine();
 
   using UpdateContexts = std::map<std::string, scoped_refptr<UpdateContext>>;
@@ -102,7 +105,6 @@ class UpdateEngine : public base::RefCounted<UpdateEngine> {
   base::ThreadChecker thread_checker_;
   scoped_refptr<Configurator> config_;
   UpdateChecker::Factory update_checker_factory_;
-  CrxDownloader::Factory crx_downloader_factory_;
   scoped_refptr<PingManager> ping_manager_;
   std::unique_ptr<PersistedData> metadata_;
 
@@ -120,7 +122,7 @@ class UpdateEngine : public base::RefCounted<UpdateEngine> {
 };
 
 // Describes a group of components which are installed or updated together.
-struct UpdateContext : public base::RefCounted<UpdateContext> {
+struct UpdateContext : public base::RefCountedThreadSafe<UpdateContext> {
   UpdateContext(
       scoped_refptr<Configurator> config,
       bool is_foreground,
@@ -129,7 +131,6 @@ struct UpdateContext : public base::RefCounted<UpdateContext> {
       UpdateClient::CrxStateChangeCallback crx_state_change_callback,
       const UpdateEngine::NotifyObserversCallback& notify_observers_callback,
       UpdateEngine::Callback callback,
-      CrxDownloader::Factory crx_downloader_factory,
       PersistedData* persisted_data);
   UpdateContext(const UpdateContext&) = delete;
   UpdateContext& operator=(const UpdateContext&) = delete;
@@ -160,9 +161,6 @@ struct UpdateContext : public base::RefCounted<UpdateContext> {
 
   // Called when the all updates associated with this context have completed.
   UpdateEngine::Callback callback;
-
-  // Creates instances of CrxDownloader;
-  CrxDownloader::Factory crx_downloader_factory;
 
   std::unique_ptr<UpdateChecker> update_checker;
 
@@ -201,7 +199,7 @@ struct UpdateContext : public base::RefCounted<UpdateContext> {
   PersistedData* persisted_data = nullptr;
 
  private:
-  friend class base::RefCounted<UpdateContext>;
+  friend class base::RefCountedThreadSafe<UpdateContext>;
   ~UpdateContext();
 };
 

@@ -14,6 +14,7 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
 #include "cc/metrics/frame_sequence_tracker.h"
+#include "cc/metrics/jank_metrics.h"
 #include "cc/metrics/throughput_ukm_reporter.h"
 
 namespace cc {
@@ -72,9 +73,10 @@ bool ShouldReportForInteraction(FrameSequenceMetrics* metrics,
                                 FrameSequenceMetrics::ThreadType thread_type) {
   const auto sequence_type = metrics->type();
 
-  // For touch/wheel scroll, the slower thread is the one we want to report. For
-  // pinch-zoom, it's the compositor-thread.
-  if (sequence_type == FrameSequenceTrackerType::kTouchScroll ||
+  // For scrollbar/touch/wheel scroll, the slower thread is the one we want to
+  // report. For pinch-zoom, it's the compositor-thread.
+  if (sequence_type == FrameSequenceTrackerType::kScrollbarScroll ||
+      sequence_type == FrameSequenceTrackerType::kTouchScroll ||
       sequence_type == FrameSequenceTrackerType::kWheelScroll)
     return thread_type == metrics->GetEffectiveThread();
 
@@ -85,7 +87,8 @@ bool ShouldReportForInteraction(FrameSequenceMetrics* metrics,
 }
 
 bool IsInteractionType(FrameSequenceTrackerType sequence_type) {
-  return sequence_type == FrameSequenceTrackerType::kTouchScroll ||
+  return sequence_type == FrameSequenceTrackerType::kScrollbarScroll ||
+         sequence_type == FrameSequenceTrackerType::kTouchScroll ||
          sequence_type == FrameSequenceTrackerType::kWheelScroll ||
          sequence_type == FrameSequenceTrackerType::kPinchZoom;
 }
@@ -95,6 +98,16 @@ bool IsInteractionType(FrameSequenceTrackerType sequence_type) {
 FrameSequenceMetrics::FrameSequenceMetrics(FrameSequenceTrackerType type,
                                            ThroughputUkmReporter* ukm_reporter)
     : type_(type), throughput_ukm_reporter_(ukm_reporter) {
+  ThreadType thread_type = GetEffectiveThread();
+
+  // Only construct |jank_reporter_| if it has a valid tracker and thread type.
+  // For scrolling tracker types, |jank_reporter_| may be constructed later in
+  // SetScrollingThread().
+  if ((thread_type == ThreadType::kCompositor ||
+       thread_type == ThreadType::kMain) &&
+      type != FrameSequenceTrackerType::kUniversal &&
+      type != FrameSequenceTrackerType::kCustom)
+    jank_reporter_ = std::make_unique<JankMetrics>(type, thread_type);
 }
 
 FrameSequenceMetrics::~FrameSequenceMetrics() = default;
@@ -119,6 +132,11 @@ void FrameSequenceMetrics::SetScrollingThread(ThreadType scrolling_thread) {
          type_ == FrameSequenceTrackerType::kScrollbarScroll);
   DCHECK_EQ(scrolling_thread_, ThreadType::kUnknown);
   scrolling_thread_ = scrolling_thread;
+
+  DCHECK(!jank_reporter_);
+  DCHECK_NE(scrolling_thread, ThreadType::kSlower);
+  DCHECK_NE(scrolling_thread, ThreadType::kUnknown);
+  jank_reporter_ = std::make_unique<JankMetrics>(type_, scrolling_thread);
 }
 
 void FrameSequenceMetrics::SetCustomReporter(CustomReporter custom_reporter) {
@@ -131,11 +149,11 @@ FrameSequenceMetrics::ThreadType FrameSequenceMetrics::GetEffectiveThread()
   switch (type_) {
     case FrameSequenceTrackerType::kCompositorAnimation:
     case FrameSequenceTrackerType::kPinchZoom:
+    case FrameSequenceTrackerType::kVideo:
       return ThreadType::kCompositor;
 
     case FrameSequenceTrackerType::kMainThreadAnimation:
     case FrameSequenceTrackerType::kRAF:
-    case FrameSequenceTrackerType::kVideo:
       return ThreadType::kMain;
 
     case FrameSequenceTrackerType::kTouchScroll:
@@ -166,6 +184,9 @@ void FrameSequenceMetrics::Merge(
   aggregated_throughput_.Merge(metrics->aggregated_throughput_);
   frames_checkerboarded_ += metrics->frames_checkerboarded_;
 
+  if (jank_reporter_)
+    jank_reporter_->Merge(std::move(metrics->jank_reporter_));
+
   // Reset the state of |metrics| before destroying it, so that it doesn't end
   // up reporting the metrics.
   metrics->impl_throughput_ = {};
@@ -192,17 +213,6 @@ void FrameSequenceMetrics::AdoptTrace(FrameSequenceMetrics* adopt_from) {
 
 void FrameSequenceMetrics::AdvanceTrace(base::TimeTicks timestamp) {
   trace_data_.Advance(timestamp);
-}
-
-void FrameSequenceMetrics::ComputeAggregatedThroughput() {
-  // Whenever we are expecting and producing main frames, we are expecting and
-  // producing impl frames as well. As an example, if we expect one main frame
-  // to be produced, and when that main frame is presented, we are expecting 3
-  // impl frames, then the number of expected frames is 3 for the aggregated
-  // throughput.
-  aggregated_throughput_.frames_expected = impl_throughput_.frames_expected;
-  DCHECK_LE(aggregated_throughput_.frames_produced,
-            aggregated_throughput_.frames_expected);
 }
 
 void FrameSequenceMetrics::ReportMetrics() {
@@ -305,6 +315,18 @@ void FrameSequenceMetrics::ReportMetrics() {
     frames_checkerboarded_ = 0;
   }
 
+  // Report the jank metrics
+  if (jank_reporter_) {
+    if (jank_reporter_->thread_type() ==
+            FrameSequenceMetrics::ThreadType::kCompositor &&
+        impl_throughput_.frames_expected >= kMinFramesForThroughputMetric)
+      jank_reporter_->ReportJankMetrics(impl_throughput_.frames_expected);
+    else if (jank_reporter_->thread_type() ==
+                 FrameSequenceMetrics::ThreadType::kMain &&
+             main_throughput_.frames_expected >= kMinFramesForThroughputMetric)
+      jank_reporter_->ReportJankMetrics(main_throughput_.frames_expected);
+  }
+
   // Reset the metrics that reach reporting threshold.
   if (impl_throughput_.frames_expected >= kMinFramesForThroughputMetric) {
     impl_throughput_ = {};
@@ -312,6 +334,17 @@ void FrameSequenceMetrics::ReportMetrics() {
   }
   if (main_throughput_.frames_expected >= kMinFramesForThroughputMetric)
     main_throughput_ = {};
+}
+
+void FrameSequenceMetrics::ComputeJank(
+    FrameSequenceMetrics::ThreadType thread_type,
+    base::TimeTicks presentation_time,
+    base::TimeDelta frame_interval) {
+  if (!jank_reporter_)
+    return;
+
+  if (thread_type == jank_reporter_->thread_type())
+    jank_reporter_->AddPresentedFrame(presentation_time, frame_interval);
 }
 
 base::Optional<int> FrameSequenceMetrics::ThroughputData::ReportHistogram(
@@ -322,14 +355,21 @@ base::Optional<int> FrameSequenceMetrics::ThroughputData::ReportHistogram(
   const auto sequence_type = metrics->type();
   DCHECK_LT(sequence_type, FrameSequenceTrackerType::kMaxType);
 
-  STATIC_HISTOGRAM_POINTER_GROUP(
-      GetFrameSequenceLengthHistogramName(sequence_type),
-      static_cast<int>(sequence_type),
-      static_cast<int>(FrameSequenceTrackerType::kMaxType),
-      Add(data.frames_expected),
-      base::Histogram::FactoryGet(
-          GetFrameSequenceLengthHistogramName(sequence_type), 1, 1000, 50,
-          base::HistogramBase::kUmaTargetedHistogramFlag));
+  // All video frames are compositor thread only.
+  if (sequence_type == FrameSequenceTrackerType::kVideo &&
+      thread_type == ThreadType::kMain)
+    return base::nullopt;
+
+  if (metrics->GetEffectiveThread() == thread_type) {
+    STATIC_HISTOGRAM_POINTER_GROUP(
+        GetFrameSequenceLengthHistogramName(sequence_type),
+        static_cast<int>(sequence_type),
+        static_cast<int>(FrameSequenceTrackerType::kMaxType),
+        Add(data.frames_expected),
+        base::Histogram::FactoryGet(
+            GetFrameSequenceLengthHistogramName(sequence_type), 1, 1000, 50,
+            base::HistogramBase::kUmaTargetedHistogramFlag));
+  }
 
   if (data.frames_expected < kMinFramesForThroughputMetric)
     return base::nullopt;

@@ -131,6 +131,10 @@ void MirrorSettings::SetResolutionConstraints(int max_width, int max_height) {
   max_height_ = std::max(max_height, min_height_);
 }
 
+void MirrorSettings::SetSenderSideLetterboxingEnabled(bool enabled) {
+  enable_sender_side_letterboxing_ = enabled;
+}
+
 media::VideoCaptureParams MirrorSettings::GetVideoCaptureParams() {
   media::VideoCaptureParams params;
   params.requested_format =
@@ -154,30 +158,6 @@ media::AudioParameters MirrorSettings::GetAudioCaptureParams() {
                                 kAudioTimebase / 100);
   DCHECK(params.IsValid());
   return params;
-}
-
-base::Value MirrorSettings::ToDictionaryValue() {
-  base::Value settings(base::Value::Type::DICTIONARY);
-  settings.SetKey("maxWidth", base::Value(max_width_));
-  settings.SetKey("maxHeight", base::Value(max_height_));
-  settings.SetKey("minWidth", base::Value(min_width_));
-  settings.SetKey("minHeight", base::Value(min_height_));
-  settings.SetKey("senderSideLetterboxing",
-                  base::Value(enable_sender_side_letterboxing_));
-  settings.SetKey("minFrameRate", base::Value(0));
-  settings.SetKey("maxFrameRate", base::Value(kMaxFrameRate));
-  settings.SetKey("minVideoBitrate", base::Value(kMinVideoBitrate));
-  settings.SetKey("maxVideoBitrate", base::Value(kMaxVideoBitrate));
-  settings.SetKey("audioBitrate", base::Value(kAudioBitrate));
-  const int32_t playout_delay(
-      static_cast<int32_t>(GetPlayoutDelay().InMilliseconds()));
-  settings.SetKey("maxLatencyMillis", base::Value(playout_delay));
-  settings.SetKey("minLatencyMillis", base::Value(playout_delay));
-  settings.SetKey("animatedLatencyMillis", base::Value(playout_delay));
-  settings.SetKey("dscpEnabled", base::Value(false));
-  settings.SetKey("enableLogging", base::Value(true));
-  settings.SetKey("useTdls", base::Value(false));
-  return settings;
 }
 
 }  // namespace mirroring

@@ -99,7 +99,7 @@ net_configs = [
   "//build/config/compiler:wexit_time_destructors",
 ]
 
-if (is_linux) {
+if (is_linux || is_chromeos) {
   net_configs += [ "//build/config/linux:libresolv" ]
 }
 
@@ -158,6 +158,7 @@ component("net") {
     "base/parse_number.h",
     "base/port_util.cc",
     "base/port_util.h",
+    "base/privacy_mode.cc",
     "base/privacy_mode.h",
     "base/rand_callback.h",
     "base/registry_controlled_domains/registry_controlled_domain.cc",
@@ -165,6 +166,8 @@ component("net") {
     "base/sockaddr_storage.cc",
     "base/sockaddr_storage.h",
     "base/sys_addrinfo.h",
+    "base/transport_info.cc",
+    "base/transport_info.h",
     "base/url_util.cc",
     "base/url_util.h",
     "cert/asn1_util.cc",
@@ -247,6 +250,7 @@ component("net") {
     "cert/ocsp_verify_result.h",
     "cert/pem.cc",
     "cert/pem.h",
+    "cert/sct_auditing_delegate.h",
     "cert/sct_status_flags.cc",
     "cert/sct_status_flags.h",
     "cert/signed_certificate_timestamp.cc",
@@ -519,8 +523,6 @@ component("net") {
       "cert/ev_root_ca_metadata.h",
       "cert/internal/system_trust_store.cc",
       "cert/internal/system_trust_store.h",
-      "cert/jwk_serializer.cc",
-      "cert/jwk_serializer.h",
       "cert/known_roots.cc",
       "cert/known_roots.h",
       "cert/merkle_audit_proof.cc",
@@ -771,6 +773,8 @@ component("net") {
       "log/trace_net_log_observer.h",
       "nqe/cached_network_quality.cc",
       "nqe/cached_network_quality.h",
+      "nqe/connectivity_monitor.cc",
+      "nqe/connectivity_monitor.h",
       "nqe/effective_connection_type.cc",
       "nqe/effective_connection_type.h",
       "nqe/effective_connection_type_observer.h",
@@ -924,6 +928,8 @@ component("net") {
       "quic/quic_crypto_client_config_handle.h",
       "quic/quic_crypto_client_stream_factory.cc",
       "quic/quic_crypto_client_stream_factory.h",
+      "quic/quic_event_logger.cc",
+      "quic/quic_event_logger.h",
       "quic/quic_flags_list.h",
       "quic/quic_http3_logger.cc",
       "quic/quic_http3_logger.h",
@@ -1007,6 +1013,8 @@ component("net") {
       "socket/udp_server_socket.cc",
       "socket/udp_server_socket.h",
       "socket/udp_socket.h",
+      "socket/udp_socket_global_limits.cc",
+      "socket/udp_socket_global_limits.h",
       "socket/websocket_endpoint_lock_manager.cc",
       "socket/websocket_endpoint_lock_manager.h",
       "socket/websocket_transport_client_socket_pool.cc",
@@ -1079,6 +1087,7 @@ component("net") {
       "url_request/redirect_info.h",
       "url_request/redirect_util.cc",
       "url_request/redirect_util.h",
+      "url_request/referrer_policy.h",
       "url_request/report_sender.cc",
       "url_request/report_sender.h",
       "url_request/static_http_user_agent_settings.cc",
@@ -1125,8 +1134,6 @@ component("net") {
       "url_request/url_request_netlog_params.h",
       "url_request/url_request_redirect_job.cc",
       "url_request/url_request_redirect_job.h",
-      "url_request/url_request_status.cc",
-      "url_request/url_request_status.h",
       "url_request/url_request_test_job.cc",
       "url_request/url_request_test_job.h",
       "url_request/url_request_throttler_entry.cc",
@@ -1192,6 +1199,8 @@ component("net") {
         "android/http_auth_negotiate_android.h",
         "android/keystore.cc",
         "android/keystore.h",
+        "android/network_activation_request.cc",
+        "android/network_activation_request.h",
         "android/network_change_notifier_android.cc",
         "android/network_change_notifier_android.h",
         "android/network_change_notifier_delegate_android.cc",
@@ -1234,7 +1243,7 @@ component("net") {
       ]
     }
 
-    if (is_linux) {
+    if (is_linux && !is_chromeos) {
       sources += [
         "base/network_change_notifier_linux.cc",
         "base/network_change_notifier_linux.h",
@@ -1243,7 +1252,7 @@ component("net") {
       ]
     }
 
-    if (is_linux || is_android) {
+    if (is_linux || is_chromeos || is_android) {
       sources += [
         "base/address_tracker_linux.cc",
         "base/address_tracker_linux.h",
@@ -1279,7 +1288,7 @@ component("net") {
       ]
     }
 
-    if (is_ios || is_mac) {
+    if (is_apple) {
       sources += [
         "base/mac/url_conversions.h",
         "base/mac/url_conversions.mm",
@@ -1340,6 +1349,12 @@ component("net") {
         "proxy_resolution/win/windows_system_proxy_resolution_request.h",
         "proxy_resolution/win/windows_system_proxy_resolution_service.cc",
         "proxy_resolution/win/windows_system_proxy_resolution_service.h",
+        "proxy_resolution/win/windows_system_proxy_resolver.cc",
+        "proxy_resolution/win/windows_system_proxy_resolver.h",
+        "proxy_resolution/win/winhttp_api_wrapper.cc",
+        "proxy_resolution/win/winhttp_api_wrapper.h",
+        "proxy_resolution/win/winhttp_proxy_resolver_functions.cc",
+        "proxy_resolution/win/winhttp_proxy_resolver_functions.h",
         "socket/tcp_socket_win.cc",
         "socket/tcp_socket_win.h",
         "socket/udp_socket_win.cc",
@@ -1416,7 +1431,7 @@ component("net") {
     }
 
     # Use getifaddrs() on POSIX platforms, except Linux.
-    if (is_posix && !is_linux) {
+    if (is_posix && !is_linux && !is_chromeos) {
       sources += [
         "base/network_interfaces_getifaddrs.cc",
         "base/network_interfaces_getifaddrs.h",
@@ -1453,6 +1468,7 @@ component("net") {
     }
 
     if (is_fuchsia) {
+      deps += [ "//third_party/fuchsia-sdk/sdk/pkg/async-loop-cpp" ]
       public_deps += [ "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.netstack" ]
       sources += [
         "base/network_change_notifier_fuchsia.cc",
@@ -1484,23 +1500,23 @@ component("net") {
   cflags = []
 
   if (is_mac) {
-    libs = [
+    libs = [ "resolv" ]
+    frameworks = [
       "CFNetwork.framework",
       "CoreServices.framework",
       "Foundation.framework",
       "Security.framework",
       "SystemConfiguration.framework",
-      "resolv",
     ]
   }
 
   if (is_ios) {
-    libs = [
+    libs = [ "resolv" ]
+    frameworks = [
       "CFNetwork.framework",
       "MobileCoreServices.framework",
       "Security.framework",
       "SystemConfiguration.framework",
-      "resolv",
     ]
   }
 
@@ -1748,6 +1764,7 @@ source_set("net_public_deps") {
   public_deps = [
     ":buildflags",
     ":net_nqe_proto",
+    "//base",
     "//crypto",
     "//crypto:platform",
     "//net/third_party/quiche:net_quic_proto",
@@ -2239,7 +2256,7 @@ static_library("test_support") {
   data = [ "data/" ]
 
   if (is_mac) {
-    libs = [ "Security.framework" ]
+    frameworks = [ "Security.framework" ]
   }
 
   if (is_ios) {
@@ -2336,7 +2353,7 @@ if (!is_ios && !is_android) {
     ]
 
     if (is_mac) {
-      libs = [ "Security.framework" ]
+      frameworks = [ "Security.framework" ]
     }
   }
 
@@ -2446,7 +2463,7 @@ if (use_external_gssapi) {
   }
 }
 
-if (is_linux || is_mac) {
+if (is_linux || is_chromeos || is_mac) {
   executable("cachetool") {
     testonly = true
     sources = [ "tools/cachetool/cachetool.cc" ]
@@ -2473,7 +2490,7 @@ if (is_linux || is_mac) {
   }
 }
 
-if (is_linux) {
+if (is_linux || is_chromeos) {
   static_library("epoll_server") {
     sources = [
       "tools/epoll_server/platform/impl/epoll_bug_impl.h",
@@ -2532,6 +2549,7 @@ if (is_android) {
       "android/java/src/org/chromium/net/HttpNegotiateAuthenticator.java",
       "android/java/src/org/chromium/net/HttpUtil.java",
       "android/java/src/org/chromium/net/NetStringUtil.java",
+      "android/java/src/org/chromium/net/NetworkActivationRequest.java",
       "android/java/src/org/chromium/net/NetworkChangeNotifier.java",
       "android/java/src/org/chromium/net/ProxyChangeListener.java",
       "android/java/src/org/chromium/net/X509Util.java",
@@ -2549,7 +2567,7 @@ if (is_android) {
   }
 }
 
-if (is_android || is_linux) {
+if (is_android || is_linux || is_chromeos) {
   executable("disk_cache_memory_test") {
     testonly = true
     sources = [ "tools/disk_cache_memory_test/disk_cache_memory_test.cc" ]
@@ -4142,6 +4160,7 @@ test("net_unittests") {
     "base/prioritized_dispatcher_unittest.cc",
     "base/prioritized_task_runner_unittest.cc",
     "base/priority_queue_unittest.cc",
+    "base/proxy_server_unittest.cc",
     "base/registry_controlled_domains/registry_controlled_domain_unittest.cc",
     "base/scheme_host_port_matcher_rule_unittest.cc",
     "base/scheme_host_port_matcher_unittest.cc",
@@ -4191,7 +4210,6 @@ test("net_unittests") {
     "cert/internal/verify_certificate_chain_unittest.cc",
     "cert/internal/verify_name_match_unittest.cc",
     "cert/internal/verify_signed_data_unittest.cc",
-    "cert/jwk_serializer_unittest.cc",
     "cert/known_roots_unittest.cc",
     "cert/merkle_audit_proof_unittest.cc",
     "cert/merkle_tree_leaf_unittest.cc",
@@ -4298,6 +4316,7 @@ test("net_unittests") {
     "log/net_log_util_unittest.cc",
     "log/net_log_values_unittest.cc",
     "log/trace_net_log_observer_unittest.cc",
+    "nqe/connectivity_monitor_unittest.cc",
     "nqe/effective_connection_type_unittest.cc",
     "nqe/event_creator_unittest.cc",
     "nqe/network_congestion_analyzer_unittest.cc",
@@ -4319,7 +4338,6 @@ test("net_unittests") {
     "proxy_resolution/proxy_config_unittest.cc",
     "proxy_resolution/proxy_info_unittest.cc",
     "proxy_resolution/proxy_list_unittest.cc",
-    "proxy_resolution/proxy_server_unittest.cc",
     "quic/bidirectional_stream_quic_impl_unittest.cc",
     "quic/crypto/proof_test_chromium.cc",
     "quic/crypto/proof_verifier_chromium_test.cc",
@@ -4463,7 +4481,7 @@ test("net_unittests") {
     ]
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     sources += [
       "base/address_tracker_linux_unittest.cc",
       "base/network_interfaces_linux_unittest.cc",
@@ -4494,6 +4512,7 @@ test("net_unittests") {
       "proxy_resolution/win/dhcp_pac_file_fetcher_win_unittest.cc",
       "proxy_resolution/win/proxy_config_service_win_unittest.cc",
       "proxy_resolution/win/windows_system_proxy_resolution_service_unittest.cc",
+      "proxy_resolution/win/windows_system_proxy_resolver_unittest.cc",
       "ssl/client_cert_store_win_unittest.cc",
       "ssl/ssl_platform_key_win_unittest.cc",
     ]
@@ -4573,7 +4592,7 @@ test("net_unittests") {
     "//testing/buildbot/filters:net_unittests_filters",
   ]
 
-  if (is_linux || is_mac || is_win || is_fuchsia) {
+  if (is_linux || is_chromeos || is_mac || is_win || is_fuchsia) {
     deps += [
       "//third_party/pywebsocket3/",
       "//third_party/tlslite/",
@@ -4589,7 +4608,7 @@ test("net_unittests") {
     ]
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     sources += [
       "quic/platform/impl/quic_epoll_clock_test.cc",
       "quic/platform/impl/quic_flags_test.cc",
@@ -4601,12 +4620,12 @@ test("net_unittests") {
     ]
   }
 
-  if (is_mac || is_ios) {
+  if (is_apple) {
     sources += [ "base/mac/url_conversions_unittest.mm" ]
   }
 
   if (is_mac) {
-    libs = [ "Security.framework" ]
+    frameworks = [ "Security.framework" ]
   }
 
   if (!is_win) {
@@ -4750,7 +4769,7 @@ test("net_unittests") {
   }
 
   # Use getifaddrs() on POSIX platforms, except Linux and Android.
-  if (is_posix && !is_linux && !is_android) {
+  if (is_posix && !is_linux && !is_chromeos && !is_android) {
     sources += [ "base/network_interfaces_getifaddrs_unittest.cc" ]
   }
 
@@ -5345,6 +5364,16 @@ fuzzer_test("net_http_auth_handler_digest_fuzzer") {
   ]
 }
 
+fuzzer_test("net_http_auth_handler_fuzzer") {
+  sources = [ "http/http_auth_handler_fuzzer.cc" ]
+  deps = [
+    ":net_fuzzer_test_support",
+    ":test_support",
+    "//base",
+    "//net",
+  ]
+}
+
 fuzzer_test("net_http_content_disposition_fuzzer") {
   sources = [ "http/http_content_disposition_fuzzer.cc" ]
   dict = "data/fuzzer_dictionaries/net_http_content_disposition_fuzzer.dict"
@@ -5554,7 +5583,7 @@ fuzzer_test("net_uri_template_fuzzer") {
   dict = "data/fuzzer_dictionaries/net_uri_template_fuzzer.dict"
 }
 
-if (is_linux) {
+if (is_linux || is_chromeos) {
   fuzzer_test("net_base_address_tracker_linux_fuzzer") {
     sources = [ "base/address_tracker_linux_fuzzer.cc" ]
     deps = [

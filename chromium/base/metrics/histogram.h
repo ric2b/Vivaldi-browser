@@ -467,6 +467,12 @@ class BASE_EXPORT ScaledLinearHistogram {
                         uint32_t bucket_count,
                         int32_t scale,
                         int32_t flags);
+  ScaledLinearHistogram(const std::string& name,
+                        Sample minimum,
+                        Sample maximum,
+                        uint32_t bucket_count,
+                        int32_t scale,
+                        int32_t flags);
 
   ~ScaledLinearHistogram();
 
@@ -476,12 +482,13 @@ class BASE_EXPORT ScaledLinearHistogram {
   void AddScaledCount(Sample value, int count);
 
   int32_t scale() const { return scale_; }
-  LinearHistogram* histogram() { return histogram_; }
+  HistogramBase* histogram() { return histogram_; }
 
  private:
   // Pointer to the underlying histogram. Ownership of it remains with
-  // the statistics-recorder.
-  LinearHistogram* const histogram_;
+  // the statistics-recorder. This is typed as HistogramBase because it may be a
+  // DummyHistogram if expired.
+  HistogramBase* const histogram_;
 
   // The scale factor of the sample counts.
   const int32_t scale_;

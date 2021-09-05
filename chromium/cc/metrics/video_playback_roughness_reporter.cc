@@ -8,6 +8,8 @@
 
 #include "base/bind_helpers.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/ranges.h"
+#include "base/numerics/safe_conversions.h"
 #include "components/viz/common/quads/compositor_frame_metadata.h"
 
 namespace {
@@ -30,7 +32,6 @@ constexpr int VideoPlaybackRoughnessReporter::kMaxWindowSize;
 constexpr int VideoPlaybackRoughnessReporter::kMaxWindowsBeforeSubmit;
 constexpr int VideoPlaybackRoughnessReporter::kMinWindowsBeforeSubmit;
 constexpr int VideoPlaybackRoughnessReporter::kPercentileToSubmit;
-constexpr double VideoPlaybackRoughnessReporter::kDesiredWindowDuration;
 
 VideoPlaybackRoughnessReporter::VideoPlaybackRoughnessReporter(
     PlaybackRoughnessReportingCallback reporting_cb)
@@ -59,6 +60,8 @@ void VideoPlaybackRoughnessReporter::FrameSubmitted(
   FrameInfo info;
   info.token = token;
   info.decode_time = frame.metadata()->decode_end_time;
+  info.refresh_rate_hz = int{std::round(1.0 / render_interval.InSecondsF())};
+  info.size = frame.natural_size();
 
   info.intended_duration = frame.metadata()->wallclock_frame_duration;
   if (info.intended_duration) {
@@ -70,10 +73,10 @@ void VideoPlaybackRoughnessReporter::FrameSubmitted(
     }
 
     // Adjust frame window size to fit about 1 second of playback
-    double win_size = std::round(kDesiredWindowDuration /
-                                 info.intended_duration.value().InSecondsF());
-    frames_window_size_ = std::max(kMinWindowSize, static_cast<int>(win_size));
-    frames_window_size_ = std::min(frames_window_size_, kMaxWindowSize);
+    const int win_size =
+        base::ClampRound(info.intended_duration.value().ToHz());
+    frames_window_size_ =
+        base::ClampToRange(win_size, kMinWindowSize, kMaxWindowSize);
   }
 
   frames_.push_back(info);
@@ -108,7 +111,8 @@ void VideoPlaybackRoughnessReporter::SubmitPlaybackRoughness() {
   }
 
   auto it = worst_windows_.begin() + index_to_submit;
-  reporting_cb_.Run(it->size, it->intended_duration, it->roughness());
+  reporting_cb_.Run(it->size, it->intended_duration, it->roughness(),
+                    it->refresh_rate_hz, it->frame_size);
 
   worst_windows_.clear();
   windows_seen_ = 0;
@@ -163,14 +167,25 @@ void VideoPlaybackRoughnessReporter::ProcessFrameWindow() {
   // let's calculate window metrics and report it.
   if (next_frame_it - frames_.begin() > frames_window_size_) {
     ConsecutiveFramesWindow win;
+    bool observed_change_in_parameters = false;
     double mean_square_error_ms2 = 0.0;
     base::TimeDelta total_error;
-    if (frames_.front().presentation_time.has_value())
-      win.first_frame_time = frames_.front().presentation_time.value();
+    auto& first_frame = frames_.front();
+    if (first_frame.presentation_time.has_value()) {
+      win.first_frame_time = first_frame.presentation_time.value();
+      win.refresh_rate_hz = first_frame.refresh_rate_hz;
+      win.frame_size = first_frame.size;
+    }
 
     for (auto i = 0; i < frames_window_size_; i++) {
       FrameInfo& frame = frames_[i];
       base::TimeDelta error;
+
+      if (win.frame_size != frame.size ||
+          win.refresh_rate_hz != frame.refresh_rate_hz) {
+        observed_change_in_parameters = true;
+        break;
+      }
 
       if (frame.actual_duration.has_value() &&
           frame.intended_duration.has_value()) {
@@ -187,7 +202,20 @@ void VideoPlaybackRoughnessReporter::ProcessFrameWindow() {
     win.root_mean_square_error = base::TimeDelta::FromMillisecondsD(
         std::sqrt(mean_square_error_ms2 / frames_window_size_));
 
-    ReportWindow(win);
+    if (observed_change_in_parameters) {
+      // There has been a change in the frame size or the screen refresh rate,
+      // whatever roughness stats were accumulated up to this point need to be
+      // reported or discarded, because there is no point in mixing together
+      // roughess for different resolutions or refresh rates.
+      if (windows_seen_ >= kMinWindowsBeforeSubmit) {
+        SubmitPlaybackRoughness();
+      } else {
+        worst_windows_.clear();
+        windows_seen_ = 0;
+      }
+    } else {
+      ReportWindow(win);
+    }
 
     // The frames in the window have been reported,
     // no need to keep them around any longer.

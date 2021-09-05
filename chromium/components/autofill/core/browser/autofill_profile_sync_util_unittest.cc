@@ -5,16 +5,20 @@
 #include "components/autofill/core/browser/autofill_profile_sync_util.h"
 
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/autofill_structured_address_component.h"
 #include "components/autofill/core/browser/geo/country_names.h"
 #include "components/autofill/core/browser/test_autofill_clock.h"
 #include "components/autofill/core/browser/webdata/autofill_table.h"
 #include "components/autofill/core/common/autofill_constants.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/sync/model/entity_data.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
 namespace autofill {
+
+using structured_address::VerificationStatus;
 
 namespace {
 using base::ASCIIToUTF16;
@@ -38,10 +42,23 @@ AutofillProfile ConstructCompleteProfile() {
   profile.set_use_count(7);
   profile.set_use_date(base::Time::FromTimeT(1423182152));
 
-  profile.SetRawInfo(NAME_FULL, ASCIIToUTF16("John K. Doe, Jr."));
-  profile.SetRawInfo(NAME_FIRST, ASCIIToUTF16("John"));
-  profile.SetRawInfo(NAME_MIDDLE, ASCIIToUTF16("K."));
-  profile.SetRawInfo(NAME_LAST, ASCIIToUTF16("Doe"));
+  profile.SetRawInfoWithVerificationStatus(
+      NAME_HONORIFIC_PREFIX, ASCIIToUTF16(""), VerificationStatus::kNoStatus);
+  profile.SetRawInfoWithVerificationStatus(NAME_FULL,
+                                           ASCIIToUTF16("John K. Doe"),
+                                           VerificationStatus::kUserVerified);
+  profile.SetRawInfoWithVerificationStatus(NAME_FIRST, ASCIIToUTF16("John"),
+                                           VerificationStatus::kObserved);
+  profile.SetRawInfoWithVerificationStatus(NAME_MIDDLE, ASCIIToUTF16("K."),
+                                           VerificationStatus::kObserved);
+  profile.SetRawInfoWithVerificationStatus(NAME_LAST, ASCIIToUTF16("Doe"),
+                                           VerificationStatus::kFormatted);
+  profile.SetRawInfoWithVerificationStatus(NAME_LAST_FIRST, ASCIIToUTF16("D"),
+                                           VerificationStatus::kParsed);
+  profile.SetRawInfoWithVerificationStatus(NAME_LAST_SECOND, ASCIIToUTF16("e"),
+                                           VerificationStatus::kParsed);
+  profile.SetRawInfoWithVerificationStatus(
+      NAME_LAST_CONJUNCTION, ASCIIToUTF16("o"), VerificationStatus::kParsed);
 
   profile.SetRawInfo(EMAIL_ADDRESS, ASCIIToUTF16("user@example.com"));
   profile.SetRawInfo(PHONE_HOME_WHOLE_NUMBER, ASCIIToUTF16("1.800.555.1234"));
@@ -60,6 +77,13 @@ AutofillProfile ConstructCompleteProfile() {
   profile.SetRawInfo(ADDRESS_HOME_SORTING_CODE, ASCIIToUTF16("CEDEX"));
   profile.SetRawInfo(ADDRESS_HOME_DEPENDENT_LOCALITY,
                      ASCIIToUTF16("Santa Clara"));
+
+  profile.SetRawInfo(ADDRESS_HOME_STREET_NAME, ASCIIToUTF16("Street Name"));
+  profile.SetRawInfo(ADDRESS_HOME_DEPENDENT_STREET_NAME,
+                     ASCIIToUTF16("Dependent Street Name"));
+  profile.SetRawInfo(ADDRESS_HOME_HOUSE_NUMBER, ASCIIToUTF16("House Number"));
+  profile.SetRawInfo(ADDRESS_HOME_SUBPREMISE, ASCIIToUTF16("Subpremise"));
+  profile.SetRawInfo(ADDRESS_HOME_PREMISE_NAME, ASCIIToUTF16("Premise"));
   profile.set_language_code("en");
   profile.SetClientValidityFromBitfieldValue(1984);
   profile.set_is_client_validity_states_updated(true);
@@ -77,10 +101,39 @@ AutofillProfileSpecifics ConstructCompleteSpecifics() {
   specifics.set_use_count(7);
   specifics.set_use_date(1423182152);
 
+  specifics.add_name_honorific("");
   specifics.add_name_first("John");
   specifics.add_name_middle("K.");
   specifics.add_name_last("Doe");
-  specifics.add_name_full("John K. Doe, Jr.");
+  specifics.add_name_last_first("D");
+  specifics.add_name_last_second("e");
+  specifics.add_name_last_conjunction("o");
+  specifics.add_name_full("John K. Doe");
+
+  specifics.add_name_honorific_status(
+      AutofillProfileSpecifics::VerificationStatus::
+          AutofillProfileSpecifics_VerificationStatus_VERIFICATION_STATUS_UNSPECIFIED);
+  specifics.add_name_first_status(
+      AutofillProfileSpecifics::VerificationStatus::
+          AutofillProfileSpecifics_VerificationStatus_OBSERVED);
+  specifics.add_name_middle_status(
+      AutofillProfileSpecifics::VerificationStatus::
+          AutofillProfileSpecifics_VerificationStatus_OBSERVED);
+  specifics.add_name_last_status(
+      AutofillProfileSpecifics::VerificationStatus::
+          AutofillProfileSpecifics_VerificationStatus_FORMATTED);
+  specifics.add_name_last_first_status(
+      AutofillProfileSpecifics::VerificationStatus::
+          AutofillProfileSpecifics_VerificationStatus_PARSED);
+  specifics.add_name_last_second_status(
+      AutofillProfileSpecifics::VerificationStatus::
+          AutofillProfileSpecifics_VerificationStatus_PARSED);
+  specifics.add_name_last_conjunction_status(
+      AutofillProfileSpecifics::VerificationStatus::
+          AutofillProfileSpecifics_VerificationStatus_PARSED);
+  specifics.add_name_full_status(
+      AutofillProfileSpecifics::VerificationStatus::
+          AutofillProfileSpecifics_VerificationStatus_USER_VERIFIED);
 
   specifics.add_email_address("user@example.com");
 
@@ -91,6 +144,12 @@ AutofillProfileSpecifics ConstructCompleteSpecifics() {
   specifics.set_address_home_street_address(
       "123 Fake St.\n"
       "Apt. 42");
+  specifics.set_address_home_thoroughfare_name("Street Name");
+  specifics.set_address_home_dependent_thoroughfare_name(
+      "Dependent Street Name");
+  specifics.set_address_home_thoroughfare_number("House Number");
+  specifics.set_address_home_subpremise_name("Subpremise");
+  specifics.set_address_home_premise_name("Premise");
 
   specifics.set_company_name("Google, Inc.");
   specifics.set_address_home_city("Mountain View");
@@ -121,6 +180,10 @@ class AutofillProfileSyncUtilTest : public testing::Test {
 // Ensure that all profile fields are able to be synced up from the client to
 // the server.
 TEST_F(AutofillProfileSyncUtilTest, CreateEntityDataFromAutofillProfile) {
+  base::test::ScopedFeatureList structured_names_feature;
+  structured_names_feature.InitAndEnableFeature(
+      features::kAutofillEnableSupportForMoreStructureInNames);
+
   AutofillProfile profile = ConstructCompleteProfile();
   AutofillProfileSpecifics specifics = ConstructCompleteSpecifics();
 
@@ -135,6 +198,10 @@ TEST_F(AutofillProfileSyncUtilTest, CreateEntityDataFromAutofillProfile) {
 
 // Test that fields not set for the input are empty in the output.
 TEST_F(AutofillProfileSyncUtilTest, CreateEntityDataFromAutofillProfile_Empty) {
+  base::test::ScopedFeatureList structured_names_feature;
+  structured_names_feature.InitAndEnableFeature(
+      features::kAutofillEnableSupportForMoreStructureInNames);
+
   AutofillProfile profile(kGuid, std::string());
   ASSERT_FALSE(profile.HasRawInfo(NAME_FULL));
   ASSERT_FALSE(profile.HasRawInfo(COMPANY_NAME));

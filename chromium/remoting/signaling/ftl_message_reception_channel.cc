@@ -9,9 +9,10 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/logging.h"
-#include "remoting/base/grpc_support/scoped_grpc_server_stream.h"
-#include "remoting/proto/ftl/v1/ftl_services.grpc.pb.h"
-#include "remoting/signaling/ftl_grpc_context.h"
+#include "remoting/base/protobuf_http_status.h"
+#include "remoting/base/scoped_protobuf_http_request.h"
+#include "remoting/proto/ftl/v1/ftl_messages.pb.h"
+#include "remoting/signaling/ftl_services_context.h"
 
 namespace remoting {
 
@@ -19,7 +20,7 @@ constexpr base::TimeDelta FtlMessageReceptionChannel::kPongTimeout;
 
 FtlMessageReceptionChannel::FtlMessageReceptionChannel(
     SignalingTracker* signaling_tracker)
-    : reconnect_retry_backoff_(&FtlGrpcContext::GetBackoffPolicy()),
+    : reconnect_retry_backoff_(&FtlServicesContext::GetBackoffPolicy()),
       signaling_tracker_(signaling_tracker) {
   DCHECK(signaling_tracker_);
 }
@@ -79,12 +80,12 @@ void FtlMessageReceptionChannel::OnReceiveMessagesStreamReady() {
 }
 
 void FtlMessageReceptionChannel::OnReceiveMessagesStreamClosed(
-    const grpc::Status& status) {
+    const ProtobufHttpStatus& status) {
   if (state_ == State::STOPPED) {
     // Previously closed by the caller.
     return;
   }
-  if (status.error_code() == grpc::StatusCode::OK) {
+  if (status.ok()) {
     // The backend closes the stream. This is not an error so we restart it
     // without backoff.
     VLOG(1) << "Stream has been closed by the server. Reconnecting...";
@@ -94,11 +95,10 @@ void FtlMessageReceptionChannel::OnReceiveMessagesStreamClosed(
   }
 
   reconnect_retry_backoff_.InformOfRequest(false);
-  if (status.error_code() == grpc::StatusCode::ABORTED ||
-      status.error_code() == grpc::StatusCode::UNAVAILABLE) {
+  if (status.error_code() == ProtobufHttpStatus::Code::ABORTED ||
+      status.error_code() == ProtobufHttpStatus::Code::UNAVAILABLE) {
     // These are 'soft' connection errors that should be retried.
-    // Other errors should be ignored.  See this file for more info:
-    // third_party/grpc/src/include/grpcpp/impl/codegen/status_code_enum.h
+    // Other errors should be ignored.
     RetryStartReceivingMessagesWithBackoff();
     return;
   }
@@ -108,11 +108,11 @@ void FtlMessageReceptionChannel::OnReceiveMessagesStreamClosed(
 }
 
 void FtlMessageReceptionChannel::OnMessageReceived(
-    const ftl::ReceiveMessagesResponse& response) {
-  switch (response.body_case()) {
+    std::unique_ptr<ftl::ReceiveMessagesResponse> response) {
+  switch (response->body_case()) {
     case ftl::ReceiveMessagesResponse::BodyCase::kInboxMessage: {
       VLOG(1) << "Received message";
-      on_incoming_msg_.Run(response.inbox_message());
+      on_incoming_msg_.Run(response->inbox_message());
       break;
     }
     case ftl::ReceiveMessagesResponse::BodyCase::kPong:
@@ -127,7 +127,8 @@ void FtlMessageReceptionChannel::OnMessageReceived(
       VLOG(1) << "Received end of batch";
       break;
     default:
-      LOG(WARNING) << "Received unknown message type: " << response.body_case();
+      LOG(WARNING) << "Received unknown message type: "
+                   << response->body_case();
       break;
   }
 }
@@ -146,7 +147,7 @@ void FtlMessageReceptionChannel::RunStreamReadyCallbacks() {
 }
 
 void FtlMessageReceptionChannel::RunStreamClosedCallbacks(
-    const grpc::Status& status) {
+    const ProtobufHttpStatus& status) {
   if (stream_closed_callbacks_.empty()) {
     return;
   }

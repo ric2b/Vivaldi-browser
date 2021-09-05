@@ -137,11 +137,7 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   bool ContentsAreVisible() const { return contents_visible_; }
   void SetContentsVisible(bool);
 
-  // For special cases, e.g. drawing missing tiles on Android.
-  // The compositor should never paint this color in normal cases because the
-  // Layer will paint the background by itself.
-  RGBA32 BackgroundColor() const;
-  void SetBackgroundColor(RGBA32);
+  void SetContentsLayerBackgroundColor(Color color);
 
   // Opaque means that we know the layer contents have no alpha.
   bool ContentsOpaque() const;
@@ -149,7 +145,7 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   void SetContentsOpaqueForText(bool);
 
   void SetHitTestable(bool);
-  bool GetHitTestable() const { return hit_testable_; }
+  bool IsHitTestable() const { return hit_testable_; }
 
   // Some GraphicsLayers paint only the foreground or the background content
   GraphicsLayerPaintingPhase PaintingPhase() const { return painting_phase_; }
@@ -173,7 +169,7 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   const IntRect& ContentsRect() const { return contents_rect_; }
 
   // For hosting this GraphicsLayer in a native layer hierarchy.
-  cc::PictureLayer* CcLayer() const;
+  cc::PictureLayer& CcLayer() const { return *layer_; }
 
   void UpdateTrackingRasterInvalidations();
   void ResetTrackedRasterInvalidations();
@@ -184,7 +180,7 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
                                PaintInvalidationReason);
 
   IntRect InterestRect();
-  bool PaintRecursively();
+  void PaintRecursively(HashSet<const GraphicsLayer*>& repainted_layers);
   // Returns true if this layer is repainted.
   bool Paint();
 
@@ -194,7 +190,6 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
 
   // DisplayItemClient methods
   String DebugName() const final { return client_.DebugName(this); }
-  IntRect VisualRect() const override;
   DOMNodeId OwnerNodeId() const final { return owner_node_id_; }
 
   // LayerAsJSONClient implementation.
@@ -203,15 +198,16 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
                                   JSONObject&) const override;
 
   bool HasLayerState() const { return layer_state_.get(); }
-  void SetLayerState(const PropertyTreeState&, const IntPoint& layer_offset);
-  const PropertyTreeState& GetPropertyTreeState() const {
+  void SetLayerState(const PropertyTreeStateOrAlias&,
+                     const IntPoint& layer_offset);
+  const PropertyTreeStateOrAlias& GetPropertyTreeState() const {
     return layer_state_->state;
   }
   IntPoint GetOffsetFromTransformNode() const { return layer_state_->offset; }
 
-  void SetContentsLayerState(const PropertyTreeState&,
+  void SetContentsLayerState(const PropertyTreeStateOrAlias&,
                              const IntPoint& layer_offset);
-  const PropertyTreeState& GetContentsPropertyTreeState() const {
+  const PropertyTreeStateOrAlias& GetContentsPropertyTreeState() const {
     return contents_layer_state_ ? contents_layer_state_->state
                                  : GetPropertyTreeState();
   }
@@ -231,6 +227,10 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   bool PaintWithoutCommitForTesting(
       const base::Optional<IntRect>& interest_rect = base::nullopt);
 
+  bool ShouldCreateLayersAfterPaint() const {
+    return should_create_layers_after_paint_;
+  }
+
  protected:
   String DebugName(const cc::Layer*) const;
 
@@ -245,8 +245,7 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   bool FillsBoundsCompletely() const override { return false; }
   size_t GetApproximateUnsharedMemoryUsage() const final;
 
-  void PaintRecursivelyInternal(Vector<GraphicsLayer*>& repainted_layers);
-  void UpdateSafeOpaqueBackgroundColor();
+  void UpdateShouldCreateLayersAfterPaint();
 
   // Returns true if PaintController::PaintArtifact() changed and needs commit.
   bool PaintWithoutCommit(const IntRect* interest_rect = nullptr);
@@ -270,8 +269,6 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   RasterInvalidator& EnsureRasterInvalidator();
   void SetNeedsDisplayInRect(const IntRect&);
 
-  FloatSize VisualRectSubpixelOffset() const;
-
   GraphicsLayerClient& client_;
 
   // Offset from the owning layoutObject
@@ -285,6 +282,10 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   bool contents_visible_ : 1;
   bool hit_testable_ : 1;
   bool needs_check_raster_invalidation_ : 1;
+  // True if the cc::Layers for this GraphicsLayer should be created after
+  // paint (in PaintArtifactCompositor). This depends on the display item list
+  // and is updated after CommitNewDisplayItems.
+  bool should_create_layers_after_paint_ : 1;
 
   GraphicsLayerPaintingPhase painting_phase_;
 
@@ -304,7 +305,7 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   IntRect previous_interest_rect_;
 
   struct LayerState {
-    PropertyTreeState state;
+    PropertyTreeStateOrAlias state;
     IntPoint offset;
   };
   std::unique_ptr<LayerState> layer_state_;
@@ -318,6 +319,59 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
 
   DISALLOW_COPY_AND_ASSIGN(GraphicsLayer);
 };
+
+// Iterates all graphics layers that should be seen by the compositor in
+// pre-order. |GraphicsLayerType| matches |GraphicsLayer&| or
+// |const GraphicsLayer&|.
+template <typename GraphicsLayerType,
+          typename GraphicsLayerFunction,
+          typename ContentsLayerFunction>
+void ForAllActiveGraphicsLayers(
+    GraphicsLayerType& layer,
+    const GraphicsLayerFunction& graphics_layer_function,
+    const ContentsLayerFunction& contents_layer_function) {
+  if (layer.Client().ShouldThrottleRendering() ||
+      layer.Client().IsUnderSVGHiddenContainer()) {
+    return;
+  }
+
+  if (layer.Client().PaintBlockedByDisplayLockIncludingAncestors(
+          DisplayLockContextLifecycleTarget::kSelf)) {
+    // If we skip the layer, then we need to ensure to notify the
+    // display-lock, since we need to force recollect the layers when we commit.
+    layer.Client().NotifyDisplayLockNeedsGraphicsLayerCollection();
+    return;
+  }
+
+  DCHECK(layer.HasLayerState());
+
+  if (layer.PaintsContentOrHitTest() || layer.IsHitTestable())
+    graphics_layer_function(layer);
+
+  if (auto* contents_layer = layer.ContentsLayer())
+    contents_layer_function(layer, *contents_layer);
+
+  for (auto* child : layer.Children()) {
+    ForAllActiveGraphicsLayers(*child, graphics_layer_function,
+                               contents_layer_function);
+  }
+}
+
+template <typename GraphicsLayerType, typename Function>
+void ForAllActiveGraphicsLayers(GraphicsLayerType& layer,
+                                const Function& function) {
+  ForAllActiveGraphicsLayers(layer, function,
+                             [](GraphicsLayerType&, const cc::Layer&) {});
+}
+
+template <typename GraphicsLayerType, typename Function>
+void ForAllPaintingGraphicsLayers(GraphicsLayerType& layer,
+                                  const Function& function) {
+  ForAllActiveGraphicsLayers(layer, [&function](GraphicsLayerType& layer) {
+    if (layer.PaintsContentOrHitTest())
+      function(layer);
+  });
+}
 
 }  // namespace blink
 

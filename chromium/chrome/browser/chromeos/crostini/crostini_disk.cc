@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/crostini/crostini_disk.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 #include "base/bind.h"
@@ -17,7 +18,6 @@
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_simple_types.h"
 #include "chrome/browser/chromeos/crostini/crostini_types.mojom.h"
-#include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chromeos/dbus/concierge/concierge_service.pb.h"
 #include "chromeos/dbus/concierge_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -37,6 +37,14 @@ void EmitResizeResultMetric(vm_tools::concierge::DiskImageStatus status) {
       "Crostini.DiskResize.Result", status,
       static_cast<vm_tools::concierge::DiskImageStatus>(
           vm_tools::concierge::DiskImageStatus_MAX + 1));
+}
+
+int64_t round_up(int64_t n, double increment) {
+  return std::ceil(n / increment) * increment;
+}
+
+int64_t round_down(int64_t n, double increment) {
+  return std::floor(n / increment) * increment;
 }
 }  // namespace
 
@@ -211,13 +219,12 @@ std::vector<crostini::mojom::DiskSliderTickPtr> GetTicks(
   }
   std::vector<int64_t> values = GetTicksForDiskSize(min, max);
 
-  // Find the first value which is >= the current size, round that value down to
-  // the current size, and then record that as the default. This means that the
-  // ticks won't be evenly spaced, but GetTicksForDiskSize uses ~100 ticks so
-  // close enough.
+  // If the current size isn't on one of the ticks insert an extra tick for it.
   auto it = std::lower_bound(begin(values), end(values), current);
   if (it != end(values)) {
-    *it = current;
+    if (*it != current) {
+      values.insert(it, current);
+    }
     *out_default_index = std::distance(begin(values), it);
   } else {
     DCHECK(values.empty());
@@ -318,6 +325,44 @@ void OnResize(
     EmitResizeResultMetric(response->status());
     std::move(callback).Run(false);
   }
+}
+
+std::vector<int64_t> GetTicksForDiskSize(int64_t min_size,
+                                         int64_t available_space,
+                                         int num_ticks) {
+  if (min_size < 0 || available_space < 0 || min_size > available_space) {
+    return {};
+  }
+  std::vector<int64_t> ticks;
+
+  int64_t delta = (available_space - min_size) / num_ticks;
+  double increments[] = {1 * kGiB, 0.5 * kGiB, 0.2 * kGiB, 0.1 * kGiB};
+  double increment;
+  if (delta > increments[0]) {
+    increment = increments[0];
+  } else if (delta > increments[1]) {
+    increment = increments[1];
+  } else if (delta > increments[2]) {
+    increment = increments[2];
+  } else {
+    increment = increments[3];
+  }
+
+  int64_t start = round_up(min_size, increment);
+  int64_t end = round_down(available_space, increment);
+
+  if (end <= start) {
+    // We have less than 1 tick between min_size and available space, so the
+    // only option is to give all the space.
+    return std::vector<int64_t>{min_size};
+  }
+
+  ticks.emplace_back(start);
+  for (int n = 1; std::ceil(n * increment) < (end - start); n++) {
+    ticks.emplace_back(start + std::round(n * increment));
+  }
+  ticks.emplace_back(end);
+  return ticks;
 }
 }  // namespace disk
 }  // namespace crostini

@@ -54,6 +54,9 @@ class WebFrameTestProxy : public RenderFrameImpl,
 
   // Returns the test-subclass of RenderWidget for the local root of this frame.
   WebWidgetTestProxy* GetLocalRootWebWidgetTestProxy();
+  // Returns the test-subclass of RenderViewImpl that is hosting this frame's
+  // frame tree fragment.
+  WebViewTestProxy* GetWebViewTestProxy();
 
   // WebLocalFrameClient implementation.
   blink::WebPlugin* CreatePlugin(const blink::WebPluginParams& params) override;
@@ -66,10 +69,11 @@ class WebFrameTestProxy : public RenderFrameImpl,
   void DidChangeSelection(bool is_selection_empty) override;
   void DidChangeContents() override;
   blink::WebEffectiveConnectionType GetEffectiveConnectionType() override;
-  void ShowContextMenu(
-      const blink::WebContextMenuData& context_menu_data) override;
+  void ShowContextMenu(const blink::WebContextMenuData& context_menu_data,
+                       const base::Optional<gfx::Point>&) override;
   void DidDispatchPingLoader(const blink::WebURL& url) override;
-  void WillSendRequest(blink::WebURLRequest& request) override;
+  void WillSendRequest(blink::WebURLRequest& request,
+                       ForRedirect for_redirect) override;
   void BeginNavigation(std::unique_ptr<blink::WebNavigationInfo> info) override;
   void PostAccessibilityEvent(const ui::AXEvent& event) override;
   void MarkWebAXObjectDirty(const blink::WebAXObject& object,
@@ -81,7 +85,6 @@ class WebFrameTestProxy : public RenderFrameImpl,
 
  private:
   // mojom::WebTestRenderFrame implementation.
-  void CaptureDump(CaptureDumpCallback callback) override;
   void SynchronouslyCompositeAfterTest(
       SynchronouslyCompositeAfterTestCallback callback) override;
   void DumpFrameLayout(DumpFrameLayoutCallback callback) override;
@@ -92,9 +95,6 @@ class WebFrameTestProxy : public RenderFrameImpl,
   void SetupRendererProcessForNonTestWindow() override;
   void ResetRendererAfterWebTest() override;
   void FinishTestInMainWindow() override;
-  void LayoutDumpCompleted(const std::string& completed_layout_dump) override;
-  void ReplyBluetoothManualChooserEvents(
-      const std::vector<std::string>& events) override;
 
   void BindReceiver(
       mojo::PendingAssociatedReceiver<mojom::WebTestRenderFrame> receiver);

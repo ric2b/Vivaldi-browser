@@ -4,6 +4,10 @@
 
 #include "cc/trees/single_thread_proxy.h"
 
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
@@ -16,6 +20,7 @@
 #include "cc/resources/ui_resource_manager.h"
 #include "cc/scheduler/commit_earlyout_reason.h"
 #include "cc/scheduler/scheduler.h"
+#include "cc/trees/compositor_commit_data.h"
 #include "cc/trees/latency_info_swap_promise.h"
 #include "cc/trees/layer_tree_frame_sink.h"
 #include "cc/trees/layer_tree_host.h"
@@ -24,7 +29,6 @@
 #include "cc/trees/mutator_host.h"
 #include "cc/trees/render_frame_metadata_observer.h"
 #include "cc/trees/scoped_abort_remaining_swap_promises.h"
-#include "cc/trees/scroll_and_scale_set.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
 #include "components/viz/common/frame_timing_details.h"
 #include "components/viz/common/gpu/context_provider.h"
@@ -53,6 +57,7 @@ SingleThreadProxy::SingleThreadProxy(LayerTreeHost* layer_tree_host,
       defer_main_frame_update_(false),
       defer_commits_(false),
       animate_requested_(false),
+      update_layers_requested_(false),
       commit_requested_(false),
       inside_synchronous_composite_(false),
       needs_impl_frame_(false),
@@ -171,7 +176,12 @@ void SingleThreadProxy::SetNeedsAnimate() {
 void SingleThreadProxy::SetNeedsUpdateLayers() {
   TRACE_EVENT0("cc", "SingleThreadProxy::SetNeedsUpdateLayers");
   DCHECK(task_runner_provider_->IsMainThread());
-  SetNeedsCommit();
+  if (!RequestedAnimatePending()) {
+    DebugScopedSetImplThread impl(task_runner_provider_);
+    if (scheduler_on_impl_thread_)
+      scheduler_on_impl_thread_->SetNeedsBeginMainFrame();
+  }
+  update_layers_requested_ = true;
 }
 
 void SingleThreadProxy::DoCommit(const viz::BeginFrameArgs& commit_args) {
@@ -256,7 +266,8 @@ void SingleThreadProxy::SetNextCommitWaitsForActivation() {
 }
 
 bool SingleThreadProxy::RequestedAnimatePending() {
-  return animate_requested_ || commit_requested_ || needs_impl_frame_;
+  return animate_requested_ || update_layers_requested_ || commit_requested_ ||
+         needs_impl_frame_;
 }
 
 void SingleThreadProxy::SetDeferMainFrameUpdate(bool defer_main_frame_update) {
@@ -785,6 +796,7 @@ void SingleThreadProxy::BeginMainFrame(
   commit_requested_ = false;
   needs_impl_frame_ = false;
   animate_requested_ = false;
+  update_layers_requested_ = false;
 
   if (defer_main_frame_update_) {
     TRACE_EVENT_INSTANT0("cc", "EarlyOut_DeferBeginMainFrame",
@@ -840,9 +852,9 @@ void SingleThreadProxy::DoBeginMainFrame(
     // The impl-side scroll deltas may be manipulated directly via the
     // InputHandler on the UI thread and the scale deltas may change when they
     // are clamped on the impl thread.
-    std::unique_ptr<ScrollAndScaleSet> scroll_info =
-        host_impl_->ProcessScrollDeltas();
-    layer_tree_host_->ApplyScrollAndScale(scroll_info.get());
+    std::unique_ptr<CompositorCommitData> commit_data =
+        host_impl_->ProcessCompositorDeltas();
+    layer_tree_host_->ApplyCompositorChanges(commit_data.get());
   }
   layer_tree_host_->ApplyMutatorEvents(host_impl_->TakeMutatorEvents());
   layer_tree_host_->WillBeginMainFrame();
@@ -853,6 +865,7 @@ void SingleThreadProxy::DoBeginMainFrame(
 
 void SingleThreadProxy::DoPainting() {
   layer_tree_host_->UpdateLayers();
+  update_layers_requested_ = false;
 
   // TODO(enne): SingleThreadProxy does not support cancelling commits yet,
   // search for CommitEarlyOutReason::FINISHED_NO_UPDATES inside

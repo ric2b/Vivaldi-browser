@@ -55,8 +55,9 @@
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #else
-#include "chrome/browser/policy/browser_dm_token_storage.h"
-#include "chrome/browser/policy/chrome_browser_cloud_management_controller.h"
+#include "chrome/browser/policy/chrome_browser_policy_connector.h"
+#include "components/enterprise/browser/controller/browser_dm_token_storage.h"
+#include "components/enterprise/browser/controller/chrome_browser_cloud_management_controller.h"
 #endif
 
 namespace {
@@ -77,22 +78,9 @@ void AddAnalysisConnectorVerdictToEvent(
   base::ListValue triggered_rule_info;
   for (const auto& trigger : result.triggers) {
     base::Value triggered_rule(base::Value::Type::DICTIONARY);
-    int64_t rule_id;
-    if (base::StringToInt64(trigger.id, &rule_id)) {
-      triggered_rule.SetIntKey(
-          extensions::SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleId,
-          rule_id);
-    } else {
-      triggered_rule.SetIntKey(
-          extensions::SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleId, 0);
-    }
-
     triggered_rule.SetStringKey(
         extensions::SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleName,
         trigger.name);
-    triggered_rule.SetIntKey(
-        extensions::SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleAction,
-        trigger.action);
 
     triggered_rule_info.Append(std::move(triggered_rule));
   }
@@ -102,9 +90,9 @@ void AddAnalysisConnectorVerdictToEvent(
 }
 
 std::string MalwareRuleToThreatType(const std::string& rule_name) {
-  if (rule_name == "UWS") {
+  if (rule_name == "uws") {
     return "POTENTIALLY_UNWANTED";
-  } else if (rule_name == "MALWARE") {
+  } else if (rule_name == "malware") {
     return "DANGEROUS";
   } else {
     return "UNKNOWN";
@@ -133,15 +121,14 @@ const char SafeBrowsingPrivateEventRouter::kKeyReason[] = "reason";
 const char SafeBrowsingPrivateEventRouter::kKeyNetErrorCode[] = "netErrorCode";
 const char SafeBrowsingPrivateEventRouter::kKeyClickedThrough[] =
     "clickedThrough";
-const char SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleId[] = "ruleId";
 const char SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleName[] = "ruleName";
-const char SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleAction[] = "action";
 const char SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleInfo[] =
     "triggeredRuleInfo";
 const char SafeBrowsingPrivateEventRouter::kKeyThreatType[] = "threatType";
 const char SafeBrowsingPrivateEventRouter::kKeyContentType[] = "contentType";
 const char SafeBrowsingPrivateEventRouter::kKeyContentSize[] = "contentSize";
 const char SafeBrowsingPrivateEventRouter::kKeyTrigger[] = "trigger";
+const char SafeBrowsingPrivateEventRouter::kKeyEventResult[] = "eventResult";
 
 const char SafeBrowsingPrivateEventRouter::kKeyPasswordReuseEvent[] =
     "passwordReuseEvent";
@@ -170,7 +157,10 @@ SafeBrowsingPrivateEventRouter::SafeBrowsingPrivateEventRouter(
   event_router_ = EventRouter::Get(context_);
 }
 
-SafeBrowsingPrivateEventRouter::~SafeBrowsingPrivateEventRouter() {}
+SafeBrowsingPrivateEventRouter::~SafeBrowsingPrivateEventRouter() {
+  if (client_)
+    client_->RemoveObserver(this);
+}
 
 void SafeBrowsingPrivateEventRouter::OnPolicySpecifiedPasswordReuseDetected(
     const GURL& url,
@@ -295,6 +285,10 @@ void SafeBrowsingPrivateEventRouter::OnDangerousDownloadOpened(
             if (content_size >= 0)
               event.SetIntKey(kKeyContentSize, content_size);
             event.SetStringKey(kKeyTrigger, kTriggerFileDownload);
+            event.SetStringKey(kKeyEventResult,
+                               safe_browsing::EventResultToString(
+                                   safe_browsing::EventResult::BYPASSED));
+            event.SetBoolKey(kKeyClickedThrough, true);
             return event;
           },
           params.url, params.file_name, params.download_digest_sha256,
@@ -329,11 +323,17 @@ void SafeBrowsingPrivateEventRouter::OnSecurityInterstitialShown(
   if (!IsRealtimeReportingEnabled())
     return;
 
+  PrefService* prefs = Profile::FromBrowserContext(context_)->GetPrefs();
+  auto event_result =
+      prefs->GetBoolean(prefs::kSafeBrowsingProceedAnywayDisabled)
+          ? safe_browsing::EventResult::BLOCKED
+          : safe_browsing::EventResult::WARNED;
   ReportRealtimeEvent(
       kKeyInterstitialEvent,
       base::BindOnce(
           [](const std::string& url, const std::string& reason,
-             int net_error_code, const std::string& user_name) {
+             int net_error_code, const std::string& user_name,
+             safe_browsing::EventResult event_result) {
             // Convert |params| to a real-time event dictionary and report it.
             base::Value event(base::Value::Type::DICTIONARY);
             event.SetStringKey(kKeyUrl, url);
@@ -341,9 +341,14 @@ void SafeBrowsingPrivateEventRouter::OnSecurityInterstitialShown(
             event.SetIntKey(kKeyNetErrorCode, net_error_code);
             event.SetStringKey(kKeyProfileUserName, user_name);
             event.SetBoolKey(kKeyClickedThrough, false);
+            event.SetStringKey(
+                kKeyEventResult,
+                safe_browsing::EventResultToString(event_result));
+
             return event;
           },
-          params.url, params.reason, net_error_code, params.user_name));
+          params.url, params.reason, net_error_code, params.user_name,
+          event_result));
 }
 
 void SafeBrowsingPrivateEventRouter::OnSecurityInterstitialProceeded(
@@ -386,6 +391,9 @@ void SafeBrowsingPrivateEventRouter::OnSecurityInterstitialProceeded(
             event.SetIntKey(kKeyNetErrorCode, net_error_code);
             event.SetStringKey(kKeyProfileUserName, user_name);
             event.SetBoolKey(kKeyClickedThrough, true);
+            event.SetStringKey(kKeyEventResult,
+                               safe_browsing::EventResultToString(
+                                   safe_browsing::EventResult::BYPASSED));
             return event;
           },
           params.url, params.reason, net_error_code, params.user_name));
@@ -399,7 +407,8 @@ void SafeBrowsingPrivateEventRouter::OnAnalysisConnectorResult(
     const std::string& trigger,
     safe_browsing::DeepScanAccessPoint /* access_point */,
     const safe_browsing::ContentAnalysisScanResult& result,
-    const int64_t content_size) {
+    const int64_t content_size,
+    safe_browsing::EventResult event_result) {
   if (!IsRealtimeReportingEnabled())
     return;
 
@@ -408,10 +417,10 @@ void SafeBrowsingPrivateEventRouter::OnAnalysisConnectorResult(
     OnDangerousDeepScanningResult(
         url, file_name, download_digest_sha256,
         MalwareRuleToThreatType(result.triggers[0].name), mime_type, trigger,
-        content_size);
+        content_size, event_result);
   } else if (result.tag == "dlp") {
     OnSensitiveDataEvent(url, file_name, download_digest_sha256, mime_type,
-                         trigger, result, content_size);
+                         trigger, result, content_size, event_result);
   }
 }
 
@@ -422,7 +431,8 @@ void SafeBrowsingPrivateEventRouter::OnDangerousDeepScanningResult(
     const std::string& threat_type,
     const std::string& mime_type,
     const std::string& trigger,
-    const int64_t content_size) {
+    const int64_t content_size,
+    safe_browsing::EventResult event_result) {
   if (!IsRealtimeReportingEnabled())
     return;
 
@@ -433,7 +443,8 @@ void SafeBrowsingPrivateEventRouter::OnDangerousDeepScanningResult(
              const std::string& download_digest_sha256,
              const std::string& profile_user_name,
              const std::string& threat_type, const std::string& mime_type,
-             const std::string& trigger, const int64_t content_size) {
+             const std::string& trigger, const int64_t content_size,
+             safe_browsing::EventResult event_result) {
             // Create a real-time event dictionary from the arguments and
             // report it.
             base::Value event(base::Value::Type::DICTIONARY);
@@ -449,10 +460,16 @@ void SafeBrowsingPrivateEventRouter::OnDangerousDeepScanningResult(
             if (content_size >= 0)
               event.SetIntKey(kKeyContentSize, content_size);
             event.SetStringKey(kKeyTrigger, trigger);
+            event.SetStringKey(
+                kKeyEventResult,
+                safe_browsing::EventResultToString(event_result));
+            event.SetBoolKey(
+                kKeyClickedThrough,
+                event_result == safe_browsing::EventResult::BYPASSED);
             return event;
           },
           url.spec(), file_name, download_digest_sha256, GetProfileUserName(),
-          threat_type, mime_type, trigger, content_size));
+          threat_type, mime_type, trigger, content_size, event_result));
 }
 
 void SafeBrowsingPrivateEventRouter::OnSensitiveDataEvent(
@@ -462,7 +479,8 @@ void SafeBrowsingPrivateEventRouter::OnSensitiveDataEvent(
     const std::string& mime_type,
     const std::string& trigger,
     const safe_browsing::ContentAnalysisScanResult& result,
-    const int64_t content_size) {
+    const int64_t content_size,
+    safe_browsing::EventResult event_result) {
   if (!IsRealtimeReportingEnabled())
     return;
 
@@ -473,7 +491,8 @@ void SafeBrowsingPrivateEventRouter::OnSensitiveDataEvent(
              const std::string& url, const std::string& file_name,
              const std::string& download_digest_sha256,
              const std::string& profile_user_name, const std::string& mime_type,
-             const std::string& trigger, const int64_t content_size) {
+             const std::string& trigger, const int64_t content_size,
+             safe_browsing::EventResult event_result) {
             // Create a real-time event dictionary from the arguments and
             // report it.
             base::Value event(base::Value::Type::DICTIONARY);
@@ -488,14 +507,20 @@ void SafeBrowsingPrivateEventRouter::OnSensitiveDataEvent(
             if (content_size >= 0)
               event.SetIntKey(kKeyContentSize, content_size);
             event.SetStringKey(kKeyTrigger, trigger);
-            event.SetBoolKey(kKeyClickedThrough, false);
+            event.SetStringKey(
+                kKeyEventResult,
+                safe_browsing::EventResultToString(event_result));
+            event.SetBoolKey(
+                kKeyClickedThrough,
+                event_result == safe_browsing::EventResult::BYPASSED);
 
             AddAnalysisConnectorVerdictToEvent(result, &event);
 
             return event;
           },
           result, url.spec(), file_name, download_digest_sha256,
-          GetProfileUserName(), mime_type, trigger, content_size));
+          GetProfileUserName(), mime_type, trigger, content_size,
+          event_result));
 }
 
 void SafeBrowsingPrivateEventRouter::OnAnalysisConnectorWarningBypassed(
@@ -536,6 +561,9 @@ void SafeBrowsingPrivateEventRouter::OnAnalysisConnectorWarningBypassed(
             if (content_size >= 0)
               event.SetIntKey(kKeyContentSize, content_size);
             event.SetStringKey(kKeyTrigger, trigger);
+            event.SetStringKey(kKeyEventResult,
+                               safe_browsing::EventResultToString(
+                                   safe_browsing::EventResult::BYPASSED));
             event.SetBoolKey(kKeyClickedThrough, true);
 
             AddAnalysisConnectorVerdictToEvent(result, &event);
@@ -555,7 +583,8 @@ void SafeBrowsingPrivateEventRouter::OnUnscannedFileEvent(
     const std::string& trigger,
     safe_browsing::DeepScanAccessPoint access_point,
     const std::string& reason,
-    const int64_t content_size) {
+    const int64_t content_size,
+    safe_browsing::EventResult event_result) {
   if (!IsRealtimeReportingEnabled())
     return;
 
@@ -567,7 +596,8 @@ void SafeBrowsingPrivateEventRouter::OnUnscannedFileEvent(
              const std::string& profile_user_name, const std::string& mime_type,
              const std::string& trigger,
              safe_browsing::DeepScanAccessPoint access_point,
-             const std::string& reason, const int64_t content_size) {
+             const std::string& reason, const int64_t content_size,
+             safe_browsing::EventResult event_result) {
             // Create a real-time event dictionary from the arguments and
             // report it.
             base::Value event(base::Value::Type::DICTIONARY);
@@ -583,19 +613,27 @@ void SafeBrowsingPrivateEventRouter::OnUnscannedFileEvent(
             if (content_size >= 0)
               event.SetIntKey(kKeyContentSize, content_size);
             event.SetStringKey(kKeyTrigger, trigger);
+            event.SetStringKey(
+                kKeyEventResult,
+                safe_browsing::EventResultToString(event_result));
+            event.SetBoolKey(
+                kKeyClickedThrough,
+                event_result == safe_browsing::EventResult::BYPASSED);
             return event;
           },
           url.spec(), file_name, download_digest_sha256, GetProfileUserName(),
-          mime_type, trigger, access_point, reason, content_size));
+          mime_type, trigger, access_point, reason, content_size,
+          event_result));
 }
 
-void SafeBrowsingPrivateEventRouter::OnDangerousDownloadWarning(
+void SafeBrowsingPrivateEventRouter::OnDangerousDownloadEvent(
     const GURL& url,
     const std::string& file_name,
     const std::string& download_digest_sha256,
     const std::string& threat_type,
     const std::string& mime_type,
-    const int64_t content_size) {
+    const int64_t content_size,
+    safe_browsing::EventResult event_result) {
   if (!IsRealtimeReportingEnabled())
     return;
 
@@ -606,7 +644,8 @@ void SafeBrowsingPrivateEventRouter::OnDangerousDownloadWarning(
              const std::string& download_digest_sha256,
              const std::string& profile_user_name,
              const std::string& threat_type, const std::string& mime_type,
-             const int64_t content_size) {
+             const int64_t content_size,
+             safe_browsing::EventResult event_result) {
             // Create a real-time event dictionary and report it.
             base::Value event(base::Value::Type::DICTIONARY);
             event.SetStringKey(kKeyUrl, url);
@@ -622,10 +661,13 @@ void SafeBrowsingPrivateEventRouter::OnDangerousDownloadWarning(
             if (content_size >= 0)
               event.SetIntKey(kKeyContentSize, content_size);
             event.SetStringKey(kKeyTrigger, kTriggerFileDownload);
+            event.SetStringKey(
+                kKeyEventResult,
+                safe_browsing::EventResultToString(event_result));
             return event;
           },
           url.spec(), file_name, download_digest_sha256, GetProfileUserName(),
-          threat_type, mime_type, content_size));
+          threat_type, mime_type, content_size, event_result));
 }
 
 void SafeBrowsingPrivateEventRouter::OnDangerousDownloadWarningBypassed(
@@ -661,6 +703,9 @@ void SafeBrowsingPrivateEventRouter::OnDangerousDownloadWarningBypassed(
             if (content_size >= 0)
               event.SetIntKey(kKeyContentSize, content_size);
             event.SetStringKey(kKeyTrigger, kTriggerFileDownload);
+            event.SetStringKey(kKeyEventResult,
+                               safe_browsing::EventResultToString(
+                                   safe_browsing::EventResult::BYPASSED));
             return event;
           },
           url.spec(), file_name, download_digest_sha256, GetProfileUserName(),
@@ -808,6 +853,8 @@ void SafeBrowsingPrivateEventRouter::OnCloudPolicyClientAvailable(
     return;
   }
 
+  client_->AddObserver(this);
+
   VLOG(1) << "Ready for safe browsing real-time event reporting.";
 }
 
@@ -867,9 +914,14 @@ void SafeBrowsingPrivateEventRouter::ReportRealtimeEventCallback(
   wrapper.SetStringKey("time", now_str);
   wrapper.SetKey(name, std::move(event_builder).Run());
 
-  // Show the report on chrome://safe-browsing, if appropriate.
-  safe_browsing::WebUIInfoSingleton::GetInstance()->AddToReportingEvents(
-      wrapper);
+  auto upload_callback = base::BindOnce(
+      [](base::Value wrapper, bool uploaded) {
+        // Show the report on chrome://safe-browsing, if appropriate.
+        wrapper.SetBoolKey("uploaded_successfully", uploaded);
+        safe_browsing::WebUIInfoSingleton::GetInstance()->AddToReportingEvents(
+            wrapper);
+      },
+      wrapper.Clone());
 
   base::Value event_list(base::Value::Type::LIST);
   event_list.Append(std::move(wrapper));
@@ -878,22 +930,11 @@ void SafeBrowsingPrivateEventRouter::ReportRealtimeEventCallback(
       policy::RealtimeReportingJobConfiguration::BuildReport(
           std::move(event_list),
           reporting::GetContext(Profile::FromBrowserContext(context_))),
-      base::DoNothing());
+      std::move(upload_callback));
 }
 
 std::string SafeBrowsingPrivateEventRouter::GetProfileUserName() const {
-  // |identity_manager_| may be null in some tests.
-  if (!identity_manager_)
-    return std::string();
-
-  if (!identity_manager_->HasPrimaryAccount(
-          signin::ConsentLevel::kNotRequired)) {
-    return std::string();
-  }
-
-  return identity_manager_
-      ->GetPrimaryAccountInfo(signin::ConsentLevel::kNotRequired)
-      .email;
+  return safe_browsing::GetProfileEmail(identity_manager_);
 }
 
 #if defined(OS_CHROMEOS)
@@ -919,8 +960,20 @@ bool SafeBrowsingPrivateEventRouter::IsRealtimeReportingAvailable() {
   auto* user = GetChromeOSUser();
   return user && user->IsAffiliated();
 #else
-  return policy::ChromeBrowserCloudManagementController::IsEnabled();
+  return g_browser_process->browser_policy_connector()
+      ->chrome_browser_cloud_management_controller()
+      ->IsEnabled();
 #endif
+}
+
+void SafeBrowsingPrivateEventRouter::OnClientError(
+    policy::CloudPolicyClient* client) {
+  base::Value error_value(base::Value::Type::DICTIONARY);
+  error_value.SetStringKey(
+      "error", "An event got an error status and hasn't been reported");
+  error_value.SetIntKey("status", client->status());
+  safe_browsing::WebUIInfoSingleton::GetInstance()->AddToReportingEvents(
+      error_value);
 }
 
 }  // namespace extensions

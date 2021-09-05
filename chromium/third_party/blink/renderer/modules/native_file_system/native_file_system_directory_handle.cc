@@ -12,6 +12,7 @@
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_manager.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_file_system_directory_handle.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_file_system_get_directory_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_file_system_get_file_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_file_system_remove_options.h"
@@ -43,7 +44,25 @@ NativeFileSystemDirectoryHandle::NativeFileSystemDirectoryHandle(
   DCHECK(mojo_ptr_.is_bound());
 }
 
-ScriptPromise NativeFileSystemDirectoryHandle::getFile(
+NativeFileSystemDirectoryIterator* NativeFileSystemDirectoryHandle::entries() {
+  return MakeGarbageCollected<NativeFileSystemDirectoryIterator>(
+      this, NativeFileSystemDirectoryIterator::Mode::kKeyValue,
+      GetExecutionContext());
+}
+
+NativeFileSystemDirectoryIterator* NativeFileSystemDirectoryHandle::keys() {
+  return MakeGarbageCollected<NativeFileSystemDirectoryIterator>(
+      this, NativeFileSystemDirectoryIterator::Mode::kKey,
+      GetExecutionContext());
+}
+
+NativeFileSystemDirectoryIterator* NativeFileSystemDirectoryHandle::values() {
+  return MakeGarbageCollected<NativeFileSystemDirectoryIterator>(
+      this, NativeFileSystemDirectoryIterator::Mode::kValue,
+      GetExecutionContext());
+}
+
+ScriptPromise NativeFileSystemDirectoryHandle::getFileHandle(
     ScriptState* script_state,
     const String& name,
     const FileSystemGetFileOptions* options) {
@@ -72,7 +91,7 @@ ScriptPromise NativeFileSystemDirectoryHandle::getFile(
   return result;
 }
 
-ScriptPromise NativeFileSystemDirectoryHandle::getDirectory(
+ScriptPromise NativeFileSystemDirectoryHandle::getDirectoryHandle(
     ScriptState* script_state,
     const String& name,
     const FileSystemGetDirectoryOptions* options) {
@@ -119,7 +138,8 @@ void ReturnDataFunction(const v8::FunctionCallbackInfo<v8::Value>& info) {
 ScriptValue NativeFileSystemDirectoryHandle::getEntries(
     ScriptState* script_state) {
   auto* iterator = MakeGarbageCollected<NativeFileSystemDirectoryIterator>(
-      this, ExecutionContext::From(script_state));
+      this, NativeFileSystemDirectoryIterator::Mode::kValue,
+      ExecutionContext::From(script_state));
   auto* isolate = script_state->GetIsolate();
   auto context = script_state->GetContext();
   v8::Local<v8::Object> result = v8::Object::New(isolate);
@@ -197,8 +217,7 @@ ScriptPromise NativeFileSystemDirectoryHandle::getSystemDirectory(
     ExceptionState& exception_state) {
   ExecutionContext* context = ExecutionContext::From(script_state);
   if (!context->GetSecurityOrigin()->CanAccessNativeFileSystem()) {
-    if (context->GetSecurityContext().IsSandboxed(
-            network::mojom::blink::WebSandboxFlags::kOrigin)) {
+    if (context->IsSandboxed(network::mojom::blink::WebSandboxFlags::kOrigin)) {
       exception_state.ThrowSecurityError(
           "System directory access is denied because the context is "
           "sandboxed and lacks the 'allow-same-origin' flag.");

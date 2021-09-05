@@ -48,8 +48,6 @@ def DefaultVals():
   """Default mixin values"""
   return {
       'args_file': '',
-      # TODO(crbug.com/937821): Get rid of 'cros_passthrough'.
-      'cros_passthrough': False,
       'gn_args': '',
   }
 
@@ -1148,12 +1146,13 @@ class MetaBuildWrapper(object):
     label = labels[0]
 
     build_dir = self.args.path
+
     command, extra_files = self.GetIsolateCommand(target, vals)
 
-    # Any warning for an unused arg will get interleaved into the cmd's stdout.
-    # When that happens, the isolate step below will fail with an obscure error
-    # when it tries processing the lines of the warning. Fail quickly in that
-    # case to avoid confusion.
+    # Any warning for an unused arg will get interleaved into the cmd's
+    # stdout. When that happens, the isolate step below will fail with an
+    # obscure error when it tries processing the lines of the warning. Fail
+    # quickly in that case to avoid confusion
     cmd = self.GNCmd('desc', build_dir, label, 'runtime_deps',
                      '--fail-on-unused-args')
     ret, out, _ = self.Call(cmd)
@@ -1190,8 +1189,7 @@ class MetaBuildWrapper(object):
     # https://crbug.com/912946
     is_android = 'target_os="android"' in vals['gn_args']
     is_cros = ('target_os="chromeos"' in vals['gn_args']
-               or 'is_chromeos_device=true' in vals['gn_args']
-               or vals.get('cros_passthrough', False))
+               or 'is_chromeos_device=true' in vals['gn_args'])
     is_mac = self.platform == 'darwin'
     is_msan = 'is_msan=true' in vals['gn_args']
     is_ios = 'target_os="ios"' in vals['gn_args']
@@ -1328,17 +1326,7 @@ class MetaBuildWrapper(object):
 
 
   def GNArgs(self, vals, expand_imports=False):
-    if vals['cros_passthrough']:
-      if not 'GN_ARGS' in os.environ:
-        raise MBErr('MB is expecting GN_ARGS to be in the environment')
-      gn_args = os.environ['GN_ARGS']
-      if not re.search('target_os.*=.*"chromeos"', gn_args):
-        raise MBErr('GN_ARGS is missing target_os = "chromeos": (GN_ARGS=%s)' %
-                    gn_args)
-      if vals['gn_args']:
-        gn_args += ' ' + vals['gn_args']
-    else:
-      gn_args = vals['gn_args']
+    gn_args = vals['gn_args']
 
     if self.args.goma_dir:
       gn_args += ' goma_dir="%s"' % self.args.goma_dir
@@ -1353,16 +1341,6 @@ class MetaBuildWrapper(object):
 
     args_gn_lines = []
     parsed_gn_args = {}
-
-    # If we're using the Simple Chrome SDK, add a comment at the top that
-    # points to the doc. This must happen after the gn_helpers.ToGNString()
-    # call above since gn_helpers strips comments.
-    if vals['cros_passthrough']:
-      args_gn_lines.extend([
-          '# These args are generated via the Simple Chrome SDK. See the link',
-          '# below for more details:',
-          '# https://chromium.googlesource.com/chromiumos/docs/+/master/simple_chrome_workflow.md',  # pylint: disable=line-too-long
-      ])
 
     args_file = vals.get('args_file', None)
     if args_file:
@@ -1385,12 +1363,31 @@ class MetaBuildWrapper(object):
 
     is_android = 'target_os="android"' in vals['gn_args']
     is_fuchsia = 'target_os="fuchsia"' in vals['gn_args']
-    is_cros = 'target_os="chromeos"' in vals['gn_args']
+    is_cros = ('target_os="chromeos"' in vals['gn_args']
+               or 'is_chromeos_device=true' in vals['gn_args'])
+    is_cros_device = 'is_chromeos_device=true' in vals['gn_args']
     is_ios = 'target_os="ios"' in vals['gn_args']
-    is_cros_device = ('is_chromeos_device=true' in vals['gn_args']
-                      or vals.get('cros_passthrough', False))
-    is_mac = self.platform == 'darwin'
+    is_mac = self.platform == 'darwin' and not is_ios
     is_win = self.platform == 'win32' or 'target_os="win"' in vals['gn_args']
+    is_lacros = 'chromeos_is_browser_only=true' in vals['gn_args']
+
+    test_type = isolate_map[target]['type']
+
+    if self.use_luci_auth:
+      cmdline = ['luci-auth.exe' if is_win else 'luci-auth', 'context', '--']
+    else:
+      cmdline = []
+
+    if test_type == 'generated_script' or is_ios or is_lacros:
+      script = isolate_map[target].get('script', 'bin/run_{}'.format(target))
+      if is_win:
+        script += '.bat'
+      cmdline += [script]
+      return cmdline, []
+
+
+    # TODO(crbug.com/816629): Convert all targets to generated_scripts
+    # and delete the rest of this function.
 
     # This should be true if tests with type='windowed_test_launcher' are
     # expected to run using xvfb. For example, Linux Desktop, X11 CrOS and
@@ -1410,50 +1407,16 @@ class MetaBuildWrapper(object):
     clang_coverage = 'use_clang_coverage=true' in vals['gn_args']
     java_coverage = 'use_jacoco_coverage=true' in vals['gn_args']
 
-    test_type = isolate_map[target]['type']
-    use_python3 = isolate_map[target].get('use_python3', False)
-
     executable = isolate_map[target].get('executable', target)
     executable_suffix = isolate_map[target].get(
         'executable_suffix', '.exe' if is_win else '')
-
-    # TODO(crbug.com/1060857): Remove this once swarming task templates
-    # support command prefixes.
-    if self.use_luci_auth:
-      cmdline = ['luci-auth.exe' if is_win else 'luci-auth', 'context', '--']
-    else:
-      cmdline = []
-
-    if use_python3:
-      cmdline += ['vpython3']
-      extra_files = ['../../.vpython3']
-    else:
-      cmdline += ['vpython']
-      extra_files = ['../../.vpython']
+    cmdline += ['vpython']
+    extra_files = ['../../.vpython']
     extra_files += [
       '../../testing/test_env.py',
     ]
 
-    if test_type == 'nontest':
-      self.WriteFailureAndRaise('We should not be isolating %s.' % target,
-                                output_path=None)
-
-    if test_type == 'generated_script':
-      script = isolate_map[target]['script']
-      if self.platform == 'win32':
-        script += '.bat'
-      cmdline += [
-          '../../testing/test_env.py',
-          script,
-      ]
-    elif is_ios and test_type != "raw":
-      # iOS commands are all wrapped with generate_wrapper. Some targets
-      # shared with iOS aren't defined with generated_script (ie/ basic_
-      # unittests) so we force those to follow iOS' execution process by
-      # mimicking what generated_script would do
-      script = 'bin/run_{}'.format(target)
-      cmdline += ['../../testing/test_env.py', script]
-    elif is_android and test_type != 'script':
+    if is_android and test_type != 'script':
       if asan:
         cmdline += [os.path.join('bin', 'run_with_asan'), '--']
       cmdline += [
@@ -1475,6 +1438,7 @@ class MetaBuildWrapper(object):
       cmdline += [
           '../../testing/test_env.py',
           os.path.join('bin', 'run_%s' % target),
+          '--flash',
       ]
     elif use_xvfb and test_type == 'windowed_test_launcher':
       extra_files.append('../../testing/xvfb.py')
@@ -1514,6 +1478,8 @@ class MetaBuildWrapper(object):
         cmdline += [
             os.path.join('bin', 'cros_test_wrapper'),
             '--logs-dir=${ISOLATED_OUTDIR}',
+            '--flash',
+            '--',
         ]
       cmdline += [
           '../../testing/test_env.py',
@@ -1894,8 +1860,6 @@ def FlattenMixins(mixin_pool, mixins_to_flatten, vals, visited):
 
     mixin_vals = mixin_pool[m]
 
-    if 'cros_passthrough' in mixin_vals:
-      vals['cros_passthrough'] = mixin_vals['cros_passthrough']
     if 'args_file' in mixin_vals:
       if vals['args_file']:
         raise MBErr('args_file specified multiple times in mixins '

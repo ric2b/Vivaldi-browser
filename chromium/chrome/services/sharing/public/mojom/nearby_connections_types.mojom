@@ -41,9 +41,10 @@ enum Status {
   kAlreadyConnectedToEndpoint,
   // The remote endpoint is not connected; messages cannot be sent to it.
   kNotConnectedToEndpoint,
-  // There was an error trying to use the device's Bluetooth/WiFi/NFC
-  // capabilities.
-  kRadioError,
+  // There was an error trying to use the device's Bluetooth capabilities.
+  kBluetoothError,
+  // There was an error trying to use the device's WiFi capabilities.
+  kWifiLanError,
   // An attempt to interact with an in-flight Payload failed because it's
   // unknown to us.
   kPayloadUnknown,
@@ -51,8 +52,6 @@ enum Status {
 
 // Information about a connection that is being initiated.
 struct ConnectionInfo {
-  // The name of the remote device we're connecting to.
-  string remote_endpoint_name;
   // A short human-readable authentication token that has been given to both
   // devices.
   string authentication_token;
@@ -61,21 +60,19 @@ struct ConnectionInfo {
   // typically on devices with no output capabilities, where the authentication
   // is purely programmatic and does not have the luxury of human intervention.
   array<uint8> raw_authentication_token;
+  // Information that represents the remote device.
+  array<uint8> endpoint_info;
   // True if the connection request was initiated from a remote device. False if
   // this device was the one to try and initiate the connection.
   bool is_incoming_connection;
-  // Information that represents the remote device.
-  array<uint8> endpoint_info;
 };
 
 // Information about an endpoint when it's discovered.
 struct DiscoveredEndpointInfo {
-  // The ID of the service advertised by the remote endpoint.
-  string service_id;
-  // The human readable name of the remote endpoint.
-  string endpoint_name;
   // Information advertised by the remote endpoint.
   array<uint8> endpoint_info;
+  // The ID of the service advertised by the remote endpoint.
+  string service_id;
 };
 
 // The Strategy to be used when discovering or advertising to Nearby devices.
@@ -102,11 +99,25 @@ enum Strategy {
   kP2pPointToPoint,
 };
 
+// A selection of on/off toggles to define a set of allowed mediums.
+struct MediumSelection {
+  // Whether Bluetooth should be allowed.
+  bool bluetooth;
+  // Whether WebRTC should be allowed.
+  bool web_rtc;
+  // Whether WiFi LAN should be allowed.
+  bool wifi_lan;
+};
+
 // Options for a call to NearbyConnections::StartAdvertising().
 struct AdvertisingOptions {
   // The strategy to use for advertising. Must match the strategy used in
   // DiscoveryOptions for remote devices to see this advertisement.
   Strategy strategy;
+  // Describes which mediums are allowed to be used for advertising. Note that
+  // allowing an otherwise unsupported medium is ok. Only the intersection of
+  // allowed and supported mediums will be used to advertise.
+  MediumSelection allowed_mediums;
   // By default, this option is true. If false, we will not attempt to upgrade
   // the bandwidth until a call to InitiateBandwidthUpgrade() is made.
   bool auto_upgrade_bandwidth = true;

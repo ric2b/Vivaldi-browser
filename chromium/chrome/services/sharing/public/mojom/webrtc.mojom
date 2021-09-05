@@ -7,7 +7,7 @@ module sharing.mojom;
 import "url/mojom/url.mojom";
 
 // Represents an ICE candidate as defined in RFC 5245. These will be exchanged
-// OOB via the SignallingSender and SignallingReceiver interfaces.
+// OOB via the SignalingSender and SignalingReceiver interfaces.
 struct IceCandidate {
   // Represents the remote address to connect to as defined in RFC 5245 # 15.1.
   string candidate;
@@ -35,9 +35,16 @@ enum SendMessageResult {
   kError,
 };
 
-// Signalling sender interface used to exchange offer / answer pairs and a list
+// Used to fetch ice servers for WebRtc communication. Implemented in browser
+// process.
+interface IceConfigFetcher {
+  // Returns a list of ice servers for WebRtc communication.
+  GetIceServers() => (array<IceServer> ice_servers);
+};
+
+// Signaling sender interface used to exchange offer / answer pairs and a list
 // of ICE candidates OOB. Implemented in the browser process.
-interface SignallingSender {
+interface SignalingSender {
   // Sends an offer to the remote expecting an answer in response. The content
   // of both is in SDP format.
   SendOffer(string offer) => (string answer);
@@ -48,7 +55,7 @@ interface SignallingSender {
 
 // Signalling receiver interface used to notify about incoming offers and ICE
 // candidates from a remote. Implemented in a sandboxed utility process.
-interface SignallingReceiver {
+interface SignalingReceiver {
   // Received an offer from a remote, expecting an answer in response.
   OnOfferReceived(string offer) => (string answer);
 
@@ -64,8 +71,8 @@ interface SharingWebRtcConnectionDelegate {
   OnMessageReceived(array<uint8> message);
 };
 
-// Sharing connection interface used to send messages via WebRTC. Implemented in
-// a sandboxed utility process.
+// Sharing connection interface used to send messages via WebRTC. Implemented
+// in a sandboxed utility process.
 interface SharingWebRtcConnection {
   // Sends a message to the remove via WebRTC and returns the result.
   SendMessage(array<uint8> message) => (SendMessageResult result);

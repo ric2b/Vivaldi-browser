@@ -45,10 +45,10 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.espresso.contrib.RecyclerViewActions;
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.metrics.RecordHistogram;
@@ -71,7 +71,7 @@ import org.chromium.chrome.browser.compositor.layouts.phone.stack.StackTab;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
+import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tasks.ConditionalTabStripUtils;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
@@ -85,6 +85,7 @@ import org.chromium.chrome.test.util.OverviewModeBehaviorWatcher;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.UiRestriction;
@@ -112,9 +113,6 @@ public class ConditionalTabStripTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
-    @Rule
-    public TestRule mProcessor = new Features.InstrumentationProcessor();
-
     @Before
     public void setUp() {
         // For this test suite, the session time is set to be 0 by default so that we can start a
@@ -126,9 +124,7 @@ public class ConditionalTabStripTest {
 
         mActivityTestRule.startMainActivityOnBlankPage();
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
-        CriteriaHelper.pollUiThread(cta.getTabModelSelector()
-                                            .getTabModelFilterProvider()
-                                            .getCurrentTabModelFilter()::isTabModelRestored);
+        CriteriaHelper.pollUiThread(cta.getTabModelSelector()::isTabStateInitialized);
 
         float dpToPx = InstrumentationRegistry.getInstrumentation()
                                .getContext()
@@ -652,8 +648,8 @@ public class ConditionalTabStripTest {
     private void verifyAccessibilityTabClosing(int index, boolean isClosing) {
         CriteriaHelper.pollUiThread(() -> {
             AccessibilityTabModelListItem item = getAccessibilityOverviewListItem(index);
-            assertEquals(isClosing ? View.VISIBLE : View.INVISIBLE,
-                    item.findViewById(R.id.undo_contents).getVisibility());
+            Criteria.checkThat(item.findViewById(R.id.undo_contents).getVisibility(),
+                    Matchers.is(isClosing ? View.VISIBLE : View.INVISIBLE));
         });
     }
 
@@ -663,7 +659,7 @@ public class ConditionalTabStripTest {
         // Wait for bottom controls to stabilize.
         CriteriaHelper.pollUiThread(()
                                             -> mActivityTestRule.getActivity()
-                                                       .getFullscreenManager()
+                                                       .getBrowserControlsManager()
                                                        .getBottomControlOffset()
                         == 0);
         return mActivityTestRule.getActivity();
@@ -671,7 +667,7 @@ public class ConditionalTabStripTest {
 
     private void createBlankPageWithLaunchType(ChromeTabbedActivity cta, boolean isIncognito,
             @TabLaunchType int type) throws ExecutionException {
-        TabCreatorManager.TabCreator tabCreator = cta.getTabCreator(isIncognito);
+        TabCreator tabCreator = cta.getTabCreator(isIncognito);
         LoadUrlParams loadUrlParams = new LoadUrlParams(UrlConstants.CHROME_BLANK_URL);
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> tabCreator.createNewTab(loadUrlParams, type, null));

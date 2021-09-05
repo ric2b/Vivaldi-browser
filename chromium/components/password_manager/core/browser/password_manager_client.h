@@ -91,7 +91,7 @@ enum SyncState {
 class PasswordManagerClient {
  public:
   using CredentialsCallback =
-      base::Callback<void(const autofill::PasswordForm*)>;
+      base::OnceCallback<void(const autofill::PasswordForm*)>;
   using ReauthSucceeded = util::StrongAlias<class ReauthSucceededTag, bool>;
 
   PasswordManagerClient() {}
@@ -115,12 +115,6 @@ class PasswordManagerClient {
   // Checks if manual filling fallback is enabled for the page that has |url|
   // address.
   virtual bool IsFillingFallbackEnabled(const GURL& url) const;
-
-  // Checks asynchronously whether HTTP Strict Transport Security (HSTS) is
-  // active for the host of the given origin. Notifies |callback| with the
-  // result on the calling thread.
-  virtual void PostHSTSQueryForHost(const url::Origin& origin,
-                                    HSTSCallback callback) const;
 
   // Informs the embedder of a password form that can be saved or updated in
   // password store if the user allows it. The embedder is not required to
@@ -177,7 +171,11 @@ class PasswordManagerClient {
   virtual bool PromptUserToChooseCredentials(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
       const url::Origin& origin,
-      const CredentialsCallback& callback) = 0;
+      CredentialsCallback callback) = 0;
+
+  // Indicates if re-auth with the device is needed before filling passwords.
+  // Currently only used by iOS.
+  virtual bool RequiresReauthToFill();
 
   // Instructs the client to show the Touch To Fill UI.
   virtual void ShowTouchToFill(PasswordManagerDriver* driver);
@@ -243,9 +241,11 @@ class PasswordManagerClient {
                                 const PasswordFormManagerForUI* form_manager);
 
   // Informs the embedder that user credentials were leaked.
-  virtual void NotifyUserCredentialsWereLeaked(CredentialLeakType leak_type,
-                                               const GURL& origin,
-                                               const base::string16& username);
+  virtual void NotifyUserCredentialsWereLeaked(
+      CredentialLeakType leak_type,
+      CompromisedSitesCount saved_sites,
+      const GURL& origin,
+      const base::string16& username);
 
   // Requests a reauth for the primary account with |access_point| representing
   // where the reauth was triggered.
@@ -276,8 +276,9 @@ class PasswordManagerClient {
   virtual bool WasLastNavigationHTTPError() const;
 
   // Returns true if a credential leak dialog was shown. Used by Autofill
-  // Assistance to verify a password change intent. TODO(b/151391231): Remove
-  // when proper intent signing is implemented.
+  // Assistance to verify a password change intent. TODO(b/151391231): At the
+  // moment, password change scripts don't need validation, but it may change.
+  // If it doesn't change, remove this method and related code.
   virtual bool WasCredentialLeakDialogShown() const;
 
   // Obtains the cert status for the main frame.
@@ -389,6 +390,10 @@ class PasswordManagerClient {
   // the current profile.
   virtual scoped_refptr<network::SharedURLLoaderFactory>
   GetURLLoaderFactory() = 0;
+
+  // Returns a pointer to the NetworkContext owned by the storage partition of
+  // the current profile.
+  virtual network::mojom::NetworkContext* GetNetworkContext() const;
 
   // Whether the primary account of the current profile is under Advanced
   // Protection - a type of Google Account that helps protect our most at-risk

@@ -2,25 +2,28 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
 import 'chrome://resources/cr_elements/hidden_style_css.m.js';
-import 'chrome://resources/cr_elements/md_select_css.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 // TODO(gavinwill): Remove iron-dropdown dependency https://crbug.com/1082587.
 import 'chrome://resources/polymer/v3_0/iron-dropdown/iron-dropdown.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 
+import './print_preview_vars_css.js';
+
+import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {Destination} from '../data/destination.js';
-import {PrinterStatusReason} from '../data/printer_status_cros.js';
+import {Destination, DestinationOrigin} from '../data/destination.js';
+import {ERROR_STRING_KEY_MAP, PrinterStatusReason} from '../data/printer_status_cros.js';
 
-import {PrinterState} from './printer_status_icon_cros.js';
+import {IconLocation, PrinterState} from './printer_status_icon_cros.js';
 
 Polymer({
   is: 'print-preview-destination-dropdown-cros',
 
   _template: html`{__html_template__}`,
+
+  behaviors: [I18nBehavior],
 
   properties: {
     /** @type {!Destination} */
@@ -36,6 +39,8 @@ Polymer({
     disabled: {
       type: Boolean,
       value: false,
+      observer: 'updateTabIndex_',
+      reflectToAttribute: true,
     },
 
     driveDestinationKey: String,
@@ -47,6 +52,26 @@ Polymer({
     pdfDestinationKey: String,
 
     destinationIcon: String,
+
+    isCurrentDestinationCrosLocal: Boolean,
+
+    /**
+     * Index of the highlighted item in the dropdown.
+     * @private
+     */
+    highlightedIndex_: Number,
+
+    /** Mirroring the enum so that it can be used from HTML bindings. */
+    IconLocation: Object,
+
+    /** @private */
+    dropdownLength_: {
+      type: Number,
+      computed:
+          'computeDropdownLength_(itemList, pdfPrinterDisabled, driveDestinationKey, noDestinations, )',
+    },
+
+    destinationStatusText: String,
   },
 
   listeners: {
@@ -55,13 +80,8 @@ Polymer({
 
   /** @override */
   attached() {
-    this.pointerDownListener_ = event => this.onPointerDown_(event);
-    document.addEventListener('pointerdown', this.pointerDownListener_);
-  },
-
-  /** @override */
-  detached() {
-    document.removeEventListener('pointerdown', this.pointerDownListener_);
+    this.updateTabIndex_();
+    this.IconLocation = IconLocation;
   },
 
   /**
@@ -85,6 +105,8 @@ Polymer({
       return;
     }
 
+    this.highlightedIndex_ = this.getButtonListFromDropdown_().findIndex(
+        item => item.value === this.value.key);
     this.$$('iron-dropdown').open();
     this.opened_ = true;
   },
@@ -93,68 +115,49 @@ Polymer({
   closeDropdown_() {
     this.$$('iron-dropdown').close();
     this.opened_ = false;
-
-    const selectedItem = this.findSelectedItem_();
-    if (selectedItem) {
-      selectedItem.removeAttribute('selected_');
-    }
+    this.highlightedIndex_ = -1;
   },
 
   /**
+   * Highlight the item the mouse is hovering over. If the user uses the
+   * keyboard, the highlight will shift. But once the user moves the mouse,
+   * the highlight should be updated based on the location of the mouse
+   * cursor.
    * @param {!Event} event
    * @private
    */
   onMouseMove_(event) {
-    const item = event.composedPath().find(
-        elm => elm.classList && elm.classList.contains('list-item'));
+    const item = /** @type {!Element} */ (event.composedPath().find(
+        elm => elm.classList && elm.classList.contains('list-item')));
     if (!item) {
       return;
     }
+    this.highlightedIndex_ = this.getButtonListFromDropdown_().indexOf(item);
+  },
 
-    // Select the item the mouse is hovering over. If the user uses the
-    // keyboard, the selection will shift. But once the user moves the mouse,
-    // selection should be updated based on the location of the mouse cursor.
-    const selectedItem = this.findSelectedItem_();
-    if (item === selectedItem) {
+  /** @private */
+  onClick_(event) {
+    const dropdown =
+        /** @type {!IronDropdownElement} */ (this.$$('iron-dropdown'));
+    // Exit if path includes |dropdown| because event will be handled by
+    // onSelect_.
+    if (event.composedPath().includes(dropdown)) {
       return;
     }
 
-    if (selectedItem) {
-      selectedItem.removeAttribute('selected_');
+    if (dropdown.opened) {
+      this.closeDropdown_();
+      return;
     }
-    item.setAttribute('selected_', '');
+    this.openDropdown_();
   },
 
   /**
    * @param {!Event} event
    * @private
    */
-  onPointerDown_(event) {
-    const paths = event.composedPath();
-    const dropdown =
-        /** @type {!IronDropdownElement} */ (this.$$('iron-dropdown'));
-    const dropdownInput =
-        /** @type {!CrInputElement} */ (this.$$('#dropdownInput'));
-
-    // Exit if path includes |dropdown| because event will be handled by
-    // onSelect_.
-    if (paths.includes(dropdown)) {
-      return;
-    }
-
-    if (!paths.includes(dropdownInput) || dropdown.opened) {
-      this.closeDropdown_();
-      return;
-    }
-
-    this.openDropdown_();
-  },
-
-  /** @private */
-  onSelect_() {
-    const selectedItem = this.findSelectedItem_();
-    this.closeDropdown_();
-    this.fire('dropdown-value-selected', selectedItem);
+  onSelect_(event) {
+    this.dropdownValueSelected_(/** @type {!Element} */ (event.currentTarget));
   },
 
   /**
@@ -165,21 +168,14 @@ Polymer({
     event.stopPropagation();
     const dropdown = this.$$('iron-dropdown');
     switch (event.code) {
-      case 'Tab':
-        this.closeDropdown_();
-        break;
       case 'ArrowUp':
-      case 'ArrowDown': {
-        const items = dropdown.getElementsByClassName('list-item');
-        if (items.length === 0) {
-          break;
-        }
-        this.updateSelected_(event.code === 'ArrowDown');
+      case 'ArrowDown':
+        this.onArrowKeyPress_(event.code);
         break;
-      }
       case 'Enter': {
         if (dropdown.opened) {
-          this.onSelect_();
+          this.dropdownValueSelected_(
+              this.getButtonListFromDropdown_()[this.highlightedIndex_]);
           break;
         }
         this.openDropdown_();
@@ -196,52 +192,62 @@ Polymer({
   },
 
   /**
-   * Updates the currently selected element based on keyboard up/down movement.
-   * @param {boolean} moveDown
+   * @param {string} eventCode
    * @private
    */
-  updateSelected_(moveDown) {
+  onArrowKeyPress_(eventCode) {
+    const dropdown = this.$$('iron-dropdown');
     const items = this.getButtonListFromDropdown_();
-    const numItems = items.length;
-    if (numItems === 0) {
+    if (items.length === 0) {
       return;
     }
 
-    let nextIndex = 0;
-    const currentIndex = this.findSelectedItemIndex_();
-    if (currentIndex === -1) {
-      nextIndex = moveDown ? 0 : numItems - 1;
-    } else {
-      const delta = moveDown ? 1 : -1;
-      nextIndex = (numItems + currentIndex + delta) % numItems;
-      items[currentIndex].removeAttribute('selected_');
+    // If the dropdown is open, use the arrow key press to change which item is
+    // highlighted in the dropdown. If the dropdown is closed, use the arrow key
+    // press to change the selected destination.
+    if (dropdown.opened) {
+      const nextIndex = this.getNextItemIndexInList_(
+          eventCode, this.highlightedIndex_, items.length);
+      if (nextIndex === -1) {
+        return;
+      }
+      this.highlightedIndex_ = nextIndex;
+      items[this.highlightedIndex_].focus();
+      return;
     }
-    items[nextIndex].setAttribute('selected_', '');
-    // The newly selected item might not be visible because the dropdown needs
-    // to be scrolled. So scroll the dropdown if necessary.
-    items[nextIndex].scrollIntoViewIfNeeded();
+
+    const currentIndex = items.findIndex(item => item.value === this.value.key);
+    const nextIndex =
+        this.getNextItemIndexInList_(eventCode, currentIndex, items.length);
+    if (nextIndex === -1) {
+      return;
+    }
+    this.fire('dropdown-value-selected', items[nextIndex]);
   },
 
   /**
-   * Finds the currently selected dropdown item.
-   * @return {Element|undefined} Currently selected dropdown item, or undefined
-   *   if no item is selected.
+   * @param {string} eventCode
+   * @param {number} currentIndex
+   * @param {number} numItems
+   * @return {number} Returns -1 when the next item would be outside the list.
    * @private
    */
-  findSelectedItem_() {
-    const items = this.getButtonListFromDropdown_();
-    return items.find(item => item.hasAttribute('selected_'));
+  getNextItemIndexInList_(eventCode, currentIndex, numItems) {
+    const nextIndex =
+        eventCode === 'ArrowDown' ? currentIndex + 1 : currentIndex - 1;
+    return nextIndex >= 0 && nextIndex < numItems ? nextIndex : -1;
   },
 
   /**
-   * Finds the index of currently selected dropdown item.
-   * @return {number} Index of the currently selected dropdown item, or -1 if
-   *   no item is selected.
+   * @param {Element|undefined} dropdownItem
    * @private
    */
-  findSelectedItemIndex_() {
-    const items = this.getButtonListFromDropdown_();
-    return items.findIndex(item => item.hasAttribute('selected_'));
+  dropdownValueSelected_(dropdownItem) {
+    this.closeDropdown_();
+    if (dropdownItem) {
+      this.fire('dropdown-value-selected', dropdownItem);
+    }
+    this.$$('#destination-dropdown').focus();
   },
 
   /**
@@ -269,5 +275,77 @@ Polymer({
       return PrinterState.GOOD;
     }
     return PrinterState.ERROR;
+  },
+
+  /**
+   * Sets tabindex to -1 when dropdown is disabled to prevent the dropdown from
+   * being focusable.
+   * @private
+   */
+  updateTabIndex_() {
+    this.$$('#destination-dropdown')
+        .setAttribute('tabindex', this.disabled ? '-1' : '0');
+  },
+
+  /**
+   * Determines if an item in the dropdown should be highlighted based on the
+   * current value of |highlightedIndex_|.
+   * @param {string} itemValue
+   * @return {string}
+   * @private
+   */
+  getHighlightedClass_(itemValue) {
+    const itemToHighlight =
+        this.getButtonListFromDropdown_()[this.highlightedIndex_];
+    return itemToHighlight && itemValue === itemToHighlight.value ?
+        'highlighted' :
+        '';
+  },
+
+  /**
+   * Close the dropdown when focus is lost except when an item in the dropdown
+   * is the element that received the focus.
+   * @param {!Event} event
+   * @private
+   */
+  onBlur_(event) {
+    if (!this.getButtonListFromDropdown_().includes(
+            /** @type {!Element} */ (event.relatedTarget))) {
+      this.closeDropdown_();
+    }
+  },
+
+  /**
+   * @return {number}
+   * @private
+   */
+  computeDropdownLength_() {
+    if (this.noDestinations) {
+      return 1;
+    }
+
+    if (!this.itemList) {
+      return 0;
+    }
+
+    // + 1 for "See more"
+    let length = this.itemList.length + 1;
+    if (!this.pdfPrinterDisabled) {
+      length++;
+    }
+    if (this.driveDestinationKey) {
+      length++;
+    }
+    return length;
+  },
+
+  /**
+   * @param {!PrinterStatusReason} printerStatusReason
+   * @return {string}
+   * @private
+   */
+  getPrinterStatusErrorString_: function(printerStatusReason) {
+    const errorStringKey = ERROR_STRING_KEY_MAP.get(printerStatusReason);
+    return errorStringKey ? this.i18n(errorStringKey) : '';
   },
 });

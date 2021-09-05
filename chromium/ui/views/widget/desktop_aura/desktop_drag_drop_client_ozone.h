@@ -15,8 +15,8 @@
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/native_widget_types.h"
-#include "ui/platform_window/platform_window_handler/wm_drag_handler.h"
-#include "ui/platform_window/platform_window_handler/wm_drop_handler.h"
+#include "ui/platform_window/wm/wm_drag_handler.h"
+#include "ui/platform_window/wm/wm_drop_handler.h"
 #include "ui/views/views_export.h"
 
 namespace aura {
@@ -52,9 +52,6 @@ class VIEWS_EXPORT DesktopDragDropClientOzone
     DragContext();
     ~DragContext();
 
-    // Exits the drag loop.
-    base::OnceClosure quit_closure;
-
     // Widget that the user drags around.  May be nullptr.
     std::unique_ptr<Widget> widget;
 
@@ -80,7 +77,7 @@ class VIEWS_EXPORT DesktopDragDropClientOzone
                        aura::Window* source_window,
                        const gfx::Point& root_location,
                        int operation,
-                       ui::DragDropTypes::DragEventSource source) override;
+                       ui::mojom::DragEventSource source) override;
   void DragCancel() override;
   bool IsDragDropInProgress() override;
   void AddObserver(aura::client::DragDropClientObserver* observer) override;
@@ -89,9 +86,13 @@ class VIEWS_EXPORT DesktopDragDropClientOzone
   // ui::WmDropHandler
   void OnDragEnter(const gfx::PointF& point,
                    std::unique_ptr<ui::OSExchangeData> data,
-                   int operation) override;
-  int OnDragMotion(const gfx::PointF& point, int operation) override;
-  void OnDragDrop(std::unique_ptr<ui::OSExchangeData> data) override;
+                   int operation,
+                   int modifiers) override;
+  int OnDragMotion(const gfx::PointF& point,
+                   int operation,
+                   int modifiers) override;
+  void OnDragDrop(std::unique_ptr<ui::OSExchangeData> data,
+                  int modifiers) override;
   void OnDragLeave() override;
 
   // aura::WindowObserver
@@ -103,15 +104,14 @@ class VIEWS_EXPORT DesktopDragDropClientOzone
       ui::DragDropTypes::DragOperation operation) override;
   void OnDragFinished(int operation) override;
 
-  void QuitRunLoop();
-
   // Returns a DropTargetEvent to be passed to the DragDropDelegate.
   // Updates the delegate if needed, which in its turn calls their
   // OnDragExited/OnDragEntered, so after getting the event the delegate
   // is ready to accept OnDragUpdated or OnPerformDrop.  Returns nullptr if
   // drop is not possible.
   std::unique_ptr<ui::DropTargetEvent> UpdateTargetAndCreateDropEvent(
-      const gfx::PointF& point);
+      const gfx::PointF& point,
+      int modifiers);
 
   // Updates |drag_drop_delegate_| along with |window|.
   void UpdateDragDropDelegate(aura::Window* window);
@@ -119,8 +119,10 @@ class VIEWS_EXPORT DesktopDragDropClientOzone
   // Updates |drag_widget_| so it is aligned with the last drag location.
   void UpdateDragWidgetLocation();
 
-  // Resets |drag_drop_delegate_|.  Calls OnDragExited() before resetting.
-  void ResetDragDropTarget();
+  // Resets |drag_drop_delegate_|.
+  // |send_exit| controls whether to call delegate's OnDragExited() before
+  // resetting.
+  void ResetDragDropTarget(bool send_exit);
 
   aura::Window* const root_window_;
 
@@ -139,6 +141,9 @@ class VIEWS_EXPORT DesktopDragDropClientOzone
   // The most recent native coordinates of an incoming drag.  Updated while
   // the mouse is moved, and used at dropping.
   gfx::PointF last_drag_point_;
+  // The most recent drop operation. Updated while the mouse is moved, and
+  // used at dropping.
+  int last_drop_operation_ = 0;
 
   // The operation bitfield.
   int drag_operation_ = 0;

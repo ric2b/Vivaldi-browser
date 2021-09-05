@@ -7,21 +7,24 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/debug/alias.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/power_monitor/power_monitor.h"
+#include "base/process/process.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
+#include "base/task/current_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "gpu/config/gpu_crash_keys.h"
 #include "gpu/config/gpu_finch_features.h"
+#include "gpu/ipc/common/result_codes.h"
 #include "ui/gl/shader_tracking.h"
 
 #if defined(OS_WIN)
@@ -33,7 +36,7 @@ namespace {
 
 #if defined(CYGPROFILE_INSTRUMENTATION)
 const int kGpuTimeout = 30000;
-#elif defined(OS_WIN) || defined(OS_MACOSX)
+#elif defined(OS_WIN) || defined(OS_MAC)
 // Use a slightly longer timeout on Windows due to prevalence of slow and
 // infected machines.
 
@@ -48,7 +51,7 @@ const int kGpuTimeout = 10000;
 // between V1 and V2.
 #if defined(CYGPROFILE_INSTRUMENTATION)
 const int kNewGpuTimeout = 30000;
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 const int kNewGpuTimeout = 17000;
 #else
 const int kNewGpuTimeout = 15000;
@@ -99,7 +102,7 @@ GpuWatchdogThreadImplV1::GpuWatchdogThreadImplV1()
   UpdateActiveTTY();
   host_tty_ = active_tty_;
 #endif
-  base::MessageLoopCurrent::Get()->AddTaskObserver(&task_observer_);
+  base::CurrentThread::Get()->AddTaskObserver(&task_observer_);
 }
 
 // static
@@ -241,7 +244,7 @@ GpuWatchdogThreadImplV1::~GpuWatchdogThreadImplV1() {
     fclose(tty_file_);
 #endif
 
-  base::MessageLoopCurrent::Get()->RemoveTaskObserver(&task_observer_);
+  base::CurrentThread::Get()->RemoveTaskObserver(&task_observer_);
 }
 
 void GpuWatchdogThreadImplV1::OnAcknowledge() {
@@ -453,10 +456,14 @@ void GpuWatchdogThreadImplV1::DeliberatelyTerminateToRecoverFromHang() {
     return;
   }
 
-  // Deliberately crash the process to create a crash dump.
-  *((volatile int*)0) = 0x1337;
-
   terminated = true;
+
+  // Use RESULT_CODE_HUNG so this crash is separated from other
+  // EXCEPTION_ACCESS_VIOLATION buckets for UMA analysis.
+  // Create a crash dump first. TerminateCurrentProcessImmediately will not
+  // create a dump.
+  base::debug::DumpWithoutCrashing();
+  base::Process::TerminateCurrentProcessImmediately(RESULT_CODE_HUNG);
 }
 
 void GpuWatchdogThreadImplV1::AddPowerObserver() {

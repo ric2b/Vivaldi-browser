@@ -20,6 +20,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.PersonalizedSigninPromoView;
 import org.chromium.chrome.browser.signin.ProfileDataCache;
@@ -30,6 +31,7 @@ import org.chromium.chrome.browser.signin.SigninPromoUtil;
 import org.chromium.chrome.browser.signin.SyncPromoView;
 import org.chromium.chrome.browser.sync.AndroidSyncSettings;
 import org.chromium.chrome.browser.sync.AndroidSyncSettings.AndroidSyncSettingsObserver;
+import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountsChangeObserver;
 import org.chromium.components.signin.base.CoreAccountInfo;
@@ -68,6 +70,7 @@ class BookmarkPromoHeader implements AndroidSyncSettingsObserver, SignInStateObs
 
     private final Context mContext;
     private final SigninManager mSignInManager;
+    private final AccountManagerFacade mAccountManagerFacade;
     private final Runnable mPromoHeaderChangeAction;
 
     private @Nullable ProfileDataCache mProfileDataCache;
@@ -84,8 +87,11 @@ class BookmarkPromoHeader implements AndroidSyncSettingsObserver, SignInStateObs
 
         AndroidSyncSettings.get().registerObserver(this);
 
-        mSignInManager = IdentityServicesProvider.get().getSigninManager();
+        mSignInManager = IdentityServicesProvider.get().getSigninManager(
+                Profile.getLastUsedRegularProfile());
         mSignInManager.addSignInStateObserver(this);
+
+        mAccountManagerFacade = AccountManagerFacadeProvider.getInstance();
 
         mPromoState = calculatePromoState();
         if (mPromoState == PromoState.PROMO_SYNC) {
@@ -101,7 +107,7 @@ class BookmarkPromoHeader implements AndroidSyncSettingsObserver, SignInStateObs
                             : 0);
             mProfileDataCache.addObserver(this);
             mSigninPromoController = new SigninPromoController(SigninAccessPoint.BOOKMARK_MANAGER);
-            AccountManagerFacadeProvider.getInstance().addObserver(this);
+            mAccountManagerFacade.addObserver(this);
         } else {
             mProfileDataCache = null;
             mSigninPromoController = null;
@@ -115,7 +121,7 @@ class BookmarkPromoHeader implements AndroidSyncSettingsObserver, SignInStateObs
         AndroidSyncSettings.get().unregisterObserver(this);
 
         if (mSigninPromoController != null) {
-            AccountManagerFacadeProvider.getInstance().removeObserver(this);
+            mAccountManagerFacade.removeObserver(this);
             mProfileDataCache.removeObserver(this);
             mSigninPromoController.onPromoDestroyed();
         }
@@ -159,15 +165,13 @@ class BookmarkPromoHeader implements AndroidSyncSettingsObserver, SignInStateObs
      * @param view The view to be configured.
      */
     void setupPersonalizedSigninPromo(PersonalizedSigninPromoView view) {
-        SigninPromoUtil.setupPromoViewFromCache(mSigninPromoController, mProfileDataCache, view,
-                this::setPersonalizedSigninPromoDeclined);
+        SigninPromoUtil.setupSigninPromoViewFromCache(mSigninPromoController, mProfileDataCache,
+                view, this::setPersonalizedSigninPromoDeclined);
     }
 
     void setupPersonalizedSyncPromo(PersonalizedSigninPromoView view) {
-        setupPersonalizedSigninPromo(view);
-        view.getStatusMessage().setVisibility(View.VISIBLE);
-        view.getChooseAccountButton().setVisibility(View.GONE);
-        view.getSigninButton().setText(R.string.sync_promo_turn_on_sync);
+        SigninPromoUtil.setupSyncPromoViewFromCache(mSigninPromoController, mProfileDataCache, view,
+                this::setPersonalizedSigninPromoDeclined);
     }
 
     /**
@@ -211,7 +215,7 @@ class BookmarkPromoHeader implements AndroidSyncSettingsObserver, SignInStateObs
             return sPromoStateForTests;
         }
 
-        if (!AndroidSyncSettings.get().isMasterSyncEnabled()) {
+        if (!AndroidSyncSettings.get().doesMasterSyncSettingAllowChromeSync()) {
             return PromoState.PROMO_NONE;
         }
 

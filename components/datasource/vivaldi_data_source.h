@@ -25,9 +25,9 @@ class VivaldiDataClassHandler {
 
   // The callback must be called on all code paths including any
   // failures.
-  virtual void GetData(
-      const std::string& data_id,
-      content::URLDataSource::GotDataCallback callback) = 0;
+  virtual void GetData(Profile* profile,
+                       const std::string& data_id,
+                       content::URLDataSource::GotDataCallback callback) = 0;
 };
 
 class VivaldiDataSource : public content::URLDataSource {
@@ -47,6 +47,7 @@ class VivaldiDataSource : public content::URLDataSource {
  private:
   using PathType = vivaldi_data_url_utils::PathType;
 
+  Profile* profile_;
   base::flat_map<vivaldi_data_url_utils::PathType,
                  std::unique_ptr<VivaldiDataClassHandler>>
       data_class_handlers_;

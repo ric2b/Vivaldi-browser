@@ -39,6 +39,7 @@ class AccessibilityNodeInfoDataWrapper : public AccessibilityInfoDataWrapper {
   void PopulateAXRole(ui::AXNodeData* out_data) const override;
   void PopulateAXState(ui::AXNodeData* out_data) const override;
   void Serialize(ui::AXNodeData* out_data) const override;
+  std::string ComputeAXName(bool do_recursive) const override;
   void GetChildren(
       std::vector<AccessibilityInfoDataWrapper*>* children) const override;
 
@@ -72,6 +73,9 @@ class AccessibilityNodeInfoDataWrapper : public AccessibilityInfoDataWrapper {
 
   void ComputeNameFromContents(std::vector<std::string>* names) const;
   void ComputeNameFromContentsInternal(std::vector<std::string>* names) const;
+
+  bool IsClickable() const;
+  bool IsFocusable() const;
 
   bool IsScrollableContainer() const;
   bool IsToplevelScrollItem() const;

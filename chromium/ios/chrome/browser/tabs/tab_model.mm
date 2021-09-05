@@ -30,16 +30,14 @@
 #import "ios/chrome/browser/geolocation/omnibox_geolocation_controller.h"
 #include "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/main/browser_web_state_list_delegate.h"
-#import "ios/chrome/browser/metrics/tab_usage_recorder_browser_agent.h"
 #import "ios/chrome/browser/prerender/prerender_service_factory.h"
 #include "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/sessions/session_restoration_browser_agent.h"
 #import "ios/chrome/browser/sessions/session_service_ios.h"
 #import "ios/chrome/browser/sessions/session_window_ios.h"
+#import "ios/chrome/browser/snapshots/snapshot_browser_agent.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache.h"
-#import "ios/chrome/browser/snapshots/snapshot_cache_factory.h"
 #import "ios/chrome/browser/tabs/closing_web_state_observer.h"
-#import "ios/chrome/browser/tabs/synced_window_delegate_browser_agent.h"
 #import "ios/chrome/browser/tabs/tab_parenting_observer.h"
 #import "ios/chrome/browser/web/tab_id_tab_helper.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
@@ -102,75 +100,6 @@ void CleanCertificatePolicyCache(
                  base::Unretained(web_state_list)));
 }
 
-// Returns whether |rhs| and |lhs| are different user agent types. If either
-// of them is web::UserAgentType::NONE, then return NO.
-BOOL IsTransitionBetweenDesktopAndMobileUserAgent(web::UserAgentType lhs,
-                                                  web::UserAgentType rhs) {
-  if (lhs == web::UserAgentType::NONE)
-    return NO;
-
-  if (rhs == web::UserAgentType::NONE)
-    return NO;
-
-  return lhs != rhs;
-}
-
-// Returns whether TabUsageRecorderBrowserAgent::RecordPageLoadStart should be
-// called for the given navigation.
-BOOL ShouldRecordPageLoadStartForNavigation(
-    web::NavigationContext* navigation) {
-  web::NavigationManager* navigation_manager =
-      navigation->GetWebState()->GetNavigationManager();
-
-  web::NavigationItem* last_committed_item =
-      navigation_manager->GetLastCommittedItem();
-  if (!last_committed_item) {
-    // Opening a child window and loading URL there.
-    // http://crbug.com/773160
-    return NO;
-  }
-
-  web::NavigationItem* pending_item = navigation_manager->GetPendingItem();
-  if (pending_item) {
-    if (IsTransitionBetweenDesktopAndMobileUserAgent(
-            pending_item->GetUserAgentType(),
-            last_committed_item->GetUserAgentType())) {
-      // Switching between Desktop and Mobile user agent.
-      return NO;
-    }
-  }
-
-  ui::PageTransition transition = navigation->GetPageTransition();
-  if (!ui::PageTransitionIsNewNavigation(transition)) {
-    // Back/forward navigation or reload.
-    return NO;
-  }
-
-  if ((transition & ui::PAGE_TRANSITION_CLIENT_REDIRECT) != 0) {
-    // Client redirect.
-    return NO;
-  }
-
-  static const ui::PageTransition kRecordedPageTransitionTypes[] = {
-      ui::PAGE_TRANSITION_TYPED,
-      ui::PAGE_TRANSITION_LINK,
-      ui::PAGE_TRANSITION_GENERATED,
-      ui::PAGE_TRANSITION_AUTO_BOOKMARK,
-      ui::PAGE_TRANSITION_FORM_SUBMIT,
-      ui::PAGE_TRANSITION_KEYWORD,
-      ui::PAGE_TRANSITION_KEYWORD_GENERATED,
-  };
-
-  for (size_t i = 0; i < base::size(kRecordedPageTransitionTypes); ++i) {
-    const ui::PageTransition recorded_type = kRecordedPageTransitionTypes[i];
-    if (ui::PageTransitionCoreTypeIs(transition, recorded_type)) {
-      return YES;
-    }
-  }
-
-  return NO;
-}
-
 // Records metrics for the interface's orientation.
 void RecordInterfaceOrientationMetric() {
   switch ([[UIApplication sharedApplication] statusBarOrientation]) {
@@ -206,11 +135,11 @@ void RecordInterfaceOrientationMetric() {
   // WebStateListObserverBridges.
   NSArray<id<WebStateListObserving>>* _retainedWebStateListObservers;
 
-  // Backs up property with the same name.
-  TabUsageRecorderBrowserAgent* _tabUsageRecorder;
-
   // Weak reference to the session restoration agent.
   SessionRestorationBrowserAgent* _sessionRestorationBrowserAgent;
+
+  // Used for saving gray images.
+  SnapshotBrowserAgent* _snapshotBrowserAgent;
 
   // Used to ensure thread-safety of the certificate policy management code.
   base::CancelableTaskTracker _clearPoliciesTaskTracker;
@@ -234,14 +163,6 @@ void RecordInterfaceOrientationMetric() {
 
 #pragma mark - Public methods
 
-- (BOOL)isOffTheRecord {
-  return _browserState && _browserState->IsOffTheRecord();
-}
-
-- (BOOL)isEmpty {
-  return _webStateList->empty();
-}
-
 - (NSUInteger)count {
   DCHECK_GE(_webStateList->count(), 0);
   return static_cast<NSUInteger>(_webStateList->count());
@@ -262,10 +183,9 @@ void RecordInterfaceOrientationMetric() {
 
     _sessionRestorationBrowserAgent =
         SessionRestorationBrowserAgent::FromBrowser(browser);
-    _tabUsageRecorder = TabUsageRecorderBrowserAgent::FromBrowser(browser);
     _webEnabler = WebUsageEnablerBrowserAgent::FromBrowser(browser);
-    _syncedWindowDelegate =
-        SyncedWindowDelegateBrowserAgent::FromBrowser(browser);
+
+    _snapshotBrowserAgent = SnapshotBrowserAgent::FromBrowser(browser);
 
     NSMutableArray<id<WebStateListObserving>>* retainedWebStateListObservers =
         [[NSMutableArray alloc] init];
@@ -304,16 +224,6 @@ void RecordInterfaceOrientationMetric() {
   return self;
 }
 
-- (void)closeTabAtIndex:(NSUInteger)index {
-  DCHECK_LE(index, static_cast<NSUInteger>(INT_MAX));
-  _webStateList->CloseWebStateAt(static_cast<int>(index),
-                                 WebStateList::CLOSE_USER_ACTION);
-}
-
-- (void)closeAllTabs {
-  _webStateList->CloseAllWebStates(WebStateList::CLOSE_USER_ACTION);
-}
-
 // NOTE: This can be called multiple times, so must be robust against that.
 - (void)disconnect {
   if (!_browserState)
@@ -322,7 +232,6 @@ void RecordInterfaceOrientationMetric() {
   [[NSNotificationCenter defaultCenter] removeObserver:self];
 
   _sessionRestorationBrowserAgent = nullptr;
-  _tabUsageRecorder = nullptr;
   _browserState = nullptr;
 
   // Close all tabs. Do this in an @autoreleasepool as WebStateList observers
@@ -349,17 +258,20 @@ void RecordInterfaceOrientationMetric() {
 #pragma mark - Notification Handlers
 
 // Called when UIApplicationWillResignActiveNotification is received.
+// TODO(crbug.com/1115611): Move to SceneController.
 - (void)willResignActive:(NSNotification*)notify {
   if (_webEnabler->IsWebUsageEnabled() && _webStateList->GetActiveWebState()) {
     NSString* tabId =
         TabIdTabHelper::FromWebState(_webStateList->GetActiveWebState())
             ->tab_id();
-    [SnapshotCacheFactory::GetForBrowserState(_browserState)
+
+    [_snapshotBrowserAgent->GetSnapshotCache()
         willBeSavedGreyWhenBackgrounding:tabId];
   }
 }
 
 // Called when UIApplicationDidEnterBackgroundNotification is received.
+// TODO(crbug.com/1115611): Move to SceneController.
 - (void)applicationDidEnterBackground:(NSNotification*)notify {
   if (!_browserState)
     return;
@@ -382,8 +294,8 @@ void RecordInterfaceOrientationMetric() {
         TabIdTabHelper::FromWebState(_webStateList->GetActiveWebState())
             ->tab_id();
 
-    [SnapshotCacheFactory::GetForBrowserState(_browserState)
-        saveGreyInBackgroundForSessionID:tabId];
+    [_snapshotBrowserAgent->GetSnapshotCache()
+        saveGreyInBackgroundForSnapshotID:tabId];
   }
 }
 
@@ -394,7 +306,7 @@ void RecordInterfaceOrientationMetric() {
   if (!navigation->HasCommitted())
     return;
 
-  if (!navigation->IsSameDocument() && !self.offTheRecord) {
+  if (!navigation->IsSameDocument() && !self.browserState->IsOffTheRecord()) {
     int tabCount = static_cast<int>(self.count);
     UMA_HISTOGRAM_CUSTOM_COUNTS("Tabs.TabCountPerLoad", tabCount, 1, 200, 50);
   }
@@ -403,7 +315,7 @@ void RecordInterfaceOrientationMetric() {
       webState->GetNavigationManager()->GetLastCommittedItem();
   navigation_metrics::RecordMainFrameNavigation(
       item ? item->GetVirtualURL() : GURL::EmptyGURL(),
-      navigation->IsSameDocument(), self.offTheRecord,
+      navigation->IsSameDocument(), self.browserState->IsOffTheRecord(),
       GetBrowserStateType(webState->GetBrowserState()));
 }
 
@@ -419,10 +331,6 @@ void RecordInterfaceOrientationMetric() {
     dispatch_once(&dispatch_once_token, ^{
       crash_util::ResetFailedStartupAttemptCount();
     });
-  }
-
-  if (_tabUsageRecorder && ShouldRecordPageLoadStartForNavigation(navigation)) {
-    _tabUsageRecorder->RecordPageLoadStart(webState);
   }
 
   DCHECK(webState->GetNavigationManager());

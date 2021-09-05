@@ -33,11 +33,6 @@ var HelpAppUIBrowserTest = class extends testing.Test {
   }
 
   /** @override */
-  get featureList() {
-    return {enabled: ['chromeos::features::kHelpAppV2']};
-  }
-
-  /** @override */
   get isAsync() {
     return true;
   }
@@ -70,7 +65,7 @@ TEST_F('HelpAppUIBrowserTest', 'HasChromeSchemeURL', () => {
   const guest = document.querySelector('iframe');
 
   assertEquals(document.location.origin, HOST_ORIGIN);
-  assertEquals(guest.src, GUEST_ORIGIN + '/app.html');
+  assertEquals(guest.src, GUEST_ORIGIN + '/');
   testDone();
 });
 

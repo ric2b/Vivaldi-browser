@@ -51,7 +51,6 @@
 #include "third_party/blink/renderer/core/events/composition_event.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
-#include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_text_area_element.h"
@@ -301,6 +300,24 @@ SuggestionMarker::SuggestionType ConvertImeTextSpanType(
     case ImeTextSpan::Type::kSuggestion:
       return SuggestionMarker::SuggestionType::kNotMisspelling;
   }
+}
+
+ImeTextSpan::Type ConvertSuggestionMarkerType(
+    SuggestionMarker::SuggestionType type) {
+  switch (type) {
+    case SuggestionMarker::SuggestionType::kAutocorrect:
+      return ImeTextSpan::Type::kAutocorrect;
+    case SuggestionMarker::SuggestionType::kMisspelling:
+      return ImeTextSpan::Type::kMisspellingSuggestion;
+    case SuggestionMarker::SuggestionType::kNotMisspelling:
+      return ImeTextSpan::Type::kSuggestion;
+  }
+}
+
+// ImeTextSpans types that need to be provided to TextInputInfo can be added
+// here.
+bool ShouldGetImeTextSpansAroundPosition(ImeTextSpan::Type type) {
+  return type == ImeTextSpan::Type::kAutocorrect;
 }
 
 }  // anonymous namespace
@@ -706,18 +723,14 @@ void InputMethodController::AddImeTextSpans(
 
     switch (ime_text_span.GetType()) {
       case ImeTextSpan::Type::kComposition: {
-        Color background_color =
-            GetDocument().GetPage() && ime_text_span.InterimCharSelection()
-                ? LayoutTheme::GetTheme().ActiveSelectionBackgroundColor(
-                      GetDocument()
-                          .GetPage()
-                          ->GetVisualViewport()
-                          .UsedColorScheme())
-                : ime_text_span.BackgroundColor();
+        ImeTextSpanUnderlineStyle underline_style =
+            ime_text_span.InterimCharSelection()
+                ? ImeTextSpanUnderlineStyle::kSolid
+                : ime_text_span.UnderlineStyle();
         GetDocument().Markers().AddCompositionMarker(
             ephemeral_line_range, ime_text_span.UnderlineColor(),
-            ime_text_span.Thickness(), ime_text_span.UnderlineStyle(),
-            ime_text_span.TextColor(), background_color);
+            ime_text_span.Thickness(), underline_style,
+            ime_text_span.TextColor(), ime_text_span.BackgroundColor());
         break;
       }
       case ImeTextSpan::Type::kAutocorrect:
@@ -1544,6 +1557,12 @@ WebTextInputInfo InputMethodController::TextInputInfo() const {
     info.selection_end = selection_plain_text_range.End();
   }
 
+  // Only gets ime text spans when there is no selection range.
+  // ie. the selection range is just a cursor position.
+  if (info.selection_start == info.selection_end) {
+    info.ime_text_spans = GetImeTextSpansAroundPosition(info.selection_start);
+  }
+
   EphemeralRange range = CompositionEphemeralRange();
   PlainTextRange composition_plain_text_range =
       PlainTextRangeForEphemeralRange(range).second;
@@ -1755,6 +1774,13 @@ WebTextInputType InputMethodController::TextInputType() const {
 
 void InputMethodController::WillChangeFocus() {
   FinishComposingText(kKeepSelection);
+
+  // Event handler might destroy document.
+  if (!IsAvailable())
+    return;
+
+  GetDocument().Markers().RemoveSuggestionMarkerByType(
+      SuggestionMarker::SuggestionType::kAutocorrect);
 }
 
 void InputMethodController::Trace(Visitor* visitor) const {
@@ -1762,6 +1788,58 @@ void InputMethodController::Trace(Visitor* visitor) const {
   visitor->Trace(composition_range_);
   visitor->Trace(active_edit_context_);
   ExecutionContextLifecycleObserver::Trace(visitor);
+}
+
+WebVector<ui::ImeTextSpan> InputMethodController::GetImeTextSpansAroundPosition(
+    unsigned position) const {
+  DCHECK(!GetDocument().NeedsLayoutTreeUpdate());
+  Element* target = GetDocument().FocusedElement();
+  if (!target)
+    return WebVector<ui::ImeTextSpan>();
+
+  Element* editable = GetFrame()
+                          .Selection()
+                          .ComputeVisibleSelectionInDOMTreeDeprecated()
+                          .RootEditableElement();
+  if (!editable)
+    return WebVector<ui::ImeTextSpan>();
+
+  WebVector<ui::ImeTextSpan> ime_text_spans;
+  const EphemeralRange range =
+      PlainTextRange(position, position).CreateRange(*editable);
+  // Only queries Suggestion markers for now.
+  // This can be expanded when browser needs information for
+  // other types of markers.
+  const HeapVector<std::pair<Member<const Text>, Member<DocumentMarker>>>&
+      node_marker_pairs = GetDocument().Markers().MarkersAroundPosition(
+          ToPositionInFlatTree(range.StartPosition()),
+          DocumentMarker::MarkerTypes::Suggestion());
+
+  for (const std::pair<Member<const Text>, Member<DocumentMarker>>&
+           node_marker_pair : node_marker_pairs) {
+    SuggestionMarker* marker =
+        To<SuggestionMarker>(node_marker_pair.second.Get());
+    ImeTextSpan::Type type =
+        ConvertSuggestionMarkerType(marker->GetSuggestionType());
+    if (ShouldGetImeTextSpansAroundPosition(type)) {
+      const Text* node = node_marker_pair.first;
+      const EphemeralRange& marker_ephemeral_range =
+          EphemeralRange(Position(node, marker->StartOffset()),
+                         Position(node, marker->EndOffset()));
+      PlainTextRange marker_plain_text_range =
+          PlainTextRangeForEphemeralRange(marker_ephemeral_range).second;
+
+      ime_text_spans.emplace_back(
+          ImeTextSpan(type, marker_plain_text_range.Start(),
+                      marker_plain_text_range.End(), Color::kTransparent,
+                      ImeTextSpanThickness::kNone,
+                      ImeTextSpanUnderlineStyle::kNone, Color::kTransparent,
+                      Color::kTransparent)
+              .ToUiImeTextSpan());
+    }
+  }
+
+  return ime_text_spans;
 }
 
 }  // namespace blink

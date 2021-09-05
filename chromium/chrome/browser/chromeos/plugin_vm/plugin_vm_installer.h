@@ -16,6 +16,8 @@
 #include "chromeos/dbus/dlcservice/dlcservice_client.h"
 #include "components/download/public/background_service/download_params.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "mojo/public/cpp/bindings/remote.h"
+#include "services/device/public/mojom/wake_lock.mojom.h"
 
 namespace download {
 class DownloadService;
@@ -193,6 +195,7 @@ class PluginVmInstaller : public KeyedService,
   download::DownloadService* download_service_ = nullptr;
   State state_ = State::kIdle;
   InstallingState installing_state_ = InstallingState::kInactive;
+  base::TimeTicks setup_start_tick_;
   std::string current_download_guid_;
   base::FilePath downloaded_image_;
   // Used to identify our running import with concierge:
@@ -263,6 +266,10 @@ class PluginVmInstaller : public KeyedService,
 
   void RemoveTemporaryImageIfExists();
   void OnTemporaryImageRemoved(bool success);
+
+  // Keep the system awake during installation.
+  device::mojom::WakeLock* GetWakeLock();
+  mojo::Remote<device::mojom::WakeLock> wake_lock_;
 
   base::WeakPtrFactory<PluginVmInstaller> weak_ptr_factory_{this};
 

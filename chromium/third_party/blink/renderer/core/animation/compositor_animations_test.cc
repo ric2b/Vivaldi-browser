@@ -171,16 +171,17 @@ class AnimationCompositorAnimationsTest : public PaintTestConfigurations,
 
  public:
   bool ConvertTimingForCompositor(const Timing& t,
-                                  CompositorAnimations::CompositorTiming& out) {
+                                  CompositorAnimations::CompositorTiming& out,
+                                  double playback_rate = 1) {
     return CompositorAnimations::ConvertTimingForCompositor(
-        t, base::TimeDelta(), out, 1);
+        t, base::TimeDelta(), out, playback_rate);
   }
 
   CompositorAnimations::FailureReasons CanStartEffectOnCompositor(
       const Timing& timing,
       const KeyframeEffectModelBase& effect) {
     // TODO(crbug.com/725385): Remove once compositor uses InterpolationTypes.
-    auto style = GetDocument().EnsureStyleResolver().StyleForElement(element_);
+    auto style = GetDocument().GetStyleResolver().StyleForElement(element_);
     effect.SnapshotAllCompositorKeyframesIfNecessary(*element_.Get(), *style,
                                                      nullptr);
     return CheckCanStartEffectOnCompositor(timing, *element_.Get(), nullptr,
@@ -190,11 +191,13 @@ class AnimationCompositorAnimationsTest : public PaintTestConfigurations,
       const Timing& timing,
       const Element& element,
       const Animation* animation,
-      const EffectModel& effect_model) {
+      const EffectModel& effect_model,
+      PropertyHandleSet* unsupported_properties = nullptr) {
     const PaintArtifactCompositor* paint_artifact_compositor =
         GetDocument().View()->GetPaintArtifactCompositor();
     return CompositorAnimations::CheckCanStartEffectOnCompositor(
-        timing, element, animation, effect_model, paint_artifact_compositor, 1);
+        timing, element, animation, effect_model, paint_artifact_compositor, 1,
+        unsupported_properties);
   }
 
   CompositorAnimations::FailureReasons CheckCanStartElementOnCompositor(
@@ -254,9 +257,10 @@ class AnimationCompositorAnimationsTest : public PaintTestConfigurations,
                                           const String& value,
                                           double offset = 0) {
     auto* keyframe = MakeGarbageCollected<StringKeyframe>();
-    keyframe->SetCSSPropertyValue(AtomicString(property_name), value,
-                                  GetDocument().GetSecureContextMode(),
-                                  GetDocument().ElementSheet().Contents());
+    keyframe->SetCSSPropertyValue(
+        AtomicString(property_name), value,
+        GetDocument().GetExecutionContext()->GetSecureContextMode(),
+        GetDocument().ElementSheet().Contents());
     keyframe->SetComposite(EffectModel::kCompositeReplace);
     keyframe->SetOffset(offset);
     keyframe->SetEasing(LinearTimingFunction::Shared());
@@ -447,7 +451,7 @@ class AnimationCompositorAnimationsTest : public PaintTestConfigurations,
     // As the compositor code only understands CompositorKeyframeValues, we must
     // snapshot the effect to make those available.
     // TODO(crbug.com/725385): Remove once compositor uses InterpolationTypes.
-    auto style = GetDocument().EnsureStyleResolver().StyleForElement(element_);
+    auto style = GetDocument().GetStyleResolver().StyleForElement(element_);
     effect.SnapshotAllCompositorKeyframesIfNecessary(*element_.Get(), *style,
                                                      nullptr);
 
@@ -625,7 +629,7 @@ TEST_P(AnimationCompositorAnimationsTest,
   SetCustomProperty("--x", "5");
 
   UpdateAllLifecyclePhasesForTest();
-  auto style = GetDocument().EnsureStyleResolver().StyleForElement(element_);
+  auto style = GetDocument().GetStyleResolver().StyleForElement(element_);
   EXPECT_TRUE(style->NonInheritedVariables());
   EXPECT_TRUE(style->NonInheritedVariables()
                   ->GetData(AtomicString("--foo"))
@@ -718,15 +722,25 @@ TEST_P(AnimationCompositorAnimationsTest,
 
 TEST_P(AnimationCompositorAnimationsTest,
        ConvertTimingForCompositorStartDelay) {
+  const double play_forward = 1;
+  const double play_reverse = -1;
   timing_.iteration_duration = AnimationTimeDelta::FromSecondsD(20);
 
   timing_.start_delay = 2.0;
-  EXPECT_TRUE(ConvertTimingForCompositor(timing_, compositor_timing_));
+  EXPECT_TRUE(
+      ConvertTimingForCompositor(timing_, compositor_timing_, play_forward));
   EXPECT_DOUBLE_EQ(-2.0, compositor_timing_.scaled_time_offset.InSecondsF());
+  EXPECT_TRUE(
+      ConvertTimingForCompositor(timing_, compositor_timing_, play_reverse));
+  EXPECT_DOUBLE_EQ(0.0, compositor_timing_.scaled_time_offset.InSecondsF());
 
   timing_.start_delay = -2.0;
-  EXPECT_TRUE(ConvertTimingForCompositor(timing_, compositor_timing_));
+  EXPECT_TRUE(
+      ConvertTimingForCompositor(timing_, compositor_timing_, play_forward));
   EXPECT_DOUBLE_EQ(2.0, compositor_timing_.scaled_time_offset.InSecondsF());
+  EXPECT_TRUE(
+      ConvertTimingForCompositor(timing_, compositor_timing_, play_reverse));
+  EXPECT_DOUBLE_EQ(0.0, compositor_timing_.scaled_time_offset.InSecondsF());
 }
 
 TEST_P(AnimationCompositorAnimationsTest,
@@ -1109,6 +1123,83 @@ TEST_P(AnimationCompositorAnimationsTest,
   EXPECT_TRUE(CheckCanStartEffectOnCompositor(timing_, *element_.Get(),
                                               animation2, *effect2) &
               CompositorAnimations::kMultipleTransformAnimationsOnSameTarget);
+}
+
+TEST_P(AnimationCompositorAnimationsTest,
+       CheckCanStartEffectOnCompositorUnsupportedCSSProperties) {
+  auto style = ComputedStyle::Create();
+
+  StringKeyframeEffectModel* effect1 = CreateKeyframeEffectModel(
+      CreateReplaceOpKeyframe(CSSPropertyID::kOpacity, "0", 0),
+      CreateReplaceOpKeyframe(CSSPropertyID::kOpacity, "1", 1));
+
+  auto* keyframe_effect1 =
+      MakeGarbageCollected<KeyframeEffect>(element_.Get(), effect1, timing_);
+
+  Animation* animation1 = timeline_->Play(keyframe_effect1);
+  effect1->SnapshotAllCompositorKeyframesIfNecessary(*element_.Get(), *style,
+                                                     nullptr);
+
+  // Make sure supported properties do not register a failure
+  PropertyHandleSet unsupported_properties1;
+  EXPECT_EQ(CheckCanStartEffectOnCompositor(timing_, *inline_.Get(), animation1,
+                                            *effect1, &unsupported_properties1),
+            CompositorAnimations::kNoFailure);
+  EXPECT_TRUE(unsupported_properties1.IsEmpty());
+
+  StringKeyframeEffectModel* effect2 = CreateKeyframeEffectModel(
+      CreateReplaceOpKeyframe(CSSPropertyID::kHeight, "100px", 0),
+      CreateReplaceOpKeyframe(CSSPropertyID::kHeight, "200px", 1));
+
+  auto* keyframe_effect2 =
+      MakeGarbageCollected<KeyframeEffect>(element_.Get(), effect2, timing_);
+
+  Animation* animation2 = timeline_->Play(keyframe_effect2);
+  effect1->SnapshotAllCompositorKeyframesIfNecessary(*element_.Get(), *style,
+                                                     nullptr);
+
+  // Make sure unsupported properties are reported
+  PropertyHandleSet unsupported_properties2;
+  EXPECT_TRUE(CheckCanStartEffectOnCompositor(timing_, *inline_.Get(),
+                                              animation2, *effect2,
+                                              &unsupported_properties2) &
+              CompositorAnimations::kUnsupportedCSSProperty);
+  EXPECT_EQ(unsupported_properties2.size(), 1U);
+  EXPECT_EQ(
+      unsupported_properties2.begin()->GetCSSPropertyName().ToAtomicString(),
+      "height");
+
+  StringKeyframeEffectModel* effect3 =
+      MakeGarbageCollected<StringKeyframeEffectModel>(StringKeyframeVector({
+          CreateReplaceOpKeyframe(CSSPropertyID::kHeight, "100px", 0),
+          CreateReplaceOpKeyframe(CSSPropertyID::kOpacity, "0", 0),
+          CreateReplaceOpKeyframe(CSSPropertyID::kTransform, "translateY(0)",
+                                  0),
+          CreateReplaceOpKeyframe(CSSPropertyID::kFilter, "grayscale(50%)", 0),
+          CreateReplaceOpKeyframe(CSSPropertyID::kHeight, "200px", 1),
+          CreateReplaceOpKeyframe(CSSPropertyID::kOpacity, "1", 1),
+          CreateReplaceOpKeyframe(CSSPropertyID::kTransform, "translateY(50px)",
+                                  1),
+          CreateReplaceOpKeyframe(CSSPropertyID::kFilter, "grayscale(100%)", 1),
+      }));
+
+  auto* keyframe_effect3 =
+      MakeGarbageCollected<KeyframeEffect>(element_.Get(), effect3, timing_);
+
+  Animation* animation3 = timeline_->Play(keyframe_effect3);
+  effect1->SnapshotAllCompositorKeyframesIfNecessary(*element_.Get(), *style,
+                                                     nullptr);
+
+  // Make sure only the unsupported properties are reported
+  PropertyHandleSet unsupported_properties3;
+  EXPECT_TRUE(CheckCanStartEffectOnCompositor(timing_, *inline_.Get(),
+                                              animation3, *effect3,
+                                              &unsupported_properties3) &
+              CompositorAnimations::kUnsupportedCSSProperty);
+  EXPECT_EQ(unsupported_properties3.size(), 1U);
+  EXPECT_EQ(
+      unsupported_properties3.begin()->GetCSSPropertyName().ToAtomicString(),
+      "height");
 }
 
 TEST_P(AnimationCompositorAnimationsTest,
@@ -2029,10 +2120,8 @@ TEST_P(AnimationCompositorAnimationsTest,
           ->Layer()
           ->GetCompositedLayerMapping();
   ASSERT_NE(nullptr, composited_layer_mapping);
-  const cc::PictureLayer* layer =
-      composited_layer_mapping->MainGraphicsLayer()->CcLayer();
-  ASSERT_NE(nullptr, layer);
-  EXPECT_FALSE(layer->should_check_backface_visibility());
+  const auto& layer = composited_layer_mapping->MainGraphicsLayer()->CcLayer();
+  EXPECT_FALSE(layer.should_check_backface_visibility());
 
   // Change the backface visibility, while the compositor animation is
   // happening.
@@ -2041,7 +2130,7 @@ TEST_P(AnimationCompositorAnimationsTest,
   // Make sure the setting made it to both blink and all the way to CC.
   EXPECT_EQ(transform->GetBackfaceVisibilityForTesting(),
             TransformPaintPropertyNode::BackfaceVisibility::kHidden);
-  EXPECT_TRUE(layer->should_check_backface_visibility())
+  EXPECT_TRUE(layer.should_check_backface_visibility())
       << "Change to hidden did not get propagated to CC";
   // Make sure the animation state is initialized in paint properties after
   // blink pushing new paint properties without animation state change.

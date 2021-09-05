@@ -16,6 +16,7 @@ Polymer({
 
   behaviors: [
     NetworkListenerBehavior,
+    DeepLinkingBehavior,
     I18nBehavior,
     settings.RouteObserverBehavior,
     WebUIListenerBehavior,
@@ -118,12 +119,30 @@ Polymer({
       value: false,
     },
 
+    /** @private {boolean} */
+    showCellularSetupDialog_: {
+      type: Boolean,
+      value: false,
+    },
+
     /** @private {!Map<string, Element>} */
     focusConfig_: {
       type: Object,
       value() {
         return new Map();
       },
+    },
+
+    /**
+     * Used by DeepLinkingBehavior to focus this page's deep links.
+     * @type {!Set<!chromeos.settings.mojom.Setting>}
+     */
+    supportedSettingIds: {
+      type: Object,
+      value: () => new Set([
+        chromeos.settings.mojom.Setting.kWifiOnOff,
+        chromeos.settings.mojom.Setting.kMobileOnOff,
+      ]),
     },
   },
 
@@ -137,6 +156,7 @@ Polymer({
   listeners: {
     'device-enabled-toggled': 'onDeviceEnabledToggled_',
     'network-connect': 'onNetworkConnect_',
+    'show-cellular-setup': 'onShowCellularSetupDialog_',
     'show-config': 'onShowConfig_',
     'show-detail': 'onShowDetail_',
     'show-known-networks': 'onShowKnownNetworks_',
@@ -165,6 +185,32 @@ Polymer({
   },
 
   /**
+   * Overridden from DeepLinkingBehavior.
+   * @param {!chromeos.settings.mojom.Setting} settingId
+   * @return {boolean}
+   */
+  beforeDeepLinkAttempt(settingId) {
+    // Manually show the deep links for settings nested within elements.
+    let networkType = null;
+    if (settingId === chromeos.settings.mojom.Setting.kWifiOnOff) {
+      networkType = mojom.NetworkType.kWiFi;
+    } else if (settingId === chromeos.settings.mojom.Setting.kMobileOnOff) {
+      networkType = mojom.NetworkType.kCellular;
+    }
+
+    Polymer.RenderStatus.afterNextRender(this, () => {
+      const networkRow = this.$$('network-summary').getNetworkRow(networkType);
+      if (networkRow && networkRow.getDeviceEnabledToggle()) {
+        this.showDeepLinkElement(networkRow.getDeviceEnabledToggle());
+        return;
+      }
+      console.warn(`Element with deep link id ${settingId} not focusable.`);
+    });
+    // Stop deep link attempt since we completed it manually.
+    return false;
+  },
+
+  /**
    * settings.RouteObserverBehavior
    * @param {!settings.Route} route
    * @param {!settings.Route} oldRoute
@@ -187,8 +233,10 @@ Polymer({
       if (type) {
         this.knownNetworksType_ = OncMojo.getNetworkTypeFromString(type);
       }
-    } else if (
-        route != settings.routes.INTERNET && route != settings.routes.BASIC) {
+    } else if (route == settings.routes.INTERNET) {
+      // Show deep links for the internet page.
+      this.attemptDeepLink();
+    } else if (route != settings.routes.BASIC) {
       // If we are navigating to a non internet section, do not set focus.
       return;
     }
@@ -209,8 +257,8 @@ Polymer({
         element = subPage.$$('#networkList');
       }
     } else if (this.detailType_ !== undefined) {
-      const oncType = OncMojo.getNetworkTypeString(this.detailType_);
-      const rowForDetailType = this.$$('network-summary').$$(`#${oncType}`);
+      const rowForDetailType =
+          this.$$('network-summary').getNetworkRow(this.detailType_);
 
       // Note: It is possible that the row is no longer present in the DOM
       // (e.g., when a Cellular dongle is unplugged or when Instant Tethering
@@ -263,6 +311,16 @@ Polymer({
           false /* configAndConnect */, type, event.detail.guid,
           event.detail.name);
     }
+  },
+
+  /** @private */
+  onShowCellularSetupDialog_() {
+    this.showCellularSetupDialog_ = true;
+  },
+
+  /** @private */
+  onCloseCellularSetupDialog_() {
+    this.showCellularSetupDialog_ = false;
   },
 
   /**

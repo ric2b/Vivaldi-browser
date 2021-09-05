@@ -115,7 +115,8 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void SetActive(bool active) override;
   void ShowDefinitionForSelection() override;
   void SpeakSelection() override;
-  void GetScreenInfo(ScreenInfo* screen_info) override;
+  void SetWindowFrameInScreen(const gfx::Rect& rect) override;
+  void GetScreenInfo(blink::ScreenInfo* screen_info) override;
   void TakeFallbackContentFrom(RenderWidgetHostView* view) override;
 
   // Implementation of RenderWidgetHostViewBase.
@@ -161,6 +162,10 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   blink::mojom::PointerLockResult LockMouse(bool) override;
   blink::mojom::PointerLockResult ChangeMouseLock(bool) override;
   void UnlockMouse() override;
+  bool GetIsMouseLockedUnadjustedMovementForTesting() override;
+  // Returns true when running on a recent enough OS for unaccelerated pointer
+  // events.
+  static bool IsUnadjustedMouseMovementSupported();
   bool LockKeyboard(base::Optional<base::flat_set<ui::DomCode>> codes) override;
   void UnlockKeyboard() override;
   bool IsKeyboardLocked() override;
@@ -471,6 +476,10 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // |cocoa_view_|.
   void SetParentAccessibilityElement(id parent_accessibility_element);
 
+  RenderWidgetHostViewMac* PopupChildHostView() {
+    return popup_child_host_view_;
+  }
+
   MouseWheelPhaseHandler* GetMouseWheelPhaseHandler() override;
 
  protected:
@@ -624,6 +633,10 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // indicates what the change in position of the mouse would be had it not been
   // locked.
   bool mouse_locked_ = false;
+
+  // Tracks whether unaccelerated mouse motion events are sent while the mouse
+  // is locked.
+  bool mouse_lock_unadjusted_movement_ = false;
 
   // Latest capture sequence number which is incremented when the caller
   // requests surfaces be synchronized via

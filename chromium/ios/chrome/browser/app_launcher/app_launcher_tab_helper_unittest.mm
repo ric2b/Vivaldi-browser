@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/default_clock.h"
@@ -443,9 +444,9 @@ class BlockedUrlPolicyAppLauncherTabHelperTest
     web_state_.SetBrowserState(enterprise_policy_helper_->GetBrowserState());
 
     policy::PolicyMap policy_map;
-    auto value = std::make_unique<base::Value>(base::Value::Type::LIST);
-    value->Append("itms-apps://*");
-    policy_map.Set(policy::key::kURLBlacklist, policy::POLICY_LEVEL_MANDATORY,
+    base::Value value(base::Value::Type::LIST);
+    value.Append("itms-apps://*");
+    policy_map.Set(policy::key::kURLBlocklist, policy::POLICY_LEVEL_MANDATORY,
                    policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
                    std::move(value), nullptr);
     enterprise_policy_helper_->GetPolicyProvider()->UpdateChromePolicy(

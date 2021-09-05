@@ -4,7 +4,12 @@
 
 #include "cc/tiles/gpu_image_decode_cache.h"
 
+#include <algorithm>
+#include <limits>
+#include <map>
 #include <memory>
+#include <string>
+#include <tuple>
 #include <vector>
 
 #include "base/feature_list.h"
@@ -27,7 +32,7 @@
 #include "third_party/skia/include/core/SkImageGenerator.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
-#include "third_party/skia/include/gpu/GrContext.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 
 using testing::_;
 using testing::StrictMock;
@@ -117,7 +122,8 @@ class FakeGPUImageDecodeTestGLES2Interface : public viz::TestGLES2Interface,
       : extension_string_(
             "GL_EXT_texture_format_BGRA8888 GL_OES_rgb8_rgba8 "
             "GL_OES_texture_npot GL_EXT_texture_rg "
-            "GL_OES_texture_half_float GL_OES_texture_half_float_linear"),
+            "GL_OES_texture_half_float GL_OES_texture_half_float_linear "
+            "GL_EXT_texture_norm16"),
         discardable_manager_(discardable_manager),
         transfer_cache_helper_(transfer_cache_helper),
         advertise_accelerated_decoding_(advertise_accelerated_decoding) {}
@@ -303,6 +309,17 @@ class GPUImageDecodeTestMockContextProvider : public viz::TestContextProvider {
         std::move(support), std::move(gl), std::move(raster));
   }
 
+  void SetContextCapabilitiesOverride(base::Optional<gpu::Capabilities> caps) {
+    capabilities_override_ = caps;
+  }
+
+  const gpu::Capabilities& ContextCapabilities() const override {
+    if (capabilities_override_.has_value())
+      return *capabilities_override_;
+
+    return viz::TestContextProvider::ContextCapabilities();
+  }
+
  private:
   ~GPUImageDecodeTestMockContextProvider() override = default;
   GPUImageDecodeTestMockContextProvider(
@@ -314,6 +331,8 @@ class GPUImageDecodeTestMockContextProvider : public viz::TestContextProvider {
                             std::move(raster),
                             nullptr /* sii */,
                             true) {}
+
+  base::Optional<gpu::Capabilities> capabilities_override_;
 };
 
 SkMatrix CreateMatrix(const SkSize& scale) {
@@ -395,28 +414,32 @@ class GpuImageDecodeCacheTest
       sk_sp<SkColorSpace> color_space = nullptr,
       PaintImage::Id id = PaintImage::kInvalidId) {
     const bool allocate_encoded_memory = true;
-    return CreateDiscardablePaintImage(size, color_space,
-                                       allocate_encoded_memory, id, color_type_,
-                                       do_yuv_decode_);
-  }
 
-  PaintImage CreateLargePaintImageForSoftwareFallback() {
-    return CreateLargePaintImageForSoftwareFallback(GetLargeImageSize());
+    if (do_yuv_decode_) {
+      return CreateDiscardablePaintImage(
+          size, color_space, allocate_encoded_memory, id, color_type_,
+          yuv_format_, yuv_bytes_per_pixel_);
+    }
+    return CreateDiscardablePaintImage(
+        size, color_space, allocate_encoded_memory, id, color_type_);
   }
 
   // Create an image that's too large to upload and will trigger falling back to
   // software rendering and decoded data storage.
-  PaintImage CreateLargePaintImageForSoftwareFallback(
-      const gfx::Size test_image_size) {
-    CHECK(test_image_size.width() > max_texture_size_ ||
-          test_image_size.height() > max_texture_size_);
+  PaintImage CreateLargePaintImageForSoftwareFallback() {
+    return CreatePaintImageForFallbackToRGB(GetLargeImageSize());
+  }
+
+  PaintImage CreatePaintImageForFallbackToRGB(const gfx::Size test_image_size) {
     SkImageInfo info = SkImageInfo::Make(
         test_image_size.width(), test_image_size.height(), color_type_,
         kPremul_SkAlphaType, SkColorSpace::MakeSRGB());
     sk_sp<FakePaintImageGenerator> generator;
     if (do_yuv_decode_) {
       generator = sk_make_sp<FakePaintImageGenerator>(
-          info, GetYUV420SizeInfo(test_image_size));
+          info,
+          GetYUVASizeInfo(test_image_size, yuv_format_, yuv_bytes_per_pixel_),
+          yuv_bytes_per_pixel_ * 8);
       generator->SetExpectFallbackToRGB();
     } else {
       generator = sk_make_sp<FakePaintImageGenerator>(info);
@@ -445,7 +468,8 @@ class GpuImageDecodeCacheTest
       gfx::ColorSpace* color_space = nullptr,
       SkFilterQuality filter_quality = kMedium_SkFilterQuality,
       SkIRect* src_rect = nullptr,
-      size_t frame_index = PaintImage::kDefaultFrameIndex) {
+      size_t frame_index = PaintImage::kDefaultFrameIndex,
+      float sdr_white_level = gfx::ColorSpace::kDefaultSDRWhiteLevel) {
     SkIRect src_rectangle;
     gfx::ColorSpace cs;
     if (!src_rect) {
@@ -458,7 +482,7 @@ class GpuImageDecodeCacheTest
       color_space = &cs;
     }
     return DrawImage(paint_image, *src_rect, filter_quality, matrix,
-                     frame_index, *color_space);
+                     frame_index, *color_space, sdr_white_level);
   }
 
   GPUImageDecodeTestMockContextProvider* context_provider() {
@@ -466,9 +490,10 @@ class GpuImageDecodeCacheTest
   }
 
   size_t GetBytesNeededForSingleImage(gfx::Size image_dimensions) {
-    // TODO(crbug.com/915972): Assumes YUV 420.
     if (do_yuv_decode_) {
-      return GetYUV420SizeInfo(image_dimensions).computeTotalBytes();
+      return GetYUVASizeInfo(image_dimensions, yuv_format_,
+                             yuv_bytes_per_pixel_)
+          .computeTotalBytes();
     }
     const size_t test_image_area_bytes =
         base::checked_cast<size_t>(image_dimensions.GetArea());
@@ -548,7 +573,9 @@ class GpuImageDecodeCacheTest
       GpuImageDecodeCache* cache,
       const DrawImage& draw_image,
       const base::Optional<uint32_t> transfer_cache_id,
-      const SkISize plane_sizes[SkYUVASizeInfo::kMaxCount]) {
+      const SkISize plane_sizes[SkYUVASizeInfo::kMaxCount],
+      SkColorType expected_type = kGray_8_SkColorType,
+      const SkColorSpace* expected_cs = nullptr) {
     for (size_t i = 0; i < SkYUVASizeInfo::kMaxCount; ++i) {
       // TODO(crbug.com/910276): Skip alpha plane until supported in cache.
       if (i != SkYUVAIndex::kA_Index) {
@@ -565,6 +592,13 @@ class GpuImageDecodeCacheTest
         }
         ASSERT_TRUE(uploaded_plane);
         EXPECT_EQ(plane_sizes[i], uploaded_plane->dimensions());
+        EXPECT_EQ(expected_type, uploaded_plane->colorType());
+        if (expected_cs && use_transfer_cache_) {
+          EXPECT_TRUE(
+              SkColorSpace::Equals(expected_cs, uploaded_plane->colorSpace()));
+        } else if (expected_cs) {
+          // In-process raster sets the ColorSpace on the composite SkImage.
+        }
       }
     }
   }
@@ -577,6 +611,10 @@ class GpuImageDecodeCacheTest
   FakeDiscardableManager discardable_manager_;
   TransferCacheTestHelper transfer_cache_helper_;
   scoped_refptr<GPUImageDecodeTestMockContextProvider> context_provider_;
+
+  // Only used when |do_yuv_decode_| is true.
+  uint8_t yuv_bytes_per_pixel_ = 1;
+  YUVSubsampling yuv_format_ = YUVSubsampling::k420;
 
   bool use_transfer_cache_;
   SkColorType color_type_;
@@ -1058,6 +1096,105 @@ TEST_P(GpuImageDecodeCacheTest, GetDecodedImageForDraw) {
   cache->UnrefImage(draw_image);
 }
 
+TEST_P(GpuImageDecodeCacheTest, GetHdrDecodedImageForDrawToHdr) {
+  auto cache = CreateCache();
+  auto color_space = gfx::ColorSpace::CreateHDR10();
+  auto size = GetNormalImageSize();
+  auto info =
+      SkImageInfo::Make(size.width(), size.height(), kRGBA_F16_SkColorType,
+                        kPremul_SkAlphaType, color_space.ToSkColorSpace());
+  SkBitmap bitmap;
+  bitmap.allocPixels(info);
+  PaintImage image = PaintImageBuilder::WithDefault()
+                         .set_id(PaintImage::kInvalidId)
+                         .set_is_high_bit_depth(true)
+                         .set_image(SkImage::MakeFromBitmap(bitmap),
+                                    PaintImage::GetNextContentId())
+                         .TakePaintImage();
+
+  constexpr float kCustomWhiteLevel = 200.f;
+  DrawImage draw_image = CreateDrawImageInternal(
+      image, CreateMatrix(SkSize::Make(0.5f, 0.5f)), &color_space,
+      kMedium_SkFilterQuality, nullptr, PaintImage::kDefaultFrameIndex,
+      kCustomWhiteLevel);
+  ImageDecodeCache::TaskResult result =
+      cache->GetTaskForImageAndRef(draw_image, ImageDecodeCache::TracingInfo());
+  EXPECT_EQ(draw_image.target_color_space(), color_space);
+  EXPECT_TRUE(result.need_unref);
+  EXPECT_TRUE(result.task);
+  EXPECT_EQ(result.task->dependencies().size(), 1u);
+  EXPECT_TRUE(result.task->dependencies()[0]);
+
+  TestTileTaskRunner::ProcessTask(result.task->dependencies()[0].get());
+  TestTileTaskRunner::ProcessTask(result.task.get());
+
+  // Must hold context lock before calling GetDecodedImageForDraw /
+  // DrawWithImageFinished.
+  viz::ContextProvider::ScopedContextLock context_lock(context_provider());
+  DecodedDrawImage decoded_draw_image =
+      EnsureImageBacked(cache->GetDecodedImageForDraw(draw_image));
+  EXPECT_TRUE(decoded_draw_image.image());
+  EXPECT_TRUE(decoded_draw_image.image()->isTextureBacked());
+  EXPECT_TRUE(decoded_draw_image.is_budgeted());
+  EXPECT_EQ(decoded_draw_image.image()->colorType(), kRGBA_F16_SkColorType);
+
+  auto cs = gfx::ColorSpace(*decoded_draw_image.image()->colorSpace());
+  float sdr_white_level;
+  ASSERT_TRUE(cs.GetPQSDRWhiteLevel(&sdr_white_level));
+  EXPECT_FLOAT_EQ(sdr_white_level, kCustomWhiteLevel);
+
+  EXPECT_FALSE(cache->DiscardableIsLockedForTesting(draw_image));
+
+  cache->DrawWithImageFinished(draw_image, decoded_draw_image);
+  cache->UnrefImage(draw_image);
+}
+
+TEST_P(GpuImageDecodeCacheTest, GetHdrDecodedImageForDrawToSdr) {
+  auto cache = CreateCache();
+  auto image_color_space = gfx::ColorSpace::CreateHDR10();
+  auto size = GetNormalImageSize();
+  auto info = SkImageInfo::Make(size.width(), size.height(),
+                                kRGBA_F16_SkColorType, kPremul_SkAlphaType,
+                                image_color_space.ToSkColorSpace());
+  SkBitmap bitmap;
+  bitmap.allocPixels(info);
+  PaintImage image = PaintImageBuilder::WithDefault()
+                         .set_id(PaintImage::kInvalidId)
+                         .set_is_high_bit_depth(true)
+                         .set_image(SkImage::MakeFromBitmap(bitmap),
+                                    PaintImage::GetNextContentId())
+                         .TakePaintImage();
+
+  auto raster_color_space = gfx::ColorSpace::CreateSRGB();
+  DrawImage draw_image = CreateDrawImageInternal(
+      image, CreateMatrix(SkSize::Make(0.5f, 0.5f)), &raster_color_space);
+  ImageDecodeCache::TaskResult result =
+      cache->GetTaskForImageAndRef(draw_image, ImageDecodeCache::TracingInfo());
+  EXPECT_EQ(draw_image.target_color_space(), raster_color_space);
+  EXPECT_TRUE(result.need_unref);
+  EXPECT_TRUE(result.task);
+  EXPECT_EQ(result.task->dependencies().size(), 1u);
+  EXPECT_TRUE(result.task->dependencies()[0]);
+
+  TestTileTaskRunner::ProcessTask(result.task->dependencies()[0].get());
+  TestTileTaskRunner::ProcessTask(result.task.get());
+
+  // Must hold context lock before calling GetDecodedImageForDraw /
+  // DrawWithImageFinished.
+  viz::ContextProvider::ScopedContextLock context_lock(context_provider());
+  DecodedDrawImage decoded_draw_image =
+      EnsureImageBacked(cache->GetDecodedImageForDraw(draw_image));
+  EXPECT_TRUE(decoded_draw_image.image());
+  EXPECT_TRUE(decoded_draw_image.image()->isTextureBacked());
+  EXPECT_TRUE(decoded_draw_image.is_budgeted());
+  EXPECT_NE(decoded_draw_image.image()->colorType(), kRGBA_F16_SkColorType);
+
+  EXPECT_FALSE(cache->DiscardableIsLockedForTesting(draw_image));
+
+  cache->DrawWithImageFinished(draw_image, decoded_draw_image);
+  cache->UnrefImage(draw_image);
+}
+
 TEST_P(GpuImageDecodeCacheTest, GetLargeDecodedImageForDraw) {
   auto cache = CreateCache();
   PaintImage image = CreateLargePaintImageForSoftwareFallback();
@@ -1249,7 +1386,7 @@ TEST_P(GpuImageDecodeCacheTest, GetDecodedImageForDrawNegative) {
 
 TEST_P(GpuImageDecodeCacheTest, GetLargeScaledDecodedImageForDraw) {
   auto cache = CreateCache();
-  PaintImage image = CreateLargePaintImageForSoftwareFallback(
+  PaintImage image = CreatePaintImageForFallbackToRGB(
       gfx::Size(GetLargeImageSize().width(), GetLargeImageSize().height() * 2));
   DrawImage draw_image =
       CreateDrawImageInternal(image, CreateMatrix(SkSize::Make(0.5f, 0.5f)),
@@ -1932,7 +2069,10 @@ TEST_P(GpuImageDecodeCacheTest, CacheDecodesExpectedFrames) {
                         color_type_, kPremul_SkAlphaType);
   sk_sp<FakePaintImageGenerator> generator =
       do_yuv_decode_ ? sk_make_sp<FakePaintImageGenerator>(
-                           info, GetYUV420SizeInfo(test_image_size), frames)
+                           info,
+                           GetYUVASizeInfo(test_image_size, yuv_format_,
+                                           yuv_bytes_per_pixel_),
+                           yuv_bytes_per_pixel_ * 8, frames)
                      : sk_make_sp<FakePaintImageGenerator>(info, frames);
   PaintImage image = PaintImageBuilder::WithDefault()
                          .set_id(PaintImage::GetNextId())
@@ -2781,49 +2921,265 @@ TEST_P(GpuImageDecodeCacheTest,
     // planes.
     return;
   }
-  auto cache = CreateCache();
-  SkFilterQuality filter_quality = kMedium_SkFilterQuality;
-  SkSize requires_decode_at_original_scale = SkSize::Make(0.8f, 0.8f);
+  auto owned_cache = CreateCache();
+  auto decode_and_check_plane_sizes = [this, cache = owned_cache.get()]() {
+    SkFilterQuality filter_quality = kMedium_SkFilterQuality;
+    SkSize requires_decode_at_original_scale = SkSize::Make(0.8f, 0.8f);
 
-  PaintImage image = CreatePaintImageInternal(GetNormalImageSize());
-  DrawImage draw_image(image, SkIRect::MakeWH(image.width(), image.height()),
-                       filter_quality,
-                       CreateMatrix(requires_decode_at_original_scale),
-                       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
-  ImageDecodeCache::TaskResult result =
-      cache->GetTaskForImageAndRef(draw_image, ImageDecodeCache::TracingInfo());
-  EXPECT_TRUE(result.need_unref);
-  EXPECT_TRUE(result.task);
+    PaintImage image = CreatePaintImageInternal(GetNormalImageSize());
+    DrawImage draw_image(image, SkIRect::MakeWH(image.width(), image.height()),
+                         filter_quality,
+                         CreateMatrix(requires_decode_at_original_scale),
+                         PaintImage::kDefaultFrameIndex, DefaultColorSpace());
+    ImageDecodeCache::TaskResult result = cache->GetTaskForImageAndRef(
+        draw_image, ImageDecodeCache::TracingInfo());
+    EXPECT_TRUE(result.need_unref);
+    EXPECT_TRUE(result.task);
 
-  TestTileTaskRunner::ProcessTask(result.task->dependencies()[0].get());
-  TestTileTaskRunner::ProcessTask(result.task.get());
+    TestTileTaskRunner::ProcessTask(result.task->dependencies()[0].get());
+    TestTileTaskRunner::ProcessTask(result.task.get());
 
-  // Must hold context lock before calling GetDecodedImageForDraw /
-  // DrawWithImageFinished.
-  viz::ContextProvider::ScopedContextLock context_lock(context_provider());
-  // Pull out transfer cache ID from the DecodedDrawImage while it still has
-  // it attached.
-  DecodedDrawImage serialized_decoded_draw_image =
-      cache->GetDecodedImageForDraw(draw_image);
-  const base::Optional<uint32_t> transfer_cache_entry_id =
-      serialized_decoded_draw_image.transfer_cache_entry_id();
-  DecodedDrawImage decoded_draw_image =
-      EnsureImageBacked(std::move(serialized_decoded_draw_image));
-  EXPECT_TRUE(decoded_draw_image.image());
-  EXPECT_TRUE(decoded_draw_image.image()->isTextureBacked());
+    // Must hold context lock before calling GetDecodedImageForDraw /
+    // DrawWithImageFinished.
+    viz::ContextProvider::ScopedContextLock context_lock(context_provider());
+    // Pull out transfer cache ID from the DecodedDrawImage while it still has
+    // it attached.
+    DecodedDrawImage serialized_decoded_draw_image =
+        cache->GetDecodedImageForDraw(draw_image);
+    const base::Optional<uint32_t> transfer_cache_entry_id =
+        serialized_decoded_draw_image.transfer_cache_entry_id();
+    DecodedDrawImage decoded_draw_image =
+        EnsureImageBacked(std::move(serialized_decoded_draw_image));
+    EXPECT_TRUE(decoded_draw_image.image());
+    EXPECT_TRUE(decoded_draw_image.image()->isTextureBacked());
 
-  // Skia will flatten a YUV SkImage upon calling makeTextureImage. Thus, we
-  // must separately request mips for each plane and compare to the original
-  // uploaded planes.
-  CompareAllPlanesToMippedVersions(cache.get(), draw_image,
-                                   transfer_cache_entry_id,
-                                   true /* should_have_mips */);
-  SkYUVASizeInfo yuv_size_info = GetYUV420SizeInfo(GetNormalImageSize());
-  VerifyUploadedPlaneSizes(cache.get(), draw_image, transfer_cache_entry_id,
-                           yuv_size_info.fSizes);
+    // Skia will flatten a YUV SkImage upon calling makeTextureImage. Thus, we
+    // must separately request mips for each plane and compare to the original
+    // uploaded planes.
+    CompareAllPlanesToMippedVersions(cache, draw_image, transfer_cache_entry_id,
+                                     true /* should_have_mips */);
+    SkYUVASizeInfo yuv_size_info = GetYUVASizeInfo(
+        GetNormalImageSize(), yuv_format_, yuv_bytes_per_pixel_);
+    VerifyUploadedPlaneSizes(cache, draw_image, transfer_cache_entry_id,
+                             yuv_size_info.fSizes);
 
-  cache->DrawWithImageFinished(draw_image, decoded_draw_image);
-  cache->UnrefImage(draw_image);
+    cache->DrawWithImageFinished(draw_image, decoded_draw_image);
+    cache->UnrefImage(draw_image);
+  };
+
+  yuv_format_ = YUVSubsampling::k420;
+  decode_and_check_plane_sizes();
+
+  yuv_format_ = YUVSubsampling::k422;
+  decode_and_check_plane_sizes();
+
+  yuv_format_ = YUVSubsampling::k444;
+  decode_and_check_plane_sizes();
+}
+
+TEST_P(GpuImageDecodeCacheTest, HighBitDepthYUVDecoding) {
+  // This test creates a high bit depth image that will be YUV decoded and drawn
+  // at 80% scale. Because the final size is between mip levels, we expect the
+  // image to be decoded and uploaded at original size (mip level 0 for all
+  // planes) but to have mips attached since kMedium_SkFilterQuality uses
+  // bilinear filtering between mip levels.
+  if (!do_yuv_decode_) {
+    // The YUV case may choose different mip levels between chroma and luma
+    // planes.
+    return;
+  }
+
+  auto decode_and_check_plane_sizes = [this](GpuImageDecodeCache* cache,
+                                             SkColorType yuv_color_type,
+                                             gfx::ColorSpace target_cs) {
+    SkFilterQuality filter_quality = kMedium_SkFilterQuality;
+    SkSize requires_decode_at_original_scale = SkSize::Make(0.8f, 0.8f);
+
+    // When we're targeting HDR output, select a reasonable HDR color space for
+    // the decoded content.
+    gfx::ColorSpace decoded_cs;
+    if (target_cs.IsHDR())
+      decoded_cs = gfx::ColorSpace::CreateHDR10();
+
+    // An unknown SkColorType means we expect fallback to RGB.
+    PaintImage image =
+        yuv_color_type == kUnknown_SkColorType
+            ? CreatePaintImageForFallbackToRGB(GetNormalImageSize())
+            : CreatePaintImageInternal(GetNormalImageSize(),
+                                       decoded_cs.ToSkColorSpace());
+
+    float sdr_white_level = gfx::ColorSpace::kDefaultSDRWhiteLevel;
+    if (target_cs.IsHDR())
+      ASSERT_TRUE(target_cs.GetPQSDRWhiteLevel(&sdr_white_level));
+
+    DrawImage draw_image(
+        image, SkIRect::MakeWH(image.width(), image.height()), filter_quality,
+        CreateMatrix(requires_decode_at_original_scale),
+        PaintImage::kDefaultFrameIndex, target_cs, sdr_white_level);
+    ImageDecodeCache::TaskResult result = cache->GetTaskForImageAndRef(
+        draw_image, ImageDecodeCache::TracingInfo());
+    EXPECT_TRUE(result.need_unref);
+    EXPECT_TRUE(result.task);
+
+    TestTileTaskRunner::ProcessTask(result.task->dependencies()[0].get());
+    TestTileTaskRunner::ProcessTask(result.task.get());
+
+    // Must hold context lock before calling GetDecodedImageForDraw /
+    // DrawWithImageFinished.
+    viz::ContextProvider::ScopedContextLock context_lock(context_provider());
+    // Pull out transfer cache ID from the DecodedDrawImage while it still has
+    // it attached.
+    DecodedDrawImage serialized_decoded_draw_image =
+        cache->GetDecodedImageForDraw(draw_image);
+    const base::Optional<uint32_t> transfer_cache_entry_id =
+        serialized_decoded_draw_image.transfer_cache_entry_id();
+    DecodedDrawImage decoded_draw_image =
+        EnsureImageBacked(std::move(serialized_decoded_draw_image));
+    EXPECT_TRUE(decoded_draw_image.image());
+    EXPECT_TRUE(decoded_draw_image.image()->isTextureBacked());
+
+    if (yuv_color_type != kUnknown_SkColorType) {
+      // Skia will flatten a YUV SkImage upon calling makeTextureImage. Thus, we
+      // must separately request mips for each plane and compare to the original
+      // uploaded planes.
+      CompareAllPlanesToMippedVersions(cache, draw_image,
+                                       transfer_cache_entry_id,
+                                       true /* should_have_mips */);
+      SkYUVASizeInfo yuv_size_info = GetYUVASizeInfo(
+          GetNormalImageSize(), yuv_format_, yuv_bytes_per_pixel_);
+
+      // Decoded HDR images should have their SDR white level adjusted to match
+      // the display so we avoid scaling them by variable SDR brightness levels.
+      auto expected_cs = decoded_cs.IsHDR()
+                             ? decoded_cs.GetWithSDRWhiteLevel(sdr_white_level)
+                             : decoded_cs;
+
+      VerifyUploadedPlaneSizes(cache, draw_image, transfer_cache_entry_id,
+                               yuv_size_info.fSizes, yuv_color_type,
+                               expected_cs.ToSkColorSpace().get());
+
+      if (expected_cs.IsValid()) {
+        EXPECT_TRUE(
+            SkColorSpace::Equals(expected_cs.ToSkColorSpace().get(),
+                                 decoded_draw_image.image()->colorSpace()));
+      }
+    } else {
+      if (use_transfer_cache_) {
+        EXPECT_FALSE(transfer_cache_helper_
+                         .GetEntryAs<ServiceImageTransferCacheEntry>(
+                             *transfer_cache_entry_id)
+                         ->is_yuv());
+      } else {
+        for (size_t plane = 0; plane < SkYUVASizeInfo::kMaxCount; ++plane)
+          EXPECT_FALSE(cache->GetUploadedPlaneForTesting(draw_image, plane));
+      }
+    }
+
+    cache->DrawWithImageFinished(draw_image, decoded_draw_image);
+    cache->UnrefImage(draw_image);
+  };
+
+  // Setup paint images and associated YUV info structs to be uint16_t based.
+  yuv_bytes_per_pixel_ = 2;
+
+  gpu::Capabilities original_caps;
+  {
+    // TODO(crbug.com/1110007): We shouldn't need to lock to get capabilities.
+    viz::RasterContextProvider::ScopedRasterContextLock auto_lock(
+        context_provider_.get());
+    original_caps = context_provider_->ContextCapabilities();
+  }
+
+  const auto hdr_cs = gfx::ColorSpace::CreateHDR10(/*sdr_white_level=*/200.0f);
+
+  // Ensure that when R16 is supported, it's used and preferred over half-float.
+  {
+    auto r16_caps = original_caps;
+    r16_caps.texture_norm16 = true;
+    r16_caps.texture_half_float_linear = true;
+    context_provider_->SetContextCapabilitiesOverride(r16_caps);
+    auto r16_cache = CreateCache();
+
+    yuv_format_ = YUVSubsampling::k420;
+    decode_and_check_plane_sizes(r16_cache.get(), kA16_unorm_SkColorType,
+                                 DefaultColorSpace());
+
+    yuv_format_ = YUVSubsampling::k422;
+    decode_and_check_plane_sizes(r16_cache.get(), kA16_unorm_SkColorType,
+                                 DefaultColorSpace());
+
+    yuv_format_ = YUVSubsampling::k444;
+    decode_and_check_plane_sizes(r16_cache.get(), kA16_unorm_SkColorType,
+                                 DefaultColorSpace());
+
+    // Verify HDR decoding has white level adjustment.
+    yuv_format_ = YUVSubsampling::k420;
+    decode_and_check_plane_sizes(r16_cache.get(), kA16_unorm_SkColorType,
+                                 hdr_cs);
+
+    yuv_format_ = YUVSubsampling::k422;
+    decode_and_check_plane_sizes(r16_cache.get(), kA16_unorm_SkColorType,
+                                 hdr_cs);
+
+    yuv_format_ = YUVSubsampling::k444;
+    decode_and_check_plane_sizes(r16_cache.get(), kA16_unorm_SkColorType,
+                                 hdr_cs);
+  }
+
+  // Verify that half-float is used when R16 is not available.
+  {
+    auto f16_caps = original_caps;
+    f16_caps.texture_norm16 = false;
+    f16_caps.texture_half_float_linear = true;
+    context_provider_->SetContextCapabilitiesOverride(f16_caps);
+    auto f16_cache = CreateCache();
+
+    yuv_format_ = YUVSubsampling::k420;
+    decode_and_check_plane_sizes(f16_cache.get(), kA16_float_SkColorType,
+                                 DefaultColorSpace());
+
+    yuv_format_ = YUVSubsampling::k422;
+    decode_and_check_plane_sizes(f16_cache.get(), kA16_float_SkColorType,
+                                 DefaultColorSpace());
+
+    yuv_format_ = YUVSubsampling::k444;
+    decode_and_check_plane_sizes(f16_cache.get(), kA16_float_SkColorType,
+                                 DefaultColorSpace());
+
+    // Verify HDR decoding has white level adjustment.
+    yuv_format_ = YUVSubsampling::k420;
+    decode_and_check_plane_sizes(f16_cache.get(), kA16_float_SkColorType,
+                                 hdr_cs);
+
+    yuv_format_ = YUVSubsampling::k422;
+    decode_and_check_plane_sizes(f16_cache.get(), kA16_float_SkColorType,
+                                 hdr_cs);
+
+    yuv_format_ = YUVSubsampling::k444;
+    decode_and_check_plane_sizes(f16_cache.get(), kA16_float_SkColorType,
+                                 hdr_cs);
+  }
+
+  // Verify YUV16 is unsupported when neither R16 or half-float are available.
+  {
+    auto no_yuv16_caps = original_caps;
+    no_yuv16_caps.texture_norm16 = false;
+    no_yuv16_caps.texture_half_float_linear = false;
+    context_provider_->SetContextCapabilitiesOverride(no_yuv16_caps);
+    auto no_yuv16_cache = CreateCache();
+
+    yuv_format_ = YUVSubsampling::k420;
+    decode_and_check_plane_sizes(no_yuv16_cache.get(), kUnknown_SkColorType,
+                                 DefaultColorSpace());
+
+    yuv_format_ = YUVSubsampling::k422;
+    decode_and_check_plane_sizes(no_yuv16_cache.get(), kUnknown_SkColorType,
+                                 DefaultColorSpace());
+
+    yuv_format_ = YUVSubsampling::k444;
+    decode_and_check_plane_sizes(no_yuv16_cache.get(), kUnknown_SkColorType,
+                                 DefaultColorSpace());
+  }
 }
 
 TEST_P(GpuImageDecodeCacheTest, ScaledYUVDecodeScaledDrawCorrectlyMipsPlanes) {
@@ -2837,61 +3193,108 @@ TEST_P(GpuImageDecodeCacheTest, ScaledYUVDecodeScaledDrawCorrectlyMipsPlanes) {
     // planes.
     return;
   }
-  auto cache = CreateCache();
-  SkFilterQuality filter_quality = kMedium_SkFilterQuality;
-  SkSize less_than_half_scale = SkSize::Make(0.45f, 0.45f);
+  auto owned_cache = CreateCache();
+  auto decode_and_check_plane_sizes =
+      [this, cache = owned_cache.get()](
+          SkSize scaled_size,
+          const SkISize mipped_plane_sizes[SkYUVASizeInfo::kMaxCount]) {
+        SkFilterQuality filter_quality = kMedium_SkFilterQuality;
+
+        gfx::Size image_size = GetNormalImageSize();
+        PaintImage image = CreatePaintImageInternal(image_size);
+        DrawImage draw_image(
+            image, SkIRect::MakeWH(image.width(), image.height()),
+            filter_quality, CreateMatrix(scaled_size),
+            PaintImage::kDefaultFrameIndex, DefaultColorSpace());
+        ImageDecodeCache::TaskResult result = cache->GetTaskForImageAndRef(
+            draw_image, ImageDecodeCache::TracingInfo());
+        EXPECT_TRUE(result.need_unref);
+        EXPECT_TRUE(result.task);
+
+        TestTileTaskRunner::ProcessTask(result.task->dependencies()[0].get());
+        TestTileTaskRunner::ProcessTask(result.task.get());
+
+        // Must hold context lock before calling GetDecodedImageForDraw /
+        // DrawWithImageFinished.
+        viz::ContextProvider::ScopedContextLock context_lock(
+            context_provider());
+        // Pull out transfer cache ID from the DecodedDrawImage while it still
+        // has it attached.
+        DecodedDrawImage serialized_decoded_draw_image =
+            cache->GetDecodedImageForDraw(draw_image);
+        const base::Optional<uint32_t> transfer_cache_entry_id =
+            serialized_decoded_draw_image.transfer_cache_entry_id();
+        DecodedDrawImage decoded_draw_image =
+            EnsureImageBacked(std::move(serialized_decoded_draw_image));
+        EXPECT_TRUE(decoded_draw_image.image());
+        EXPECT_TRUE(decoded_draw_image.image()->isTextureBacked());
+
+        // Skia will flatten a YUV SkImage upon calling makeTextureImage. Thus,
+        // we must separately request mips for each plane and compare to the
+        // original uploaded planes.
+        CompareAllPlanesToMippedVersions(cache, draw_image,
+                                         transfer_cache_entry_id,
+                                         true /* should_have_mips */);
+        VerifyUploadedPlaneSizes(cache, draw_image, transfer_cache_entry_id,
+                                 mipped_plane_sizes);
+
+        cache->DrawWithImageFinished(draw_image, decoded_draw_image);
+        cache->UnrefImage(draw_image);
+      };
 
   gfx::Size image_size = GetNormalImageSize();
-  PaintImage image = CreatePaintImageInternal(image_size);
-  DrawImage draw_image(image, SkIRect::MakeWH(image.width(), image.height()),
-                       filter_quality, CreateMatrix(less_than_half_scale),
-                       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
-  ImageDecodeCache::TaskResult result =
-      cache->GetTaskForImageAndRef(draw_image, ImageDecodeCache::TracingInfo());
-  EXPECT_TRUE(result.need_unref);
-  EXPECT_TRUE(result.task);
+  SkISize mipped_plane_sizes[SkYUVASizeInfo::kMaxCount];
 
-  TestTileTaskRunner::ProcessTask(result.task->dependencies()[0].get());
-  TestTileTaskRunner::ProcessTask(result.task.get());
-
-  // Must hold context lock before calling GetDecodedImageForDraw /
-  // DrawWithImageFinished.
-  viz::ContextProvider::ScopedContextLock context_lock(context_provider());
-  // Pull out transfer cache ID from the DecodedDrawImage while it still has
-  // it attached.
-  DecodedDrawImage serialized_decoded_draw_image =
-      cache->GetDecodedImageForDraw(draw_image);
-  const base::Optional<uint32_t> transfer_cache_entry_id =
-      serialized_decoded_draw_image.transfer_cache_entry_id();
-  DecodedDrawImage decoded_draw_image =
-      EnsureImageBacked(std::move(serialized_decoded_draw_image));
-  EXPECT_TRUE(decoded_draw_image.image());
-  EXPECT_TRUE(decoded_draw_image.image()->isTextureBacked());
-
-  // Skia will flatten a YUV SkImage upon calling makeTextureImage. Thus, we
-  // must separately request mips for each plane and compare to the original
-  // uploaded planes.
-  CompareAllPlanesToMippedVersions(cache.get(), draw_image,
-                                   transfer_cache_entry_id,
-                                   true /* should_have_mips */);
+  SkSize less_than_half_scale = SkSize::Make(0.45f, 0.45f);
 
   // Because we intend to draw this image at 0.45 x 0.45 scale, we will upload
-  // the Y plane at mip level 1 (corresponding to half the original size). The
-  // chroma planes (U and V) should be uploaded at the same size as the Y plane,
-  // corresponding to mip level 0, because the largest dimensions greater than
-  // or equal to target dimensions for them is their original size.
-  SkISize mipped_plane_sizes[SkYUVASizeInfo::kMaxCount];
+  // the Y plane at mip level 1 (corresponding to 1/2 the original size).
   mipped_plane_sizes[SkYUVAIndex::kY_Index] = SkISize::Make(
       (image_size.width() + 1) / 2, (image_size.height() + 1) / 2);
   mipped_plane_sizes[SkYUVAIndex::kU_Index] =
       mipped_plane_sizes[SkYUVAIndex::kY_Index];
   mipped_plane_sizes[SkYUVAIndex::kV_Index] =
       mipped_plane_sizes[SkYUVAIndex::kY_Index];
-  VerifyUploadedPlaneSizes(cache.get(), draw_image, transfer_cache_entry_id,
-                           mipped_plane_sizes);
 
-  cache->DrawWithImageFinished(draw_image, decoded_draw_image);
-  cache->UnrefImage(draw_image);
+  // For 4:2:0, the chroma planes (U and V) should be uploaded at the same size
+  // as the Y plane since they get promoted to 4:4:4 to avoid blurriness from
+  // scaling.
+  yuv_format_ = YUVSubsampling::k420;
+  decode_and_check_plane_sizes(less_than_half_scale, mipped_plane_sizes);
+
+  // For 4:2:2, only the UV height plane should be scaled.
+  yuv_format_ = YUVSubsampling::k422;
+  decode_and_check_plane_sizes(less_than_half_scale, mipped_plane_sizes);
+
+  // For 4:4:4, all planes should be the same size.
+  yuv_format_ = YUVSubsampling::k444;
+  decode_and_check_plane_sizes(less_than_half_scale, mipped_plane_sizes);
+
+  // Now try at 1/4 scale.
+  SkSize one_quarter_scale = SkSize::Make(0.20f, 0.20f);
+
+  // Because we intend to draw this image at 0.20 x 0.20 scale, we will upload
+  // the Y plane at mip level 2 (corresponding to 1/4 the original size).
+  mipped_plane_sizes[SkYUVAIndex::kY_Index] = SkISize::Make(
+      (image_size.width() + 1) / 4, (image_size.height() + 1) / 4);
+  mipped_plane_sizes[SkYUVAIndex::kU_Index] =
+      mipped_plane_sizes[SkYUVAIndex::kY_Index];
+  mipped_plane_sizes[SkYUVAIndex::kV_Index] =
+      mipped_plane_sizes[SkYUVAIndex::kY_Index];
+
+  // For 4:2:0, the chroma planes (U and V) should be uploaded at the same size
+  // as the Y plane since they get promoted to 4:4:4 to avoid blurriness from
+  // scaling.
+  yuv_format_ = YUVSubsampling::k420;
+  decode_and_check_plane_sizes(one_quarter_scale, mipped_plane_sizes);
+
+  // For 4:2:2, only the UV height plane should be scaled.
+  yuv_format_ = YUVSubsampling::k422;
+  decode_and_check_plane_sizes(one_quarter_scale, mipped_plane_sizes);
+
+  // For 4:4:4, all planes should be the same size.
+  yuv_format_ = YUVSubsampling::k444;
+  decode_and_check_plane_sizes(one_quarter_scale, mipped_plane_sizes);
 }
 
 TEST_P(GpuImageDecodeCacheTest, GetBorderlineLargeDecodedImageForDraw) {
@@ -2990,7 +3393,10 @@ class GpuImageDecodeCacheWithAcceleratedDecodesTest
     sk_sp<FakePaintImageGenerator> generator;
     if (do_yuv_decode_) {
       generator = sk_make_sp<FakePaintImageGenerator>(
-          info, GetYUV420SizeInfo(image_data.image_size));
+          info,
+          GetYUVASizeInfo(image_data.image_size, yuv_format_,
+                          yuv_bytes_per_pixel_),
+          yuv_bytes_per_pixel_ * 8);
     } else {
       generator = sk_make_sp<FakePaintImageGenerator>(info);
     }

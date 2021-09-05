@@ -58,10 +58,6 @@ class FlagRegistry {
   // Will emit a warning if a 'retired' flag is specified.
   CommandLineFlag* FindFlagLocked(absl::string_view name);
 
-  // Returns the retired flag object for the specified name, or nullptr if not
-  // found or not retired.  Does not emit a warning.
-  CommandLineFlag* FindRetiredFlagLocked(absl::string_view name);
-
   static FlagRegistry& GlobalRegistry();  // returns a singleton registry
 
  private:
@@ -89,20 +85,6 @@ CommandLineFlag* FlagRegistry::FindFlagLocked(absl::string_view name) {
     return nullptr;
   }
 
-  if (i->second->IsRetired()) {
-    flags_internal::ReportUsageError(
-        absl::StrCat("Accessing retired flag '", name, "'"), false);
-  }
-
-  return i->second;
-}
-
-CommandLineFlag* FlagRegistry::FindRetiredFlagLocked(absl::string_view name) {
-  FlagConstIterator i = flags_.find(name);
-  if (i == flags_.end() || !i->second->IsRetired()) {
-    return nullptr;
-  }
-
   return i->second;
 }
 
@@ -116,8 +98,6 @@ class FlagRegistryLock {
  private:
   FlagRegistry& fr_;
 };
-
-void DestroyRetiredFlag(CommandLineFlag& flag);
 
 }  // namespace
 
@@ -143,8 +123,6 @@ void FlagRegistry::RegisterFlag(CommandLineFlag& flag) {
                        old_flag.Filename(), "' and '", flag.Filename(), "'."),
           true);
     } else if (old_flag.IsRetired()) {
-      // Retired flag can just be deleted.
-      DestroyRetiredFlag(flag);
       return;
     } else if (old_flag.Filename() != flag.Filename()) {
       flags_internal::ReportUsageError(
@@ -155,7 +133,7 @@ void FlagRegistry::RegisterFlag(CommandLineFlag& flag) {
     } else {
       flags_internal::ReportUsageError(
           absl::StrCat(
-              "Something wrong with flag '", flag.Name(), "' in file '",
+              "Something is wrong with flag '", flag.Name(), "' in file '",
               flag.Filename(), "'. One possibility: file '", flag.Filename(),
               "' is being linked both statically and dynamically into this "
               "executable. e.g. some files listed as srcs to a test and also "
@@ -206,16 +184,34 @@ class RetiredFlagObj final : public CommandLineFlag {
 
  private:
   absl::string_view Name() const override { return name_; }
-  std::string Filename() const override { return "RETIRED"; }
+  std::string Filename() const override {
+    OnAccess();
+    return "RETIRED";
+  }
   FlagFastTypeId TypeId() const override { return type_id_; }
-  std::string Help() const override { return ""; }
+  std::string Help() const override {
+    OnAccess();
+    return "";
+  }
   bool IsRetired() const override { return true; }
-  bool IsSpecifiedOnCommandLine() const override { return false; }
-  std::string DefaultValue() const override { return ""; }
-  std::string CurrentValue() const override { return ""; }
+  bool IsSpecifiedOnCommandLine() const override {
+    OnAccess();
+    return false;
+  }
+  std::string DefaultValue() const override {
+    OnAccess();
+    return "";
+  }
+  std::string CurrentValue() const override {
+    OnAccess();
+    return "";
+  }
 
   // Any input is valid
-  bool ValidateInputValue(absl::string_view) const override { return true; }
+  bool ValidateInputValue(absl::string_view) const override {
+    OnAccess();
+    return true;
+  }
 
   std::unique_ptr<flags_internal::FlagStateInterface> SaveState() override {
     return nullptr;
@@ -223,29 +219,32 @@ class RetiredFlagObj final : public CommandLineFlag {
 
   bool ParseFrom(absl::string_view, flags_internal::FlagSettingMode,
                  flags_internal::ValueSource, std::string&) override {
+    OnAccess();
     return false;
   }
 
-  void CheckDefaultValueParsingRoundtrip() const override {}
+  void CheckDefaultValueParsingRoundtrip() const override { OnAccess(); }
 
-  void Read(void*) const override {}
+  void Read(void*) const override { OnAccess(); }
+
+  void OnAccess() const {
+    flags_internal::ReportUsageError(
+        absl::StrCat("Accessing retired flag '", name_, "'"), false);
+  }
 
   // Data members
   const char* const name_;
   const FlagFastTypeId type_id_;
 };
 
-void DestroyRetiredFlag(CommandLineFlag& flag) {
-  assert(flag.IsRetired());
-  delete static_cast<RetiredFlagObj*>(&flag);
-}
-
 }  // namespace
 
-bool Retire(const char* name, FlagFastTypeId type_id) {
-  auto* flag = new flags_internal::RetiredFlagObj(name, type_id);
+void Retire(const char* name, FlagFastTypeId type_id, char* buf) {
+  static_assert(sizeof(RetiredFlagObj) == kRetiredFlagObjSize, "");
+  static_assert(alignof(RetiredFlagObj) == kRetiredFlagObjAlignment, "");
+  auto* flag = ::new (static_cast<void*>(buf))
+      flags_internal::RetiredFlagObj(name, type_id);
   FlagRegistry::GlobalRegistry().RegisterFlag(*flag);
-  return true;
 }
 
 // --------------------------------------------------------------------

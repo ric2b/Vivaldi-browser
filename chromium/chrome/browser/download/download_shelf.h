@@ -5,17 +5,26 @@
 #ifndef CHROME_BROWSER_DOWNLOAD_DOWNLOAD_SHELF_H_
 #define CHROME_BROWSER_DOWNLOAD_DOWNLOAD_SHELF_H_
 
-#include <stdint.h>
-
 #include "base/memory/weak_ptr.h"
-#include "base/time/time.h"
-#include "build/build_config.h"
 #include "chrome/browser/download/download_ui_model.h"
 
 class Browser;
+class Profile;
+
+namespace base {
+template <typename T>
+class Optional;
+class TimeDelta;
+}  // namespace base
+
+namespace base {
+template <typename T>
+class Optional;
+}  // namespace base
 
 namespace offline_items_collection {
 struct ContentId;
+struct OfflineItem;
 }  // namespace offline_items_collection
 
 // This is an abstract base class for platform specific download shelf
@@ -23,6 +32,8 @@ struct ContentId;
 class DownloadShelf {
  public:
   DownloadShelf(Browser* browser, Profile* profile);
+  DownloadShelf(const DownloadShelf&) = delete;
+  DownloadShelf& operator=(const DownloadShelf&) = delete;
   virtual ~DownloadShelf();
 
   // The browser view needs to know when we are going away to properly return
@@ -49,17 +60,15 @@ class DownloadShelf {
   // Closes the shelf.
   void Close();
 
-  // Hides the shelf. This closes the shelf if it is currently showing.
+  // Closes the shelf and prevents it from reopening until Unhide() is called.
   void Hide();
 
-  // Unhides the shelf. This will cause the shelf to be opened if it was open
-  // when it was hidden, or was shown while it was hidden.
+  // Allows the shelf to open after a previous call to Hide().  Opens the shelf
+  // if, had Hide() not been called, it would currently be open.
   void Unhide();
 
   Browser* browser() { return browser_; }
-
-  // Returns whether the download shelf is hidden.
-  bool is_hidden() { return is_hidden_; }
+  bool is_hidden() const { return is_hidden_; }
 
  protected:
   virtual void DoShowDownload(DownloadUIModel::DownloadUIModelPtr download) = 0;
@@ -75,17 +84,22 @@ class DownloadShelf {
   Profile* profile() { return profile_; }
 
  private:
-  // Show the download on the shelf immediately. Also displayes the download
+  // Shows the download on the shelf immediately. Also displays the download
   // started animation if necessary.
   void ShowDownload(DownloadUIModel::DownloadUIModelPtr download);
 
   // Similar to ShowDownload() but refers to the download using an ID.
   void ShowDownloadById(const offline_items_collection::ContentId& id);
 
+  // Callback used by ShowDownloadById() to trigger ShowDownload() once |item|
+  // has been fetched.
+  void OnGetDownloadDoneForOfflineItem(
+      const base::Optional<offline_items_collection::OfflineItem>& item);
+
   Browser* const browser_;
   Profile* const profile_;
-  bool should_show_on_unhide_;
-  bool is_hidden_;
+  bool should_show_on_unhide_ = false;
+  bool is_hidden_ = false;
   base::WeakPtrFactory<DownloadShelf> weak_ptr_factory_{this};
 };
 

@@ -170,6 +170,20 @@ bool VulkanSurface::Initialize(VulkanDeviceQueue* device_queue,
     return false;
   }
 
+  constexpr auto kRequiredUsageFlags =
+      VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+  constexpr auto kOptionalUsageFlags =
+      VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  if ((surface_caps.supportedUsageFlags & kRequiredUsageFlags) !=
+      kRequiredUsageFlags) {
+    DLOG(ERROR) << "Vulkan surface doesn't support necessary usage. "
+                   "supportedUsageFlags: 0x"
+                << std::hex << surface_caps.supportedUsageFlags;
+  }
+
+  image_usage_flags_ = (kRequiredUsageFlags | kOptionalUsageFlags) &
+                       surface_caps.supportedUsageFlags;
+
   return true;
 }
 
@@ -273,8 +287,8 @@ bool VulkanSurface::CreateSwapChain(const gfx::Size& size,
   // Create swap chain.
   auto min_image_count = std::max(surface_caps.minImageCount, kMinImageCount);
   if (!swap_chain->Initialize(device_queue_, surface_, surface_format_,
-                              image_size_, min_image_count, vk_transform,
-                              enforce_protected_memory_,
+                              image_size_, min_image_count, image_usage_flags_,
+                              vk_transform, enforce_protected_memory_,
                               std::move(swap_chain_))) {
     return false;
   }

@@ -101,9 +101,11 @@ void FormatAllocationSourcesForTracing(
 }  // namespace
 
 GpuChannelManager::GpuPeakMemoryMonitor::GpuPeakMemoryMonitor(
-    GpuChannelManager* channel_manager)
+    GpuChannelManager* channel_manager,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
     : ablation_experiment_(
-          std::make_unique<GpuMemoryAblationExperiment>(channel_manager)),
+          std::make_unique<GpuMemoryAblationExperiment>(channel_manager,
+                                                        task_runner)),
       weak_factory_(this) {}
 
 GpuChannelManager::GpuPeakMemoryMonitor::~GpuPeakMemoryMonitor() = default;
@@ -299,20 +301,25 @@ GpuChannelManager::GpuChannelManager(
       vulkan_context_provider_(vulkan_context_provider),
       metal_context_provider_(metal_context_provider),
       dawn_context_provider_(dawn_context_provider),
-      peak_memory_monitor_(this) {
+      peak_memory_monitor_(this, task_runner) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(task_runner->BelongsToCurrentThread());
   DCHECK(io_task_runner);
   DCHECK(scheduler);
 
+  const bool using_skia_renderer = features::IsUsingSkiaRenderer();
   const bool enable_gr_shader_cache =
       (gpu_feature_info_.status_values[GPU_FEATURE_TYPE_OOP_RASTERIZATION] ==
        gpu::kGpuFeatureStatusEnabled) ||
-      features::IsUsingSkiaRenderer();
+      using_skia_renderer;
   const bool disable_disk_cache =
       gpu_preferences_.disable_gpu_shader_disk_cache;
-  if (enable_gr_shader_cache && !disable_disk_cache)
+  if (enable_gr_shader_cache && !disable_disk_cache) {
     gr_shader_cache_.emplace(gpu_preferences.gpu_program_cache_size, this);
+    if (using_skia_renderer) {
+      gr_shader_cache_->CacheClientIdOnDisk(gpu::kDisplayCompositorClientId);
+    }
+  }
 }
 
 GpuChannelManager::~GpuChannelManager() {
@@ -635,21 +642,52 @@ void GpuChannelManager::HandleMemoryPressure(
     base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  if (program_cache_)
+  SCOPED_UMA_HISTOGRAM_TIMER(
+      "Memory.Experimental.GpuChannelManagerPressureHandlerDuration."
+      "TotalDuration");
+
+  if (program_cache_) {
+    SCOPED_UMA_HISTOGRAM_TIMER(
+        "Memory.Experimental.GpuChannelManagerPressureHandlerDuration."
+        "ProgramCacheHandleMemoryPressureDuration");
     program_cache_->HandleMemoryPressure(memory_pressure_level);
+  }
 
   // These caches require a current context for cleanup.
   if (shared_context_state_ &&
       shared_context_state_->MakeCurrent(nullptr, true /* needs_gl */)) {
-    discardable_manager_.HandleMemoryPressure(memory_pressure_level);
-    passthrough_discardable_manager_.HandleMemoryPressure(
-        memory_pressure_level);
+    {
+      SCOPED_UMA_HISTOGRAM_TIMER(
+          "Memory.Experimental.GpuChannelManagerPressureHandlerDuration."
+          "DiscardableManagerHandleMemoryPressureDuration");
+      discardable_manager_.HandleMemoryPressure(memory_pressure_level);
+    }
+    {
+      SCOPED_UMA_HISTOGRAM_TIMER(
+          "Memory.Experimental.GpuChannelManagerPressureHandlerDuration."
+          "PasshtroughDiscardableManagerHandleMemoryPressureDuration");
+      passthrough_discardable_manager_.HandleMemoryPressure(
+          memory_pressure_level);
+    }
+
+    SCOPED_UMA_HISTOGRAM_TIMER(
+        "Memory.Experimental.GpuChannelManagerPressureHandlerDuration."
+        "SharedContextStatePurgeMemoryDuration");
     shared_context_state_->PurgeMemory(memory_pressure_level);
   }
-  if (gr_shader_cache_)
+  if (gr_shader_cache_) {
+    SCOPED_UMA_HISTOGRAM_TIMER(
+        "Memory.Experimental.GpuChannelManagerPressureHandlerDuration."
+        "GrShaderCachePurgeMemoryDuration");
     gr_shader_cache_->PurgeMemory(memory_pressure_level);
+  }
 #if defined(OS_WIN)
-  TrimD3DResources();
+  {
+    SCOPED_UMA_HISTOGRAM_TIMER(
+        "Memory.Experimental.GpuChannelManagerPressureHandlerDuration."
+        "TrimD3DResourcesDuration");
+    TrimD3DResources();
+  }
 #endif
 }
 
@@ -664,7 +702,7 @@ scoped_refptr<SharedContextState> GpuChannelManager::GetSharedContextState(
 
   scoped_refptr<gl::GLSurface> surface = default_offscreen_surface();
   bool use_virtualized_gl_contexts = false;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Virtualize GpuPreference::kLowPower contexts by default on OS X to prevent
   // performance regressions when enabling FCM.
   // http://crbug.com/180463
@@ -740,8 +778,7 @@ scoped_refptr<SharedContextState> GpuChannelManager::GetSharedContextState(
   auto shared_context_state = base::MakeRefCounted<SharedContextState>(
       std::move(share_group), std::move(surface), std::move(context),
       use_virtualized_gl_contexts,
-      base::BindOnce(&GpuChannelManager::OnContextLost, base::Unretained(this),
-                     /*synthetic_loss=*/false),
+      base::BindOnce(&GpuChannelManager::OnContextLost, base::Unretained(this)),
       gpu_preferences_.gr_context_type, vulkan_context_provider_,
       metal_context_provider_, dawn_context_provider_,
       peak_memory_monitor_.GetWeakPtr());
@@ -756,7 +793,7 @@ scoped_refptr<SharedContextState> GpuChannelManager::GetSharedContextState(
 
   // GpuMemoryAblationExperiment needs a context to use Skia for Gpu
   // allocations.
-  need_gr_context |= base::FeatureList::IsEnabled(kGPUMemoryAblationFeature);
+  need_gr_context |= GpuMemoryAblationExperiment::ExperimentSupported();
 
   if (need_gr_context) {
     if (gpu_preferences_.gr_context_type == gpu::GrContextType::kGL) {
@@ -801,8 +838,10 @@ void GpuChannelManager::OnContextLost(bool synthetic_loss) {
   }
 
   // Work around issues with recovery by allowing a new GPU process to launch.
-  if (gpu_driver_bug_workarounds_.exit_on_context_lost)
+  if (gpu_driver_bug_workarounds_.exit_on_context_lost ||
+      (shared_context_state_ && !shared_context_state_->GrContextIsGL())) {
     delegate_->MaybeExitOnContextLost();
+  }
 }
 
 void GpuChannelManager::ScheduleGrContextCleanup() {

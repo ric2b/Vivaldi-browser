@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/message_loop/message_pump_type.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "ui/base/buildflags.h"
@@ -22,6 +23,7 @@
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 #include "ui/events/ozone/layout/stub/stub_keyboard_layout_engine.h"
 #include "ui/events/platform/x11/x11_event_source.h"
+#include "ui/events/x/events_x_utils.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/x/x11_types.h"
 #include "ui/ozone/common/stub_overlay_manager.h"
@@ -63,15 +65,19 @@ namespace ui {
 namespace {
 
 constexpr OzonePlatform::PlatformProperties kX11PlatformProperties{
-    /*needs_view_token=*/false,
-    /*custom_frame_pref_default=*/false,
-    /*use_system_title_bar=*/true,
+    .needs_view_token = false,
+    .custom_frame_pref_default = false,
+    .use_system_title_bar = true,
 
     // When the Ozone X11 backend is running, use a UI loop to grab Expose
     // events. See GLSurfaceGLX and https://crbug.com/326995.
-    /*message_pump_type_for_gpu=*/base::MessagePumpType::UI,
-    /*supports_vulkan_swap_chain=*/true,
-};
+    .message_pump_type_for_gpu = base::MessagePumpType::UI,
+    // When the Ozone X11 backend is running, use a UI loop to dispatch
+    // SHM completion events.
+    .message_pump_type_for_viz_compositor = base::MessagePumpType::UI,
+    .supports_vulkan_swap_chain = true,
+    .platform_shows_drag_image = false,
+    .supports_global_application_menus = true};
 
 // Singleton OzonePlatform implementation for X11 platform.
 class OzonePlatformX11 : public OzonePlatform,
@@ -132,6 +138,8 @@ class OzonePlatformX11 : public OzonePlatform,
     return gl_egl_utility_.get();
   }
 
+  int GetKeyModifiers() const override { return GetModifierKeyState(); }
+
   std::unique_ptr<InputMethod> CreateInputMethod(
       internal::InputMethodDelegate* delegate,
       gfx::AcceleratedWidget) override {
@@ -184,9 +192,12 @@ class OzonePlatformX11 : public OzonePlatform,
 
 #if BUILDFLAG(USE_GTK)
     DCHECK(!GtkUiDelegate::instance());
-    gtk_ui_delegate_ = std::make_unique<GtkUiDelegateX11>(gfx::GetXDisplay());
+    gtk_ui_delegate_ =
+        std::make_unique<GtkUiDelegateX11>(x11::Connection::Get());
     GtkUiDelegate::SetInstance(gtk_ui_delegate_.get());
 #endif
+
+    base::UmaHistogramEnumeration("Linux.WindowManager", GetWindowManagerUMA());
   }
 
   void InitializeGPU(const InitParams& params) override {
@@ -197,7 +208,12 @@ class OzonePlatformX11 : public OzonePlatform,
     if (!params.single_process)
       CreatePlatformEventSource();
 
-    surface_factory_ozone_ = std::make_unique<X11SurfaceFactory>();
+    // Set up the X11 connection before the sandbox gets set up.  This cannot be
+    // done later since opening the connection requires socket() and connect().
+    auto connection = x11::Connection::Get()->Clone();
+    connection->DetachFromSequence();
+    surface_factory_ozone_ =
+        std::make_unique<X11SurfaceFactory>(std::move(connection));
     gl_egl_utility_ = std::make_unique<GLEGLUtilityX11>();
   }
 
@@ -229,10 +245,10 @@ class OzonePlatformX11 : public OzonePlatform,
     if (common_initialized_)
       return;
 
-    // If XOpenDisplay() failed there is nothing we can do. Crash here instead
-    // of crashing later. If you are crashing here, make sure there is an X
-    // server running and $DISPLAY is set.
-    CHECK(gfx::GetXDisplay()) << "Missing X server or $DISPLAY";
+    // If opening the connection failed there is nothing we can do. Crash here
+    // instead of crashing later. If you are crashing here, make sure there is
+    // an X server running and $DISPLAY is set.
+    CHECK(x11::Connection::Get()) << "Missing X server or $DISPLAY";
 
     ui::SetDefaultX11ErrorHandlers();
 
@@ -244,8 +260,8 @@ class OzonePlatformX11 : public OzonePlatform,
     if (event_source_)
       return;
 
-    XDisplay* display = gfx::GetXDisplay();
-    event_source_ = std::make_unique<X11EventSource>(display);
+    auto* connection = x11::Connection::Get();
+    event_source_ = std::make_unique<X11EventSource>(connection);
   }
 
   bool common_initialized_ = false;

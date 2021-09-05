@@ -41,10 +41,9 @@ void ResponseToDownloadCheckResult(
     DownloadCheckResult* download_result) {
   bool malware_scan_failure = false;
   bool dlp_scan_failure = false;
-  auto malware_action = enterprise_connectors::ContentAnalysisResponse::Result::
-      TriggeredRule::ACTION_UNSPECIFIED;
-  auto dlp_action = enterprise_connectors::ContentAnalysisResponse::Result::
-      TriggeredRule::ACTION_UNSPECIFIED;
+  auto malware_action =
+      enterprise_connectors::TriggeredRule::ACTION_UNSPECIFIED;
+  auto dlp_action = enterprise_connectors::TriggeredRule::ACTION_UNSPECIFIED;
 
   for (const auto& result : response.results()) {
     if (result.tag() == "malware") {
@@ -54,8 +53,8 @@ void ResponseToDownloadCheckResult(
         continue;
       }
       for (const auto& rule : result.triggered_rules()) {
-        if (rule.action() > malware_action)
-          malware_action = rule.action();
+        malware_action = enterprise_connectors::GetHighestPrecedenceAction(
+            malware_action, rule.action());
       }
     }
     if (result.tag() == "dlp") {
@@ -65,41 +64,37 @@ void ResponseToDownloadCheckResult(
         continue;
       }
       for (const auto& rule : result.triggered_rules()) {
-        if (rule.action() > dlp_action)
-          dlp_action = rule.action();
+        dlp_action = enterprise_connectors::GetHighestPrecedenceAction(
+            dlp_action, rule.action());
       }
     }
   }
 
-  switch (malware_action) {
-    case enterprise_connectors::ContentAnalysisResponse::Result::TriggeredRule::
-        BLOCK:
-      *download_result = DownloadCheckResult::DANGEROUS;
-      return;
-    case enterprise_connectors::ContentAnalysisResponse::Result::TriggeredRule::
-        WARN:
-      *download_result = DownloadCheckResult::POTENTIALLY_UNWANTED;
-      return;
-    case enterprise_connectors::ContentAnalysisResponse::Result::TriggeredRule::
-        REPORT_ONLY:
-    case enterprise_connectors::ContentAnalysisResponse::Result::TriggeredRule::
-        ACTION_UNSPECIFIED:
-      break;
-  }
-  switch (dlp_action) {
-    case enterprise_connectors::ContentAnalysisResponse::Result::TriggeredRule::
-        BLOCK:
-      *download_result = DownloadCheckResult::SENSITIVE_CONTENT_BLOCK;
-      return;
-    case enterprise_connectors::ContentAnalysisResponse::Result::TriggeredRule::
-        WARN:
-      *download_result = DownloadCheckResult::SENSITIVE_CONTENT_WARNING;
-      return;
-    case enterprise_connectors::ContentAnalysisResponse::Result::TriggeredRule::
-        REPORT_ONLY:
-    case enterprise_connectors::ContentAnalysisResponse::Result::TriggeredRule::
-        ACTION_UNSPECIFIED:
-      break;
+  if (malware_action == enterprise_connectors::GetHighestPrecedenceAction(
+                            malware_action, dlp_action)) {
+    switch (malware_action) {
+      case enterprise_connectors::TriggeredRule::BLOCK:
+        *download_result = DownloadCheckResult::DANGEROUS;
+        return;
+      case enterprise_connectors::TriggeredRule::WARN:
+        *download_result = DownloadCheckResult::POTENTIALLY_UNWANTED;
+        return;
+      case enterprise_connectors::TriggeredRule::REPORT_ONLY:
+      case enterprise_connectors::TriggeredRule::ACTION_UNSPECIFIED:
+        break;
+    }
+  } else {
+    switch (dlp_action) {
+      case enterprise_connectors::TriggeredRule::BLOCK:
+        *download_result = DownloadCheckResult::SENSITIVE_CONTENT_BLOCK;
+        return;
+      case enterprise_connectors::TriggeredRule::WARN:
+        *download_result = DownloadCheckResult::SENSITIVE_CONTENT_WARNING;
+        return;
+      case enterprise_connectors::TriggeredRule::REPORT_ONLY:
+      case enterprise_connectors::TriggeredRule::ACTION_UNSPECIFIED:
+        break;
+    }
   }
 
   if (dlp_scan_failure || malware_scan_failure) {
@@ -112,18 +107,11 @@ void ResponseToDownloadCheckResult(
 
 void ResponseToDownloadCheckResult(const DeepScanningClientResponse& response,
                                    DownloadCheckResult* download_result) {
-  if (response.has_malware_scan_verdict()) {
-    if (response.malware_scan_verdict().verdict() ==
-        MalwareDeepScanningVerdict::MALWARE) {
-      *download_result = DownloadCheckResult::DANGEROUS;
-      return;
-    }
-
-    if (response.malware_scan_verdict().verdict() ==
-        MalwareDeepScanningVerdict::UWS) {
-      *download_result = DownloadCheckResult::POTENTIALLY_UNWANTED;
-      return;
-    }
+  if (response.has_malware_scan_verdict() &&
+      response.malware_scan_verdict().verdict() ==
+          MalwareDeepScanningVerdict::MALWARE) {
+    *download_result = DownloadCheckResult::DANGEROUS;
+    return;
   }
 
   if (response.has_dlp_scan_verdict() &&
@@ -138,7 +126,17 @@ void ResponseToDownloadCheckResult(const DeepScanningClientResponse& response,
       *download_result = DownloadCheckResult::SENSITIVE_CONTENT_BLOCK;
       return;
     }
+  }
 
+  if (response.has_malware_scan_verdict() &&
+      response.malware_scan_verdict().verdict() ==
+          MalwareDeepScanningVerdict::UWS) {
+    *download_result = DownloadCheckResult::POTENTIALLY_UNWANTED;
+    return;
+  }
+
+  if (response.has_dlp_scan_verdict() &&
+      response.dlp_scan_verdict().status() == DlpDeepScanningVerdict::SUCCESS) {
     bool should_dlp_warn = std::any_of(
         response.dlp_scan_verdict().triggered_rules().begin(),
         response.dlp_scan_verdict().triggered_rules().end(),
@@ -348,9 +346,13 @@ void DeepScanningRequest::PrepareConnectorRequest(
     request->set_device_token(GetDMToken(profile).value());
 
   request->set_analysis_connector(enterprise_connectors::FILE_DOWNLOADED);
+  request->set_email(GetProfileEmail(profile));
 
   if (item_->GetURL().is_valid())
     request->set_url(item_->GetURL().spec());
+
+  if (item_->GetTabUrl().is_valid())
+    request->set_tab_url(item_->GetTabUrl());
 
   for (const std::string& tag : analysis_settings_.tags)
     request->add_tag(tag);
@@ -376,19 +378,6 @@ void DeepScanningRequest::OnScanComplete(BinaryUploadService::Result result,
       /*duration=*/base::TimeTicks::Now() - upload_start_time_,
       /*total_size=*/item_->GetTotalBytes(), /*result=*/result,
       /*response=*/response);
-  Profile* profile = Profile::FromBrowserContext(
-      content::DownloadItemUtils::GetBrowserContext(item_));
-  if (profile && trigger_ == DeepScanTrigger::TRIGGER_POLICY) {
-    std::string raw_digest_sha256 = item_->GetHash();
-    MaybeReportDeepScanningVerdict(
-        profile, item_->GetURL(), item_->GetTargetFilePath().AsUTF8Unsafe(),
-        base::HexEncode(raw_digest_sha256.data(), raw_digest_sha256.size()),
-        item_->GetMimeType(),
-        extensions::SafeBrowsingPrivateEventRouter::kTriggerFileDownload,
-        DeepScanAccessPoint::DOWNLOAD, item_->GetTotalBytes(), result,
-        response);
-  }
-
   DownloadCheckResult download_result = DownloadCheckResult::UNKNOWN;
   if (result == BinaryUploadService::Result::SUCCESS) {
     ResponseToDownloadCheckResult(response, &download_result);
@@ -412,6 +401,49 @@ void DeepScanningRequest::OnScanComplete(BinaryUploadService::Result result,
              BinaryUploadService::Result::DLP_SCAN_UNSUPPORTED_FILE_TYPE) {
     if (analysis_settings_.block_unsupported_file_types)
       download_result = DownloadCheckResult::BLOCKED_UNSUPPORTED_FILE_TYPE;
+  }
+
+  // Determine if the user is allowed to access the downloaded file.
+  EventResult event_result = EventResult::UNKNOWN;
+  switch (download_result) {
+    case DownloadCheckResult::UNKNOWN:
+    case DownloadCheckResult::SAFE:
+    case DownloadCheckResult::WHITELISTED_BY_POLICY:
+    case DownloadCheckResult::DEEP_SCANNED_SAFE:
+      event_result = EventResult::ALLOWED;
+      break;
+
+    case DownloadCheckResult::UNCOMMON:
+    case DownloadCheckResult::POTENTIALLY_UNWANTED:
+    case DownloadCheckResult::SENSITIVE_CONTENT_WARNING:
+    case DownloadCheckResult::DANGEROUS:
+    case DownloadCheckResult::DANGEROUS_HOST:
+      event_result = EventResult::WARNED;
+      break;
+
+    case DownloadCheckResult::BLOCKED_PASSWORD_PROTECTED:
+    case DownloadCheckResult::BLOCKED_TOO_LARGE:
+    case DownloadCheckResult::SENSITIVE_CONTENT_BLOCK:
+    case DownloadCheckResult::BLOCKED_UNSUPPORTED_FILE_TYPE:
+      event_result = EventResult::BLOCKED;
+      break;
+
+    default:
+      NOTREACHED() << "Should never be final result";
+      break;
+  }
+
+  Profile* profile = Profile::FromBrowserContext(
+      content::DownloadItemUtils::GetBrowserContext(item_));
+  if (profile && trigger_ == DeepScanTrigger::TRIGGER_POLICY) {
+    std::string raw_digest_sha256 = item_->GetHash();
+    MaybeReportDeepScanningVerdict(
+        profile, item_->GetURL(), item_->GetTargetFilePath().AsUTF8Unsafe(),
+        base::HexEncode(raw_digest_sha256.data(), raw_digest_sha256.size()),
+        item_->GetMimeType(),
+        extensions::SafeBrowsingPrivateEventRouter::kTriggerFileDownload,
+        DeepScanAccessPoint::DOWNLOAD, item_->GetTotalBytes(), result, response,
+        event_result);
   }
 
   FinishRequest(download_result);

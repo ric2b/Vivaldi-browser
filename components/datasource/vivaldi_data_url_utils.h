@@ -3,8 +3,15 @@
 #ifndef COMPONENTS_DATASOURCE_VIVALDI_DATA_URL_UTILS_H_
 #define COMPONENTS_DATASOURCE_VIVALDI_DATA_URL_UTILS_H_
 
+#include <vector>
+
+#include "base/memory/ref_counted_memory.h"
 #include "base/optional.h"
 #include "base/strings/string_piece.h"
+
+namespace base {
+class FilePath;
+}
 
 namespace vivaldi_data_url_utils {
 
@@ -47,6 +54,17 @@ extern const char* const kTypeNames[PathTypeCount];
 constexpr const char* top_dir(PathType type) {
   return kTypeNames[static_cast<size_t>(type)];
 }
+
+// Read the given file into the vector. Return false when file does not exit
+// or is empty or on errors. The errors are logged. This should only be used
+// on threads that are allowed to block.
+bool ReadFileOnBlockingThread(const base::FilePath& file_path,
+                              std::vector<unsigned char>* buffer);
+
+// A verssion of the above that returns null on error or empty or non-existent
+// file.
+scoped_refptr<base::RefCountedMemory> ReadFileOnBlockingThread(
+    const base::FilePath& file_path);
 
 }  // vivaldi_data_url_utils
 

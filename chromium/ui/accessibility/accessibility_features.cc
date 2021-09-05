@@ -37,6 +37,16 @@ bool IsAccessibilityExposeHTMLElementEnabled() {
       ::features::kEnableAccessibilityExposeHTMLElement);
 }
 
+// Enable language detection to determine language used in page text, exposed
+// on the browser process AXTree.
+const base::Feature kEnableAccessibilityLanguageDetection{
+    "AccessibilityLanguageDetection", base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsAccessibilityLanguageDetectionEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kEnableAccessibilityLanguageDetection);
+}
+
 // Serializes accessibility information from the Views tree and deserializes it
 // into an AXTree in the browser process.
 const base::Feature kEnableAccessibilityTreeForViews{
@@ -48,7 +58,7 @@ bool IsAccessibilityTreeForViewsEnabled() {
 }
 
 const base::Feature kAccessibilityFocusHighlight{
-    "AccessibilityFocusHighlight", base::FEATURE_DISABLED_BY_DEFAULT};
+    "AccessibilityFocusHighlight", base::FEATURE_ENABLED_BY_DEFAULT};
 
 bool IsAccessibilityFocusHighlightEnabled() {
   return base::FeatureList::IsEnabled(::features::kAccessibilityFocusHighlight);
@@ -64,8 +74,8 @@ bool IsIChromeAccessibleEnabled() {
 #endif  // defined(OS_WIN)
 
 #if defined(OS_CHROMEOS)
-const base::Feature kAccessibilityCursorColor{
-    "AccessibilityCursorColor", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kAccessibilityCursorColor{"AccessibilityCursorColor",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
 bool IsAccessibilityCursorColorEnabled() {
   return base::FeatureList::IsEnabled(::features::kAccessibilityCursorColor);

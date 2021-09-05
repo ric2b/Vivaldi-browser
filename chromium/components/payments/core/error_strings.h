@@ -58,6 +58,9 @@ extern const char kMissingMethodNameFromPaymentApp[];
 // The PaymentRequest API is available only on secure origins.
 extern const char kNotInASecureOrigin[];
 
+// WebContents is not available from RenderFrameHost.
+extern const char kNoWebContents[];
+
 // The payment handler responded with an empty "payer name" field.
 extern const char kPayerNameEmpty[];
 
@@ -82,6 +85,10 @@ extern const char kShippingOptionEmpty[];
 
 // Used when non-empty "shippingOptionId": "" is required, but not provided.
 extern const char kShippingOptionIdRequired[];
+
+// Used when an app is skipped for supporting only part of the requested payment
+// options.
+extern const char kSkipAppForPartialDelegation[];
 
 // Used when rejecting show() with NotSupportedError, because the user did not
 // have all valid autofill data.

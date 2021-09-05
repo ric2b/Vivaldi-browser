@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_portal_activate_event_init.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/portal/html_portal_element.h"
 #include "third_party/blink/renderer/core/messaging/message_port.h"
@@ -20,7 +21,7 @@ namespace blink {
 
 PortalActivateEvent* PortalActivateEvent::Create(
     LocalFrame* frame,
-    const base::UnguessableToken& predecessor_portal_token,
+    const PortalToken& predecessor_portal_token,
     mojo::PendingAssociatedRemote<mojom::blink::Portal> predecessor_portal,
     mojo::PendingAssociatedReceiver<mojom::blink::PortalClient>
         predecessor_portal_client_receiver,
@@ -43,7 +44,7 @@ PortalActivateEvent* PortalActivateEvent::Create(
 
 PortalActivateEvent::PortalActivateEvent(
     Document* document,
-    const base::UnguessableToken& predecessor_portal_token,
+    const PortalToken& predecessor_portal_token,
     mojo::PendingAssociatedRemote<mojom::blink::Portal> predecessor_portal,
     mojo::PendingAssociatedReceiver<mojom::blink::PortalClient>
         predecessor_portal_client_receiver,
@@ -139,7 +140,7 @@ HTMLPortalElement* PortalActivateEvent::adoptPredecessor(
 
   DCHECK(!adopted_portal_);
   adopted_portal_ = MakeGarbageCollected<HTMLPortalElement>(
-      *document_, predecessor_portal_token_, std::move(predecessor_portal_),
+      *document_, &predecessor_portal_token_, std::move(predecessor_portal_),
       std::move(predecessor_portal_client_receiver_));
   std::move(on_portal_activated_callback_)
       .Run(mojom::blink::PortalActivateResult::kPredecessorWasAdopted);

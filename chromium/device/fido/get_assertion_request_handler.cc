@@ -4,7 +4,6 @@
 
 #include "device/fido/get_assertion_request_handler.h"
 
-#include <algorithm>
 #include <set>
 #include <string>
 #include <utility>
@@ -18,19 +17,24 @@
 #include "components/cbor/diagnostic_writer.h"
 #include "components/device_event_log/device_event_log.h"
 #include "device/fido/cable/fido_cable_discovery.h"
+#include "device/fido/features.h"
 #include "device/fido/fido_authenticator.h"
 #include "device/fido/fido_discovery_factory.h"
 #include "device/fido/fido_parsing_utils.h"
 #include "device/fido/get_assertion_task.h"
 #include "device/fido/pin.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "device/fido/mac/authenticator.h"
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
 #if defined(OS_WIN)
 #include "device/fido/win/authenticator.h"
 #include "device/fido/win/type_conversions.h"
+#endif
+
+#if defined(OS_CHROMEOS)
+#include "device/fido/cros/authenticator.h"
 #endif
 
 namespace device {
@@ -80,13 +84,46 @@ base::Optional<GetAssertionStatus> ConvertDeviceResponseCode(
   }
 }
 
+// ValidateResponseExtensions returns true iff |extensions| is valid as a
+// response to |request| and |options|.
+bool ValidateResponseExtensions(const CtapGetAssertionRequest& request,
+                                const CtapGetAssertionOptions& options,
+                                const cbor::Value& extensions) {
+  if (!extensions.is_map()) {
+    return false;
+  }
+
+  for (const auto& it : extensions.GetMap()) {
+    if (!it.first.is_string()) {
+      return false;
+    }
+    const std::string& ext_name = it.first.GetString();
+
+    if (ext_name == kExtensionHmacSecret) {
+      // This extension is checked by |GetAssertionTask| because it needs to be
+      // decrypted there.
+      continue;
+    } else {
+      // Authenticators may not return unknown extensions.
+      return false;
+    }
+  }
+
+  return true;
+}
+
 // ResponseValid returns whether |response| is permissible for the given
 // |authenticator| and |request|.
 bool ResponseValid(const FidoAuthenticator& authenticator,
                    const CtapGetAssertionRequest& request,
+                   const CtapGetAssertionOptions& options,
                    const AuthenticatorGetAssertionResponse& response,
                    const base::Optional<AndroidClientDataExtensionInput>&
                        android_client_data_ext_in) {
+  // The underlying code must take care of filling in the credential from the
+  // allow list as needed.
+  CHECK(response.credential());
+
   if (response.GetRpIdHash() !=
           fido_parsing_utils::CreateSHA256Hash(request.rp_id) &&
       (!request.app_id ||
@@ -120,50 +157,16 @@ bool ResponseValid(const FidoAuthenticator& authenticator,
     return false;
   }
 
-  // Check whether credential ID returned from the authenticator and transport
-  // type used matches the transport type and credential ID defined in
-  // PublicKeyCredentialDescriptor of the allowed list. If the device has
-  // resident key support, returned credential ID may be resident credential.
-  // Thus, returned credential ID need not be in allowed list.
-  // TODO(hongjunchoi) : Add link to section of the CTAP spec once it is
-  // published.
-  const auto& allow_list = request.allow_list;
-  if (allow_list.empty()) {
-    if (authenticator.Options() &&
-        !authenticator.Options()->supports_resident_key) {
-      // Allow list can't be empty for authenticators w/o resident key support.
-      return false;
-    }
-  } else {
-    // Non-empty allow list. Credential ID on the response may be omitted if
-    // allow list has size 1. Otherwise, it needs to match an entry from the
-    // allow list
-    const auto opt_transport_used = authenticator.AuthenticatorTransport();
-    if ((!response.credential() && allow_list.size() != 1) ||
-        (response.credential() &&
-         !std::any_of(allow_list.cbegin(), allow_list.cend(),
-                      [&response, opt_transport_used](const auto& credential) {
-                        return credential.id() ==
-                                   response.raw_credential_id() &&
-                               (!opt_transport_used ||
-                                base::Contains(credential.transports(),
-                                               *opt_transport_used));
-                      }))) {
-      return false;
-    }
-  }
-
   // The authenticatorData on an GetAssertionResponse must not have
   // attestedCredentialData set.
   if (response.auth_data().attested_data().has_value()) {
     return false;
   }
 
-  // No extensions are supported when getting assertions therefore no extensions
-  // are permitted in the response.
   const base::Optional<cbor::Value>& extensions =
       response.auth_data().extensions();
-  if (extensions) {
+  if (extensions &&
+      !ValidateResponseExtensions(request, options, *extensions)) {
     FIDO_LOG(ERROR) << "assertion response invalid due to extensions block: "
                     << cbor::DiagnosticWriter::Write(*extensions);
     return false;
@@ -184,17 +187,6 @@ bool ResponseValid(const FidoAuthenticator& authenticator,
   return true;
 }
 
-// When the response from the authenticator does not contain a credential and
-// the allow list from the GetAssertion request only contains a single
-// credential id, manually set credential id in the returned response.
-void SetCredentialIdForResponseWithEmptyCredential(
-    const CtapGetAssertionRequest& request,
-    AuthenticatorGetAssertionResponse& response) {
-  if (request.allow_list.size() == 1 && !response.credential()) {
-    response.SetCredential(request.allow_list.at(0));
-  }
-}
-
 base::flat_set<FidoTransportProtocol> GetTransportsAllowedByRP(
     const CtapGetAssertionRequest& request) {
   const base::flat_set<FidoTransportProtocol> kAllTransports = {
@@ -202,7 +194,9 @@ base::flat_set<FidoTransportProtocol> GetTransportsAllowedByRP(
       FidoTransportProtocol::kNearFieldCommunication,
       FidoTransportProtocol::kUsbHumanInterfaceDevice,
       FidoTransportProtocol::kBluetoothLowEnergy,
-      FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy};
+      FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy,
+      FidoTransportProtocol::kAndroidAccessory,
+  };
 
   const auto& allowed_list = request.allow_list;
   if (allowed_list.empty()) {
@@ -211,10 +205,15 @@ base::flat_set<FidoTransportProtocol> GetTransportsAllowedByRP(
 
   base::flat_set<FidoTransportProtocol> transports;
   for (const auto& credential : allowed_list) {
-    if (credential.transports().empty())
+    if (credential.transports().empty()) {
       return kAllTransports;
+    }
     transports.insert(credential.transports().begin(),
                       credential.transports().end());
+  }
+
+  if (base::FeatureList::IsEnabled(device::kWebAuthPhoneSupport)) {
+    transports.insert(device::FidoTransportProtocol::kAndroidAccessory);
   }
 
   return transports;
@@ -242,6 +241,7 @@ GetAssertionRequestHandler::GetAssertionRequestHandler(
     FidoDiscoveryFactory* fido_discovery_factory,
     const base::flat_set<FidoTransportProtocol>& supported_transports,
     CtapGetAssertionRequest request,
+    CtapGetAssertionOptions options,
     bool allow_skipping_pin_touch,
     CompletionCallback completion_callback)
     : FidoRequestHandlerBase(
@@ -251,6 +251,7 @@ GetAssertionRequestHandler::GetAssertionRequestHandler(
               GetTransportsAllowedByRP(request))),
       completion_callback_(std::move(completion_callback)),
       request_(std::move(request)),
+      options_(std::move(options)),
       allow_skipping_pin_touch_(allow_skipping_pin_touch) {
   transport_availability_info().request_type =
       FidoRequestHandlerBase::RequestType::kGetAssertion;
@@ -355,7 +356,7 @@ void GetAssertionRequestHandler::DispatchRequest(
   FIDO_LOG(DEBUG) << "Asking for assertion from "
                   << authenticator->GetDisplayName();
   authenticator->GetAssertion(
-      std::move(request),
+      std::move(request), options_,
       base::BindOnce(&GetAssertionRequestHandler::HandleResponse,
                      weak_factory_.GetWeakPtr(), authenticator,
                      base::ElapsedTimer()));
@@ -366,7 +367,7 @@ void GetAssertionRequestHandler::AuthenticatorAdded(
     FidoAuthenticator* authenticator) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(my_sequence_checker_);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Indicate to the UI whether a GetAssertion call to Touch ID would succeed
   // or not. This needs to happen before the base AuthenticatorAdded()
   // implementation runs |notify_observer_callback_| for this callback.
@@ -375,7 +376,17 @@ void GetAssertionRequestHandler::AuthenticatorAdded(
         static_cast<fido::mac::TouchIdAuthenticator*>(authenticator)
             ->HasCredentialForGetAssertionRequest(request_);
   }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
+
+#if defined(OS_CHROMEOS)
+  // TODO(martinkr): Put this boolean in a ChromeOS equivalent of
+  // "has_recognized_mac_touch_id_credential".
+  if (authenticator->IsChromeOSAuthenticator()) {
+    transport_availability_info().has_recognized_mac_touch_id_credential =
+        static_cast<ChromeOSAuthenticator*>(authenticator)
+            ->HasCredentialForGetAssertionRequest(request_);
+  }
+#endif  // defined(OS_CHROMEOS)
 
   FidoRequestHandlerBase::AuthenticatorAdded(discovery, authenticator);
 }
@@ -424,7 +435,7 @@ void GetAssertionRequestHandler::HandleResponse(
                base::nullopt, authenticator);
       return;
     }
-    if (!ResponseValid(*authenticator, request_, *response,
+    if (!ResponseValid(*authenticator, request_, options_, *response,
                        android_client_data_ext_)) {
       FIDO_LOG(ERROR) << "Failing assertion request due to bad response from "
                       << authenticator->GetDisplayName();
@@ -493,7 +504,7 @@ void GetAssertionRequestHandler::HandleResponse(
     return;
   }
 
-  if (!response || !ResponseValid(*authenticator, request_, *response,
+  if (!response || !ResponseValid(*authenticator, request_, options_, *response,
                                   android_client_data_ext_)) {
     FIDO_LOG(ERROR) << "Failing assertion request due to bad response from "
                     << authenticator->GetDisplayName();
@@ -503,7 +514,6 @@ void GetAssertionRequestHandler::HandleResponse(
     return;
   }
 
-  SetCredentialIdForResponseWithEmptyCredential(request_, *response);
   const size_t num_responses = response->num_credentials().value_or(1);
   if (num_responses == 0 ||
       (num_responses > 1 && !request_.allow_list.empty())) {
@@ -550,7 +560,7 @@ void GetAssertionRequestHandler::HandleNextResponse(
     return;
   }
 
-  if (!ResponseValid(*authenticator, request_, *response,
+  if (!ResponseValid(*authenticator, request_, options_, *response,
                      android_client_data_ext_)) {
     FIDO_LOG(ERROR) << "Failing assertion request due to bad response from "
                     << authenticator->GetDisplayName();
@@ -796,7 +806,7 @@ void GetAssertionRequestHandler::DispatchRequestWithToken(
   ReportGetAssertionRequestTransport(authenticator_);
 
   authenticator_->GetAssertion(
-      std::move(request),
+      std::move(request), options_,
       base::BindOnce(&GetAssertionRequestHandler::HandleResponse,
                      weak_factory_.GetWeakPtr(), authenticator_,
                      base::ElapsedTimer()));

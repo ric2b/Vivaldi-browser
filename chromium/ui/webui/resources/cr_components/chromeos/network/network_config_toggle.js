@@ -16,16 +16,32 @@ Polymer({
   properties: {
     label: String,
 
+    subLabel: String,
+
     checked: {
       type: Boolean,
       value: false,
       reflectToAttribute: true,
       notify: true,
     },
+
+    /**
+     * Uses Settings styling when true (policy icon is left of the toggle)
+     */
+    policyOnLeft: {
+      type: Boolean,
+      value: false,
+      reflectToAttribute: true,
+    },
   },
 
   listeners: {
     'click': 'onHostTap_',
+  },
+
+  /** @override */
+  focus() {
+    this.$$('cr-toggle').focus();
   },
 
   /**

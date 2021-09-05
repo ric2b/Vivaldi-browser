@@ -196,20 +196,18 @@
             label="$i18n{siteSettingsBluetoothDevices}">
         </site-details-permission>
       </template>
-      <template is="dom-if" if="[[enableNativeFileSystemWriteContentSetting_]]">
+      <template is="dom-if" if="[[enableFileSystemWriteContentSetting_]]">
         <site-details-permission
-            category="{{ContentSettingsTypes.NATIVE_FILE_SYSTEM_WRITE}}"
-            icon="settings:save-original" id="nativeFileSystemWrite"
-            label="$i18n{siteSettingsNativeFileSystemWrite}">
+            category="{{ContentSettingsTypes.FILE_SYSTEM_WRITE}}"
+            icon="settings:save-original" id="fileSystemWrite"
+            label="$i18n{siteSettingsFileSystemWrite}">
         </site-details-permission>
       </template>
-      <template is="dom-if" if="[[enableExperimentalWebPlatformFeatures_]]">
-        <site-details-permission
-            category="[[ContentSettingsTypes.HID_DEVICES]]"
-            icon="settings:hid-device" id="hidDevices"
-            label="$i18n{siteSettingsHidDevices}">
-        </site-details-permission>
-      </template>
+      <site-details-permission
+          category="[[ContentSettingsTypes.HID_DEVICES]]"
+          icon="settings:hid-device" id="hidDevices"
+          label="$i18n{siteSettingsHidDevices}">
+      </site-details-permission>
       <site-details-permission
           category="{{ContentSettingsTypes.UNSANDBOXED_PLUGINS}}"
           icon="cr:extension" id="unsandboxedPlugins"
@@ -261,6 +259,13 @@
             category="{{ContentSettingsTypes.WINDOW_PLACEMENT}}"
             icon="settings:window-placement" id="windowPlacement"
             label="$i18n{siteSettingsWindowPlacement}">
+        </site-details-permission>
+      </template>
+      <template is="dom-if" if="[[enableFontAccessContentSetting_]]">
+        <site-details-permission
+            category="[[ContentSettingsTypes.FONT_ACCESS]]"
+            icon="settings:font-access" id="fontAccess"
+            label="$i18n{fonts}">
         </site-details-permission>
       </template>
     </div>

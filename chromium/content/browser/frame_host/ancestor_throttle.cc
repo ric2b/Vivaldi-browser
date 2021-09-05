@@ -8,6 +8,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/util/ranges/algorithm.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/navigation_request.h"
@@ -22,8 +23,8 @@
 #include "content/public/browser/storage_partition.h"
 #include "net/http/http_response_headers.h"
 #include "services/network/public/cpp/content_security_policy/csp_context.h"
+#include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
-#include "url/origin.h"
 
 namespace content {
 
@@ -79,27 +80,15 @@ void RecordXFrameOptionsUsage(XFrameOptionsHistogram usage) {
       XFrameOptionsHistogram::XFRAMEOPTIONS_HISTOGRAM_MAX);
 }
 
-bool HeadersContainFrameAncestorsCSP(const net::HttpResponseHeaders* headers,
-                                     bool include_report_only) {
-  std::vector<std::string> header_names = {"content-security-policy"};
-  if (include_report_only)
-    header_names.push_back("content-security-policy-report-only");
-  for (const auto& header : header_names) {
-    size_t iter = 0;
-    std::string value;
-    while (headers->EnumerateHeader(&iter, header, &value)) {
-      // A content-security-policy is a semicolon-separated list of directives.
-      for (const auto& directive : base::SplitStringPiece(
-               value, ";", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
-        // The trailing " " is intentional; we'd otherwise match
-        // "frame-ancestors-is-not-this-directive".
-        if (base::StartsWith(directive, "frame-ancestors ",
-                             base::CompareCase::INSENSITIVE_ASCII))
-          return true;
-      }
-    }
-  }
-  return false;
+bool HeadersContainFrameAncestorsCSP(
+    const network::mojom::ParsedHeadersPtr& headers) {
+  return util::ranges::any_of(
+      headers->content_security_policy, [](const auto& csp) {
+        return csp->header->type ==
+                   network::mojom::ContentSecurityPolicyType::kEnforce &&
+               csp->directives.count(
+                   network::mojom::CSPDirectiveName::FrameAncestors);
+      });
 }
 
 class FrameAncestorCSPContext : public network::CSPContext {
@@ -139,7 +128,7 @@ class FrameAncestorCSPContext : public network::CSPContext {
 };
 
 // Returns the parent, including outer delegates in the case of portals.
-RenderFrameHostImpl* ParentForAncestorThrottle(RenderFrameHostImpl* frame) {
+RenderFrameHostImpl* ParentOrOuterDelegate(RenderFrameHostImpl* frame) {
   return frame->InsidePortal() ? frame->ParentOrOuterDelegateFrame()
                                : frame->GetParent();
 }
@@ -155,6 +144,49 @@ std::unique_ptr<NavigationThrottle> AncestorThrottle::MaybeCreateThrottleFor(
 }
 
 AncestorThrottle::~AncestorThrottle() {}
+
+NavigationThrottle::ThrottleCheckResult AncestorThrottle::WillStartRequest() {
+  if (!base::FeatureList::IsEnabled(network::features::kOutOfBlinkCSPEE))
+    return NavigationThrottle::PROCEED;
+
+  NavigationRequest* request = NavigationRequest::From(navigation_handle());
+  if (request->IsInMainFrame())
+    return NavigationThrottle::PROCEED;
+
+  // TODO(antoniosartori): Probably we should have taken a snapshot of the 'csp'
+  // attribute at the beginning of the navigation and not now, since the
+  // beforeunload handlers might have modified it in the meantime.
+  std::vector<network::mojom::ContentSecurityPolicyPtr> frame_csp;
+  frame_csp.emplace_back(
+      request->frame_tree_node()->csp_attribute()
+          ? request->frame_tree_node()->csp_attribute()->Clone()
+          : nullptr);
+  const network::mojom::ContentSecurityPolicy* parent_required_csp =
+      request->frame_tree_node()->parent()->required_csp();
+
+  std::string error_message;
+  if (!network::IsValidRequiredCSPAttr(frame_csp, parent_required_csp,
+                                       error_message)) {
+    if (frame_csp[0]) {
+      navigation_handle()->GetParentFrame()->AddMessageToConsole(
+          blink::mojom::ConsoleMessageLevel::kError,
+          base::StringPrintf("The frame 'csp' attribute ('%s') is invalid and "
+                             "will be discarded: %s",
+                             frame_csp[0]->header->header_value.c_str(),
+                             error_message.c_str()));
+    }
+    if (parent_required_csp)
+      request->SetRequiredCSP(parent_required_csp->Clone());
+    // TODO(antoniosartori): Consider instead blocking the navigation here,
+    // since this seems to be insecure
+    // (cf. https://github.com/w3c/webappsec-cspee/pull/11).
+  } else {
+    // If |frame_csp| is valid then it is not null.
+    request->SetRequiredCSP(std::move(frame_csp[0]));
+  }
+
+  return NavigationThrottle::PROCEED;
+}
 
 NavigationThrottle::ThrottleCheckResult
 AncestorThrottle::WillRedirectRequest() {
@@ -199,20 +231,22 @@ NavigationThrottle::ThrottleCheckResult AncestorThrottle::ProcessResponseImpl(
     return NavigationThrottle::PROCEED;
   }
 
-  if (EvaluateXFrameOptions(logging) == CheckResult::BLOCK) {
-    return NavigationThrottle::BLOCK_RESPONSE;
-  }
-
-  // X-Frame-Option is checked on both redirect and final responses. However,
-  // CSP:Frame-ancestor is checked only for the final response.
-  if (!is_response_check)
-    return NavigationThrottle::PROCEED;
-
   const std::vector<network::mojom::ContentSecurityPolicyPtr>&
       content_security_policies =
           request->response()->parsed_headers->content_security_policy;
 
-  if (EvaluateFrameAncestors(content_security_policies) == CheckResult::BLOCK) {
+  // CSP: frame-ancestors is checked only for the final response.
+  if (is_response_check &&
+      EvaluateFrameAncestors(content_security_policies) == CheckResult::BLOCK) {
+    return NavigationThrottle::BLOCK_RESPONSE;
+  }
+
+  if (EvaluateXFrameOptions(logging) == CheckResult::BLOCK)
+    return NavigationThrottle::BLOCK_RESPONSE;
+
+  // CSPEE is checked only for the final response.
+  if (is_response_check &&
+      EvaluateCSPEmbeddedEnforcement() == CheckResult::BLOCK) {
     return NavigationThrottle::BLOCK_RESPONSE;
   }
 
@@ -251,7 +285,7 @@ void AncestorThrottle::ParseXFrameOptionsError(const std::string& value,
   // the current RenderFrameHost itself doesn't yet have a document).
   auto* frame = static_cast<RenderFrameHostImpl*>(
       navigation_handle()->GetRenderFrameHost());
-  ParentForAncestorThrottle(frame)->AddMessageToConsole(
+  ParentOrOuterDelegate(frame)->AddMessageToConsole(
       blink::mojom::ConsoleMessageLevel::kError, message);
 }
 
@@ -272,7 +306,7 @@ void AncestorThrottle::ConsoleErrorXFrameOptions(
   // the current RenderFrameHost itself doesn't yet have a document).
   auto* frame = static_cast<RenderFrameHostImpl*>(
       navigation_handle()->GetRenderFrameHost());
-  ParentForAncestorThrottle(frame)->AddMessageToConsole(
+  ParentOrOuterDelegate(frame)->AddMessageToConsole(
       blink::mojom::ConsoleMessageLevel::kError, message);
 }
 
@@ -282,6 +316,16 @@ AncestorThrottle::CheckResult AncestorThrottle::EvaluateXFrameOptions(
   NavigationRequest* request = NavigationRequest::From(navigation_handle());
   HeaderDisposition disposition =
       ParseXFrameOptionsHeader(request->GetResponseHeaders(), &header_value);
+
+  // If 'X-Frame-Options' would potentially block the response, check whether
+  // the 'frame-ancestors' CSP directive should take effect instead. See
+  // https://www.w3.org/TR/CSP/#frame-ancestors-and-frame-options
+  if (disposition != HeaderDisposition::NONE &&
+      disposition != HeaderDisposition::ALLOWALL &&
+      HeadersContainFrameAncestorsCSP(request->response()->parsed_headers)) {
+    RecordXFrameOptionsUsage(XFrameOptionsHistogram::BYPASS);
+    return CheckResult::PROCEED;
+  }
 
   switch (disposition) {
     case HeaderDisposition::CONFLICT:
@@ -305,7 +349,7 @@ AncestorThrottle::CheckResult AncestorThrottle::EvaluateXFrameOptions(
 
     case HeaderDisposition::SAMEORIGIN: {
       // Block the request when any ancestor is not same-origin.
-      RenderFrameHostImpl* parent = ParentForAncestorThrottle(
+      RenderFrameHostImpl* parent = ParentOrOuterDelegate(
           request->frame_tree_node()->current_frame_host());
       url::Origin current_origin =
           url::Origin::Create(navigation_handle()->GetURL());
@@ -328,7 +372,7 @@ AncestorThrottle::CheckResult AncestorThrottle::EvaluateXFrameOptions(
 
           return CheckResult::BLOCK;
         }
-        parent = ParentForAncestorThrottle(parent);
+        parent = ParentOrOuterDelegate(parent);
       }
       RecordXFrameOptionsUsage(XFrameOptionsHistogram::SAMEORIGIN);
       return CheckResult::PROCEED;
@@ -336,9 +380,6 @@ AncestorThrottle::CheckResult AncestorThrottle::EvaluateXFrameOptions(
 
     case HeaderDisposition::NONE:
       RecordXFrameOptionsUsage(XFrameOptionsHistogram::NONE);
-      return CheckResult::PROCEED;
-    case HeaderDisposition::BYPASS:
-      RecordXFrameOptionsUsage(XFrameOptionsHistogram::BYPASS);
       return CheckResult::PROCEED;
     case HeaderDisposition::ALLOWALL:
       RecordXFrameOptionsUsage(XFrameOptionsHistogram::ALLOWALL);
@@ -365,7 +406,7 @@ AncestorThrottle::CheckResult AncestorThrottle::EvaluateFrameAncestors(
   // We enforce frame-ancestors in the outer delegate for portals, but not
   // for other uses of inner/outer WebContents (GuestViews).
   RenderFrameHostImpl* parent =
-      ParentForAncestorThrottle(static_cast<RenderFrameHostImpl*>(
+      ParentOrOuterDelegate(static_cast<RenderFrameHostImpl*>(
           navigation_handle()->GetRenderFrameHost()));
   while (parent) {
     if (!csp_context.IsAllowedByCsp(
@@ -377,10 +418,107 @@ AncestorThrottle::CheckResult AncestorThrottle::EvaluateFrameAncestors(
             navigation_handle()->IsFormSubmission())) {
       return CheckResult::BLOCK;
     }
-    parent = ParentForAncestorThrottle(parent);
+    parent = ParentOrOuterDelegate(parent);
   }
 
   return CheckResult::PROCEED;
+}
+
+// When the embedder requires the use of Content Security Policy via Embedded
+// Enforcement, framed documents must either
+// 1) Use the 'allow-csp-from' header to opt-into enforcement.
+// 2) Enforce its own CSP that subsumes the required CSP.
+// Framed documents that fail to do either of these will be blocked.
+//
+// See:
+// - https://w3c.github.io/webappsec-cspee/#required-csp-header
+// - https://w3c.github.io/webappsec-cspee/#allow-csp-from-header
+AncestorThrottle::CheckResult
+AncestorThrottle::EvaluateCSPEmbeddedEnforcement() {
+  if (!base::FeatureList::IsEnabled(network::features::kOutOfBlinkCSPEE))
+    return CheckResult::PROCEED;
+
+  NavigationRequest* request = NavigationRequest::From(navigation_handle());
+  if (request->IsInMainFrame()) {
+    // We enforce CSPEE only for frames, not for portals.
+    return CheckResult::PROCEED;
+  }
+
+  RenderFrameHostImpl* frame = static_cast<RenderFrameHostImpl*>(
+      navigation_handle()->GetRenderFrameHost());
+
+  if (!request->required_csp())
+    return CheckResult::PROCEED;
+
+  const network::mojom::AllowCSPFromHeaderValuePtr& allow_csp_from =
+      request->response()->parsed_headers->allow_csp_from;
+  if (AllowsBlanketEnforcementOfRequiredCSP(
+          frame->GetParent()->GetLastCommittedOrigin(),
+          navigation_handle()->GetURL(), allow_csp_from)) {
+    // Enforce the required csps on the frame by passing them down to blink
+    request->ForceCSPForResponse(request->required_csp()->header->header_value);
+    return CheckResult::PROCEED;
+  }
+
+  std::string sanitized_blocked_url =
+      navigation_handle()->GetRedirectChain().front().GetOrigin().spec();
+  if (allow_csp_from && allow_csp_from->is_error_message()) {
+    frame->GetParent()->AddMessageToConsole(
+        blink::mojom::ConsoleMessageLevel::kError,
+        base::StringPrintf("The value of the 'Allow-CSP-From' response header "
+                           "returned by %s is invalid: %s",
+                           sanitized_blocked_url.c_str(),
+                           allow_csp_from->get_error_message().c_str()));
+  }
+
+  // TODO(antoniosartori): This is temporary, since the check in this function
+  // is incomplete and will require iterations in several CLs. For now, let's
+  // allow anything that has no "allow-csp-from" header.
+  if (!allow_csp_from) {
+    return CheckResult::PROCEED;
+  }
+
+  frame->GetParent()->AddMessageToConsole(
+      blink::mojom::ConsoleMessageLevel::kError,
+      base::StringPrintf(
+          "Refused to display '%s' in a frame. The embedder requires it to "
+          "enforce the following Content Security Policy: '%s'. However, the "
+          "frame neither accepts that policy using the Allow-CSP-From header "
+          "nor delivers a Content Security Policy which is at least as strong "
+          "as that one.",
+          sanitized_blocked_url.c_str(),
+          request->required_csp()->header->header_value.c_str()));
+
+  return CheckResult::BLOCK;
+}
+
+// static
+bool AncestorThrottle::AllowsBlanketEnforcementOfRequiredCSP(
+    const url::Origin& request_origin,
+    const GURL& response_url,
+    const network::mojom::AllowCSPFromHeaderValuePtr& allow_csp_from) {
+  if (response_url.SchemeIs(url::kAboutScheme) ||
+      response_url.SchemeIs(url::kDataScheme) || response_url.SchemeIsFile() ||
+      response_url.SchemeIsFileSystem() || response_url.SchemeIsBlob()) {
+    return true;
+  }
+
+  if (request_origin.IsSameOriginWith(url::Origin::Create(response_url))) {
+    return true;
+  }
+
+  if (!allow_csp_from)
+    return false;
+
+  if (allow_csp_from->is_allow_star()) {
+    return true;
+  }
+  if (allow_csp_from->is_origin() &&
+      request_origin.IsSameOriginWith(allow_csp_from->get_origin())) {
+    return true;
+  }
+
+  return false;
 }
 
 AncestorThrottle::HeaderDisposition AncestorThrottle::ParseXFrameOptionsHeader(
@@ -420,18 +558,6 @@ AncestorThrottle::HeaderDisposition AncestorThrottle::ParseXFrameOptionsHeader(
       result = current;
     else if (result != current)
       result = HeaderDisposition::CONFLICT;
-  }
-
-  // If 'X-Frame-Options' would potentially block the response, check whether
-  // the 'frame-ancestors' CSP directive should take effect instead. See
-  // https://www.w3.org/TR/CSP/#frame-ancestors-and-frame-options
-  if (result != HeaderDisposition::NONE &&
-      result != HeaderDisposition::ALLOWALL &&
-      // TODO(antoniosartori): Use the already parsed CSP header instead of the
-      // raw headers here as soon as we remove
-      // network::features::kOutOfBlinkFrameAncestors
-      HeadersContainFrameAncestorsCSP(headers, false)) {
-    return HeaderDisposition::BYPASS;
   }
 
   return result;

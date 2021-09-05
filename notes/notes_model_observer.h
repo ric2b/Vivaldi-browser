@@ -17,7 +17,7 @@ class NoteNode;
 class NotesModelObserver : public base::CheckedObserver {
  public:
   // Invoked when the model has finished loading. |ids_reassigned| mirrors
-  // that of NotesLoadDetails::ids_reassigned. See it for details.
+  // that of NoteLoadDetails::ids_reassigned. See it for details.
   virtual void NotesModelLoaded(NotesModel* model, bool ids_reassigned) {}
 
   // Invoked from the destructor of the NotesModel.
@@ -55,8 +55,7 @@ class NotesModelObserver : public base::CheckedObserver {
                                 const NoteNode* node) {}
 
   // Invoked before the title or url of a node is changed.
-  virtual void OnWillChangeNotesNode(NotesModel* model,
-                                     const NoteNode* node) {}
+  virtual void OnWillChangeNotesNode(NotesModel* model, const NoteNode* node) {}
 
   // Invoked when the title or url of a node changes.
   virtual void NotesNodeChanged(NotesModel* model, const NoteNode* node) {}
@@ -67,8 +66,8 @@ class NotesModelObserver : public base::CheckedObserver {
 
   // Invoked before the direct children of |node| have been reordered in some
   // way, such as sorted.
-  virtual void OnWillReorderNotesNode(NotesModel* model,
-                                      const NoteNode* node) {}
+  virtual void OnWillReorderNotesNode(NotesModel* model, const NoteNode* node) {
+  }
 
   // Invoked when the children (just direct children, not descendants) of
   // |node| have been reordered in some way, such as sorted.

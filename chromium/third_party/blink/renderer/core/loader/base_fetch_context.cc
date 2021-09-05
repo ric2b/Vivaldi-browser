@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/loader/base_fetch_context.h"
 
 #include "services/network/public/cpp/request_mode.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -114,13 +115,13 @@ BaseFetchContext::CheckCSPForRequestInternal(
     const KURL& url_before_redirects,
     ResourceRequest::RedirectStatus redirect_status,
     ContentSecurityPolicy::CheckHeaderType check_header_type) const {
-  if (ShouldBypassMainWorldCSP() ||
-      options.content_security_policy_option ==
-          network::mojom::CSPDisposition::DO_NOT_CHECK) {
+  if (options.content_security_policy_option ==
+      network::mojom::CSPDisposition::DO_NOT_CHECK) {
     return base::nullopt;
   }
 
-  const ContentSecurityPolicy* csp = GetContentSecurityPolicy();
+  const ContentSecurityPolicy* csp =
+      GetContentSecurityPolicyForWorld(options.world.get());
   if (csp &&
       !csp->AllowRequest(request_context, request_destination, url,
                          options.content_security_policy_nonce,
@@ -282,6 +283,27 @@ BaseFetchContext::CanRequestInternal(
   }
 
   return base::nullopt;
+}
+
+void BaseFetchContext::AddBackForwardCacheExperimentHTTPHeaderIfNeeded(
+    ExecutionContext* context,
+    ResourceRequest& request) {
+  if (!RuntimeEnabledFeatures::BackForwardCacheExperimentHTTPHeaderEnabled(
+          context)) {
+    return;
+  }
+  if (!base::FeatureList::IsEnabled(
+          blink::features::kBackForwardCacheABExperimentControl)) {
+    return;
+  }
+  // Send the 'Sec-bfcache-experiment' HTTP header to indicate which
+  // BackForwardCacheSameSite experiment group we're in currently.
+  UseCounter::Count(context, WebFeature::kBackForwardCacheExperimentHTTPHeader);
+  auto experiment_group = base::GetFieldTrialParamValueByFeature(
+      features::kBackForwardCacheABExperimentControl,
+      features::kBackForwardCacheABExperimentGroup);
+  request.SetHttpHeaderField("Sec-bfcache-experiment",
+                             experiment_group.c_str());
 }
 
 void BaseFetchContext::Trace(Visitor* visitor) const {

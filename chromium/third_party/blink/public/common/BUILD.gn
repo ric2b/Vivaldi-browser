@@ -15,6 +15,7 @@ component("common") {
   output_name = "blink_common"
 
   public_deps = [
+    "//third_party/blink/common/privacy_budget:privacy_budget",
     "//third_party/blink/public/common:headers",
     "//third_party/blink/public/mojom:mojom_modules",
     "//third_party/blink/public/mojom:web_bluetooth_mojo_bindings",
@@ -32,7 +33,10 @@ buildflag_header("buildflags") {
 }
 
 source_set("common_export") {
-  visibility = [ "//third_party/blink/public/common/*" ]
+  visibility = [
+    "//third_party/blink/public/common/*",
+    "//third_party/blink/common/*",
+  ]
   sources = [ "common_export.h" ]
 }
 
@@ -50,6 +54,7 @@ source_set("headers") {
   ]
 
   sources = [
+    "action_after_pagehide.h",
     "associated_interfaces/associated_interface_provider.h",
     "associated_interfaces/associated_interface_registry.h",
     "blob/blob_utils.h",
@@ -72,6 +77,8 @@ source_set("headers") {
     "feature_policy/document_policy.h",
     "feature_policy/document_policy_features.h",
     "feature_policy/feature_policy.h",
+    "feature_policy/feature_policy_features.h",
+    "feature_policy/feature_policy_forward.h",
     "feature_policy/policy_value.h",
     "features.h",
     "fetch/fetch_api_request_headers_map.h",
@@ -106,10 +113,14 @@ source_set("headers") {
     "loader/loading_behavior_flag.h",
     "loader/mime_sniffing_throttle.h",
     "loader/mime_sniffing_url_loader.h",
+    "loader/network_utils.h",
+    "loader/previews_state.h",
+    "loader/referrer_utils.h",
     "loader/resource_type_util.h",
     "loader/url_loader_factory_bundle.h",
     "loader/url_loader_factory_bundle_mojom_traits.h",
     "loader/url_loader_throttle.h",
+    "loader/worker_main_script_load_parameters.h",
     "logging/logging_utils.h",
     "manifest/manifest.h",
     "manifest/manifest_icon_selector.h",
@@ -130,6 +141,7 @@ source_set("headers") {
     "messaging/transferable_message_mojom_traits.h",
     "messaging/web_message_port.h",
     "metrics/document_update_reason.h",
+    "metrics/form_element_pii_type.h",
     "mime_util/mime_util.h",
     "navigation/triggering_event_info.h",
     "notifications/notification_constants.h",
@@ -149,8 +161,6 @@ source_set("headers") {
     "permissions/permission_utils.h",
     "prerender/prerender_rel_type.h",
     "scheduler/web_scheduler_tracked_feature.h",
-    "screen_orientation/web_screen_orientation_lock_type.h",
-    "screen_orientation/web_screen_orientation_type.h",
     "security/security_style.h",
     "security_context/insecure_request_policy.h",
     "service_worker/service_worker_status_code.h",
@@ -160,10 +170,18 @@ source_set("headers") {
     "sms/sms_receiver_destroyed_reason.h",
     "sms/sms_receiver_outcome.h",
     "switches.h",
+    "tokens/multi_token.h",
+    "tokens/multi_token_internal.h",
+    "tokens/token_mojom_traits_helper.h",
+    "tokens/tokens.h",
+    "tokens/tokens_mojom_traits.h",
     "user_agent/user_agent_metadata.h",
     "web_cache/web_cache_resource_type_stats.h",
     "web_package/signed_exchange_consts.h",
     "web_package/web_package_request_matcher.h",
+    "widget/device_emulation_params.h",
+    "widget/screen_info.h",
+    "widget/visual_properties.h",
   ]
 
   public_deps = [
@@ -185,6 +203,8 @@ source_set("headers") {
     ":buildflags",
     ":common_export",
     "//base",
+    "//cc",
+    "//components/viz/common",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
     "//mojo/public/mojom/base",
@@ -223,4 +243,8 @@ if (is_android || is_win) {
   proto_library("font_unique_name_table_proto") {
     sources = [ "font_unique_name_lookup/font_unique_name_table.proto" ]
   }
+}
+
+proto_library("font_enumeration_table_proto") {
+  sources = [ "font_access/font_enumeration_table.proto" ]
 }

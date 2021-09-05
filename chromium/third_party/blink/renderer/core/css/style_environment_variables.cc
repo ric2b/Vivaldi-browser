@@ -87,6 +87,24 @@ const AtomicString StyleEnvironmentVariables::GetVariableName(
     case UADefinedVariable::kKeyboardInsetRight:
       DCHECK(RuntimeEnabledFeatures::VirtualKeyboardEnabled());
       return "keyboard-inset-right";
+    case UADefinedVariable::kFoldTop:
+      DCHECK(RuntimeEnabledFeatures::CSSFoldablesEnabled());
+      return "fold-top";
+    case UADefinedVariable::kFoldRight:
+      DCHECK(RuntimeEnabledFeatures::CSSFoldablesEnabled());
+      return "fold-right";
+    case UADefinedVariable::kFoldBottom:
+      DCHECK(RuntimeEnabledFeatures::CSSFoldablesEnabled());
+      return "fold-bottom";
+    case UADefinedVariable::kFoldLeft:
+      DCHECK(RuntimeEnabledFeatures::CSSFoldablesEnabled());
+      return "fold-left";
+    case UADefinedVariable::kFoldWidth:
+      DCHECK(RuntimeEnabledFeatures::CSSFoldablesEnabled());
+      return "fold-width";
+    case UADefinedVariable::kFoldHeight:
+      DCHECK(RuntimeEnabledFeatures::CSSFoldablesEnabled());
+      return "fold-height";
     default:
       break;
   }
@@ -131,11 +149,12 @@ void StyleEnvironmentVariables::SetVariable(const AtomicString& name,
   Vector<String> backing_strings;
   backing_strings.push_back(value);
 
-  SetVariable(name,
-              CSSVariableData::CreateResolved(
-                  tokens, backing_strings, false /* is_animation_tainted */,
-                  false /* has_font_units */, false /* has_root_font_units*/,
-                  true /* absolutized */, g_null_atom, WTF::TextEncoding()));
+  SetVariable(
+      name,
+      CSSVariableData::CreateResolved(
+          std::move(tokens), std::move(backing_strings),
+          false /* is_animation_tainted */, false /* has_font_units */,
+          false /* has_root_font_units*/, g_null_atom, WTF::TextEncoding()));
 }
 
 void StyleEnvironmentVariables::SetVariable(const UADefinedVariable name,
@@ -167,6 +186,10 @@ void StyleEnvironmentVariables::DetachFromParent() {
     parent_->children_.EraseAt(it);
 
   parent_ = nullptr;
+}
+
+String StyleEnvironmentVariables::FormatPx(int value) {
+  return String::Format("%dpx", value);
 }
 
 void StyleEnvironmentVariables::ClearForTesting() {

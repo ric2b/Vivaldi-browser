@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Stavka popisa</translation>
 <translation id="1013742170491673792">prtrž</translation>
 <translation id="1014370462248694370">Prelazak dvama prstima udesno</translation>
+<translation id="1016393160682012902">Pritisnite tipku qwerty tastuture, tipku s Braillevim pismom koju je moguće osvježiti ili uradite pokret dodira da saznate funkciju. Za zatvaranje pritisnite tipku Ctrl i "w" ili Esc.</translation>
 <translation id="1022586497894531524">Koristite li po prvi put ChromeVox izgovorene povratne informacije? Ovaj brzi vodič vam objašnjava osnove stvari da počnete koristiti ChromeVox.</translation>
 <translation id="1025074108959230262">Ljepljivi način rada je onemogućen</translation>
 <translation id="1031961866430398710">zatim</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Interni link</translation>
 <translation id="4909019435900810068">Pomjeri nazad za jednu riječ</translation>
 <translation id="4911349081560453449">Nema prethodnog polja za potvrdu</translation>
-<translation id="4915087353619183190">Pokretanje načina za učenje. Pritisnite tipku qwerty tastuture, tipku s Braillevim pismom koju je moguće osvježiti ili uradite pokret dodira da saznate funkciju. Za zatvaranje pritisnite tipku Ctrl i "w" ili Esc.</translation>
 <translation id="492295894462528572">Predgovor</translation>
 <translation id="495046168593986294">Klizni prema gore</translation>
 <translation id="495170559598752135">Radnje</translation>
@@ -647,11 +647,12 @@
 <translation id="6017514345406065928">Zelena</translation>
 <translation id="602001110135236999">Listaj ulijevo</translation>
 <translation id="6034000775414344507">Svijetlo siva</translation>
+<translation id="6036135911048686884">Istražite dodirom</translation>
 <translation id="6037602951055904232">Pomiči se prema naprijed</translation>
 <translation id="6044160928851315051">Zatamnjivanje ekrana</translation>
 <translation id="6082768461603900813">Osnovno kretanje</translation>
 <translation id="609281021724813947">Nema prethodnog klizača</translation>
-<translation id="6100239002225743044">Pomjeri gore za jedan red</translation>
+<translation id="6100239002225743044">Pomjeri nagore za jedan red</translation>
 <translation id="6118126368611144850">Android aplikacije za Chrome Ako imate Play trgovinu na uređaju, zavirite u ChromeVox s Android aplikacijama. Isprobajte eksperimentalnu podršku preuzimanjem preglednika Google Chrome Canary u Play trgovini.</translation>
 <translation id="611827076493383239">pst</translation>
 <translation id="6122013438240733403">dgm</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{funta}one{# znak funte}few{# znaka funte}other{# znakova funte}}</translation>
 <translation id="8378855320830505539">Regija</translation>
 <translation id="8382679411218029383">Automatsko dovršavanje retka i popisa</translation>
+<translation id="8394908167088220973">Reproduciraj/pauziraj medij</translation>
 <translation id="8428213095426709021">Postavke</translation>
 <translation id="8428603554127842284">razina <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">trmen</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">napuštanje strukturiranog sadržaja, na primjer, tablica</translation>
 <translation id="8779057862865475116">Nema prethodnog linka</translation>
 <translation id="8796411681063377102">Sljedeći naslov 3. nivoa</translation>
+<translation id="8823311177246872527"><ph name="CURRENTPAGE" />. stranica od <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">natp</translation>
 <translation id="8851136666856101339">glavni</translation>
 <translation id="8882002077197914455">Naslov zaglavlja</translation>
@@ -1017,6 +1020,6 @@
 <translation id="962913030769097253">Sljedeći naslov 1. nivoa</translation>
 <translation id="966588271015727539">Odaberite bluetooth Brailleov ekran</translation>
 <translation id="973955474346881951">Omogućavanje/onemogućavanje ljepljivog načina rada</translation>
-<translation id="985654871861528815">Pomjeri dolje za jedan red</translation>
+<translation id="985654871861528815">Pomjeri nadolje za jedan red</translation>
 <translation id="992256792861109788">Ružičasta</translation>
 </translationbundle>

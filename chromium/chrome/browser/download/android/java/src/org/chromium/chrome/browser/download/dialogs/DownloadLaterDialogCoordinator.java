@@ -25,9 +25,9 @@ import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 /**
  * Coordinator to construct the download later dialog.
  */
-public class DownloadLaterDialogCoordinator
-        implements ModalDialogProperties.Controller, DownloadLaterDialogView.Controller,
-                   DownloadDateTimePickerDialogCoordinator.Controller {
+public class DownloadLaterDialogCoordinator implements ModalDialogProperties.Controller,
+                                                       DownloadLaterDialogView.Controller,
+                                                       DownloadDateTimePickerDialog.Controller {
     private static final long INVALID_START_TIME = -1;
     private PropertyModel mDownloadLaterDialogModel;
     private DownloadLaterDialogView mCustomView;
@@ -41,7 +41,7 @@ public class DownloadLaterDialogCoordinator
             mPropertyModelChangeProcessor;
 
     private DownloadLaterDialogController mController;
-    private final DownloadDateTimePickerDialogCoordinator mDateTimePickerDialog;
+    private final DownloadDateTimePickerDialog mDateTimePickerDialog;
 
     @DownloadLaterDialogChoice
     private int mDownloadLaterChoice = DownloadLaterDialogChoice.DOWNLOAD_NOW;
@@ -51,7 +51,7 @@ public class DownloadLaterDialogCoordinator
      * @param dateTimePickerDialog The date time selection widget.
      */
     public DownloadLaterDialogCoordinator(
-            @NonNull DownloadDateTimePickerDialogCoordinator dateTimePickerDialog) {
+            @NonNull DownloadDateTimePickerDialog dateTimePickerDialog) {
         mDateTimePickerDialog = dateTimePickerDialog;
     }
 
@@ -70,6 +70,7 @@ public class DownloadLaterDialogCoordinator
      * @param prefService {@link PrefService} to write download later prompt status preference.
      * @param model The data model that defines the UI details.
      */
+    // TODO(xingliu): The public showDialog API should use a param instead of exposing the model.
     public void showDialog(Context context, ModalDialogManager modalDialogManager,
             PrefService prefService, PropertyModel model) {
         if (context == null || modalDialogManager == null) {
@@ -88,11 +89,13 @@ public class DownloadLaterDialogCoordinator
         mPropertyModelChangeProcessor =
                 PropertyModelChangeProcessor.create(mDownloadLaterDialogModel, mCustomView,
                         DownloadLaterDialogView.Binder::bind, true /*performInitialBind*/);
-        mDownloadLaterChoice =
-                model.get(DownloadLaterDialogProperties.DOWNLOAD_TIME_INITIAL_SELECTION);
 
         // Set up the modal dialog.
         mDialogModel = getModalDialogModel(context, this);
+
+        // Adjust models based on initial choice.
+        onChoiceChanged(model.get(DownloadLaterDialogProperties.INITIAL_CHOICE));
+
         mModalDialogManager.showDialog(mDialogModel, ModalDialogManager.ModalDialogType.APP);
     }
 
@@ -132,14 +135,13 @@ public class DownloadLaterDialogCoordinator
                 .with(ModalDialogProperties.CUSTOM_VIEW, mCustomView)
                 .with(ModalDialogProperties.POSITIVE_BUTTON_TEXT, context.getResources(),
                         R.string.duplicate_download_infobar_download_button)
+                .with(ModalDialogProperties.PRIMARY_BUTTON_FILLED, true)
                 .with(ModalDialogProperties.NEGATIVE_BUTTON_TEXT, context.getResources(),
                         R.string.cancel)
                 .build();
     }
 
     private void onPositiveButtonClicked(@DownloadLaterDialogChoice int choice) {
-        mDownloadLaterChoice = choice;
-
         // Immediately show the date time picker when selecting the "Download later".
         if (choice == DownloadLaterDialogChoice.DOWNLOAD_LATER) {
             dismissDialog(DialogDismissalCause.ACTION_ON_CONTENT);
@@ -153,12 +155,15 @@ public class DownloadLaterDialogCoordinator
 
     private void showDateTimePicker() {
         long now = System.currentTimeMillis();
-        // TODO(xingliu): Round up default time to next hour from now.
+        long initialTime = DownloadDialogUtils.getLong(mDownloadLaterDialogModel,
+                DownloadDateTimePickerDialogProperties.INITIAL_TIME, now);
+
         PropertyModel model =
                 new PropertyModel.Builder(DownloadDateTimePickerDialogProperties.ALL_KEYS)
                         .with(DownloadDateTimePickerDialogProperties.STATE, State.DATE)
-                        .with(DownloadDateTimePickerDialogProperties.INITIAL_TIME, now)
-                        .with(DownloadDateTimePickerDialogProperties.MIN_TIME, now)
+                        .with(DownloadDateTimePickerDialogProperties.INITIAL_TIME, initialTime)
+                        .with(DownloadDateTimePickerDialogProperties.MIN_TIME,
+                                Math.min(now, initialTime))
                         .build();
 
         mDateTimePickerDialog.showDialog(mContext, mModalDialogManager, model);
@@ -167,17 +172,17 @@ public class DownloadLaterDialogCoordinator
 
     private void notifyComplete(long time) {
         assert mController != null;
-        updatePromptStatus();
+        maybeUpdatePromptStatus();
         mController.onDownloadLaterDialogComplete(mDownloadLaterChoice, time);
     }
 
     private void notifyCancel() {
         assert mController != null;
-        updatePromptStatus();
+        maybeUpdatePromptStatus();
         mController.onDownloadLaterDialogCanceled();
     }
 
-    private void updatePromptStatus() {
+    private void maybeUpdatePromptStatus() {
         assert mCustomView != null;
         assert mPrefService != null;
         Integer promptStatus = mCustomView.getPromptStatus();
@@ -216,7 +221,7 @@ public class DownloadLaterDialogCoordinator
         notifyCancel();
     }
 
-    // DownloadDateTimePickerDialogCoordinator.Controller implementation.
+    // DownloadDateTimePickerDialog.Controller implementation.
     @Override
     public void onDateTimePicked(long time) {
         DownloadLaterMetrics.recordDownloadLaterUiEvent(
@@ -240,7 +245,31 @@ public class DownloadLaterDialogCoordinator
     }
 
     @Override
-    public void onCheckedChanged(int choice) {
+    public void onCheckedChanged(@DownloadLaterDialogChoice int choice) {
+        onChoiceChanged(choice);
+    }
+
+    private void onChoiceChanged(@DownloadLaterDialogChoice int choice) {
+        @DownloadLaterDialogChoice
+        int previousChoice = mDownloadLaterChoice;
         mDownloadLaterChoice = choice;
+
+        // Change the positive button text and disable the checkbox if the user select download
+        // later option.
+        if (previousChoice != DownloadLaterDialogChoice.DOWNLOAD_LATER
+                && choice == DownloadLaterDialogChoice.DOWNLOAD_LATER) {
+            mDialogModel.set(ModalDialogProperties.POSITIVE_BUTTON_TEXT,
+                    mContext.getResources().getString(
+                            R.string.download_date_time_picker_next_text));
+            mDownloadLaterDialogModel.set(
+                    DownloadLaterDialogProperties.DONT_SHOW_AGAIN_DISABLED, true);
+        } else if (previousChoice == DownloadLaterDialogChoice.DOWNLOAD_LATER
+                && choice != DownloadLaterDialogChoice.DOWNLOAD_LATER) {
+            mDialogModel.set(ModalDialogProperties.POSITIVE_BUTTON_TEXT,
+                    mContext.getResources().getString(
+                            R.string.duplicate_download_infobar_download_button));
+            mDownloadLaterDialogModel.set(
+                    DownloadLaterDialogProperties.DONT_SHOW_AGAIN_DISABLED, false);
+        }
     }
 }

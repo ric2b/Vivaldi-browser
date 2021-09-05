@@ -24,7 +24,9 @@ To make sure the inclusion of a new third_party project makes sense for the
 Chromium project, you should first obtain Chrome Eng Review approval.
 Googlers should see go/chrome-eng-review and review existing topics in
 g/chrome-eng-review. Please include information about the additional checkout
-size, build times, and binary sizes. Please also make sure that the motivation
+size, build times, and binary size increase of
+[official](https://www.chromium.org/developers/gn-build-configuration) builds
+on Android and one desktop platform. Please also make sure that the motivation
 for your project is clear, e.g., a design doc has been circulated.
 
 ## Get the code
@@ -92,7 +94,9 @@ See [Moving large files to Google Storage](https://goto.google.com/checking-in-l
 
 ### Add OWNERS
 
-Your OWNERS file must include 2 Chromium developer accounts. This will ensure
+Your OWNERS file must either list two Chromium developer accounts as the first
+two lines or include a `file:` directive to an OWNERS file within the
+`third_party` directory that itself conforms to this criterion. This will ensure
 accountability for maintenance of the code over time. While there isn't always
 an ideal or obvious set of people that should go in OWNERS, this is critical for
 first-line triage of any issues that crop up in the code.

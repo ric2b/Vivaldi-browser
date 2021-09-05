@@ -34,6 +34,7 @@
 #include "chrome/browser/extensions/forced_extensions/install_stage_tracker.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/web_applications/components/external_app_install_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -107,6 +108,8 @@ const char ExternalProviderImpl::kIsBookmarkApp[] = "is_bookmark_app";
 const char ExternalProviderImpl::kIsFromWebstore[] = "is_from_webstore";
 const char ExternalProviderImpl::kKeepIfPresent[] = "keep_if_present";
 const char ExternalProviderImpl::kWasInstalledByOem[] = "was_installed_by_oem";
+const char ExternalProviderImpl::kWebAppMigrationFlag[] =
+    "web_app_migration_flag";
 const char ExternalProviderImpl::kSupportedLocales[] = "supported_locales";
 const char ExternalProviderImpl::kMayBeUntrusted[] = "may_be_untrusted";
 const char ExternalProviderImpl::kMinProfileCreatedByVersion[] =
@@ -346,9 +349,19 @@ void ExternalProviderImpl::RetrieveExtensionsFromPrefs(
         is_from_webstore) {
       creation_flags |= Extension::FROM_WEBSTORE;
     }
-    bool keep_if_present = false;
-    if (extension->GetBoolean(kKeepIfPresent, &keep_if_present) &&
-        keep_if_present) {
+
+    // If the extension is in a web app migration treat it as "keep_if_present"
+    // so it can get uninstalled by WebAppUiManager::UninstallAndReplace() once
+    // the replacement web app has installed and migrated over user preferences.
+    // TODO(crbug.com/1099150): Remove this field after migration is complete.
+    const std::string* web_app_migration_flag =
+        extension->FindStringPath(kWebAppMigrationFlag);
+    bool is_migrating_to_web_app =
+        web_app_migration_flag &&
+        web_app::IsExternalAppInstallFeatureEnabled(*web_app_migration_flag);
+    bool keep_if_present =
+        extension->FindBoolPath(kKeepIfPresent).value_or(false);
+    if (keep_if_present || is_migrating_to_web_app) {
       ExtensionRegistry* extension_registry = ExtensionRegistry::Get(profile_);
       const Extension* extension =
           extension_registry ? extension_registry->GetExtensionById(
@@ -365,6 +378,7 @@ void ExternalProviderImpl::RetrieveExtensionsFromPrefs(
         continue;
       }
     }
+
     bool was_installed_by_oem = false;
     if (extension->GetBoolean(kWasInstalledByOem, &was_installed_by_oem) &&
         was_installed_by_oem) {
@@ -576,6 +590,7 @@ bool ExternalProviderImpl::HandleDoNotInstallForEnterprise(
 void ExternalProviderImpl::CreateExternalProviders(
     VisitorInterface* service,
     Profile* profile,
+    PendingExtensionManager* pending_extension_manager,
     ProviderCollection* provider_list) {
   TRACE_EVENT0("browser,startup",
                "ExternalProviderImpl::CreateExternalProviders");
@@ -591,7 +606,7 @@ void ExternalProviderImpl::CreateExternalProviders(
     crx_location = Manifest::EXTERNAL_POLICY_DOWNLOAD;
     external_loader =
         base::MakeRefCounted<chromeos::SigninScreenExtensionsExternalLoader>(
-            profile);
+            profile, pending_extension_manager);
     auto signin_profile_provider = std::make_unique<ExternalProviderImpl>(
         service, external_loader, profile, crx_location,
         Manifest::EXTERNAL_POLICY_DOWNLOAD, Extension::FOR_LOGIN_SCREEN);
@@ -704,7 +719,7 @@ void ExternalProviderImpl::CreateExternalProviders(
   // On Mac OS, items in /Library/... should be written by the superuser.
   // Check that all components of the path are writable by root only.
   ExternalPrefLoader::Options check_admin_permissions_on_mac;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   check_admin_permissions_on_mac =
     ExternalPrefLoader::ENSURE_PATH_CONTROLLED_BY_ADMIN;
 #else
@@ -787,7 +802,8 @@ void ExternalProviderImpl::CreateExternalProviders(
           bundled_extension_creation_flags));
 
       // Define a per-user source of external extensions.
-#if defined(OS_MACOSX) || (defined(OS_LINUX) && BUILDFLAG(CHROMIUM_BRANDING))
+#if defined(OS_MAC) || ((defined(OS_LINUX) || defined(OS_CHROMEOS)) && \
+                        BUILDFLAG(CHROMIUM_BRANDING))
       provider_list->push_back(std::make_unique<ExternalProviderImpl>(
           service,
           base::MakeRefCounted<ExternalPrefLoader>(

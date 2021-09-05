@@ -33,7 +33,6 @@ class CoreAudioDemuxerStream : public DemuxerStream {
 
   // DemuxerStream implementation.
   void Read(ReadCB read_cb) override;
-  bool IsReadPending() const override;
   AudioDecoderConfig audio_decoder_config() override;
   VideoDecoderConfig video_decoder_config() override;
   Type type() const override;

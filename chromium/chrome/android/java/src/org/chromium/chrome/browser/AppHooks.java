@@ -13,7 +13,6 @@ import androidx.annotation.VisibleForTesting;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 
-import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.browser.banners.AppDetailsDelegate;
@@ -26,9 +25,9 @@ import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.historyreport.AppIndexingReporter;
 import org.chromium.chrome.browser.init.ProcessInitializationHandler;
 import org.chromium.chrome.browser.instantapps.InstantAppsHandler;
+import org.chromium.chrome.browser.lens.LensController;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.metrics.VariationsSession;
-import org.chromium.chrome.browser.offlinepages.CCTRequestStatus;
 import org.chromium.chrome.browser.omaha.RequestGenerator;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmark;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksProviderIterator;
@@ -43,7 +42,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.usage_stats.DigitalWellbeingClient;
 import org.chromium.chrome.browser.webapps.GooglePlayWebApkInstallDelegate;
 import org.chromium.chrome.browser.xsurface.ProcessScope;
-import org.chromium.chrome.browser.xsurface.SurfaceDependencyProvider;
+import org.chromium.chrome.browser.xsurface.ProcessScopeDependencyProvider;
 import org.chromium.components.browser_ui.widget.FeatureHighlightProvider;
 import org.chromium.components.external_intents.AuthenticatorNavigationInterceptor;
 import org.chromium.components.signin.AccountManagerDelegate;
@@ -61,6 +60,9 @@ import java.util.List;
  */
 public abstract class AppHooks {
     private static AppHooksImpl sInstance;
+
+    @Nullable
+    private ExternalAuthUtils mExternalAuthUtils;
 
     /**
      * Sets a mocked instance for testing.
@@ -140,6 +142,19 @@ public abstract class AppHooks {
     }
 
     /**
+     * @return The singleton instance of ExternalAuthUtils.
+     *
+     * TODO(https://crbug.com/1104817): Make createExternalAuthUtils protected.
+     */
+    public ExternalAuthUtils getExternalAuthUtils() {
+        if (mExternalAuthUtils == null) {
+            mExternalAuthUtils = createExternalAuthUtils();
+        }
+
+        return mExternalAuthUtils;
+    }
+
+    /**
      * @return An instance of {@link FeedbackReporter} to report feedback.
      */
     public FeedbackReporter createFeedbackReporter() {
@@ -170,6 +185,10 @@ public abstract class AppHooks {
 
     public InstantAppsHandler createInstantAppsHandler() {
         return new InstantAppsHandler();
+    }
+
+    public LensController createLensController() {
+        return new LensController();
     }
 
     /**
@@ -236,16 +255,9 @@ public abstract class AppHooks {
     }
 
     /**
-     * @return A callback that will be run each time an offline page is saved in the custom tabs
-     * namespace.
-     */
-    @CalledByNative
-    public Callback<CCTRequestStatus> getOfflinePagesCCTRequestDoneCallback() {
-        return null;
-    }
-
-    /**
-     * @return A list of whitelisted apps that are allowed to receive notification when the
+     * TODO(crbug.com/1102812) : Remove this method after updating the downstream to use the new
+     * method {@link getOfflinePagesCctAllowlist} instead.
+     * @return A list of allowlisted apps that are allowed to receive notification when the
      * set of offlined pages downloaded on their behalf has changed. Apps are listed by their
      * package name.
      */
@@ -254,7 +266,16 @@ public abstract class AppHooks {
     }
 
     /**
-     * @return A list of whitelisted app package names whose completed notifications
+     * @return A list of allowlisted apps that are allowed to receive notification when the
+     * set of offlined pages downloaded on their behalf has changed. Apps are listed by their
+     * package name.
+     */
+    public List<String> getOfflinePagesCctAllowlist() {
+        return Collections.emptyList();
+    }
+
+    /**
+     * @return A list of allowlisted app package names whose completed notifications
      * we should suppress.
      */
     public List<String> getOfflinePagesSuppressNotificationPackages() {
@@ -328,7 +349,7 @@ public abstract class AppHooks {
      * apk. Otherwise null is returned.
      */
     public @Nullable ProcessScope getExternalSurfaceProcessScope(
-            SurfaceDependencyProvider dependencies) {
+            ProcessScopeDependencyProvider dependencies) {
         return null;
     }
 

@@ -37,6 +37,7 @@ namespace blink {
 class DataTransfer;
 class EventDispatcher;
 class MouseEventInit;
+class WebPointerProperties;
 
 class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
   DEFINE_WRAPPERTYPEINFO();
@@ -130,7 +131,7 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
   bool IsMouseEvent() const override;
   unsigned which() const override;
 
-  int ClickCount() { return detail(); }
+  int ClickCount() const { return detail(); }
 
   enum class PositionType {
     kPosition,

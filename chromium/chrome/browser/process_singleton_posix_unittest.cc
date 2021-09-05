@@ -47,10 +47,10 @@ class ProcessSingletonPosixTest : public testing::Test {
   class TestableProcessSingleton : public ProcessSingleton {
    public:
     explicit TestableProcessSingleton(const base::FilePath& user_data_dir)
-        : ProcessSingleton(
-            user_data_dir,
-            base::Bind(&TestableProcessSingleton::NotificationCallback,
-                       base::Unretained(this))) {}
+        : ProcessSingleton(user_data_dir,
+                           base::BindRepeating(
+                               &TestableProcessSingleton::NotificationCallback,
+                               base::Unretained(this))) {}
 
     std::vector<base::CommandLine::StringVector> callback_command_lines_;
 
@@ -175,9 +175,8 @@ class ProcessSingletonPosixTest : public testing::Test {
     if (override_kill) {
       process_singleton->OverrideCurrentPidForTesting(
           base::GetCurrentProcId() + 1);
-      process_singleton->OverrideKillCallbackForTesting(
-          base::Bind(&ProcessSingletonPosixTest::KillCallback,
-                     base::Unretained(this)));
+      process_singleton->OverrideKillCallbackForTesting(base::BindRepeating(
+          &ProcessSingletonPosixTest::KillCallback, base::Unretained(this)));
     }
 
     return process_singleton->NotifyOtherProcessWithTimeout(
@@ -500,7 +499,7 @@ TEST_F(ProcessSingletonPosixTest, IgnoreSocketSymlinkWithTooLongTarget) {
       ProcessSingleton::ORPHANED_LOCK_FILE, 1u);
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // Test that if there is an existing lock file, and we could not flock()
 // it, then exit.
 TEST_F(ProcessSingletonPosixTest, CreateRespectsOldMacLock) {
@@ -525,4 +524,4 @@ TEST_F(ProcessSingletonPosixTest, CreateReplacesOldMacLock) {
   EXPECT_TRUE(process_singleton->Create());
   VerifyFiles();
 }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)

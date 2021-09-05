@@ -5,6 +5,7 @@
 #include "base/allocator/partition_allocator/partition_page.h"
 
 #include "base/allocator/partition_allocator/address_pool_manager.h"
+#include "base/allocator/partition_allocator/partition_address_space.h"
 #include "base/allocator/partition_allocator/partition_alloc.h"
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
 #include "base/allocator/partition_allocator/partition_alloc_features.h"
@@ -184,7 +185,10 @@ void PartitionPage<thread_safe>::DecommitIfPossible(
 
 void DeferredUnmap::Unmap() {
   PA_DCHECK(ptr && size > 0);
-  if (IsManagedByPartitionAlloc(ptr)) {
+  // Currently this path is only called for direct-mapped allocations. If this
+  // changes, the if statement below has to be updated.
+  PA_DCHECK(!IsManagedByPartitionAllocNormalBuckets(ptr));
+  if (IsManagedByPartitionAllocDirectMap(ptr)) {
 #if defined(ARCH_CPU_64_BITS) && !defined(OS_NACL)
     internal::AddressPoolManager::GetInstance()->Free(
         internal::GetDirectMapPool(), ptr, size);

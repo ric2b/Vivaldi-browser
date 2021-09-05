@@ -53,8 +53,6 @@ namespace password_manager {
 
 namespace {
 
-const base::TimeDelta kSyncTaskTimeout = base::TimeDelta::FromSeconds(30);
-
 // Utility function to simplify removing logins prior a given |cutoff| data.
 // Runs |callback| with the result.
 //
@@ -84,6 +82,12 @@ void CloseTraceAndCallBack(
 }
 
 }  // namespace
+
+void PasswordStore::Observer::OnLoginsChangedIn(
+    PasswordStore* store,
+    const PasswordStoreChangeList& changes) {
+  OnLoginsChanged(changes);
+}
 
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
 PasswordStore::CheckReuseRequest::CheckReuseRequest(
@@ -467,6 +471,12 @@ void PasswordStore::RemoveFieldInfoByTime(base::Time remove_begin,
                               std::move(completion)));
 }
 
+void PasswordStore::ClearStore(base::OnceCallback<void(bool)> completion) {
+  DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
+  ScheduleTask(base::BindOnce(&PasswordStore::ClearStoreInternal, this,
+                              std::move(completion)));
+}
+
 void PasswordStore::AddObserver(Observer* observer) {
   observers_->AddObserver(observer);
 }
@@ -527,6 +537,10 @@ void PasswordStore::SetUnsyncedCredentialsDeletionNotifier(
   DCHECK(!deletion_notifier_);
   DCHECK(notifier);
   deletion_notifier_ = std::move(notifier);
+}
+
+void PasswordStore::SetSyncTaskTimeoutForTest(base::TimeDelta timeout) {
+  sync_task_timeout_ = timeout;
 }
 
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
@@ -679,7 +693,7 @@ bool PasswordStore::InitOnBackgroundSequence() {
   base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::BindOnce(&PasswordStoreConsumer::OnGetPasswordStoreResultsFrom,
-                     reuse_detector_->GetWeakPtr(), base::WrapRefCounted(this),
+                     reuse_detector_->GetWeakPtr(), base::RetainedRef(this),
                      GetAutofillableLoginsImpl()));
 #endif
   return true;
@@ -723,7 +737,8 @@ void PasswordStore::NotifyLoginsChanged(
     const PasswordStoreChangeList& changes) {
   DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
   if (!changes.empty()) {
-    observers_->Notify(FROM_HERE, &Observer::OnLoginsChanged, changes);
+    observers_->Notify(FROM_HERE, &Observer::OnLoginsChangedIn,
+                       base::RetainedRef(this), changes);
     if (sync_bridge_)
       sync_bridge_->ActOnPasswordStoreChanges(changes);
 
@@ -777,7 +792,7 @@ void PasswordStore::InvokeAndNotifyAboutCompromisedPasswordsChange(
 }
 
 void PasswordStore::NotifyUnsyncedCredentialsWillBeDeleted(
-    const std::vector<autofill::PasswordForm>& unsynced_credentials) {
+    std::vector<autofill::PasswordForm> unsynced_credentials) {
   DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(IsAccountStore());
   // |deletion_notifier_| only gets set for desktop.
@@ -786,7 +801,7 @@ void PasswordStore::NotifyUnsyncedCredentialsWillBeDeleted(
         FROM_HERE,
         base::BindOnce(
             &PasswordStore::UnsyncedCredentialsDeletionNotifier::Notify,
-            deletion_notifier_->GetWeakPtr(), unsynced_credentials));
+            deletion_notifier_->GetWeakPtr(), std::move(unsynced_credentials)));
   }
 }
 
@@ -879,7 +894,7 @@ void PasswordStore::PostLoginsTaskAndReplyToConsumerWithResult(
   consumer->cancelable_task_tracker()->PostTaskAndReplyWithResult(
       background_task_runner_.get(), FROM_HERE, std::move(task),
       base::BindOnce(&PasswordStoreConsumer::OnGetPasswordStoreResultsFrom,
-                     consumer->GetWeakPtr(), base::WrapRefCounted(this)));
+                     consumer->GetWeakPtr(), base::RetainedRef(this)));
 }
 
 void PasswordStore::PostLoginsTaskAndReplyToConsumerWithProcessedResult(
@@ -890,7 +905,7 @@ void PasswordStore::PostLoginsTaskAndReplyToConsumerWithProcessedResult(
   auto call_consumer = base::BindOnce(
       CloseTraceAndCallBack, trace_name, consumer,
       base::BindOnce(&PasswordStoreConsumer::OnGetPasswordStoreResultsFrom,
-                     consumer->GetWeakPtr(), base::WrapRefCounted(this)));
+                     consumer->GetWeakPtr(), base::RetainedRef(this)));
   consumer->cancelable_task_tracker()->PostTaskAndReplyWithResult(
       background_task_runner_.get(), FROM_HERE, std::move(task),
       base::BindOnce(std::move(processor), std::move(call_consumer)));
@@ -998,7 +1013,8 @@ void PasswordStore::RemoveLoginsByURLAndTimeInternal(
     deletions_have_synced_timeout_.Reset(base::BindRepeating(
         &PasswordStore::NotifyDeletionsHaveSynced, this, /*success=*/false));
     background_task_runner_->PostDelayedTask(
-        FROM_HERE, deletions_have_synced_timeout_.callback(), kSyncTaskTimeout);
+        FROM_HERE, deletions_have_synced_timeout_.callback(),
+        sync_task_timeout_);
 
     // Do an immediate check for the case where there are already no unsynced
     // deletions.
@@ -1060,8 +1076,8 @@ void PasswordStore::UnblacklistInternal(
   std::vector<std::unique_ptr<PasswordForm>> all_matches =
       GetLoginsImpl(form_digest);
   for (auto& form : all_matches) {
-    // Ignore PSL matches for blacklisted entries.
-    if (form->blacklisted_by_user && !form->is_public_suffix_match)
+    // Ignore PSL matches for blocked entries.
+    if (form->blocked_by_user && !form->is_public_suffix_match)
       RemoveLoginInternal(*form);
   }
   if (completion)
@@ -1088,6 +1104,18 @@ void PasswordStore::RemoveFieldInfoByTimeInternal(
   RemoveFieldInfoByTimeImpl(remove_begin, remove_end);
   if (completion)
     main_task_runner_->PostTask(FROM_HERE, std::move(completion));
+}
+
+void PasswordStore::ClearStoreInternal(
+    base::OnceCallback<void(bool)> completion) {
+  DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
+  bool should_clear = !IsEmpty();
+  if (should_clear)
+    DeleteAndRecreateDatabaseFile();
+  if (completion) {
+    main_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(std::move(completion), should_clear));
+  }
 }
 
 std::vector<std::unique_ptr<autofill::PasswordForm>>

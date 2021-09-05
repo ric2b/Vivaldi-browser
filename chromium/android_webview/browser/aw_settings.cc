@@ -78,6 +78,7 @@ AwSettings::AwSettings(JNIEnv* env,
       javascript_can_open_windows_automatically_(false),
       allow_third_party_cookies_(false),
       allow_file_access_(false),
+      is_dark_mode_(false),
       aw_settings_(env, obj) {
   web_contents->SetUserData(kAwSettingsUserDataKey,
                             std::make_unique<AwSettingsUserData>(this));
@@ -90,7 +91,7 @@ AwSettings::~AwSettings() {
 
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jobject> scoped_obj = aw_settings_.get(env);
-  if (scoped_obj.is_null())
+  if (!scoped_obj)
     return;
   Java_AwSettings_nativeAwSettingsGone(env, scoped_obj,
                                        reinterpret_cast<intptr_t>(this));
@@ -138,7 +139,7 @@ void AwSettings::UpdateEverything() {
   JNIEnv* env = base::android::AttachCurrentThread();
   CHECK(env);
   ScopedJavaLocalRef<jobject> scoped_obj = aw_settings_.get(env);
-  if (scoped_obj.is_null())
+  if (!scoped_obj)
     return;
   // Grab the lock and call UpdateEverythingLocked.
   Java_AwSettings_updateEverything(env, scoped_obj);
@@ -165,7 +166,7 @@ void AwSettings::UpdateUserAgentLocked(JNIEnv* env,
 
   ScopedJavaLocalRef<jstring> str =
       Java_AwSettings_getUserAgentLocked(env, obj);
-  bool ua_overidden = str.obj() != NULL;
+  bool ua_overidden = !!str;
 
   if (ua_overidden) {
     std::string override = base::android::ConvertJavaStringToUTF8(str);
@@ -187,11 +188,7 @@ void AwSettings::UpdateWebkitPreferencesLocked(
   if (!render_view_host_ext)
     return;
 
-  content::RenderViewHost* render_view_host =
-      web_contents()->GetRenderViewHost();
-  if (!render_view_host)
-    return;
-  render_view_host->OnWebkitPreferencesChanged();
+  web_contents()->OnWebPreferencesChanged();
 }
 
 void AwSettings::UpdateInitialPageScaleLocked(
@@ -316,7 +313,7 @@ void AwSettings::PopulateWebPreferences(WebPreferences* web_prefs) {
   JNIEnv* env = base::android::AttachCurrentThread();
   CHECK(env);
   ScopedJavaLocalRef<jobject> scoped_obj = aw_settings_.get(env);
-  if (scoped_obj.is_null())
+  if (!scoped_obj)
     return;
   // Grab the lock and call PopulateWebPreferencesLocked.
   Java_AwSettings_populateWebPreferences(env, scoped_obj,
@@ -515,24 +512,23 @@ void AwSettings::PopulateWebPreferencesLocked(JNIEnv* env,
   web_prefs->allow_mixed_content_upgrades =
       Java_AwSettings_getAllowMixedContentAutoupgradesLocked(env, obj);
 
-  bool is_dark_mode;
   switch (Java_AwSettings_getForceDarkModeLocked(env, obj)) {
     case ForceDarkMode::FORCE_DARK_OFF:
-      is_dark_mode = false;
+      is_dark_mode_ = false;
       break;
     case ForceDarkMode::FORCE_DARK_ON:
-      is_dark_mode = true;
+      is_dark_mode_ = true;
       break;
     case ForceDarkMode::FORCE_DARK_AUTO: {
       AwContents* contents = AwContents::FromWebContents(web_contents());
-      is_dark_mode = contents && contents->GetViewTreeForceDarkState();
+      is_dark_mode_ = contents && contents->GetViewTreeForceDarkState();
       break;
     }
   }
-  web_prefs->preferred_color_scheme = is_dark_mode
+  web_prefs->preferred_color_scheme = is_dark_mode_
                                           ? blink::PreferredColorScheme::kDark
                                           : blink::PreferredColorScheme::kLight;
-  if (is_dark_mode) {
+  if (is_dark_mode_) {
     switch (Java_AwSettings_getForceDarkBehaviorLocked(env, obj)) {
       case ForceDarkBehavior::FORCE_DARK_ONLY: {
         web_prefs->preferred_color_scheme = blink::PreferredColorScheme::kLight;
@@ -560,6 +556,11 @@ void AwSettings::PopulateWebPreferencesLocked(JNIEnv* env,
     web_prefs->preferred_color_scheme = blink::PreferredColorScheme::kLight;
     web_prefs->force_dark_mode_enabled = false;
   }
+}
+
+bool AwSettings::IsDarkMode(JNIEnv* env,
+                                 const JavaParamRef<jobject>& obj) {
+  return is_dark_mode_;
 }
 
 bool AwSettings::GetAllowFileAccess() {

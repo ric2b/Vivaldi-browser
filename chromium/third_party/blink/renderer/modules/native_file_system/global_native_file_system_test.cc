@@ -11,11 +11,11 @@
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_error.mojom-blink.h"
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_file_handle.mojom-blink.h"
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_manager.mojom-blink.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/forms/html_button_element.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
+#include "third_party/blink/renderer/core/script/classic_script.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 
@@ -84,6 +84,11 @@ class MockNativeFileSystemManager
       mojo::PendingReceiver<mojom::blink::NativeFileSystemDirectoryHandle>)
       override {}
 
+  void GetEntryFromDragDropToken(
+      mojo::PendingRemote<blink::mojom::blink::NativeFileSystemDragDropToken>
+          token,
+      GetEntryFromDragDropTokenCallback callback) override {}
+
  private:
   void BindNativeFileSystemManager(mojo::ScopedMessagePipeHandle handle) {
     receivers_.Add(this,
@@ -125,8 +130,9 @@ TEST_F(GlobalNativeFileSystemTest, UserActivationRequiredOtherwiseDenied) {
       [](MockNativeFileSystemManager::ChooseEntriesCallback callback) {
         FAIL();
       }));
-  GetFrame().GetScriptController().ExecuteScriptInMainWorld(
-      "window.chooseFileSystemEntries({type: 'open-file'});");
+  ClassicScript::CreateUnspecifiedScript(
+      ScriptSourceCode("window.showOpenFilePicker();"))
+      ->RunScript(&GetFrame());
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(frame->HasStickyUserActivation());
 }
@@ -135,7 +141,8 @@ TEST_F(GlobalNativeFileSystemTest, UserActivationChooseEntriesSuccessful) {
   LocalFrame* frame = &GetFrame();
   EXPECT_FALSE(frame->HasStickyUserActivation());
 
-  LocalFrame::NotifyUserActivation(frame);
+  LocalFrame::NotifyUserActivation(
+      frame, mojom::UserActivationNotificationType::kTest);
   EXPECT_TRUE(frame->HasStickyUserActivation());
 
   base::RunLoop manager_run_loop;
@@ -159,8 +166,9 @@ TEST_F(GlobalNativeFileSystemTest, UserActivationChooseEntriesSuccessful) {
 
         std::move(callback).Run(std::move(error), std::move(entries));
       }));
-  GetFrame().GetScriptController().ExecuteScriptInMainWorld(
-      "window.chooseFileSystemEntries({type: 'open-file'});");
+  ClassicScript::CreateUnspecifiedScript(
+      ScriptSourceCode("window.showOpenFilePicker();"))
+      ->RunScript(&GetFrame());
   manager_run_loop.Run();
 
   // Mock Manager finished sending data over the mojo pipe.
@@ -191,7 +199,8 @@ TEST_F(GlobalNativeFileSystemTest, UserActivationChooseEntriesErrors) {
   MockNativeFileSystemManager manager(frame->GetBrowserInterfaceBroker());
 
   for (const NativeFileSystemStatus& status : statuses) {
-    LocalFrame::NotifyUserActivation(frame);
+    LocalFrame::NotifyUserActivation(
+        frame, mojom::UserActivationNotificationType::kTest);
     EXPECT_TRUE(frame->HasStickyUserActivation());
 
     base::RunLoop manager_run_loop;
@@ -207,8 +216,9 @@ TEST_F(GlobalNativeFileSystemTest, UserActivationChooseEntriesErrors) {
           std::move(callback).Run(std::move(error), std::move(entries));
         },
         status));
-    GetFrame().GetScriptController().ExecuteScriptInMainWorld(
-        "window.chooseFileSystemEntries({type: 'open-file'});");
+    ClassicScript::CreateUnspecifiedScript(
+        ScriptSourceCode("window.showOpenFilePicker();"))
+        ->RunScript(&GetFrame());
     manager_run_loop.Run();
 
     // Mock Manager finished sending data over the mojo pipe.

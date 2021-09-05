@@ -15,6 +15,7 @@
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
@@ -26,11 +27,11 @@
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
-#include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/transform.h"
 #include "ui/gfx/transform_util.h"
 
 #if defined(USE_OZONE)
+#include "ui/base/ui_base_features.h"                               // nogncheck
 #include "ui/events/ozone/layout/keyboard_layout_engine.h"          // nogncheck
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"  // nogncheck
 #endif
@@ -346,9 +347,11 @@ Event::Event(const PlatformEvent& native_event, EventType type, int flags)
   ComputeEventLatencyOS(native_event);
 
 #if defined(USE_OZONE)
-  source_device_id_ = native_event->source_device_id();
-  if (auto* properties = native_event->properties())
-    properties_ = std::make_unique<Properties>(*properties);
+  if (features::IsUsingOzonePlatform()) {
+    source_device_id_ = native_event->source_device_id();
+    if (auto* properties = native_event->properties())
+      properties_ = std::make_unique<Properties>(*properties);
+  }
 #endif
 }
 
@@ -636,8 +639,8 @@ MouseWheelEvent::MouseWheelEvent(const PlatformEvent& native_event)
 
 MouseWheelEvent::MouseWheelEvent(const ScrollEvent& scroll_event)
     : MouseEvent(scroll_event),
-      offset_(gfx::ToRoundedInt(scroll_event.x_offset()),
-              gfx::ToRoundedInt(scroll_event.y_offset())) {
+      offset_(base::ClampRound(scroll_event.x_offset()),
+              base::ClampRound(scroll_event.y_offset())) {
   SetType(ET_MOUSEWHEEL);
 }
 
@@ -789,7 +792,7 @@ float TouchEvent::ComputeRotationAngle() const {
 
 // static
 KeyEvent* KeyEvent::last_key_event_ = nullptr;
-#if defined(USE_X11)
+#if defined(USE_X11) || defined(USE_OZONE)
 KeyEvent* KeyEvent::last_ibus_key_event_ = nullptr;
 #endif
 
@@ -911,21 +914,25 @@ void KeyEvent::ApplyLayout() const {
     }
   }
   KeyboardCode dummy_key_code;
-#if defined(OS_WIN)
-// Native Windows character events always have is_char_ == true,
-// so this is a synthetic or native keystroke event.
-// Therefore, perform only the fallback action.
-#elif defined(USE_OZONE)
-  if (KeyboardLayoutEngineManager::GetKeyboardLayoutEngine()->Lookup(
+
+#if defined(USE_OZONE)
+  if (features::IsUsingOzonePlatform() &&
+      KeyboardLayoutEngineManager::GetKeyboardLayoutEngine()->Lookup(
           code, flags(), &key_, &dummy_key_code)) {
     return;
   }
-#else
+#endif
+
+#if !defined(OS_WIN)
+  // Native Windows character events always have is_char_ == true,
+  // so this is a synthetic or native keystroke event.
+  // Therefore, perform only the fallback action.
   if (native_event()) {
     DCHECK(EventTypeFromNative(native_event()) == ET_KEY_PRESSED ||
            EventTypeFromNative(native_event()) == ET_KEY_RELEASED);
   }
 #endif
+
   if (!DomCodeToUsLayoutDomKey(code, flags(), &key_, &dummy_key_code))
     key_ = DomKey::UNIDENTIFIED;
 }
@@ -988,7 +995,7 @@ bool KeyEvent::IsRepeated(KeyEvent** last_key_event) {
 }
 
 KeyEvent** KeyEvent::GetLastKeyEvent() {
-#if defined(USE_X11)
+#if defined(USE_X11) || defined(USE_OZONE)
   // Use a different static variable for key events that have non standard
   // state masks as it may be reposted by an IME. IBUS-GTK uses this field
   // to detect the re-posted event for example. crbug.com/385873.

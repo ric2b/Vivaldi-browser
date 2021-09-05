@@ -154,11 +154,13 @@ INSTANTIATE_TEST_SUITE_P(All,
                              HitTestConfig{false, kEditingWindowsBehavior},
                              HitTestConfig{false, kEditingUnixBehavior},
                              HitTestConfig{false, kEditingAndroidBehavior},
+                             HitTestConfig{false, kEditingChromeOSBehavior},
                              // LayoutNG
                              HitTestConfig{true, kEditingMacBehavior},
                              HitTestConfig{true, kEditingWindowsBehavior},
                              HitTestConfig{true, kEditingUnixBehavior},
-                             HitTestConfig{true, kEditingAndroidBehavior}));
+                             HitTestConfig{true, kEditingAndroidBehavior},
+                             HitTestConfig{true, kEditingChromeOSBehavior}));
 
 TEST_P(LayoutViewHitTestTest, HitTestHorizontal) {
   LoadAhem();
@@ -270,7 +272,10 @@ TEST_P(LayoutViewHitTestTest, HitTestHorizontal) {
   result = HitTestResult();
   GetLayoutView().HitTest(HitTestLocation(PhysicalOffset(101, 131)), result);
   EXPECT_EQ(text2, result.InnerNode());
-  EXPECT_EQ(PhysicalOffset(51, 1), result.LocalPoint());
+  if (RuntimeEnabledFeatures::LayoutNGEnabled())
+    EXPECT_EQ(PhysicalOffset(51, 31), result.LocalPoint());
+  else
+    EXPECT_EQ(PhysicalOffset(51, 1), result.LocalPoint());
   EXPECT_EQ(PositionWithAffinity(Position(text2, 0), TextAffinity::kDownstream),
             result.GetPosition());
 }
@@ -380,7 +385,10 @@ TEST_P(LayoutViewHitTestTest, HitTestVerticalLR) {
   result = HitTestResult();
   GetLayoutView().HitTest(HitTestLocation(PhysicalOffset(81, 151)), result);
   EXPECT_EQ(text2, result.InnerNode());
-  EXPECT_EQ(PhysicalOffset(1, 51), result.LocalPoint());
+  if (RuntimeEnabledFeatures::LayoutNGEnabled())
+    EXPECT_EQ(PhysicalOffset(31, 51), result.LocalPoint());
+  else
+    EXPECT_EQ(PhysicalOffset(1, 51), result.LocalPoint());
   EXPECT_EQ(PositionWithAffinity(Position(text2, 0), TextAffinity::kDownstream),
             result.GetPosition());
 }
@@ -503,7 +511,10 @@ TEST_P(LayoutViewHitTestTest, HitTestVerticalRL) {
   result = HitTestResult();
   GetLayoutView().HitTest(HitTestLocation(PhysicalOffset(219, 151)), result);
   EXPECT_EQ(text2, result.InnerNode());
-  EXPECT_EQ(PhysicalOffset(199, 51), result.LocalPoint());
+  if (RuntimeEnabledFeatures::LayoutNGEnabled())
+    EXPECT_EQ(PhysicalOffset(169, 51), result.LocalPoint());
+  else
+    EXPECT_EQ(PhysicalOffset(199, 51), result.LocalPoint());
   EXPECT_EQ(PositionWithAffinity(Position(text2, 0), TextAffinity::kDownstream),
             result.GetPosition());
 }

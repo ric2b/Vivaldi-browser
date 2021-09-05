@@ -63,6 +63,7 @@
 #include "content/browser/web_package/web_bundle_navigation_info.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/frame_messages.h"
+#include "content/common/trace_utils.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/content_browser_client.h"
@@ -144,22 +145,21 @@ bool ShouldOverrideUserAgent(
 // navigating to the last committed url via the address bar or clicking on a
 // link which results in a navigation to the last committed or pending
 // navigation, etc.
-// |url|, |virtual_url|, |base_url_for_data_url|, |transition_type| correspond
-// to the new navigation (i.e. the pending NavigationEntry).
-// |last_committed_entry| is the last navigation that committed.
-bool ShouldTreatNavigationAsReload(const GURL& url,
+// |node| is the FrameTreeNode which is navigating. |url|, |virtual_url|,
+// |base_url_for_data_url|, |transition_type| correspond to the new navigation
+// (i.e. the pending NavigationEntry). |last_committed_entry| is the last
+// navigation that committed.
+bool ShouldTreatNavigationAsReload(FrameTreeNode* node,
+                                   const GURL& url,
                                    const GURL& virtual_url,
                                    const GURL& base_url_for_data_url,
                                    ui::PageTransition transition_type,
-                                   bool is_main_frame,
                                    bool is_post,
                                    bool is_reload,
                                    bool is_navigation_to_existing_entry,
                                    NavigationEntryImpl* last_committed_entry) {
-  // Only convert main frame navigations to a new entry.
-  if (!is_main_frame || is_reload || is_navigation_to_existing_entry)
+  if (is_reload || is_navigation_to_existing_entry)
     return false;
-
   // Only convert to reload if at least one navigation committed.
   if (!last_committed_entry)
     return false;
@@ -192,8 +192,13 @@ bool ShouldTreatNavigationAsReload(const GURL& url,
   if (virtual_url != last_committed_entry->GetVirtualURL())
     return false;
 
-  // Check that the URL match.
-  if (url != last_committed_entry->GetURL())
+  // Check that the URLs match.
+  FrameNavigationEntry* frame_entry = last_committed_entry->GetFrameEntry(node);
+  // If there's no frame entry then by definition the URLs don't match.
+  if (!frame_entry)
+    return false;
+
+  if (url != frame_entry->url())
     return false;
 
   // This check is required for Android WebView loadDataWithBaseURL. Apps
@@ -210,7 +215,7 @@ bool ShouldTreatNavigationAsReload(const GURL& url,
 
   // Don't convert to a reload when the last navigation was a POST or the new
   // navigation is a POST.
-  if (last_committed_entry->GetHasPostData() || is_post)
+  if (frame_entry->get_has_post_data() || is_post)
     return false;
 
   return true;
@@ -1248,10 +1253,14 @@ bool NavigationControllerImpl::RendererDidNavigate(
 NavigationType NavigationControllerImpl::ClassifyNavigation(
     RenderFrameHostImpl* rfh,
     const FrameHostMsg_DidCommitProvisionalLoad_Params& params) {
+  TraceReturnReason<TracingCategory::kNavigation> trace_return(
+      "ClassifyNavigation");
+
   if (params.did_create_new_entry) {
     // A new entry. We may or may not have a pending entry for the page, and
     // this may or may not be the main frame.
     if (!rfh->GetParent()) {
+      trace_return.set_return_reason("new entry, no parent, new page");
       return NAVIGATION_TYPE_NEW_PAGE;
     }
 
@@ -1260,10 +1269,13 @@ NavigationType NavigationControllerImpl::ClassifyNavigation(
     // navigated on a popup navigated to about:blank (the iframe would be
     // written into the popup by script on the main page). For these cases,
     // there isn't any navigation stuff we can do, so just ignore it.
-    if (!GetLastCommittedEntry())
+    if (!GetLastCommittedEntry()) {
+      trace_return.set_return_reason("new entry, no last committed, ignore");
       return NAVIGATION_TYPE_NAV_IGNORE;
+    }
 
     // Valid subframe navigation.
+    trace_return.set_return_reason("new entry, new subframe");
     return NAVIGATION_TYPE_NEW_SUBFRAME;
   }
 
@@ -1273,11 +1285,14 @@ NavigationType NavigationControllerImpl::ClassifyNavigation(
   if (rfh->GetParent()) {
     // All manual subframes would be did_create_new_entry and handled above, so
     // we know this is auto.
-    if (GetLastCommittedEntry())
+    if (GetLastCommittedEntry()) {
+      trace_return.set_return_reason("subframe, last commmited, auto subframe");
       return NAVIGATION_TYPE_AUTO_SUBFRAME;
+    }
 
     // We ignore subframes created in non-committed pages; we'd appreciate if
     // people stopped doing that.
+    trace_return.set_return_reason("subframe, no last commmited, ignore");
     return NAVIGATION_TYPE_NAV_IGNORE;
   }
 
@@ -1289,14 +1304,18 @@ NavigationType NavigationControllerImpl::ClassifyNavigation(
     // scribble onto an uncommitted page. Again, there isn't any navigation
     // stuff that we can do, so ignore it here as well.
     NavigationEntry* last_committed = GetLastCommittedEntry();
-    if (!last_committed)
+    if (!last_committed) {
+      trace_return.set_return_reason("nav entry 0, no last committed, ignore");
       return NAVIGATION_TYPE_NAV_IGNORE;
+    }
 
     // This is history.replaceState() or history.reload().
     // TODO(nasko): With error page isolation, reloading an existing session
     // history entry can result in change of SiteInstance. Check for such a case
     // here and classify it as NEW_PAGE, as such navigations should be treated
     // as new with replacement.
+    trace_return.set_return_reason(
+        "nav entry 0, last committed, existing page");
     return NAVIGATION_TYPE_EXISTING_PAGE;
   }
 
@@ -1308,6 +1327,7 @@ NavigationType NavigationControllerImpl::ClassifyNavigation(
     // reloaded into a different SiteInstance.
     if (pending_entry_->site_instance() &&
         pending_entry_->site_instance() != rfh->GetSiteInstance()) {
+      trace_return.set_return_reason("pending matching nav entry, new page");
       return NAVIGATION_TYPE_NEW_PAGE;
     }
 
@@ -1319,6 +1339,7 @@ NavigationType NavigationControllerImpl::ClassifyNavigation(
       // we must treat it as NEW since the SiteInstance doesn't match the entry.
       if (!GetLastCommittedEntry() ||
           GetLastCommittedEntry()->site_instance() != rfh->GetSiteInstance()) {
+        trace_return.set_return_reason("no pending, new page");
         return NAVIGATION_TYPE_NEW_PAGE;
       }
 
@@ -1329,19 +1350,23 @@ NavigationType NavigationControllerImpl::ClassifyNavigation(
       // Therefore we want to just ignore the pending entry and go back to where
       // we were (the "existing entry").
       // TODO(creis,avi): Eliminate SAME_PAGE in https://crbug.com/536102.
+      trace_return.set_return_reason("no pending, same page");
       return NAVIGATION_TYPE_SAME_PAGE;
     }
   }
 
   // Everything below here is assumed to be an existing entry, but if there is
   // no last committed entry, we must consider it a new navigation instead.
-  if (!GetLastCommittedEntry())
+  if (!GetLastCommittedEntry()) {
+    trace_return.set_return_reason("no last committed, new page");
     return NAVIGATION_TYPE_NEW_PAGE;
+  }
 
   if (params.intended_as_new_entry) {
     // This was intended to be a navigation to a new entry but the pending entry
     // got cleared in the meanwhile. Classify as EXISTING_PAGE because we may or
     // may not have a pending entry.
+    trace_return.set_return_reason("indented as new entry, new page");
     return NAVIGATION_TYPE_EXISTING_PAGE;
   }
 
@@ -1351,19 +1376,25 @@ NavigationType NavigationControllerImpl::ClassifyNavigation(
     // of an error, this is the case of the user trying to retry a failed load
     // by pressing return. Classify as EXISTING_PAGE because we probably don't
     // have a pending entry.
+    trace_return.set_return_reason(
+        "unreachable, matching pending, existing page");
     return NAVIGATION_TYPE_EXISTING_PAGE;
   }
 
   // Now we know that the notification is for an existing page. Find that entry.
   int existing_entry_index = GetEntryIndexWithUniqueID(params.nav_entry_id);
+  trace_return.traced_value()->SetInteger("existing_entry_index",
+                                          existing_entry_index);
   if (existing_entry_index == -1) {
     // The renderer has committed a navigation to an entry that no longer
     // exists. Because the renderer is showing that page, resurrect that entry.
+    trace_return.set_return_reason("existing entry -1, new page");
     return NAVIGATION_TYPE_NEW_PAGE;
   }
 
   // Since we weeded out "new" navigations above, we know this is an existing
   // (back/forward) navigation.
+  trace_return.set_return_reason("default return, existing page");
   return NAVIGATION_TYPE_EXISTING_PAGE;
 }
 
@@ -1961,7 +1992,7 @@ bool NavigationControllerImpl::IsURLSameDocumentNavigation(
     last_committed_url = last_committed->GetURL();
   }
 
-  WebPreferences prefs = rfh->GetRenderViewHost()->GetWebkitPreferences();
+  WebPreferences prefs = rfhi->GetOrCreateWebPreferences();
   const url::Origin& committed_origin =
       rfhi->frame_tree_node()->current_origin();
   bool is_same_origin = last_committed_url.is_empty() ||
@@ -2224,6 +2255,26 @@ bool NavigationControllerImpl::StartHistoryNavigationInNewSubframe(
   render_frame_host->frame_tree_node()->navigator().Navigate(
       std::move(request), ReloadType::NONE, RestoreType::NONE);
 
+  return true;
+}
+
+bool NavigationControllerImpl::ReloadFrame(FrameTreeNode* frame_tree_node) {
+  NavigationEntryImpl* entry = GetEntryAtIndex(GetCurrentEntryIndex());
+  if (!entry)
+    return false;
+  FrameNavigationEntry* frame_entry = entry->GetFrameEntry(frame_tree_node);
+  if (!frame_entry)
+    return false;
+  ReloadType reload_type = ReloadType::NORMAL;
+  entry->set_reload_type(reload_type);
+  std::unique_ptr<NavigationRequest> request = CreateNavigationRequestFromEntry(
+      frame_tree_node, entry, frame_entry, reload_type,
+      false /* is_same_document_history_load */,
+      false /* is_history_navigation_in_new_child */);
+  if (!request)
+    return false;
+  frame_tree_node->navigator().Navigate(std::move(request), reload_type,
+                                        RestoreType::NONE);
   return true;
 }
 
@@ -2590,47 +2641,6 @@ void NavigationControllerImpl::NavigateToExistingPendingEntry(
   FrameTreeNode* root = delegate_->GetFrameTree()->root();
   int nav_entry_id = pending_entry_->GetUniqueID();
 
-  // BackForwardCache:
-  // Navigate immediately if the document is in the BackForwardCache.
-  if (back_forward_cache_.GetEntry(nav_entry_id)) {
-    TRACE_EVENT0("navigation", "BackForwardCache_CreateNavigationRequest");
-    DCHECK_EQ(reload_type, ReloadType::NONE);
-    auto navigation_request = CreateNavigationRequestFromEntry(
-        root, pending_entry_, pending_entry_->GetFrameEntry(root),
-        ReloadType::NONE, false /* is_same_document_history_load */,
-        false /* is_history_navigation_in_new_child */);
-    root->navigator().Navigate(std::move(navigation_request), ReloadType::NONE,
-                               RestoreType::NONE);
-
-    return;
-  }
-
-  // History navigation might try to reuse a specific BrowsingInstance, already
-  // used by a page in the cache. To avoid having two different main frames that
-  // live in the same BrowsingInstance, evict the all pages with this
-  // BrowsingInstance from the cache.
-  //
-  // For example, take the following scenario:
-  //
-  // A1 = Some page on a.com
-  // A2 = Some other page on a.com
-  // B3 = An uncacheable page on b.com
-  //
-  // Then the following navigations occur:
-  // A1->A2->B3->A1
-  // On the navigation from B3 to A1, A2 will remain in the cache (B3 doesn't
-  // take its place) and A1 will be created in the same BrowsingInstance (and
-  // SiteInstance), as A2.
-  //
-  // If we didn't do anything, both A1 and A2 would remain alive in the same
-  // BrowsingInstance/SiteInstance, which is unsupported by
-  // RenderFrameHostManager::CommitPending(). To avoid this conundrum, we evict
-  // A2 from the cache.
-  if (pending_entry_->site_instance()) {
-    back_forward_cache_.EvictFramesInRelatedSiteInstances(
-        pending_entry_->site_instance());
-  }
-
   // If we were navigating to a slow-to-commit page, and the user performs
   // a session history navigation to the last committed page, RenderViewHost
   // will force the throbber to start, but WebKit will essentially ignore the
@@ -2723,6 +2733,47 @@ void NavigationControllerImpl::NavigateToExistingPendingEntry(
       DiscardPendingEntry(false);
       return;
     }
+  }
+
+  // BackForwardCache:
+  // Navigate immediately if the document is in the BackForwardCache.
+  if (back_forward_cache_.GetEntry(nav_entry_id)) {
+    TRACE_EVENT0("navigation", "BackForwardCache_CreateNavigationRequest");
+    DCHECK_EQ(reload_type, ReloadType::NONE);
+    auto navigation_request = CreateNavigationRequestFromEntry(
+        root, pending_entry_, pending_entry_->GetFrameEntry(root),
+        ReloadType::NONE, false /* is_same_document_history_load */,
+        false /* is_history_navigation_in_new_child */);
+    root->navigator().Navigate(std::move(navigation_request), ReloadType::NONE,
+                               RestoreType::NONE);
+
+    return;
+  }
+
+  // History navigation might try to reuse a specific BrowsingInstance, already
+  // used by a page in the cache. To avoid having two different main frames that
+  // live in the same BrowsingInstance, evict the all pages with this
+  // BrowsingInstance from the cache.
+  //
+  // For example, take the following scenario:
+  //
+  // A1 = Some page on a.com
+  // A2 = Some other page on a.com
+  // B3 = An uncacheable page on b.com
+  //
+  // Then the following navigations occur:
+  // A1->A2->B3->A1
+  // On the navigation from B3 to A1, A2 will remain in the cache (B3 doesn't
+  // take its place) and A1 will be created in the same BrowsingInstance (and
+  // SiteInstance), as A2.
+  //
+  // If we didn't do anything, both A1 and A2 would remain alive in the same
+  // BrowsingInstance/SiteInstance, which is unsupported by
+  // RenderFrameHostManager::CommitPending(). To avoid this conundrum, we evict
+  // A2 from the cache.
+  if (pending_entry_->site_instance()) {
+    back_forward_cache_.EvictFramesInRelatedSiteInstances(
+        pending_entry_->site_instance());
   }
 
   // This call does not support re-entrancy.  See http://crbug.com/347742.
@@ -2977,7 +3028,7 @@ void NavigationControllerImpl::NavigateWithoutEntry(
   if (IsRendererDebugURL(params.url)) {
     // Renderer-debug URLs won't go through NavigationThrottlers so we have to
     // check them explicitly. See bug 913334.
-    if (GetContentClient()->browser()->IsRendererDebugURLBlacklisted(
+    if (GetContentClient()->browser()->ShouldBlockRendererDebugURL(
             params.url, browser_context_)) {
       DiscardPendingEntry(false);
       return;
@@ -2997,9 +3048,8 @@ void NavigationControllerImpl::NavigateWithoutEntry(
   ReloadType reload_type = params.reload_type;
   if (reload_type == ReloadType::NONE &&
       ShouldTreatNavigationAsReload(
-          params.url, pending_entry_->GetVirtualURL(),
+          node, params.url, pending_entry_->GetVirtualURL(),
           params.base_url_for_data_url, params.transition_type,
-          params.frame_tree_node_id == RenderFrameHost::kNoFrameTreeNodeId,
           params.load_type ==
               NavigationController::LOAD_TYPE_HTTP_POST /* is_post */,
           false /* is_reload */, false /* is_navigation_to_existing_entry */,
@@ -3226,7 +3276,8 @@ NavigationControllerImpl::CreateNavigationRequestFromLoadParams(
   }
 
   // Determine if Previews should be used for the navigation.
-  PreviewsState previews_state = PREVIEWS_UNSPECIFIED;
+  blink::PreviewsState previews_state =
+      blink::PreviewsTypes::PREVIEWS_UNSPECIFIED;
   if (!node->IsMainFrame()) {
     // For subframes, use the state of the top-level frame.
     previews_state = node->frame_tree()
@@ -3273,7 +3324,8 @@ NavigationControllerImpl::CreateNavigationRequestFromLoadParams(
           params.load_type == LOAD_TYPE_HTTP_POST ? "POST" : "GET",
           params.post_data, network::mojom::SourceLocation::New(),
           params.started_from_context_menu, has_user_gesture,
-          CreateInitiatorCSPInfo(), std::vector<int>(), params.href_translate,
+          false /* has_text_fragment_token */, CreateInitiatorCSPInfo(),
+          std::vector<int>(), params.href_translate,
           false /* is_history_navigation_in_new_child_frame */,
           params.input_start);
 
@@ -3305,7 +3357,12 @@ NavigationControllerImpl::CreateNavigationRequestFromLoadParams(
           GURL() /* base_url_override_for_web_bundle */,
           node->pending_frame_policy(),
           std::vector<std::string>() /* force_enabled_origin_trials */,
-          false /* origin_isolation_restricted */);
+          false /* origin_isolated */,
+          std::vector<
+              network::mojom::WebClientHintsType>() /* enabled_client_hints */,
+          false /* is_cross_browsing_instance */,
+          std::vector<std::string>() /* forced_content_security_policies */,
+          nullptr /* old_page_info */);
 #if defined(OS_ANDROID)
   if (ValidateDataURLAsString(params.data_url_as_string)) {
     commit_params->data_url_as_string = params.data_url_as_string->data();
@@ -3376,7 +3433,8 @@ NavigationControllerImpl::CreateNavigationRequestFromEntry(
   }
 
   // Determine if Previews should be used for the navigation.
-  PreviewsState previews_state = PREVIEWS_UNSPECIFIED;
+  blink::PreviewsState previews_state =
+      blink::PreviewsTypes::PREVIEWS_UNSPECIFIED;
   if (!frame_tree_node->IsMainFrame()) {
     // For subframes, use the state of the top-level frame.
     previews_state = frame_tree_node->frame_tree()

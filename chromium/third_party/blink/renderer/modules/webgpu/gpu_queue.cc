@@ -161,11 +161,13 @@ void GPUQueue::signal(GPUFence* fence, uint64_t signal_value) {
 GPUFence* GPUQueue::createFence(const GPUFenceDescriptor* descriptor) {
   DCHECK(descriptor);
 
+  std::string label;
   WGPUFenceDescriptor desc = {};
   desc.nextInChain = nullptr;
   desc.initialValue = descriptor->initialValue();
   if (descriptor->hasLabel()) {
-    desc.label = descriptor->label().Utf8().data();
+    label = descriptor->label().Utf8();
+    desc.label = label.c_str();
   }
 
   return MakeGarbageCollected<GPUFence>(
@@ -272,6 +274,49 @@ void GPUQueue::WriteBufferImpl(GPUBuffer* buffer,
                               data_ptr, static_cast<size_t>(write_byte_size));
 }
 
+void GPUQueue::writeTexture(
+    GPUTextureCopyView* destination,
+    const MaybeShared<DOMArrayBufferView>& data,
+    GPUTextureDataLayout* data_layout,
+    UnsignedLongEnforceRangeSequenceOrGPUExtent3DDict& write_size,
+    ExceptionState& exception_state) {
+  WriteTextureImpl(destination, data->BaseAddressMaybeShared(),
+                   data->byteLengthAsSizeT(), data_layout, write_size,
+                   exception_state);
+}
+
+void GPUQueue::writeTexture(
+    GPUTextureCopyView* destination,
+    const DOMArrayBufferBase* data,
+    GPUTextureDataLayout* data_layout,
+    UnsignedLongEnforceRangeSequenceOrGPUExtent3DDict& write_size,
+    ExceptionState& exception_state) {
+  WriteTextureImpl(destination, data->DataMaybeShared(),
+                   data->ByteLengthAsSizeT(), data_layout, write_size,
+                   exception_state);
+}
+
+void GPUQueue::WriteTextureImpl(
+    GPUTextureCopyView* destination,
+    const void* data,
+    size_t data_size,
+    GPUTextureDataLayout* data_layout,
+    UnsignedLongEnforceRangeSequenceOrGPUExtent3DDict& write_size,
+    ExceptionState& exception_state) {
+  if (!ValidateCopySize(write_size, exception_state) ||
+      !ValidateTextureCopyView(destination, exception_state)) {
+    return;
+  }
+
+  WGPUTextureCopyView dawn_destination = AsDawnType(destination, device_);
+  WGPUTextureDataLayout dawn_data_layout = AsDawnType(data_layout);
+  WGPUExtent3D dawn_write_size = AsDawnType(&write_size);
+
+  GetProcs().queueWriteTexture(GetHandle(), &dawn_destination, data, data_size,
+                               &dawn_data_layout, &dawn_write_size);
+  return;
+}
+
 // TODO(shaobo.yan@intel.com): Implement this function
 void GPUQueue::copyImageBitmapToTexture(
     GPUImageBitmapCopyView* source,
@@ -365,34 +410,37 @@ bool GPUQueue::CopyContentFromCPU(StaticBitmapImage* image,
       image_data_rect, dest_texture_format);
 
   // Create a mapped buffer to receive image bitmap contents
-  WGPUBufferDescriptor buffer_desc;
-  buffer_desc.nextInChain = nullptr;
-  buffer_desc.label = nullptr;
+  WGPUBufferDescriptor buffer_desc = {};
   buffer_desc.usage = WGPUBufferUsage_CopySrc;
   buffer_desc.size = info.size_in_bytes;
+  buffer_desc.mappedAtCreation = true;
 
-  WGPUCreateBufferMappedResult result =
-      GetProcs().deviceCreateBufferMapped(device_->GetHandle(), &buffer_desc);
+  if (buffer_desc.size > uint64_t(std::numeric_limits<size_t>::max())) {
+    return false;
+  }
+  size_t size = static_cast<size_t>(buffer_desc.size);
+
+  WGPUBuffer buffer =
+      GetProcs().deviceCreateBuffer(device_->GetHandle(), &buffer_desc);
+  void* data = GetProcs().bufferGetMappedRange(buffer, 0, size);
 
   if (!CopyBytesFromImageBitmapForWebGPU(
-          image,
-          base::span<uint8_t>(reinterpret_cast<uint8_t*>(result.data),
-                              static_cast<size_t>(result.dataLength)),
+          image, base::span<uint8_t>(static_cast<uint8_t*>(data), size),
           image_data_rect, color_params, dest_texture_format)) {
     // Release the buffer.
-    GetProcs().bufferRelease(result.buffer);
+    GetProcs().bufferRelease(buffer);
     return false;
   }
 
-  GetProcs().bufferUnmap(result.buffer);
+  GetProcs().bufferUnmap(buffer);
 
   // Start a B2T copy to move contents from buffer to destination texture
   WGPUBufferCopyView dawn_intermediate = {};
   dawn_intermediate.nextInChain = nullptr;
-  dawn_intermediate.buffer = result.buffer;
-  dawn_intermediate.offset = 0;
-  dawn_intermediate.bytesPerRow = info.wgpu_bytes_per_row;
-  dawn_intermediate.rowsPerImage = image->height();
+  dawn_intermediate.buffer = buffer;
+  dawn_intermediate.layout.offset = 0;
+  dawn_intermediate.layout.bytesPerRow = info.wgpu_bytes_per_row;
+  dawn_intermediate.layout.rowsPerImage = image->height();
 
   WGPUCommandEncoder encoder =
       GetProcs().deviceCreateCommandEncoder(device_->GetHandle(), nullptr);
@@ -409,7 +457,7 @@ bool GPUQueue::CopyContentFromCPU(StaticBitmapImage* image,
   // Release intermediate resources.
   GetProcs().commandBufferRelease(commands);
   GetProcs().commandEncoderRelease(encoder);
-  GetProcs().bufferRelease(result.buffer);
+  GetProcs().bufferRelease(buffer);
 
   return true;
 }
@@ -425,11 +473,8 @@ bool GPUQueue::CopyContentFromGPU(StaticBitmapImage* image,
     return false;
   }
 
-  WGPUTextureCopyView src;
-  src.nextInChain = nullptr;
+  WGPUTextureCopyView src = {};
   src.texture = src_texture;
-  src.mipLevel = 0;
-  src.arrayLayer = 0;
   src.origin = origin;
 
   WGPUCommandEncoder encoder =

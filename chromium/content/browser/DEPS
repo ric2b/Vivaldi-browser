@@ -2,7 +2,8 @@ include_rules = [
   # Allow inclusion of specific components that we depend on.
   # See comment in content/DEPS for which components are allowed.
   # *********************************** NOTE ***********************************
-  # If adding a new component dependency, email content/OWNERS first.
+  # If adding a new component dependency, email
+  # content-owners@chromium.org first.
   # ****************************************************************************
   "+components/discardable_memory/common",
   "+components/discardable_memory/public",
@@ -34,13 +35,15 @@ include_rules = [
   "+components/ukm",
   "+components/url_formatter",
   "+components/variations/variations_client.h",
-  "+components/variations/variations_http_header_provider.h",
+  "+components/variations/variations_ids_provider.h",
   "+components/variations/net",
   "+components/viz",
+  "+components/web_package",
   "+components/cbor",
   "+components/os_crypt/os_crypt_switches.h",
   # *********************************** NOTE ***********************************
-  # If adding a new component dependency, email content/OWNERS first.
+  # If adding a new component dependency, email
+  # content-owners@chromium.org first.
   # ****************************************************************************
 
   "+content/public/app",
@@ -109,8 +112,7 @@ include_rules = [
   "+third_party/blink/public/common/page/web_drag_operation.h",
   "+third_party/blink/public/platform/web_fullscreen_video_status.h",
   "+third_party/blink/public/platform/web_mixed_content_context_type.h",
-  "+third_party/blink/public/platform/web_screen_info.h",
-  "+third_party/blink/public/platform/web_text_autosizer_page_info.h",
+  "+third_party/blink/public/common/widget/screen_info.h",
   "+third_party/blink/public/platform/web_text_input_type.h",
   "+third_party/blink/public/platform/mac/web_scrollbar_theme.h",
   "+third_party/blink/public/platform/modules/service_worker/web_service_worker_error.h",
@@ -120,7 +122,7 @@ include_rules = [
   "+third_party/blink/public/web/web_ax_enums.h",
   "+third_party/blink/public/web/web_console_message.h",
   "+third_party/blink/public/web/web_context_menu_data.h",
-  "+third_party/blink/public/web/web_device_emulation_params.h",
+  "+third_party/blink/public/common/widget/device_emulation_params.h",
   "+third_party/blink/public/web/web_drag_status.h",
   "+third_party/blink/public/web/web_serialized_script_value_version.h",
   "+third_party/blink/public/mojom/frame/tree_scope_type.mojom.h",
@@ -141,13 +143,6 @@ specific_include_rules = {
   "browsing_data_(filter_builder|remover)_impl_unittest\.cc": [
     "+services/network/cookie_manager.h",
   ],
-  "cross_origin_read_blocking_checker\.(cc|h)": [
-    # TODO(crbug.com/1049894): Remove.
-    "+services/network/cross_origin_read_blocking.h",
-  ],
-  "cross_site_document_blocking_browsertest\.cc": [
-    "+services/network/cross_origin_read_blocking.h",
-  ],
   "navigation_url_loader_impl_unittest\.cc": [
     "+services/network/resource_scheduler/resource_scheduler_client.h",
     "+services/network/url_loader.h",
@@ -162,9 +157,6 @@ specific_include_rules = {
   "signed_exchange_handler_unittest\.cc": [
     "+services/network/network_context.h",
   ],
-  "signed_exchange_subresource_prefetch_browsertest\.cc": [
-    "+services/network/cross_origin_read_blocking.h",
-  ],
   # SiteInstance and BrowsingInstance should not depend on the types of things
   # that rely on them, like RenderFrameHostImpl or WebContentsImpl.
   "(site_instance_impl|browsing_instance)\.(cc|h)": [
@@ -175,8 +167,7 @@ specific_include_rules = {
     "+services/network/cookie_manager.h",
     "+third_party/leveldatabase",
   ],
-  "utility_process_host\.cc": [
-    # TODO(crbug.com/1049894): Remove.
-    "+services/network/network_sandbox_win.h",
+  "launch_as_mojo_client_browsertest.cc": [
+    "+ui/ozone/public/ozone_switches.h",
   ],
 }

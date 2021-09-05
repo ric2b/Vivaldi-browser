@@ -46,11 +46,6 @@ namespace extensions {
 
 namespace {
 
-// Schedule check for no longer used data url after the browser is loaded and
-// probably idle.
-constexpr base::TimeDelta kDataUrlGCStartupDelay =
-    base::TimeDelta::FromSeconds(30);
-
 // Give Chromium little pause to write bookmark file before checking for unused
 // data urls to minimize disk IO spikes.
 constexpr base::TimeDelta kDataUrlGCSTrashDelay =
@@ -152,10 +147,6 @@ VivaldiBookmarksAPI::VivaldiBookmarksAPI(content::BrowserContext* context)
   bookmark_model_ = BookmarkModelFactory::GetForBrowserContext(context);
   DCHECK(bookmark_model_);
   bookmark_model_->AddObserver(this);
-  if (bookmark_model_->loaded()) {
-    VivaldiDataSourcesAPI::ScheduleRemovalOfUnusedUrlData(
-        browser_context_, kDataUrlGCStartupDelay);
-  }
 }
 
 VivaldiBookmarksAPI::~VivaldiBookmarksAPI() {}
@@ -173,10 +164,8 @@ VivaldiBookmarksAPI::GetFactoryInstance() {
   return g_factory_bookmark.Pointer();
 }
 
-void VivaldiBookmarksAPI::BookmarkModelLoaded(BookmarkModel* model, bool ids_reassigned) {
-  VivaldiDataSourcesAPI::ScheduleRemovalOfUnusedUrlData(browser_context_,
-                                                        kDataUrlGCStartupDelay);
-}
+void VivaldiBookmarksAPI::BookmarkModelLoaded(BookmarkModel* model,
+                                              bool ids_reassigned) {}
 
 void VivaldiBookmarksAPI::BookmarkNodeMoved(
     bookmarks::BookmarkModel* model,
@@ -246,28 +235,6 @@ void VivaldiBookmarksAPI::BookmarkNodeFaviconChanged(BookmarkModel* model,
                             bookmarks_private::OnFaviconChanged::Create(
                                 base::NumberToString(node->id())),
                             browser_context_);
-}
-
-// static
-bool VivaldiBookmarksAPI::SetBookmarkThumbnail(
-    content::BrowserContext* browser_context,
-    int64_t bookmark_id,
-    const std::string& url) {
-  BookmarkModel* model =
-      BookmarkModelFactory::GetForBrowserContext(browser_context);
-  // model should be loaded as bookmark_id comes from it.
-  DCHECK(model->loaded());
-  const BookmarkNode* node = bookmarks::GetBookmarkNodeByID(model, bookmark_id);
-  if (!node) {
-    LOG(ERROR) << "Failed to locate bookmark with id " << bookmark_id;
-    return false;
-  }
-  if (model->is_permanent_node(node)) {
-    LOG(ERROR) << "Cannot modify special bookmark " << bookmark_id;
-    return false;
-  }
-  model->SetNodeMetaInfo(node, "Thumbnail", url);
-  return true;
 }
 
 ExtensionFunction::ResponseAction

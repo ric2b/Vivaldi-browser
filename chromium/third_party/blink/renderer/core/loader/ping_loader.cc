@@ -34,7 +34,6 @@
 #include "base/feature_list.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/web_url_request.h"
-#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/fileapi/file.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -42,6 +41,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/html/forms/form_data.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer_view.h"
+#include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/loader/cors/cors.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_context.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
@@ -183,11 +183,12 @@ class BeaconFormData final : public Beacon {
   AtomicString content_type_;
 };
 
-bool SendBeaconCommon(LocalFrame* frame,
+bool SendBeaconCommon(const ScriptState& state,
+                      LocalFrame* frame,
                       const KURL& url,
                       const Beacon& beacon) {
   if (!frame->DomWindow()
-           ->GetContentSecurityPolicyForWorld()
+           ->GetContentSecurityPolicyForWorld(&state.World())
            ->AllowConnectToSource(url, url, RedirectStatus::kNoRedirect)) {
     // We're simulating a network failure here, so we return 'true'.
     return true;
@@ -198,7 +199,7 @@ bool SendBeaconCommon(LocalFrame* frame,
   request.SetKeepalive(true);
   request.SetRequestContext(mojom::RequestContextType::BEACON);
   beacon.Serialize(request);
-  FetchParameters params(std::move(request));
+  FetchParameters params(std::move(request), &state.World());
   // The spec says:
   //  - If mimeType is not null:
   //   - If mimeType value is a CORS-safelisted request-header value for the
@@ -210,7 +211,7 @@ bool SendBeaconCommon(LocalFrame* frame,
 
   frame->Client()->DidDispatchPingLoader(request.Url());
   Resource* resource =
-      RawResource::Fetch(params, frame->GetDocument()->Fetcher(), nullptr);
+      RawResource::Fetch(params, frame->DomWindow()->Fetcher(), nullptr);
   return resource->GetStatus() != ResourceStatus::kLoadError;
 }
 
@@ -232,23 +233,24 @@ void PingLoader::SendLinkAuditPing(LocalFrame* frame,
                              AtomicString(destination_url.GetString()));
   scoped_refptr<const SecurityOrigin> ping_origin =
       SecurityOrigin::Create(ping_url);
-  if (ProtocolIs(frame->GetDocument()->Url().GetString(), "http") ||
-      frame->GetDocument()->GetSecurityOrigin()->CanAccess(ping_origin.get())) {
+  if (ProtocolIs(frame->DomWindow()->Url().GetString(), "http") ||
+      frame->DomWindow()->GetSecurityOrigin()->CanAccess(ping_origin.get())) {
     request.SetHttpHeaderField(
         http_names::kPingFrom,
-        AtomicString(frame->GetDocument()->Url().GetString()));
+        AtomicString(frame->DomWindow()->Url().GetString()));
   }
 
   request.SetKeepalive(true);
   request.SetReferrerString(Referrer::NoReferrer());
   request.SetReferrerPolicy(network::mojom::ReferrerPolicy::kNever);
   request.SetRequestContext(mojom::RequestContextType::PING);
-  FetchParameters params(std::move(request));
+  FetchParameters params(std::move(request),
+                         frame->DomWindow()->GetCurrentWorld());
   params.MutableOptions().initiator_info.name =
       fetch_initiator_type_names::kPing;
 
   frame->Client()->DidDispatchPingLoader(ping_url);
-  RawResource::Fetch(params, frame->GetDocument()->Fetcher(), nullptr);
+  RawResource::Fetch(params, frame->DomWindow()->Fetcher(), nullptr);
 }
 
 void PingLoader::SendViolationReport(LocalFrame* frame,
@@ -262,42 +264,47 @@ void PingLoader::SendViolationReport(LocalFrame* frame,
   request.SetCredentialsMode(network::mojom::CredentialsMode::kSameOrigin);
   request.SetRequestContext(mojom::RequestContextType::CSP_REPORT);
   request.SetRequestDestination(network::mojom::RequestDestination::kReport);
-  request.SetRequestorOrigin(frame->GetDocument()->GetSecurityOrigin());
+  request.SetRequestorOrigin(frame->DomWindow()->GetSecurityOrigin());
   request.SetRedirectMode(network::mojom::RedirectMode::kError);
-  FetchParameters params(std::move(request));
+  FetchParameters params(std::move(request),
+                         frame->DomWindow()->GetCurrentWorld());
   params.MutableOptions().initiator_info.name =
       fetch_initiator_type_names::kViolationreport;
 
   frame->Client()->DidDispatchPingLoader(report_url);
-  RawResource::Fetch(params, frame->GetDocument()->Fetcher(), nullptr);
+  RawResource::Fetch(params, frame->DomWindow()->Fetcher(), nullptr);
 }
 
-bool PingLoader::SendBeacon(LocalFrame* frame,
+bool PingLoader::SendBeacon(const ScriptState& state,
+                            LocalFrame* frame,
                             const KURL& beacon_url,
                             const String& data) {
   BeaconString beacon(data);
-  return SendBeaconCommon(frame, beacon_url, beacon);
+  return SendBeaconCommon(state, frame, beacon_url, beacon);
 }
 
-bool PingLoader::SendBeacon(LocalFrame* frame,
+bool PingLoader::SendBeacon(const ScriptState& state,
+                            LocalFrame* frame,
                             const KURL& beacon_url,
                             DOMArrayBufferView* data) {
   BeaconDOMArrayBufferView beacon(data);
-  return SendBeaconCommon(frame, beacon_url, beacon);
+  return SendBeaconCommon(state, frame, beacon_url, beacon);
 }
 
-bool PingLoader::SendBeacon(LocalFrame* frame,
+bool PingLoader::SendBeacon(const ScriptState& state,
+                            LocalFrame* frame,
                             const KURL& beacon_url,
                             FormData* data) {
   BeaconFormData beacon(data);
-  return SendBeaconCommon(frame, beacon_url, beacon);
+  return SendBeaconCommon(state, frame, beacon_url, beacon);
 }
 
-bool PingLoader::SendBeacon(LocalFrame* frame,
+bool PingLoader::SendBeacon(const ScriptState& state,
+                            LocalFrame* frame,
                             const KURL& beacon_url,
                             Blob* data) {
   BeaconBlob beacon(data);
-  return SendBeaconCommon(frame, beacon_url, beacon);
+  return SendBeaconCommon(state, frame, beacon_url, beacon);
 }
 
 }  // namespace blink

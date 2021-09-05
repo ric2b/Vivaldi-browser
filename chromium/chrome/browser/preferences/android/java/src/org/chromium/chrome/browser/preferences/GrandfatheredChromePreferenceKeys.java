@@ -109,7 +109,6 @@ public class GrandfatheredChromePreferenceKeys {
                 ChromePreferenceKeys.HOMEPAGE_ENABLED,
                 ChromePreferenceKeys.HOMEPAGE_USE_DEFAULT_URI,
                 ChromePreferenceKeys.INCOGNITO_SHORTCUT_ADDED,
-                ChromePreferenceKeys.INVALIDATIONS_UUID_PREF_KEY,
                 ChromePreferenceKeys.LATEST_UNSUPPORTED_VERSION,
                 ChromePreferenceKeys.LOCALE_MANAGER_AUTO_SWITCH,
                 ChromePreferenceKeys.LOCALE_MANAGER_PROMO_SHOWN,
@@ -170,8 +169,8 @@ public class GrandfatheredChromePreferenceKeys {
                 ChromePreferenceKeys.SIGNIN_PROMO_NTP_PROMO_SUPPRESSION_PERIOD_START,
                 ChromePreferenceKeys.SIGNIN_PROMO_PERSONALIZED_DECLINED,
                 ChromePreferenceKeys.SIGNIN_PROMO_SETTINGS_PERSONALIZED_DISMISSED,
+                ChromePreferenceKeys.SIGNIN_LEGACY_SYNC_ACCOUNT_EMAIL,
                 ChromePreferenceKeys.SNAPSHOT_DATABASE_REMOVED,
-                ChromePreferenceKeys.START_SURFACE_SINGLE_PANE_ENABLED_KEY,
                 ChromePreferenceKeys.SURVEY_DATE_LAST_ROLLED,
                 ChromePreferenceKeys.SURVEY_INFO_BAR_DISPLAYED,
                 ChromePreferenceKeys.SYNC_SESSIONS_UUID,
@@ -221,7 +220,8 @@ public class GrandfatheredChromePreferenceKeys {
                 ChromePreferenceKeys.KEY_ZERO_SUGGEST_POST_CONTENT_TYPE_PREFIX,
                 ChromePreferenceKeys.KEY_ZERO_SUGGEST_POST_CONTENT_DATA_PREFIX,
                 ChromePreferenceKeys.KEY_ZERO_SUGGEST_HEADER_GROUP_ID_PREFIX,
-                ChromePreferenceKeys.KEY_ZERO_SUGGEST_HEADER_GROUP_TITLE_PREFIX
+                ChromePreferenceKeys.KEY_ZERO_SUGGEST_HEADER_GROUP_TITLE_PREFIX,
+                ChromePreferenceKeys.KEY_ZERO_SUGGEST_HEADER_GROUP_COLLAPSED_BY_DEFAULT_PREFIX
         );
         // clang-format on
     }

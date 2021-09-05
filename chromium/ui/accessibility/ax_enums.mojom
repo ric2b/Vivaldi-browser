@@ -633,6 +633,9 @@ enum IntAttribute {
   // The list style type. Only available on list items.
   kListStyle,
 
+  // Specifies the alignment of the text, e.g. left, center, right, justify
+  kTextAlign,
+
   // Specifies the direction of the text, e.g., right-to-left.
   kTextDirection,
 
@@ -729,6 +732,12 @@ enum BoolAttribute {
   // Indicates that this node clips its children, i.e. may have
   // overflow: hidden or clip children by default.
   kClipsChildren,
+
+  // Indicates that this node is not selectable because the style has
+  // user-select: none. Note that there may be other reasons why a node is
+  // not selectable - for example, bullets in a list. However, this attribute
+  // is only set on user-select: none.
+  kNotUserSelectableStyle,
 
   // Indicates whether this node is selected or unselected.
   kSelected,
@@ -894,7 +903,16 @@ enum TextBoundary {
   kNone = kObject
 };
 
-enum TextDirection {
+// Types of text alignment according to the IAccessible2 Object Attributes spec.
+enum TextAlign {
+  kNone,
+  kLeft,
+  kRight,
+  kCenter,
+  kJustify,
+};
+
+enum WritingDirection {
   kNone,
   kLtr,
   kRtl,
@@ -1035,6 +1053,7 @@ enum Gesture {
   kTap2,
   kTap3,
   kTap4,
+  kTouchExplore,
 };
 
 enum TextAffinity {

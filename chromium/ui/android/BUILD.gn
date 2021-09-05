@@ -18,10 +18,6 @@ component("android") {
     "display_android_manager.h",
     "edge_effect.cc",
     "edge_effect.h",
-    "edge_effect_base.cc",
-    "edge_effect_base.h",
-    "edge_effect_l.cc",
-    "edge_effect_l.h",
     "event_forwarder.cc",
     "event_forwarder.h",
     "handle_view_resources.cc",
@@ -129,7 +125,7 @@ java_strings_grd("ui_strings_grd") {
 }
 
 android_resources("ui_java_resources") {
-  custom_package = "org.chromium.ui"
+  create_srcjar = false
   sources = [
     "java/res/color/blue_when_enabled.xml",
     "java/res/color/chip_background_color.xml",
@@ -169,12 +165,14 @@ android_resources("ui_java_resources") {
     "java/res/drawable-xxxhdpi/ic_expand_more_black_24dp.png",
     "java/res/drawable-xxxhdpi/popup_bg.9.png",
     "java/res/drawable/drag_handlebar.xml",
+    "java/res/drawable/ic_expand_more_horizontal_black_24dp.xml",
     "java/res/drawable/popup_bg_tinted.xml",
     "java/res/font/accent_font.xml",
     "java/res/layout/dropdown_footer_wrapper_jellybean.xml",
     "java/res/layout/dropdown_item.xml",
     "java/res/layout/dropdown_window.xml",
     "java/res/values-ldrtl/dimens.xml",
+    "java/res/values-ldrtl/values.xml",
     "java/res/values-night/colors.xml",
     "java/res/values-night/dimens.xml",
     "java/res/values-sw600dp/values.xml",
@@ -184,6 +182,7 @@ android_resources("ui_java_resources") {
     "java/res/values/attrs.xml",
     "java/res/values/color_palette.xml",
     "java/res/values/dimens.xml",
+    "java/res/values/font_certs.xml",
     "java/res/values/ids.xml",
     "java/res/values/one_off_colors.xml",
     "java/res/values/semantic_colors_adaptive.xml",
@@ -208,12 +207,12 @@ android_library("ui_utils_java") {
   sources = [
     "java/src/org/chromium/ui/ContactsPickerListener.java",
     "java/src/org/chromium/ui/KeyboardVisibilityDelegate.java",
-    "java/src/org/chromium/ui/PhotoPickerListener.java",
     "java/src/org/chromium/ui/UiUtils.java",
   ]
   deps = [
     "//base:base_java",
     "//components/payments/mojom:mojom_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_deps:androidx_appcompat_appcompat_java",
     "//third_party/android_deps:androidx_appcompat_appcompat_resources_java",
     "//third_party/android_deps:androidx_core_core_java",
@@ -235,6 +234,7 @@ android_library("ui_full_java") {
     "java/src/org/chromium/ui/DropdownPopupWindowInterface.java",
     "java/src/org/chromium/ui/DropdownPopupWindowJellyBean.java",
     "java/src/org/chromium/ui/HorizontalListDividerDrawable.java",
+    "java/src/org/chromium/ui/LayoutInflaterUtils.java",
     "java/src/org/chromium/ui/OverscrollRefreshHandler.java",
     "java/src/org/chromium/ui/UiSwitches.java",
     "java/src/org/chromium/ui/VSyncMonitor.java",
@@ -254,6 +254,8 @@ android_library("ui_full_java") {
     "java/src/org/chromium/ui/base/IntentWindowAndroid.java",
     "java/src/org/chromium/ui/base/LocalizationUtils.java",
     "java/src/org/chromium/ui/base/PermissionCallback.java",
+    "java/src/org/chromium/ui/base/PhotoPickerDelegate.java",
+    "java/src/org/chromium/ui/base/PhotoPickerListener.java",
     "java/src/org/chromium/ui/base/ResourceBundle.java",
     "java/src/org/chromium/ui/base/SPenSupport.java",
     "java/src/org/chromium/ui/base/SelectFileDialog.java",
@@ -356,6 +358,7 @@ android_library("ui_full_java") {
   ]
   annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
   srcjar_deps = [ ":java_enums_srcjar" ]
+  resources_package = "org.chromium.ui"
 }
 
 android_library("ui_java_test_support") {
@@ -378,6 +381,7 @@ android_library("ui_java_test_support") {
     "//base:base_java",
     "//base:base_java_test_support",
     "//third_party/android_deps:android_support_v7_appcompat_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_support_test_runner:rules_java",
     "//third_party/junit",
   ]
@@ -385,6 +389,7 @@ android_library("ui_java_test_support") {
 
 android_resources("ui_javatest_resources") {
   testonly = true
+  create_srcjar = false
   sources = [
     "junit/res/layout/inflated_view.xml",
     "junit/res/layout/layout_view_builder_test.xml",
@@ -505,6 +510,7 @@ android_library("ui_javatests") {
     "//base:base_java_test_support",
     "//base:jni_java",
     "//content/public/test/android:content_java_test_support",
+    "//third_party/android_deps:androidx_test_runner_java",
     "//third_party/junit",
   ]
 }

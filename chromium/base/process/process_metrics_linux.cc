@@ -6,14 +6,17 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+
 #include <utility>
 
+#include "base/cpu.h"
 #include "base/files/dir_reader_posix.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -40,7 +43,7 @@ void TrimKeyValuePairs(StringPairs* pairs) {
   }
 }
 
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
 // Read a file with a single number string and return the number as a uint64_t.
 uint64_t ReadFileToUint64(const FilePath& file) {
   std::string file_contents;
@@ -147,7 +150,7 @@ int64_t GetProcessCPU(pid_t pid) {
   return ParseTotalCPUTimeFromStats(proc_stats);
 }
 
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
 // Report on Chrome OS GEM object graphics memory. /run/debugfs_gpu is a
 // bind mount into /sys/kernel/debug and synchronously reading the in-memory
 // files in /sys is fast.
@@ -183,7 +186,17 @@ void ReadChromeOSGraphicsMemory(SystemMemoryInfoKB* meminfo) {
   }
 #endif  // defined(ARCH_CPU_ARM_FAMILY)
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+
+bool SupportsPerTaskTimeInState() {
+  FilePath time_in_state_path = internal::GetProcPidDir(GetCurrentProcId())
+                                    .Append("task")
+                                    .Append(NumberToString(GetCurrentProcId()))
+                                    .Append("time_in_state");
+  std::string contents;
+  return internal::ReadProcFile(time_in_state_path, &contents) &&
+         StartsWith(contents, "cpu");
+}
 
 }  // namespace
 
@@ -206,37 +219,52 @@ bool ProcessMetrics::GetCumulativeCPUUsagePerThread(
     CPUUsagePerThread& cpu_per_thread) {
   cpu_per_thread.clear();
 
-  // Iterate through the different threads tracked in /proc/<pid>/task.
-  FilePath fd_path = internal::GetProcPidDir(process_).Append("task");
+  internal::ForEachProcessTask(
+      process_,
+      [&cpu_per_thread](PlatformThreadId tid, const FilePath& task_path) {
+        FilePath thread_stat_path = task_path.Append("stat");
 
-  DirReaderPosix dir_reader(fd_path.value().c_str());
-  if (!dir_reader.IsValid())
-    return false;
+        std::string buffer;
+        std::vector<std::string> proc_stats;
+        if (!internal::ReadProcFile(thread_stat_path, &buffer) ||
+            !internal::ParseProcStats(buffer, &proc_stats)) {
+          return;
+        }
 
-  for (; dir_reader.Next();) {
-    const char* tid_str = dir_reader.name();
-    if (strcmp(tid_str, ".") == 0 || strcmp(tid_str, "..") == 0)
-      continue;
-
-    PlatformThreadId tid;
-    if (!StringToInt(tid_str, &tid))
-      continue;
-
-    FilePath thread_stat_path = fd_path.Append(tid_str).Append("stat");
-
-    std::string buffer;
-    std::vector<std::string> proc_stats;
-    if (!internal::ReadProcFile(thread_stat_path, &buffer) ||
-        !internal::ParseProcStats(buffer, &proc_stats)) {
-      continue;
-    }
-
-    TimeDelta thread_time =
-        internal::ClockTicksToTimeDelta(ParseTotalCPUTimeFromStats(proc_stats));
-    cpu_per_thread.emplace_back(tid, thread_time);
-  }
+        TimeDelta thread_time = internal::ClockTicksToTimeDelta(
+            ParseTotalCPUTimeFromStats(proc_stats));
+        cpu_per_thread.emplace_back(tid, thread_time);
+      });
 
   return !cpu_per_thread.empty();
+}
+
+bool ProcessMetrics::GetPerThreadCumulativeCPUTimeInState(
+    TimeInStatePerThread& time_in_state_per_thread) {
+  time_in_state_per_thread.clear();
+
+  // Check for per-pid/tid time_in_state support. If the current process's
+  // time_in_state file doesn't exist or conform to the expected format, there's
+  // no need to iterate the threads. This shouldn't change over the lifetime of
+  // the current process, so we cache it into a static constant.
+  static const bool kSupportsPerPidTimeInState = SupportsPerTaskTimeInState();
+  if (!kSupportsPerPidTimeInState)
+    return false;
+
+  bool success = false;
+  internal::ForEachProcessTask(
+      process_, [&time_in_state_per_thread, &success, this](
+                    PlatformThreadId tid, const FilePath& task_path) {
+        FilePath time_in_state_path = task_path.Append("time_in_state");
+
+        std::string buffer;
+        if (!internal::ReadProcFile(time_in_state_path, &buffer))
+          return;
+
+        success |= ParseProcTimeInState(buffer, tid, time_in_state_per_thread);
+      });
+
+  return success;
 }
 
 // For the /proc/self/io file to exist, the Linux kernel must have
@@ -322,7 +350,7 @@ int ProcessMetrics::GetOpenFdSoftLimit() const {
 
   for (const auto& line : SplitStringPiece(
            limits_contents, "\n", KEEP_WHITESPACE, SPLIT_WANT_NONEMPTY)) {
-    if (!line.starts_with("Max open files"))
+    if (!StartsWith(line, "Max open files"))
       continue;
 
     auto tokens =
@@ -386,6 +414,82 @@ int ParseProcStatCPU(StringPiece input) {
 int GetNumberOfThreads(ProcessHandle process) {
   return internal::ReadProcStatsAndGetFieldAsInt64(process,
                                                    internal::VM_NUMTHREADS);
+}
+
+bool ProcessMetrics::ParseProcTimeInState(
+    const std::string& content,
+    PlatformThreadId tid,
+    TimeInStatePerThread& time_in_state_per_thread) {
+  uint32_t current_core_index = 0;
+  CPU::CoreType current_core_type = CPU::CoreType::kOther;
+  bool header_seen = false;
+
+  const char* begin = content.data();
+  size_t max_pos = content.size() - 1;
+
+  // Example time_in_state content:
+  // ---
+  // cpu0
+  // 300000 1
+  // 403200 0
+  // 499200 15
+  // cpu4
+  // 710400 13
+  // 825600 5
+  // 940800 550
+  // ---
+
+  // Iterate over the individual lines.
+  for (size_t pos = 0; pos <= max_pos;) {
+    const char next_char = content[pos];
+    int num_chars = 0;
+    if (!isdigit(next_char)) {
+      // Header line, which we expect to contain "cpu" followed by the number
+      // of the CPU, e.g. "cpu0" or "cpu24".
+      int matches = sscanf(begin + pos, "cpu%" PRIu32 "\n%n",
+                           &current_core_index, &num_chars);
+      if (matches != 1)
+        return false;
+      current_core_type = GetCoreType(current_core_index);
+      header_seen = true;
+    } else if (header_seen) {
+      // Data line with two integer fields, frequency (kHz) and time (in
+      // jiffies), separated by a space, e.g. "2419200 132".
+      uint64_t frequency;
+      uint64_t time;
+      int matches = sscanf(begin + pos, "%" PRIu64 " %" PRIu64 "\n%n",
+                           &frequency, &time, &num_chars);
+      if (matches != 2)
+        return false;
+
+      // Skip zero-valued entries in the output list (no time spent at this
+      // frequency).
+      if (time > 0) {
+        time_in_state_per_thread.push_back(
+            {tid, current_core_type, current_core_index, frequency,
+             internal::ClockTicksToTimeDelta(time)});
+      }
+    } else {
+      // Data without a header is not supported.
+      return false;
+    }
+
+    // Advance line.
+    DCHECK_GT(num_chars, 0);
+    pos += num_chars;
+  }
+
+  return true;
+}
+
+CPU::CoreType ProcessMetrics::GetCoreType(int core_index) {
+  if (!core_index_to_type_)
+    core_index_to_type_ = CPU::GuessCoreTypes();
+
+  if (static_cast<size_t>(core_index) >= core_index_to_type_->size())
+    return CPU::CoreType::kUnknown;
+
+  return core_index_to_type_->at(static_cast<size_t>(core_index));
 }
 
 const char kProcSelfExe[] = "/proc/self/exe";
@@ -461,7 +565,7 @@ std::unique_ptr<DictionaryValue> SystemMemoryInfoKB::ToValue() const {
   res->SetIntKey("swap_used", swap_total - swap_free);
   res->SetIntKey("dirty", dirty);
   res->SetIntKey("reclaimable", reclaimable);
-#ifdef OS_CHROMEOS
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   res->SetIntKey("shmem", shmem);
   res->SetIntKey("slab", slab);
   res->SetIntKey("gem_objects", gem_objects);
@@ -525,7 +629,7 @@ bool ParseProcMeminfo(StringPiece meminfo_data, SystemMemoryInfoKB* meminfo) {
       target = &meminfo->dirty;
     else if (tokens[0] == "SReclaimable:")
       target = &meminfo->reclaimable;
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
     // Chrome OS has a tweaked kernel that allows querying Shmem, which is
     // usually video memory otherwise invisible to the OS.
     else if (tokens[0] == "Shmem:")
@@ -603,7 +707,7 @@ bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo) {
     return false;
   }
 
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   ReadChromeOSGraphicsMemory(meminfo);
 #endif
 
@@ -686,7 +790,7 @@ bool IsValidDiskName(StringPiece candidate) {
   }
 
   const char kMMCName[] = "mmcblk";
-  if (!candidate.starts_with(kMMCName))
+  if (!StartsWith(candidate, kMMCName))
     return false;
 
   // mmcblk[0-9]+ case
@@ -779,7 +883,7 @@ TimeDelta GetUserCpuTimeSinceBoot() {
   return internal::GetUserCpuTimeSinceBoot();
 }
 
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
 std::unique_ptr<Value> SwapInfo::ToValue() const {
   auto res = std::make_unique<DictionaryValue>();
 
@@ -937,7 +1041,7 @@ bool GetSwapInfo(SwapInfo* swap_info) {
   }
   return true;
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
 
 #if defined(OS_LINUX) || defined(OS_AIX)
 int ProcessMetrics::GetIdleWakeupsPerSecond() {

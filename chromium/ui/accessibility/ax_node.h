@@ -140,11 +140,13 @@ class AX_EXPORT AXNode final {
   AXNode* GetPreviousSibling() const;
   AXNode* GetNextSibling() const;
 
-  // Returns true if the node has any of the text related roles.
+  // Returns true if the node has any of the text related roles, including
+  // kStaticText, kInlineTextBox and kListMarker (for Legacy Layout). Does not
+  // include any text field roles.
   bool IsText() const;
 
-  // Returns true if the node has any line break related roles or is the child a
-  // node with line break related roles.
+  // Returns true if the node has any line break related roles or is the child
+  // of a node with line break related roles.
   bool IsLineBreak() const;
 
   // Set the node's accessibility data. This may be done during initialization
@@ -360,11 +362,11 @@ class AX_EXPORT AXNode final {
   // Get the node ids that represent rows in a table.
   std::vector<AXNode::AXID> GetTableRowNodeIds() const;
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   // Table column-like nodes. These nodes are only present on macOS.
   bool IsTableColumn() const;
   base::Optional<int> GetTableColColIndex() const;
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_APPLE)
 
   // Table cell-like nodes.
   bool IsTableCellOrHeader() const;
@@ -418,18 +420,12 @@ class AX_EXPORT AXNode final {
   // The definition of a leaf includes nodes with children that are exclusively
   // an internal renderer implementation, such as the children of an HTML native
   // text field, as well as nodes with presentational children according to the
-  // ARIA and HTML5 Specs.
+  // ARIA and HTML5 Specs. Also returns true if all of the node's descendants
+  // are ignored.
   //
   // A leaf node should never have children that are focusable or
   // that might send notifications.
   bool IsLeaf() const;
-
-  // Returns true if this is a leaf node, (see "IsLeaf"), or if all of the
-  // node's children are ignored.
-  //
-  // TODO(nektar): There are no performance advantages in keeping this method
-  // since unignored child count is cached. Please remove.
-  bool IsLeafIncludingIgnored() const;
 
   // Returns true if this node is a list marker or if it's a descendant
   // of a list marker node. Returns false otherwise.

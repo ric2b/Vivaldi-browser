@@ -34,9 +34,9 @@ GpuMemoryBufferHandle GpuMemoryBufferHandle::Clone() const {
   handle.region = region.Duplicate();
   handle.offset = offset;
   handle.stride = stride;
-#if defined(OS_LINUX) || defined(OS_FUCHSIA)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_FUCHSIA)
   handle.native_pixmap_handle = CloneHandleForIPC(native_pixmap_handle);
-#elif defined(OS_MACOSX) && !defined(OS_IOS)
+#elif defined(OS_MAC)
   NOTIMPLEMENTED();
 #elif defined(OS_WIN)
   NOTIMPLEMENTED();

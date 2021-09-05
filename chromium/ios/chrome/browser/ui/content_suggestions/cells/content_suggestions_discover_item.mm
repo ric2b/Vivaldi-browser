@@ -8,6 +8,11 @@
 #error "This file requires ARC support."
 #endif
 
+namespace {
+// The minimum height for the Feed Cell.
+const CGFloat kMinimumFeedCellHeight = 50;
+}
+
 #pragma mark - ContentSuggestionsDiscoverItem
 
 @interface ContentSuggestionsDiscoverItem ()
@@ -36,7 +41,8 @@
 }
 
 - (CGFloat)cellHeightForWidth:(CGFloat)width {
-  return self.lastConfiguredCell ? [self.lastConfiguredCell feedHeight] : 100.0;
+  return self.lastConfiguredCell ? [self.lastConfiguredCell feedHeight]
+                                 : kMinimumFeedCellHeight;
 }
 
 @end
@@ -52,15 +58,10 @@
 
 @implementation ContentSuggestionsDiscoverCell
 
-- (instancetype)initWithFrame:(CGRect)frame {
-  self = [super initWithFrame:frame];
-  if (self) {
-    self.contentView.backgroundColor = [UIColor redColor];
-  }
-  return self;
-}
-
 - (void)setDiscoverFeedView:(UIViewController*)discoverFeed {
+  if (_discoverFeed == discoverFeed) {
+    return;
+  }
   _discoverFeed = discoverFeed;
   if (discoverFeed) {
     UIView* discoverView = discoverFeed.view;
@@ -82,15 +83,18 @@
 - (CGFloat)feedHeight {
   UICollectionView* feedView;
   if (!self.discoverFeed) {
-    return 0;
+    return kMinimumFeedCellHeight;
   }
-
+  // TODO(crbug.com/1092900): Make this more robust. Will require
+  // the provider to expose the feed as a UICollectionViewController.
   for (UIView* view in self.discoverFeed.view.subviews) {
     if ([view isKindOfClass:[UICollectionView class]]) {
       feedView = static_cast<UICollectionView*>(view);
     }
   }
-  return feedView.contentSize.height;
+  // In order for the Feed loading spinner to be displayed, the minimum feed
+  // height must be kMinimumFeedCellHeight.
+  return fmax(feedView.contentSize.height, kMinimumFeedCellHeight);
 }
 
 @end

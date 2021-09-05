@@ -108,9 +108,16 @@ def UpdateXcodeProject(project_dir, configurations, root_dir):
 
     # Teach build shell script to look for the configuration and platform.
     if isa == 'PBXShellScriptBuildPhase':
-      value['shellScript'] = value['shellScript'].replace(
-          'ninja -C .',
-          'ninja -C "../${CONFIGURATION}${EFFECTIVE_PLATFORM_NAME}"')
+      shell_path = value['shellPath']
+      if shell_path.endswith('sh'):
+        value['shellScript'] = value['shellScript'].replace(
+            'ninja -C .',
+            'ninja -C "../${CONFIGURATION}${EFFECTIVE_PLATFORM_NAME}"')
+      elif shell_path.endswith('python') or shell_path.endswith('python3'):
+        value['shellScript'] = value['shellScript'].replace(
+            'ninja_params = [ \'-C\', \'.\' ]',
+            'ninja_params = [ \'-C\', \'../\' + os.environ[\'CONFIGURATION\']'
+            ' + os.environ[\'EFFECTIVE_PLATFORM_NAME\'] ]')
 
     # Add new configuration, using the first one as default.
     if isa == 'XCConfigurationList':
@@ -120,7 +127,6 @@ def UpdateXcodeProject(project_dir, configurations, root_dir):
       build_config_template = project.objects[value['buildConfigurations'][0]]
       build_config_template['buildSettings']['CONFIGURATION_BUILD_DIR'] = \
           '$(PROJECT_DIR)/../$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)'
-      build_config_template['buildSettings']['CODE_SIGN_IDENTITY'] = ''
 
       value['buildConfigurations'] = []
       for configuration in configurations:

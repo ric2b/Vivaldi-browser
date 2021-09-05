@@ -17,6 +17,7 @@
 #include "pdf/test/test_utils.h"
 #include "ppapi/c/private/ppb_pdf.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/pdfium/public/fpdf_formfill.h"
 #include "ui/gfx/range/range.h"
 
 namespace chrome_pdf {
@@ -85,17 +86,16 @@ TEST_F(PDFiumPageTest, Constructor) {
 class PDFiumPageLinkTest : public PDFiumTestBase {
  public:
   PDFiumPageLinkTest() = default;
+  PDFiumPageLinkTest(const PDFiumPageLinkTest&) = delete;
+  PDFiumPageLinkTest& operator=(const PDFiumPageLinkTest&) = delete;
   ~PDFiumPageLinkTest() override = default;
 
-  const std::vector<PDFiumPage::Link>& GetLinks(PDFiumEngine* engine,
+  const std::vector<PDFiumPage::Link>& GetLinks(PDFiumEngine& engine,
                                                 int page_index) {
-    PDFiumPage* page = GetPDFiumPageForTest(engine, page_index);
-    DCHECK(page);
-    page->CalculateLinks();
-    return page->links_;
+    PDFiumPage& page = GetPDFiumPageForTest(engine, page_index);
+    page.CalculateLinks();
+    return page.links_;
   }
-
-  DISALLOW_COPY_AND_ASSIGN(PDFiumPageLinkTest);
 };
 
 TEST_F(PDFiumPageLinkTest, TestLinkGeneration) {
@@ -107,7 +107,7 @@ TEST_F(PDFiumPageLinkTest, TestLinkGeneration) {
 
   bool is_chromeos = IsRunningOnChromeOS();
 
-  const std::vector<PDFiumPage::Link>& links = GetLinks(engine.get(), 0);
+  const std::vector<PDFiumPage::Link>& links = GetLinks(*engine, 0);
   ASSERT_EQ(3u, links.size());
 
   const PDFiumPage::Link& link = links[0];
@@ -169,7 +169,7 @@ TEST_F(PDFiumPageLinkTest, TestAnnotLinkGeneration) {
   ASSERT_TRUE(engine);
   ASSERT_EQ(2, engine->GetNumberOfPages());
 
-  const std::vector<PDFiumPage::Link>& links = GetLinks(engine.get(), 0);
+  const std::vector<PDFiumPage::Link>& links = GetLinks(*engine, 0);
   ASSERT_EQ(kExpectedLinkCount, links.size());
 
   for (size_t i = 0; i < kExpectedLinkCount; ++i) {
@@ -203,16 +203,15 @@ TEST_F(PDFiumPageImageTest, TestCalculateImages) {
   ASSERT_TRUE(engine);
   ASSERT_EQ(1, engine->GetNumberOfPages());
 
-  PDFiumPage* page = GetPDFiumPageForTest(engine.get(), 0);
-  ASSERT_TRUE(page);
-  page->CalculateImages();
-  ASSERT_EQ(3u, page->images_.size());
-  CompareRect({380, 78, 67, 68}, page->images_[0].bounding_rect);
-  EXPECT_EQ("Image 1", page->images_[0].alt_text);
-  CompareRect({380, 385, 27, 28}, page->images_[1].bounding_rect);
-  EXPECT_EQ("Image 2", page->images_[1].alt_text);
-  CompareRect({380, 678, 1, 1}, page->images_[2].bounding_rect);
-  EXPECT_EQ("Image 3", page->images_[2].alt_text);
+  PDFiumPage& page = GetPDFiumPageForTest(*engine, 0);
+  page.CalculateImages();
+  ASSERT_EQ(3u, page.images_.size());
+  CompareRect({380, 78, 67, 68}, page.images_[0].bounding_rect);
+  EXPECT_EQ("Image 1", page.images_[0].alt_text);
+  CompareRect({380, 385, 27, 28}, page.images_[1].bounding_rect);
+  EXPECT_EQ("Image 2", page.images_[1].alt_text);
+  CompareRect({380, 678, 1, 1}, page.images_[2].bounding_rect);
+  EXPECT_EQ("Image 3", page.images_[2].alt_text);
 }
 
 TEST_F(PDFiumPageImageTest, TestImageAltText) {
@@ -222,16 +221,15 @@ TEST_F(PDFiumPageImageTest, TestImageAltText) {
   ASSERT_TRUE(engine);
   ASSERT_EQ(1, engine->GetNumberOfPages());
 
-  PDFiumPage* page = GetPDFiumPageForTest(engine.get(), 0);
-  ASSERT_TRUE(page);
-  page->CalculateImages();
-  ASSERT_EQ(3u, page->images_.size());
-  CompareRect({380, 78, 67, 68}, page->images_[0].bounding_rect);
-  EXPECT_EQ("Image 1", page->images_[0].alt_text);
-  CompareRect({380, 385, 27, 28}, page->images_[1].bounding_rect);
-  EXPECT_EQ("", page->images_[1].alt_text);
-  CompareRect({380, 678, 1, 1}, page->images_[2].bounding_rect);
-  EXPECT_EQ("", page->images_[2].alt_text);
+  PDFiumPage& page = GetPDFiumPageForTest(*engine, 0);
+  page.CalculateImages();
+  ASSERT_EQ(3u, page.images_.size());
+  CompareRect({380, 78, 67, 68}, page.images_[0].bounding_rect);
+  EXPECT_EQ("Image 1", page.images_[0].alt_text);
+  CompareRect({380, 385, 27, 28}, page.images_[1].bounding_rect);
+  EXPECT_EQ("", page.images_[1].alt_text);
+  CompareRect({380, 678, 1, 1}, page.images_[2].bounding_rect);
+  EXPECT_EQ("", page.images_[2].alt_text);
 }
 
 using PDFiumPageTextTest = PDFiumTestBase;
@@ -382,9 +380,8 @@ TEST_F(PDFiumPageTextTest, GetTextRunInfo) {
   }
 
   // Test char index outside char range returns nullopt
-  PDFiumPage* page = GetPDFiumPageForTest(engine.get(), 0);
-  ASSERT_TRUE(page);
-  EXPECT_EQ(page->GetCharCount(), current_char_index);
+  PDFiumPage& page = GetPDFiumPageForTest(*engine, 0);
+  EXPECT_EQ(page.GetCharCount(), current_char_index);
   text_run_info_result = engine->GetTextRunInfo(0, current_char_index);
   ASSERT_FALSE(text_run_info_result.has_value());
 }
@@ -394,6 +391,7 @@ TEST_F(PDFiumPageTextTest, TestHighlightTextRunInfo) {
   std::unique_ptr<PDFiumEngine> engine =
       InitializeEngine(&client, FILE_PATH_LITERAL("highlights.pdf"));
   ASSERT_TRUE(engine);
+  ASSERT_EQ(1, engine->GetNumberOfPages());
 
   // Highlights span across text run indices 0, 2 and 3.
   static const pp::PDF::PrivateAccessibilityTextStyleInfo kExpectedStyle = {
@@ -421,9 +419,6 @@ TEST_F(PDFiumPageTextTest, TestHighlightTextRunInfo) {
     expected_text_runs[4].bounds = PP_MakeFloatRectFromXYWH(
         198.66667f, 201.33333f, 21.333328f, 12.000015f);
   }
-
-  PDFiumPage* page = GetPDFiumPageForTest(engine.get(), 0);
-  ASSERT_TRUE(page);
 
   int current_char_index = 0;
   for (const auto& expected_text_run : expected_text_runs) {
@@ -460,19 +455,18 @@ TEST_F(PDFiumPageHighlightTest, TestPopulateHighlights) {
   ASSERT_TRUE(engine);
   ASSERT_EQ(1, engine->GetNumberOfPages());
 
-  PDFiumPage* page = GetPDFiumPageForTest(engine.get(), 0);
-  ASSERT_TRUE(page);
-  page->PopulateAnnotations();
-  ASSERT_EQ(base::size(kExpectedHighlights), page->highlights_.size());
+  PDFiumPage& page = GetPDFiumPageForTest(*engine, 0);
+  page.PopulateAnnotations();
+  ASSERT_EQ(base::size(kExpectedHighlights), page.highlights_.size());
 
-  for (size_t i = 0; i < page->highlights_.size(); ++i) {
+  for (size_t i = 0; i < page.highlights_.size(); ++i) {
     ASSERT_EQ(kExpectedHighlights[i].start_char_index,
-              page->highlights_[i].start_char_index);
+              page.highlights_[i].start_char_index);
     ASSERT_EQ(kExpectedHighlights[i].char_count,
-              page->highlights_[i].char_count);
+              page.highlights_[i].char_count);
     CompareRect(kExpectedHighlights[i].bounding_rect,
-                page->highlights_[i].bounding_rect);
-    ASSERT_EQ(kExpectedHighlights[i].color, page->highlights_[i].color);
+                page.highlights_[i].bounding_rect);
+    ASSERT_EQ(kExpectedHighlights[i].color, page.highlights_[i].color);
   }
 }
 
@@ -498,18 +492,17 @@ TEST_F(PDFiumPageTextFieldTest, TestPopulateTextFields) {
   ASSERT_TRUE(engine);
   ASSERT_EQ(1, engine->GetNumberOfPages());
 
-  PDFiumPage* page = GetPDFiumPageForTest(engine.get(), 0);
-  ASSERT_TRUE(page);
-  page->PopulateAnnotations();
-  size_t text_fields_count = page->text_fields_.size();
+  PDFiumPage& page = GetPDFiumPageForTest(*engine, 0);
+  page.PopulateAnnotations();
+  size_t text_fields_count = page.text_fields_.size();
   ASSERT_EQ(base::size(kExpectedTextFields), text_fields_count);
 
   for (size_t i = 0; i < text_fields_count; ++i) {
-    EXPECT_EQ(kExpectedTextFields[i].name, page->text_fields_[i].name);
-    EXPECT_EQ(kExpectedTextFields[i].value, page->text_fields_[i].value);
+    EXPECT_EQ(kExpectedTextFields[i].name, page.text_fields_[i].name);
+    EXPECT_EQ(kExpectedTextFields[i].value, page.text_fields_[i].value);
     CompareRect(kExpectedTextFields[i].bounding_rect,
-                page->text_fields_[i].bounding_rect);
-    EXPECT_EQ(kExpectedTextFields[i].flags, page->text_fields_[i].flags);
+                page.text_fields_[i].bounding_rect);
+    EXPECT_EQ(kExpectedTextFields[i].flags, page.text_fields_[i].flags);
   }
 }
 
@@ -578,26 +571,106 @@ TEST_F(PDFiumPageChoiceFieldTest, TestPopulateChoiceFields) {
   ASSERT_TRUE(engine);
   ASSERT_EQ(1, engine->GetNumberOfPages());
 
-  PDFiumPage* page = GetPDFiumPageForTest(engine.get(), 0);
-  ASSERT_TRUE(page);
-  page->PopulateAnnotations();
-  size_t choice_fields_count = page->choice_fields_.size();
+  PDFiumPage& page = GetPDFiumPageForTest(*engine, 0);
+  page.PopulateAnnotations();
+  size_t choice_fields_count = page.choice_fields_.size();
   ASSERT_EQ(base::size(kExpectedChoiceFields), choice_fields_count);
 
   for (size_t i = 0; i < choice_fields_count; ++i) {
-    EXPECT_EQ(kExpectedChoiceFields[i].name, page->choice_fields_[i].name);
-    size_t choice_field_options_count = page->choice_fields_[i].options.size();
+    EXPECT_EQ(kExpectedChoiceFields[i].name, page.choice_fields_[i].name);
+    size_t choice_field_options_count = page.choice_fields_[i].options.size();
     ASSERT_EQ(base::size(kExpectedChoiceFields[i].options),
               choice_field_options_count);
     for (size_t j = 0; j < choice_field_options_count; ++j) {
       EXPECT_EQ(kExpectedChoiceFields[i].options[j].name,
-                page->choice_fields_[i].options[j].name);
+                page.choice_fields_[i].options[j].name);
       EXPECT_EQ(kExpectedChoiceFields[i].options[j].is_selected,
-                page->choice_fields_[i].options[j].is_selected);
+                page.choice_fields_[i].options[j].is_selected);
     }
     CompareRect(kExpectedChoiceFields[i].bounding_rect,
-                page->choice_fields_[i].bounding_rect);
-    EXPECT_EQ(kExpectedChoiceFields[i].flags, page->choice_fields_[i].flags);
+                page.choice_fields_[i].bounding_rect);
+    EXPECT_EQ(kExpectedChoiceFields[i].flags, page.choice_fields_[i].flags);
+  }
+}
+
+using PDFiumPageButtonTest = PDFiumTestBase;
+
+TEST_F(PDFiumPageButtonTest, TestPopulateButtons) {
+  struct ExpectedButton {
+    const char* name;
+    const char* value;
+    int type;
+    int flags;
+    bool is_checked;
+    uint32_t control_count;
+    int control_index;
+    pp::Rect bounding_rect;
+  };
+
+  static const ExpectedButton kExpectedButtons[] = {{"readOnlyCheckbox",
+                                                     "Yes",
+                                                     FPDF_FORMFIELD_CHECKBOX,
+                                                     1,
+                                                     true,
+                                                     1,
+                                                     0,
+                                                     {185, 43, 28, 28}},
+                                                    {"checkbox",
+                                                     "Yes",
+                                                     FPDF_FORMFIELD_CHECKBOX,
+                                                     2,
+                                                     false,
+                                                     1,
+                                                     0,
+                                                     {185, 96, 28, 28}},
+                                                    {"RadioButton",
+                                                     "value1",
+                                                     FPDF_FORMFIELD_RADIOBUTTON,
+                                                     49154,
+                                                     false,
+                                                     2,
+                                                     0,
+                                                     {185, 243, 28, 28}},
+                                                    {"RadioButton",
+                                                     "value2",
+                                                     FPDF_FORMFIELD_RADIOBUTTON,
+                                                     49154,
+                                                     true,
+                                                     2,
+                                                     1,
+                                                     {252, 243, 27, 28}},
+                                                    {"PushButton",
+                                                     "",
+                                                     FPDF_FORMFIELD_PUSHBUTTON,
+                                                     65536,
+                                                     false,
+                                                     0,
+                                                     -1,
+                                                     {118, 270, 55, 67}}};
+
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("form_buttons.pdf"));
+  ASSERT_TRUE(engine);
+  ASSERT_EQ(1, engine->GetNumberOfPages());
+
+  PDFiumPage& page = GetPDFiumPageForTest(*engine, 0);
+  page.PopulateAnnotations();
+  size_t buttons_count = page.buttons_.size();
+  ASSERT_EQ(base::size(kExpectedButtons), buttons_count);
+
+  for (size_t i = 0; i < buttons_count; ++i) {
+    EXPECT_EQ(kExpectedButtons[i].name, page.buttons_[i].name);
+    EXPECT_EQ(kExpectedButtons[i].value, page.buttons_[i].value);
+    EXPECT_EQ(kExpectedButtons[i].type, page.buttons_[i].type);
+    EXPECT_EQ(kExpectedButtons[i].flags, page.buttons_[i].flags);
+    EXPECT_EQ(kExpectedButtons[i].is_checked, page.buttons_[i].is_checked);
+    EXPECT_EQ(kExpectedButtons[i].control_count,
+              page.buttons_[i].control_count);
+    EXPECT_EQ(kExpectedButtons[i].control_index,
+              page.buttons_[i].control_index);
+    CompareRect(kExpectedButtons[i].bounding_rect,
+                page.buttons_[i].bounding_rect);
   }
 }
 

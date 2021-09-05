@@ -5,7 +5,8 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_CROSTINI_CROSTINI_RECOVERY_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_CROSTINI_CROSTINI_RECOVERY_VIEW_H_
 
-#include "chrome/browser/chromeos/crostini/crostini_util.h"
+#include "chrome/browser/chromeos/crostini/crostini_simple_types.h"
+#include "storage/browser/file_system/file_system_url.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 
 namespace crostini {
@@ -18,16 +19,16 @@ class Profile;
 // connection is needed.
 class CrostiniRecoveryView : public views::BubbleDialogDelegateView {
  public:
-  static bool Show(Profile* profile,
+  static void Show(Profile* profile,
                    const std::string& app_id,
                    int64_t display_id,
-                   crostini::LaunchCrostiniAppCallback callback);
+                   const std::vector<storage::FileSystemURL>& files,
+                   crostini::CrostiniSuccessCallback callback);
 
   // views::DialogDelegateView:
   gfx::Size CalculatePreferredSize() const override;
   bool Accept() override;
   bool Cancel() override;
-  bool IsDialogButtonEnabled(ui::DialogButton button) const override;
 
   static CrostiniRecoveryView* GetActiveViewForTesting();
 
@@ -35,19 +36,17 @@ class CrostiniRecoveryView : public views::BubbleDialogDelegateView {
   CrostiniRecoveryView(Profile* profile,
                        const std::string& app_id,
                        int64_t display_id,
-                       crostini::LaunchCrostiniAppCallback callback);
+                       const std::vector<storage::FileSystemURL>& files,
+                       crostini::CrostiniSuccessCallback callback);
   ~CrostiniRecoveryView() override;
 
-  void ScheduleAppLaunch();
-  void CompleteAppLaunch();
+  void OnStopVm(crostini::CrostiniResult result);
 
   Profile* profile_;  // Not owned.
   std::string app_id_;
   int64_t display_id_;
-  crostini::LaunchCrostiniAppCallback callback_;
-  bool can_launch_apps_ = false;
-  views::Widget::ClosedReason closed_reason_ =
-      views::Widget::ClosedReason::kUnspecified;
+  const std::vector<storage::FileSystemURL> files_;
+  crostini::CrostiniSuccessCallback callback_;
 
   base::WeakPtrFactory<CrostiniRecoveryView> weak_ptr_factory_;
 };

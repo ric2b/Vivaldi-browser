@@ -120,7 +120,7 @@ class FormatEtcEnumerator final : public IEnumFORMATETC {
   // The cursor of the active enumeration - an index into |contents_|.
   size_t cursor_;
 
-  LONG ref_count_;
+  ULONG ref_count_;
 
   DISALLOW_COPY_AND_ASSIGN(FormatEtcEnumerator);
 };
@@ -271,13 +271,6 @@ IDataObject* OSExchangeDataProviderWin::GetIDataObject(
     const OSExchangeData& data) {
   return static_cast<const OSExchangeDataProviderWin*>(&data.provider())->
       data_object();
-}
-
-// static
-IDataObjectAsyncCapability* OSExchangeDataProviderWin::GetIAsyncOperation(
-    const OSExchangeData& data) {
-  return static_cast<const OSExchangeDataProviderWin*>(&data.provider())->
-      async_operation();
 }
 
 OSExchangeDataProviderWin::OSExchangeDataProviderWin(IDataObject* source)
@@ -842,13 +835,12 @@ static void DuplicateMedium(CLIPFORMAT source_clipformat,
 
 DataObjectImpl::StoredDataInfo::StoredDataInfo(const FORMATETC& format_etc,
                                                STGMEDIUM* medium)
-    : format_etc(format_etc), medium(medium), owns_medium(true) {}
+    : format_etc(format_etc), medium(medium) {}
 
 DataObjectImpl::StoredDataInfo::~StoredDataInfo() {
-  if (owns_medium) {
-    ReleaseStgMedium(medium);
-    delete medium;
-  }
+  ReleaseStgMedium(medium);
+  delete medium;
+
   if (downloader.get())
     downloader->Stop();
 }
@@ -980,15 +972,18 @@ HRESULT DataObjectImpl::SetData(
 
   STGMEDIUM* local_medium = new STGMEDIUM;
   if (should_release) {
+    // Ownership of the original data in `medium` is transferred to `this`.
     *local_medium = *medium;
   } else {
+    // Ownership of `medium` remains with the caller. To prevent lifetime
+    // issues, perform a deep copy of `medium`.
     DuplicateMedium(format_etc->cfFormat, medium, local_medium);
   }
 
   auto info = std::make_unique<DataObjectImpl::StoredDataInfo>(*format_etc,
                                                                local_medium);
   info->medium->tymed = format_etc->tymed;
-  info->owns_medium = !!should_release;
+
   // Make newly added data appear first.
   // TODO(dcheng): Make various setters agree whether elements should be
   // prioritized from front to back or back to front.

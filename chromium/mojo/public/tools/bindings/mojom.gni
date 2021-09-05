@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/jumbo.gni")
 import("//third_party/closure_compiler/closure_args.gni")
 import("//third_party/closure_compiler/compile_js.gni")
 import("//third_party/protobuf/proto_library.gni")
@@ -45,6 +44,10 @@ declare_args() {
 
   # Enables generating Typescript bindings and compiling them to JS bindings.
   enable_typescript_bindings = false
+
+  # Enables generating javascript fuzzing-related code and the bindings for the
+  # MojoLPM fuzzer targets. Off by default.
+  enable_mojom_fuzzer = false
 }
 
 # NOTE: We would like to avoid scrambling message IDs where it doesn't add
@@ -90,8 +93,11 @@ mojom_generator_root = "$_mojom_tools_root/bindings"
 mojom_generator_script = "$mojom_generator_root/mojom_bindings_generator.py"
 mojom_generator_sources =
     mojom_parser_sources + [
+      "$mojom_generator_root/generators/cpp_util.py",
       "$mojom_generator_root/generators/mojom_cpp_generator.py",
+      "$mojom_generator_root/generators/cpp_tracing_support.py",
       "$mojom_generator_root/generators/mojom_java_generator.py",
+      "$mojom_generator_root/generators/mojom_mojolpm_generator.py",
       "$mojom_generator_root/generators/mojom_js_generator.py",
       "$mojom_generator_root/generators/mojom_ts_generator.py",
       "$mojom_generator_script",
@@ -135,15 +141,8 @@ if (enable_scrambled_message_ids) {
 }
 
 if (enable_mojom_typemapping) {
-  if (!is_ios) {
-    _bindings_configuration_files = [
-      "//mojo/public/tools/bindings/chromium_bindings_configuration.gni",
-      "//mojo/public/tools/bindings/blink_bindings_configuration.gni",
-    ]
-  } else {
-    _bindings_configuration_files =
-        [ "//mojo/public/tools/bindings/chromium_bindings_configuration.gni" ]
-  }
+  _bindings_configuration_files =
+      [ "//mojo/public/tools/bindings/chromium_bindings_configuration.gni" ]
   _bindings_configurations = []
   foreach(config_file, _bindings_configuration_files) {
     _bindings_configurations += [ read_file(config_file, "scope") ]
@@ -164,6 +163,11 @@ if (enable_mojom_typemapping) {
       typemaps = []
       component_macro_suffix = ""
     },
+  ]
+}
+
+if (!is_ios) {
+  _bindings_configurations += [
     {
       variant = "blink"
       component_macro_suffix = "_BLINK"
@@ -226,7 +230,7 @@ if (enable_mojom_typemapping) {
 #   cpp_only (optional)
 #       If set to true, only the C++ bindings targets will be generated.
 #
-#       NOTE: If the global |enable_ipc_fuzzer| build arg is true, JS bindings
+#       NOTE: If the global |enable_mojom_fuzzer| build arg is true, JS bindings
 #       will still be generated even when |cpp_only| is set to |true|, unless
 #       you also set |enable_fuzzing| to |false| in your mojom target.
 #
@@ -249,7 +253,7 @@ if (enable_mojom_typemapping) {
 #
 #   enable_fuzzing (optional)
 #       Enables generation of fuzzing sources for the target if the global build
-#       arg |enable_ipc_fuzzer| is also set to |true|. Defaults to |true|. If
+#       arg |enable_mojom_fuzzer| is also set to |true|. Defaults to |true|. If
 #       fuzzing generation is enabled for a target, the target will always
 #       generate JS bindings even if |cpp_only| is set to |true|. See note
 #       above.
@@ -613,7 +617,7 @@ template("mojom") {
 
   generate_fuzzing =
       (!defined(invoker.enable_fuzzing) || invoker.enable_fuzzing) &&
-      enable_ipc_fuzzer && (!defined(invoker.testonly) || !invoker.testonly)
+      enable_mojom_fuzzer && (!defined(invoker.testonly) || !invoker.testonly)
 
   parser_target_name = "${target_name}__parser"
   parser_deps = []
@@ -861,7 +865,7 @@ template("mojom") {
   }
 
   shared_cpp_sources_target_name = "${target_name}_shared_cpp_sources"
-  jumbo_source_set(shared_cpp_sources_target_name) {
+  source_set(shared_cpp_sources_target_name) {
     if (defined(invoker.testonly)) {
       testonly = invoker.testonly
     }
@@ -1412,7 +1416,7 @@ template("mojom") {
     js_data_deps_target_name = target_name + "_js_data_deps"
     not_needed([ "js_data_deps_target_name" ])
 
-    target("jumbo_" + output_target_type, "${target_name}${variant_suffix}") {
+    target(output_target_type, "${target_name}${variant_suffix}") {
       if (defined(output_name_override)) {
         output_name = output_name_override
       }
@@ -1811,6 +1815,7 @@ template("mojom") {
           ":$parser_target_name",
           "//mojo/public/tools/bindings:precompile_templates",
         ]
+
         outputs = ts_outputs
         args = common_generator_args
         response_file_contents = source_filelist
@@ -1835,6 +1840,7 @@ template("mojom") {
       tsconfig = {
       }
       tsconfig.compilerOptions = {
+        composite = true
         target = "es6"
         module = "es6"
         lib = [
@@ -1850,6 +1856,17 @@ template("mojom") {
                 target_gen_dir,
                 root_gen_dir) ]
       }
+      tsconfig.references = []
+
+      # Get tsconfigs for deps.
+      foreach(d, all_deps) {
+        dep_target_gen_dir = rebase_path(get_label_info(d, "target_gen_dir"))
+        dep_name = get_label_info(d, "name")
+        reference = {
+        }
+        reference.path = "$dep_target_gen_dir/$dep_name-${dependency_type.name}-tsconfig.json"
+        tsconfig.references += [ reference ]
+      }
       write_file(tsconfig_filename, tsconfig, "json")
 
       # Compile previously generated Typescript to Javascript.
@@ -1862,6 +1879,12 @@ template("mojom") {
         sources = ts_outputs
         outputs = js_outputs
         public_deps = [ ":$generator_ts_target_name" ]
+        foreach(d, all_deps) {
+          full_name = get_label_info(d, "label_no_toolchain")
+          public_deps +=
+              [ "${full_name}_${dependency_type.name}__js__generator" ]
+        }
+
         absolute_tsconfig_path =
             rebase_path(tsconfig_filename, "", target_gen_dir)
         args = [ "--tsconfig_path=$absolute_tsconfig_path" ]
@@ -1885,7 +1908,10 @@ template("mojom") {
 
     group(js_data_deps_target_name) {
       data = js_outputs
-      deps = [ ":$generator_js_target_name" ]
+      deps = []
+      foreach(generator_js_target_name, generator_js_target_names) {
+        deps += [ ":$generator_js_target_name" ]
+      }
       data_deps = []
       foreach(d, all_deps) {
         full_name = get_label_info(d, "label_no_toolchain")

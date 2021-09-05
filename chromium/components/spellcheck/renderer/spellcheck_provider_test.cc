@@ -6,10 +6,11 @@
 
 #include <memory>
 
-#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
+#include "base/task/current_thread.h"
 #include "build/build_config.h"
 #include "components/spellcheck/common/spellcheck.mojom.h"
+#include "components/spellcheck/common/spellcheck_features.h"
 #include "components/spellcheck/common/spellcheck_result.h"
 #include "components/spellcheck/renderer/hunspell_engine.h"
 #include "components/spellcheck/renderer/spellcheck.h"
@@ -190,8 +191,19 @@ void TestingSpellCheckProvider::GetPerLanguageSuggestions(
     GetPerLanguageSuggestionsCallback callback) {
   NOTREACHED();
 }
-#endif  // defined(OS_WIN)
 
+void TestingSpellCheckProvider::InitializeDictionaries(
+    InitializeDictionariesCallback callback) {
+  if (base::FeatureList::IsEnabled(
+          spellcheck::kWinDelaySpellcheckServiceInit)) {
+    std::move(callback).Run(/*dictionaries=*/{}, /*custom_words=*/{},
+                            /*enable=*/false);
+    return;
+  }
+
+  NOTREACHED();
+}
+#endif  // defined(OS_WIN)
 #endif  // BUILDFLAG(USE_BROWSER_SPELLCHECKER)
 
 #if defined(OS_ANDROID)

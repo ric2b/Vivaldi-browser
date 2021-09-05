@@ -19,6 +19,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "build/build_config.h"
+#include "build/lacros_buildflags.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/guest_view/common/guest_view_constants.h"
@@ -101,7 +102,6 @@
 #include "prefs/vivaldi_pref_names.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/vivaldi_ui_utils.h"
-#include "ui/vivaldi_browser_window.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using vivaldi::IsVivaldiApp;
@@ -178,7 +178,7 @@ static std::string TerminationStatusToString(base::TerminationStatus status) {
     case base::TERMINATION_STATUS_ABNORMAL_TERMINATION:
     case base::TERMINATION_STATUS_STILL_RUNNING:
       return "abnormal";
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
       return "oom killed";
 #endif
@@ -330,14 +330,14 @@ bool WebViewGuest::GetGuestPartitionConfigForSite(
 
 // static
 GURL WebViewGuest::GetSiteForGuestPartitionConfig(
-    const std::string& partition_domain,
-    const std::string& partition_name,
-    bool in_memory) {
-  std::string url_encoded_partition =
-      net::EscapeQueryParamValue(partition_name, false);
-  return GURL(base::StringPrintf(
-      "%s://%s/%s?%s", content::kGuestScheme, partition_domain.c_str(),
-      in_memory ? "" : "persist", url_encoded_partition.c_str()));
+    const content::StoragePartitionConfig& storage_partition_config) {
+  std::string url_encoded_partition = net::EscapeQueryParamValue(
+      storage_partition_config.partition_name(), false);
+  return GURL(
+      base::StringPrintf("%s://%s/%s?%s", content::kGuestScheme,
+                         storage_partition_config.partition_domain().c_str(),
+                         storage_partition_config.in_memory() ? "" : "persist",
+                         url_encoded_partition.c_str()));
 }
 
 // static
@@ -412,8 +412,9 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
     }
   } else {
     guest_site =
-      GetSiteForGuestPartitionConfig(partition_domain, storage_partition_id,
-                                     !persist_storage /* in_memory */);
+      GetSiteForGuestPartitionConfig(content::StoragePartitionConfig::Create(
+          partition_domain, storage_partition_id,
+          !persist_storage /* in_memory */));
   }
   content::BrowserContext* context = owner_web_contents()->GetBrowserContext();
 
@@ -658,14 +659,18 @@ void WebViewGuest::DidInitialize(const base::DictionaryValue& create_params) {
   web_modal::WebContentsModalDialogManager::CreateForWebContents(
       web_contents());
 
-  Browser* browser = ::vivaldi::FindBrowserWithWebContents(web_contents());
-  if (browser) {
-    VivaldiBrowserWindow* app_win =
-        static_cast<VivaldiBrowserWindow*>(browser->window());
-    web_modal::WebContentsModalDialogManager::FromWebContents(web_contents())
-        ->SetDelegate(app_win);
+  if (IsVivaldiRunning()) {
+    // Use Vivaldi UI delegate as the delegate for the guest manager as well.
+    web_modal::WebContentsModalDialogManager* owner_manager =
+        web_modal::WebContentsModalDialogManager::FromWebContents(
+            owner_web_contents());
+    DCHECK(owner_manager);
+    if (owner_manager) {
+      DCHECK(owner_manager->delegate());
+      web_modal::WebContentsModalDialogManager::FromWebContents(web_contents())
+          ->SetDelegate(owner_manager->delegate());
+    }
   }
-
 #endif
 
   rules_registry_id_ = GetOrGenerateRulesRegistryID(
@@ -965,13 +970,11 @@ void WebViewGuest::NewGuestWebViewCallback(const content::OpenURLParams& params,
       params.source_site_instance->GetBrowserContext()->IsOffTheRecord()) {
     DCHECK(guest_web_contents->GetBrowserContext()->IsOffTheRecord());
     RequestNewWindowPermission(WindowOpenDisposition::OFF_THE_RECORD,
-                               gfx::Rect(), params.user_gesture,
-                               new_guest->web_contents());
+                               gfx::Rect(), new_guest->web_contents());
   } else  // if Vivaldi and new window from private window.
   // Request permission to show the new window.
   RequestNewWindowPermission(params.disposition,
                              gfx::Rect(),
-                             params.user_gesture,
                              new_guest->web_contents());
 }
 
@@ -1460,7 +1463,7 @@ bool WebViewGuest::HandleKeyboardShortcuts(
         blink::mojom::PointerLockResult::kUserRejected);
   }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (event.GetModifiers() != blink::WebInputEvent::kMetaKey)
     return false;
 
@@ -1694,8 +1697,7 @@ void WebViewGuest::AddNewContents(WebContents* source,
   // https://crbug.com/832879.
   if (was_blocked)
     *was_blocked = false;
-  RequestNewWindowPermission(disposition, initial_rect, user_gesture,
-                             new_contents.release());
+  RequestNewWindowPermission(disposition, initial_rect, new_contents.release());
 }
 
 WebContents* WebViewGuest::OpenURLFromTab(
@@ -1792,10 +1794,6 @@ void WebViewGuest::WebContentsCreated(WebContents* source_contents,
   guest->name_ = frame_name;
   pending_new_windows_.insert(
       std::make_pair(guest, NewWindowInfo(target_url, frame_name)));
-
-  guest->delegate_to_browser_plugin_ =
-    static_cast<content::WebContentsImpl*>(new_contents)
-    ->GetBrowserPluginGuest();
 }
 
 void WebViewGuest::EnterFullscreenModeForTab(
@@ -1935,7 +1933,6 @@ void WebViewGuest::LoadURLWithParams(
 
 void WebViewGuest::RequestNewWindowPermission(WindowOpenDisposition disposition,
                                               const gfx::Rect& initial_bounds,
-                                              bool user_gesture,
                                               WebContents* new_contents) {
   auto* guest = WebViewGuest::FromWebContents(new_contents);
   if (!guest)
@@ -1987,7 +1984,6 @@ void WebViewGuest::RequestNewWindowPermission(WindowOpenDisposition disposition,
   request_info.SetString(webview::kStoragePartitionId, storage_partition_id);
   request_info.SetString(webview::kWindowOpenDisposition,
                          WindowOpenDispositionToString(disposition));
-  request_info.SetBoolean(guest_view::kUserGesture, user_gesture);
 
   web_view_permission_helper_->RequestPermission(
       WEB_VIEW_PERMISSION_TYPE_NEW_WINDOW, request_info,

@@ -2,22 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {browserProxy} from '../../browser_proxy/browser_proxy.js';
 import {assertInstanceof} from '../../chrome_util.js';
 import {DeviceOperator, parseMetadata} from '../../mojo/device_operator.js';
 import * as nav from '../../nav.js';
 import * as state from '../../state.js';
-import * as util from '../../util.js';
 
 /**
  * Creates a controller for the video preview of Camera view.
  */
 export class Preview {
   /**
-   * @param {!function()} onNewStreamNeeded Callback to request new stream.
+   * @param {function()} onNewStreamNeeded Callback to request new stream.
    */
   constructor(onNewStreamNeeded) {
     /**
-     * @type {!function()}
+     * @type {function()}
      * @private
      */
     this.onNewStreamNeeded_ = onNewStreamNeeded;
@@ -423,10 +423,10 @@ export class Preview {
         .then(() => {
           // Resize window by aspect ratio only if it's not maximized or
           // fullscreen.
-          if (util.isWindowFullSize()) {
+          if (browserProxy.isFullscreenOrMaximized()) {
             return;
           }
-          return util.fitWindow();
+          return browserProxy.fitWindow();
         });
   }
 

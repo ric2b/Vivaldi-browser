@@ -85,10 +85,10 @@ def stack(out_dir):
 
 
 def use_goma():
-  home_goma = os.path.expanduser("~/goma")
-  if os.path.exists(home_goma) or os.environ.get("GOMA_DIR") or \
-     os.environ.get("GOMADIR"):
-    return 'use_goma=true '
+  goma_dir = subprocess.check_output(['goma_ctl', 'goma_dir']).strip()
+  result = run(['goma_ctl', 'ensure_start'])
+  if not result:
+    return 'use_goma=true goma_dir="' + goma_dir + '" '
   return ''
 
 
@@ -123,7 +123,7 @@ def get_ios_gn_args(is_release, bundle_id_prefix, target_cpu):
       'enable_remoting=false '
       'use_xcode_clang=false '
       'ios_app_bundle_id_prefix="%s" '
-      'ios_deployment_target="9.0" '
+      'ios_deployment_target="10.0" '
       'enable_dsyms=true '
       'target_cpu="%s" ') % (bundle_id_prefix, target_cpu)
 

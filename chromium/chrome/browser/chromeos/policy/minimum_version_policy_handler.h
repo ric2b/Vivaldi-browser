@@ -24,24 +24,31 @@ namespace base {
 class Clock;
 class DictionaryValue;
 class Time;
-}
+}  // namespace base
 
 namespace chromeos {
 class UpdateRequiredNotification;
-}
+}  // namespace chromeos
 
 namespace policy {
 
-// This class observes the device setting |kMinimumChromeVersionEnforced|, and
-// checks if respective requirement is met.
+// This class observes the device setting |kDeviceMinimumVersion|, and
+// checks if respective requirement is met. If an update is not required, all
+// running timers are reset. If an update is required, it calculates the
+// deadline using the warning period in the policy and restarts the timer. It
+// also calls UpdateRequiredNotification to show in-session notifications if an
+// update is required but it cannot be downloaded due to network limitations or
+// Auto Update Expiration.
 class MinimumVersionPolicyHandler
     : public BuildStateObserver,
       public chromeos::NetworkStateHandlerObserver,
       public chromeos::UpdateEngineClient::Observer {
  public:
-  static const char kChromeVersion[];
+  static const char kRequirements[];
+  static const char kChromeOsVersion[];
   static const char kWarningPeriod[];
-  static const char KEolWarningPeriod[];
+  static const char kEolWarningPeriod[];
+  static const char kUnmanagedUserRestricted[];
 
   class Observer {
    public:
@@ -64,8 +71,8 @@ class MinimumVersionPolicyHandler
     // Checks if a user is logged in.
     virtual bool IsUserLoggedIn() const = 0;
 
-    // Checks if the user logged in is a managed user.
-    virtual bool IsUserManaged() const = 0;
+    // Checks if the user logged in is managed and not a child user.
+    virtual bool IsUserEnterpriseManaged() const = 0;
 
     // Checks if we are currently on the login screen.
     virtual bool IsLoginSessionState() const = 0;
@@ -83,7 +90,7 @@ class MinimumVersionPolicyHandler
     // Hides update required screen and shows the login screen.
     virtual void HideUpdateRequiredScreenIfShown() = 0;
 
-    virtual const base::Version& GetCurrentVersion() const = 0;
+    virtual base::Version GetCurrentVersion() const = 0;
   };
 
   class MinimumVersionRequirement {
@@ -141,18 +148,26 @@ class MinimumVersionPolicyHandler
   void RemoveObserver(Observer* observer);
   bool RequirementsAreSatisfied() const { return GetState() == nullptr; }
 
-  // Returns |true| if the current version satisfies the given requirement.
-  bool CurrentVersionSatisfies(
-      const MinimumVersionRequirement& requirement) const;
-
   const MinimumVersionRequirement* GetState() const { return state_.get(); }
 
-  bool DeadlineReached() { return deadline_reached; }
+  bool DeadlineReached() { return deadline_reached_; }
 
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
-  // Show notification on managed user login if it is the last day to deadline.
+  // Show notification on login if the user is managed or
+  // |unmanaged_user_restricted_| is set to true if it is the last day to
+  // deadline.
   void MaybeShowNotificationOnLogin();
+
+  // Whether banner to return back the device should be visible in Settings. It
+  // is true when an update is required on a device that has reached End Of Life
+  // (Auto Update Expiration) and the currently signed in user is enterprise
+  // managed or an unmanaged user restricted by DeviceMinimumVersion policy.
+  bool ShouldShowUpdateRequiredEolBanner() const;
+
+  // Returns the number of days to deadline if update is required and deadline
+  // has not been reached. Returns null if update is not required.
+  base::Optional<int> GetTimeRemainingInDays();
 
   // Callback used in tests and invoked after end-of-life status has been
   // fetched from the update_engine.
@@ -160,9 +175,22 @@ class MinimumVersionPolicyHandler
     fetch_eol_callback_ = std::move(callback);
   }
 
-  bool IsDeadlineTimerRunningForTesting();
+  base::Time update_required_deadline_for_testing() const {
+    return update_required_deadline_;
+  }
+
+  bool IsDeadlineTimerRunningForTesting() const;
 
  private:
+  // Returns |true| if the current version satisfies the given requirement.
+  bool CurrentVersionSatisfies(
+      const MinimumVersionRequirement& requirement) const;
+
+  // Whether the current user should receive update required notifications and
+  // force signed out on reaching the deadline. Retuns true if the user is
+  // enterprise managed or |unmanaged_user_restricted_| is true.
+  bool IsPolicyRestrictionAppliedForUser() const;
+
   void OnPolicyChanged();
   bool IsPolicyApplicable();
   void Reset();
@@ -193,7 +221,7 @@ class MinimumVersionPolicyHandler
   // Starts the timer to expire when |deadline| is reached.
   void StartDeadlineTimer(base::Time deadline);
 
-  // Starts observing the BuildState for any updates in Chrome and resets the
+  // Starts observing the BuildState for any updates in Chrome OS and resets the
   // state if new version satisfies the minimum version requirement.
   void StartObservingUpdate();
 
@@ -240,14 +268,23 @@ class MinimumVersionPolicyHandler
   // version in all the configurations.
   std::unique_ptr<MinimumVersionRequirement> state_;
 
+  // If this flag is true, unmanaged user sessions receive update required
+  // notifications and are force logged out when deadline is reached.
+  bool unmanaged_user_restricted_ = false;
+
   bool eol_reached_ = false;
 
   // If this flag is true, user should restricted to use the session by logging
   // out and/or showing update required screen.
-  bool deadline_reached = false;
+  bool deadline_reached_ = false;
 
+  // Time when the policy is applied and with respect to which the deadline to
+  // update the device is calculated.
   base::Time update_required_time_;
 
+  // Deadline for updating the device post which the user is restricted from
+  // using the session by force log out if a session is active and then blocking
+  // sign in at the login screen.
   base::Time update_required_deadline_;
 
   // Fires when the deadline to update the device has reached or passed.

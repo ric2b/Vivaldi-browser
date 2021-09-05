@@ -52,6 +52,21 @@ int BrowserControlsContainerView::GetControlsHeight() {
   return controls_layer_ ? controls_layer_->bounds().height() : 0;
 }
 
+int BrowserControlsContainerView::GetMinHeight() {
+  return Java_BrowserControlsContainerView_getMinHeight(
+      AttachCurrentThread(), java_browser_controls_container_view_);
+}
+
+bool BrowserControlsContainerView::OnlyExpandControlsAtPageTop() {
+  return Java_BrowserControlsContainerView_onlyExpandControlsAtPageTop(
+      AttachCurrentThread(), java_browser_controls_container_view_);
+}
+
+bool BrowserControlsContainerView::ShouldAnimateBrowserControlsHeightChanges() {
+  return Java_BrowserControlsContainerView_shouldAnimateBrowserControlsHeightChanges(
+      AttachCurrentThread(), java_browser_controls_container_view_);
+}
+
 int BrowserControlsContainerView::GetContentHeightDelta() {
   if (!controls_layer_ || !web_contents())
     return 0;

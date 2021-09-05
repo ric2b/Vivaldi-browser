@@ -421,7 +421,7 @@ class CaptureScreenshotTest : public DevToolsProtocolTest {
     EXPECT_TRUE(result_bitmap);
 
     gfx::Rect matching_mask(gfx::SkIRectToRect(expected_bitmap.bounds()));
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     // Mask out the corners, which may be drawn differently on Mac because of
     // rounded corners.
     matching_mask.Inset(4, 4, 4, 4);
@@ -507,8 +507,9 @@ class CaptureScreenshotTest : public DevToolsProtocolTest {
 
  private:
 #if !defined(OS_ANDROID)
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(switches::kEnablePixelOutputInTests);
+  void SetUp() override {
+    EnablePixelOutput();
+    DevToolsProtocolTest::SetUp();
   }
 #endif
 };
@@ -521,7 +522,7 @@ IN_PROC_BROWSER_TEST_F(CaptureScreenshotTest, CaptureScreenshot) {
 
   shell()->LoadURL(
       GURL("data:text/html,<body style='background:%23123456'></body>"));
-  WaitForLoadStop(shell()->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   Attach();
   SkBitmap expected_bitmap;
   // We compare against the actual physical backing size rather than the
@@ -544,7 +545,7 @@ IN_PROC_BROWSER_TEST_F(CaptureScreenshotTest, CaptureScreenshotJpeg) {
 
   shell()->LoadURL(
       GURL("data:text/html,<body style='background:%23123456'></body>"));
-  WaitForLoadStop(shell()->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   Attach();
   SkBitmap expected_bitmap;
   // We compare against the actual physical backing size rather than the
@@ -560,7 +561,8 @@ IN_PROC_BROWSER_TEST_F(CaptureScreenshotTest, CaptureScreenshotJpeg) {
 
 // Setting frame size (through RWHV) is not supported on Android.
 // This test seems to be very flaky on windows: https://crbug.com/801173
-#if defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_WIN)
+#if defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
+    defined(OS_WIN)
 #define MAYBE_CaptureScreenshotArea DISABLED_CaptureScreenshotArea
 #else
 #define MAYBE_CaptureScreenshotArea CaptureScreenshotArea
@@ -591,7 +593,7 @@ IN_PROC_BROWSER_TEST_F(CaptureScreenshotTest,
     return;
 
   shell()->LoadURL(GURL("about:blank"));
-  WaitForLoadStop(shell()->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   Attach();
 
   // Override background to blue.
@@ -632,7 +634,7 @@ IN_PROC_BROWSER_TEST_F(CaptureScreenshotTest, TransparentScreenshots) {
 
   shell()->LoadURL(
       GURL("data:text/html,<body style='background:transparent'></body>"));
-  WaitForLoadStop(shell()->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   Attach();
 
   // Override background to fully transparent.
@@ -1413,7 +1415,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, CertificateError) {
   int eventId;
 
   shell()->LoadURL(GURL("about:blank"));
-  WaitForLoadStop(shell()->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   Attach();
   SendCommand("Network.enable", nullptr, true);
@@ -1498,7 +1500,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest,
   GURL test_url = https_server.GetURL("/devtools/navigation.html");
 
   shell()->LoadURL(GURL("about:blank"));
-  WaitForLoadStop(shell()->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   Attach();
   SendCommand("Network.enable", nullptr, true);
@@ -1541,7 +1543,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, CertificateErrorBrowserTarget) {
   std::unique_ptr<base::DictionaryValue> command_params;
 
   shell()->LoadURL(GURL("about:blank"));
-  WaitForLoadStop(shell()->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   // Clear cookies and cache to avoid interference with cert error events.
   Attach();
@@ -1578,7 +1580,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, SubresourceWithCertificateError) {
   int eventId;
 
   shell()->LoadURL(GURL("about:blank"));
-  WaitForLoadStop(shell()->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   Attach();
   SendCommand("Security.enable", nullptr, false);
@@ -1950,7 +1952,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, CertificateExplanations) {
   ASSERT_TRUE(https_server.Start());
 
   shell()->LoadURL(GURL("about:blank"));
-  WaitForLoadStop(shell()->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   // Navigate to a page on the server in order to retrieve its certificate
   // chain.

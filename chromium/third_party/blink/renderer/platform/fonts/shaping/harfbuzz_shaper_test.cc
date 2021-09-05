@@ -436,7 +436,7 @@ TEST_F(HarfBuzzShaperTest, ShapeLatinSegment) {
 // <div>0x647<span style="color: red;">0x64A</span></
 // Cannot be enabled on Mac yet, compare
 // https:// https://github.com/harfbuzz/harfbuzz/issues/1415
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_ShapeArabicWithContext DISABLED_ShapeArabicWithContext
 #else
 #define MAYBE_ShapeArabicWithContext ShapeArabicWithContext
@@ -667,7 +667,7 @@ TEST_P(ShapeParameterTest, MaxGlyphsClusterDevanagari) {
   HarfBuzzShaper shaper(string);
   scoped_refptr<ShapeResult> result = ShapeWithParameter(&shaper);
   EXPECT_EQ(length, result->NumCharacters());
-#if defined(OS_LINUX) || defined(OS_FUCHSIA)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_FUCHSIA)
   // Linux and Fuchsia use Lohit Devanagari. When using that font the shaper
   // returns 32767 glyphs instead of 32769.
   // TODO(crbug.com/933551): Add Noto Sans Devanagari to
@@ -714,7 +714,7 @@ TEST_F(HarfBuzzShaperTest, NegativeLetterSpacing) {
   ShapeResultSpacing<String> spacing(string);
   FontDescription font_description;
   font_description.SetLetterSpacing(-5);
-  spacing.SetSpacing(font_description);
+  spacing.SetSpacing(Font(font_description));
   result->ApplySpacing(spacing);
 
   EXPECT_EQ(5 * 5, width - result->Width());
@@ -729,7 +729,7 @@ TEST_F(HarfBuzzShaperTest, NegativeLetterSpacingTo0) {
   ShapeResultSpacing<String> spacing(string);
   FontDescription font_description;
   font_description.SetLetterSpacing(-char_width);
-  spacing.SetSpacing(font_description);
+  spacing.SetSpacing(Font(font_description));
   result->ApplySpacing(spacing);
 
   // EXPECT_EQ(0.0f, result->Width());
@@ -744,7 +744,7 @@ TEST_F(HarfBuzzShaperTest, NegativeLetterSpacingToNegative) {
   ShapeResultSpacing<String> spacing(string);
   FontDescription font_description;
   font_description.SetLetterSpacing(-2 * char_width);
-  spacing.SetSpacing(font_description);
+  spacing.SetSpacing(Font(font_description));
   result->ApplySpacing(spacing);
 
   // CSS does not allow negative width, it should be clampled to 0.
@@ -1494,7 +1494,7 @@ TEST_F(HarfBuzzShaperTest, MAYBE_SafeToBreakArabicCommonLigatures) {
 
   Vector<unsigned> safe_to_break_positions;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   safe_to_break_positions = {0, 2, 3, 4, 11};
 #else
   safe_to_break_positions = {0, 3, 4, 5, 7, 11};

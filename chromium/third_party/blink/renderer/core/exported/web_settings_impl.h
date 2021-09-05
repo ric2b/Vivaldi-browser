@@ -84,7 +84,6 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetEditingBehavior(EditingBehavior) override;
   void SetEnableScrollAnimator(bool) override;
   void SetPrefersReducedMotion(bool) override;
-  void SetEnableTouchAdjustment(bool) override;
   void SetWebGL1Enabled(bool) override;
   void SetWebGL2Enabled(bool) override;
   void SetFantasyFontFamily(const WebString&,
@@ -179,6 +178,7 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetTextTrackWindowRadius(const WebString&) override;
   void SetThreadedScrollingEnabled(bool) override;
   void SetTouchDragDropEnabled(bool) override;
+  void SetTouchDragEndContextMenu(bool) override;
   void SetBarrelButtonForDragEnabled(bool) override;
   void SetUseLegacyBackgroundSizeShorthandBehavior(bool) override;
   void SetViewportStyle(WebViewportStyle) override;
@@ -224,6 +224,8 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetNavigationControls(NavigationControls) override;
 
   void SetAriaModalPrunesAXTree(bool) override;
+  void SetUseAXMenuList(bool) override;
+  void SetSelectionClipboardBufferAvailable(bool) override;
 
   bool RenderVSyncNotificationEnabled() const {
     return render_v_sync_notification_enabled_;

@@ -144,7 +144,8 @@ LikelyFormFilling SendFillInformationToRenderer(
   if (best_matches.empty()) {
     bool should_show_popup_without_passwords =
         client->GetPasswordFeatureManager()->ShouldShowAccountStorageOptIn() ||
-        client->GetPasswordFeatureManager()->ShouldShowAccountStorageReSignin();
+        client->GetPasswordFeatureManager()->ShouldShowAccountStorageReSignin(
+            client->GetLastCommittedURL());
     driver->InformNoSavedCredentials(should_show_popup_without_passwords);
     metrics_recorder->RecordFillEvent(
         PasswordFormMetricsRecorder::kManagerFillEventNoCredential);
@@ -169,13 +170,22 @@ LikelyFormFilling SendFillInformationToRenderer(
       PasswordFormMetricsRecorder::WaitForUsernameReason;
   WaitForUsernameReason wait_for_username_reason =
       WaitForUsernameReason::kDontWait;
-  if (client->IsIncognito()) {
+  if (client->RequiresReauthToFill()) {
+    wait_for_username_reason = WaitForUsernameReason::kReauthRequired;
+  } else if (client->IsIncognito()) {
     wait_for_username_reason = WaitForUsernameReason::kIncognitoMode;
   } else if (preferred_match->is_public_suffix_match) {
     wait_for_username_reason = WaitForUsernameReason::kPublicSuffixMatch;
   } else if (no_sign_in_form) {
     // If the parser did not find a current password element, don't fill.
     wait_for_username_reason = WaitForUsernameReason::kFormNotGoodForFilling;
+  } else if (observed_form.HasUsernameElement() &&
+             observed_form.HasNonEmptyPasswordValue() &&
+             observed_form.server_side_classification_successful &&
+             !observed_form.username_may_use_prefilled_placeholder) {
+    // Password is already filled in and we don't think the username is a
+    // placeholder, so don't overwrite.
+    wait_for_username_reason = WaitForUsernameReason::kPasswordPrefilled;
   } else if (!client->IsCommittedMainFrameSecure()) {
     wait_for_username_reason = WaitForUsernameReason::kInsecureOrigin;
   } else if (autofill::IsTouchToFillEnabled()) {
@@ -228,7 +238,6 @@ PasswordFormFillData CreatePasswordFormFillData(
   result.action = form_on_page.action;
   result.uses_account_store = preferred_match.IsUsingAccountStore();
   result.wait_for_username = wait_for_username;
-  result.has_renderer_ids = form_on_page.has_renderer_ids;
 
   // Note that many of the |FormFieldData| members are not initialized for
   // |username_field| and |password_field| because they are currently not used

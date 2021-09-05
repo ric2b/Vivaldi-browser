@@ -10,14 +10,16 @@
 
 #include "base/callback.h"
 #include "base/i18n/rtl.h"
+#include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/unguessable_token.h"
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "third_party/blink/public/common/css/page_size_type.h"
-#include "third_party/blink/public/common/feature_policy/feature_policy.h"
+#include "third_party/blink/public/common/feature_policy/feature_policy_features.h"
 #include "third_party/blink/public/common/frame/user_activation_update_source.h"
 #include "third_party/blink/public/common/messaging/transferable_message.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/ad_tagging/ad_frame.mojom-shared.h"
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-shared.h"
 #include "third_party/blink/public/mojom/commit_result/commit_result.mojom-shared.h"
@@ -27,6 +29,8 @@
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/media_player_action.mojom-shared.h"
+#include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom-shared.h"
+#include "third_party/blink/public/mojom/optimization_guide/optimization_guide.mojom-shared.h"
 #include "third_party/blink/public/mojom/portal/portal.mojom-shared.h"
 #include "third_party/blink/public/mojom/selection_menu/selection_menu_behavior.mojom-shared.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-shared.h"
@@ -39,6 +43,8 @@
 #include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/public/web/web_navigation_params.h"
+#include "ui/accessibility/ax_tree_id.h"
+#include "ui/base/ime/ime_text_span.h"
 #include "v8/include/v8.h"
 
 namespace gfx {
@@ -63,8 +69,8 @@ class WebFrameWidget;
 class WebInputMethodController;
 class WebPerformance;
 class WebPlugin;
+class WebPrintClient;
 class WebRange;
-class WebSecurityOrigin;
 class WebScriptExecutionCallback;
 class WebSpellCheckPanelHostClient;
 class WebString;
@@ -72,7 +78,6 @@ class WebTextCheckClient;
 class WebURL;
 class WebView;
 struct FramePolicy;
-struct TransferableMessage;
 struct WebAssociatedURLLoaderOptions;
 struct WebConsoleMessage;
 struct WebIsolatedWorldInfo;
@@ -109,8 +114,8 @@ class WebLocalFrame : public WebFrame {
       WebFrame* opener = nullptr,
       const WebString& name = WebString(),
       network::mojom::WebSandboxFlags = network::mojom::WebSandboxFlags::kNone,
-      const FeaturePolicy::FeatureState& opener_feature_state =
-          FeaturePolicy::FeatureState());
+      const FeaturePolicyFeatureState& opener_feature_state =
+          FeaturePolicyFeatureState());
 
   // Used to create a provisional local frame. Currently, it's possible for a
   // provisional navigation not to commit (i.e. it might turn into a download),
@@ -173,6 +178,10 @@ class WebLocalFrame : public WebFrame {
 
   // Basic properties ---------------------------------------------------
 
+  LocalFrameToken GetLocalFrameToken() const {
+    return LocalFrameToken(GetFrameToken());
+  }
+
   virtual WebDocument GetDocument() const = 0;
 
   // The name of this frame. If no name is given, empty string is returned.
@@ -180,6 +189,12 @@ class WebLocalFrame : public WebFrame {
 
   // Sets the name of this frame.
   virtual void SetName(const WebString&) = 0;
+
+  // Returns the AXTreeID associated to the current frame. It is tied to the
+  // frame's associated EmbeddingToken, and so it will only be a valid one after
+  // the first time that document has been loaded, and will change whenever the
+  // loaded document changes (e.g. frame navigated to a different document).
+  virtual ui::AXTreeID GetAXTreeID() const = 0;
 
   // Hierarchy ----------------------------------------------------------
 
@@ -212,7 +227,8 @@ class WebLocalFrame : public WebFrame {
   // Returns the embedding token for this frame or nullopt if the frame hasn't
   // committed a navigation. This token changes when a new document is committed
   // in this WebLocalFrame.
-  virtual const base::Optional<base::UnguessableToken>& GetEmbeddingToken() = 0;
+  virtual const base::Optional<base::UnguessableToken>& GetEmbeddingToken()
+      const = 0;
 
   // Navigation Ping --------------------------------------------------------
 
@@ -319,21 +335,6 @@ class WebLocalFrame : public WebFrame {
   // Clears the isolated world CSP stored for |world_id| by this frame's
   // Document.
   virtual void ClearIsolatedWorldCSPForTesting(int32_t world_id) = 0;
-
-  // Sets up an isolated world by associating a |world_id| with |info|.
-  // worldID must be > 0 (as 0 represents the main world).
-  // worldID must be < kEmbedderWorldIdLimit, high number used internally.
-  // TODO(karandeepb): This modifies the global isolated world info and hence
-  // should ideally be moved out of WebLocalFrame.
-  virtual void SetIsolatedWorldInfo(int32_t world_id,
-                                    const WebIsolatedWorldInfo& info) = 0;
-
-  // Returns the stable ID that was set with SetIsolatedWorldInfo.
-  virtual WebString GetIsolatedWorldStableId(v8::Local<v8::Context>) const = 0;
-
-  // Returns the human readable name that was set with SetIsolatedWorldInfo.
-  virtual WebString GetIsolatedWorldHumanReadableName(
-      v8::Local<v8::Context>) const = 0;
 
   // Executes script in the context of the current page and returns the value
   // that the script evaluated to.
@@ -497,6 +498,13 @@ class WebLocalFrame : public WebFrame {
   virtual void MoveCaretSelection(const gfx::Point&) = 0;
 
   virtual bool SetEditableSelectionOffsets(int start, int end) = 0;
+  virtual bool AddImeTextSpansToExistingText(
+      const WebVector<ui::ImeTextSpan>& ime_text_spans,
+      unsigned text_start,
+      unsigned text_end) = 0;
+  virtual bool ClearImeTextSpansByType(ui::ImeTextSpan::Type type,
+                                       unsigned text_start,
+                                       unsigned text_end) = 0;
   virtual bool SetCompositionFromExistingText(
       int composition_start,
       int composition_end,
@@ -545,15 +553,6 @@ class WebLocalFrame : public WebFrame {
 
   // Iframe sandbox ---------------------------------------------------------
 
-  // TODO(ekaramad): This method is only exposed for testing for certain tests
-  // outside of blink/ that are interested in approximate value of the
-  // FrameReplicationState. This method should be replaced with one in content/
-  // where the notion of FrameReplicationState is relevant to.
-  // Returns the effective sandbox flags which are inherited from their parent
-  // frame.
-  virtual network::mojom::WebSandboxFlags EffectiveSandboxFlagsForTesting()
-      const = 0;
-
   // Returns false if this frame, or any parent frame is sandboxed and does not
   // have the flag "allow-downloads" set.
   virtual bool IsAllowedToDownload() const = 0;
@@ -576,7 +575,8 @@ class WebLocalFrame : public WebFrame {
                               bool forward,
                               bool new_session,
                               bool force,
-                              bool wrap_within_frame) = 0;
+                              bool wrap_within_frame,
+                              bool async) = 0;
 
   // Set the tickmarks for the frame. This will override the default tickmarks
   // generated by find results. If this is called with an empty array, the
@@ -598,29 +598,12 @@ class WebLocalFrame : public WebFrame {
   // This will be removed following the deprecation.
   virtual void UsageCountChromeLoadTimes(const WebString& metric) = 0;
 
-  // Portals -------------------------------------------------------------
-
-  // Dispatches an event when a Portal gets activated. |portal_token| is the
-  // portal's unique identifier, the message pipe |portal_pipe| is the
-  // portal's mojo interface, and the message pipe |portal_client_pipe| is
-  // a mojo interface to communicate back with the caller of the portal's
-  // mojo interface. |data| is an optional message sent together with the
-  // portal's activation.
-  using OnPortalActivatedCallback =
-      base::OnceCallback<void(mojom::PortalActivateResult)>;
-  virtual void OnPortalActivated(
-      const base::UnguessableToken& portal_token,
-      CrossVariantMojoAssociatedRemote<mojom::PortalInterfaceBase> portal,
-      CrossVariantMojoAssociatedReceiver<mojom::PortalClientInterfaceBase>
-          portal_client,
-      TransferableMessage data,
-      OnPortalActivatedCallback callback) = 0;
-
-  // Forwards message to the PortalHost object exposed by the frame.
-  virtual void ForwardMessageFromHost(
-      TransferableMessage message,
-      const WebSecurityOrigin& source_origin,
-      const base::Optional<WebSecurityOrigin>& target_origin) = 0;
+  // Whether we've dispatched "pagehide" on the current document in this frame
+  // previously, and haven't dispatched the "pageshow" event after the last time
+  // we dispatched "pagehide". This means that we've navigated away from the
+  // document and it's still hidden (possibly preserved in the back-forward
+  // cache, or unloaded).
+  virtual bool DispatchedPagehideAndStillHidden() const = 0;
 
   // Scheduling ---------------------------------------------------------------
 
@@ -673,7 +656,9 @@ class WebLocalFrame : public WebFrame {
   // Dispatch |beforeprint| event, and execute event handlers. They might detach
   // this frame from the owner WebView.
   // This function should be called before pairs of PrintBegin() and PrintEnd().
-  virtual void DispatchBeforePrintEvent() = 0;
+  // |print_client| is an optional weak pointer to the caller.
+  virtual void DispatchBeforePrintEvent(
+      base::WeakPtr<WebPrintClient> print_client) = 0;
 
   // Get the plugin to print, if any. The |constrain_to_node| parameter is the
   // same as the one for PrintBegin() below.
@@ -743,7 +728,8 @@ class WebLocalFrame : public WebFrame {
   // User activation -----------------------------------------------------------
 
   // See blink::LocalFrame::NotifyUserActivation().
-  virtual void NotifyUserActivation() = 0;
+  virtual void NotifyUserActivation(
+      mojom::UserActivationNotificationType notification_type) = 0;
 
   // See blink::LocalFrame::HasStickyUserActivation().
   virtual bool HasStickyUserActivation() = 0;
@@ -755,6 +741,16 @@ class WebLocalFrame : public WebFrame {
   virtual bool ConsumeTransientUserActivation(
       UserActivationUpdateSource update_source =
           UserActivationUpdateSource::kRenderer) = 0;
+
+  // Optimization Guide --------------------------------------------------------
+
+  // Sets the optimization hints provided by the optimization guide service. See
+  // //components/optimization_guide/README.md.
+  //
+  // For now, DelayAsyncScriptExecutionDelayType is the only hint. If more hints
+  // are added, this can be struct, etc.
+  virtual void SetOptimizationGuideHints(
+      mojom::DelayAsyncScriptExecutionDelayType delay_type) = 0;
 
   // Testing ------------------------------------------------------------------
 

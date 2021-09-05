@@ -37,6 +37,7 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) MirrorSettings {
 
   // Call to override the default resolution settings.
   void SetResolutionConstraints(int max_width, int max_height);
+  void SetSenderSideLetterboxingEnabled(bool enabled);
 
   // Get video capture constraints with the current settings.
   media::VideoCaptureParams GetVideoCaptureParams();
@@ -47,18 +48,11 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) MirrorSettings {
   int max_width() const { return max_width_; }
   int max_height() const { return max_height_; }
 
-  // Returns a dictionary value of the current settings.
-  base::Value ToDictionaryValue();
-
  private:
   const int min_width_;
   const int min_height_;
   int max_width_;
   int max_height_;
-
-  // TODO(crbug.com/1002603, issuetracker.google.com/issues/158032164): provide
-  // this field from the aspect ratio constraint in libcast's OFFER/ANSWER
-  // exchange.
   bool enable_sender_side_letterboxing_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(MirrorSettings);

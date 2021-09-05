@@ -60,6 +60,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "net/url_request/referrer_policy.h"
 
 #if defined(OS_ANDROID)
 #include "components/download/internal/common/android/download_collection_bridge.h"
@@ -692,6 +693,16 @@ void DownloadItemImpl::OpenDownload() {
   last_access_time_ = base::Time::Now();
   for (auto& observer : observers_)
     observer.OnDownloadOpened(this);
+
+#if defined(OS_WIN)
+  // On Windows, don't actually open the file if it has no extension, to prevent
+  // Windows from interpreting it as the command for an executable of the same
+  // name.
+  if (destination_info_.current_path.Extension().empty()) {
+    delegate_->ShowDownloadInShell(this);
+    return;
+  }
+#endif
   delegate_->OpenDownload(this);
 }
 
@@ -975,17 +986,17 @@ DownloadFile* DownloadItemImpl::GetDownloadFile() {
 }
 
 bool DownloadItemImpl::IsDangerous() const {
-  return (danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE ||
-          danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_URL ||
-          danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT ||
-          danger_type_ == DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT ||
-          danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST ||
-          danger_type_ == DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED ||
-          danger_type_ == DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE ||
-          danger_type_ == DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED ||
-          danger_type_ == DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK ||
-          danger_type_ == DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_WARNING ||
-          danger_type_ == DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING);
+  return danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE ||
+         danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_URL ||
+         danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT ||
+         danger_type_ == DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT ||
+         danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST ||
+         danger_type_ == DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED ||
+         danger_type_ == DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED ||
+         danger_type_ == DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE ||
+         danger_type_ == DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_WARNING ||
+         danger_type_ == DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK ||
+         danger_type_ == DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING;
 }
 
 bool DownloadItemImpl::IsMixedContent() const {
@@ -1594,9 +1605,8 @@ void DownloadItemImpl::Start(
     }
     RecordDownloadMimeType(mime_type_);
     DownloadContent file_type = DownloadContentFromMimeType(mime_type_, false);
-    bool is_same_host_download =
-        base::StringPiece(new_create_info.url().host())
-            .ends_with(new_create_info.site_url.host());
+    bool is_same_host_download = base::EndsWith(
+        new_create_info.url().host(), new_create_info.site_url.host());
     DownloadConnectionSecurity state = CheckDownloadConnectionSecurity(
         new_create_info.url(), new_create_info.url_chain);
     DownloadUkmHelper::RecordDownloadStarted(
@@ -1629,7 +1639,7 @@ void DownloadItemImpl::Start(
   TransitionTo(TARGET_PENDING_INTERNAL);
 
   job_->Start(download_file_.get(),
-              base::Bind(&DownloadItemImpl::OnDownloadFileInitialized,
+              base::BindRepeating(&DownloadItemImpl::OnDownloadFileInitialized,
                          weak_ptr_factory_.GetWeakPtr()),
               GetReceivedSlices());
 }
@@ -1665,7 +1675,7 @@ void DownloadItemImpl::DetermineDownloadTarget() {
   RecordDownloadCountWithSource(DETERMINE_DOWNLOAD_TARGET_COUNT,
                                 download_source_);
   delegate_->DetermineDownloadTarget(
-      this, base::Bind(&DownloadItemImpl::OnDownloadTargetDetermined,
+      this, base::BindOnce(&DownloadItemImpl::OnDownloadTargetDetermined,
                        weak_ptr_factory_.GetWeakPtr()));
 }
 
@@ -1755,7 +1765,7 @@ void DownloadItemImpl::OnDownloadTargetDetermined(
   //               http://crbug.com/74187.
   DCHECK(!IsSavePackageDownload());
   DownloadFile::RenameCompletionCallback callback =
-      base::Bind(&DownloadItemImpl::OnDownloadRenamedToIntermediateName,
+      base::BindOnce(&DownloadItemImpl::OnDownloadRenamedToIntermediateName,
                  weak_ptr_factory_.GetWeakPtr());
 #if defined(OS_ANDROID)
   if ((download_type_ == TYPE_ACTIVE_DOWNLOAD && !transient_ &&
@@ -1940,7 +1950,7 @@ void DownloadItemImpl::OnDownloadCompleting() {
   // Unilaterally rename; even if it already has the right name,
   // we need theannotation.
   DownloadFile::RenameCompletionCallback callback =
-      base::Bind(&DownloadItemImpl::OnDownloadRenamedToFinalName,
+      base::BindOnce(&DownloadItemImpl::OnDownloadRenamedToFinalName,
                  weak_ptr_factory_.GetWeakPtr());
 #if defined(OS_ANDROID)
   if (GetTargetFilePath().IsContentUri()) {
@@ -2602,7 +2612,7 @@ void DownloadItemImpl::ResumeInterruptedDownload(
   // (which is the contents of the Referer header for the last download request)
   // will only be sent to the URL returned by GetURL().
   download_params->set_referrer(GetReferrerUrl());
-  download_params->set_referrer_policy(net::URLRequest::NEVER_CLEAR_REFERRER);
+  download_params->set_referrer_policy(net::ReferrerPolicy::NEVER_CLEAR);
   download_params->set_cross_origin_redirects(
       network::mojom::RedirectMode::kError);
 

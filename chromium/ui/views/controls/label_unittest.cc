@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
 #include "base/strings/utf_string_conversions.h"
@@ -29,10 +30,13 @@
 #include "ui/gfx/text_elider.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/border.h"
+#include "ui/views/controls/base_control_test_widget.h"
 #include "ui/views/controls/link.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/test/focus_manager_test.h"
+#include "ui/views/test/view_metadata_test_utils.h"
 #include "ui/views/test/views_test_base.h"
+#include "ui/views/widget/unique_widget_ptr.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_utils.h"
 
@@ -45,7 +49,7 @@ namespace views {
 
 namespace {
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 const int kControlCommandModifier = ui::EF_COMMAND_DOWN;
 #else
 const int kControlCommandModifier = ui::EF_CONTROL_DOWN;
@@ -88,17 +92,10 @@ void SetRTL(bool rtl) {
   EXPECT_EQ(rtl, base::i18n::IsRTL());
 }
 
-// Returns true if |current| is bigger than |last|. Sets |last| to |current|.
-bool Increased(int current, int* last) {
-  bool increased = current > *last;
-  *last = current;
-  return increased;
-}
-
 base::string16 GetClipboardText(ui::ClipboardBuffer clipboard_buffer) {
   base::string16 clipboard_text;
-  ui::Clipboard::GetForCurrentThread()->ReadText(clipboard_buffer,
-                                                 &clipboard_text);
+  ui::Clipboard::GetForCurrentThread()->ReadText(
+      clipboard_buffer, /* data_dst = */ nullptr, &clipboard_text);
   return clipboard_text;
 }
 
@@ -116,43 +113,22 @@ base::string16 ToRTL(const char* ascii) {
 
 }  // namespace
 
-class LabelTest : public ViewsTestBase {
+class LabelTest : public test::BaseControlTestWidget {
  public:
   LabelTest() = default;
-
-  // ViewsTestBase:
-  void SetUp() override {
-    ViewsTestBase::SetUp();
-
-    Widget::InitParams params =
-        CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
-    params.bounds = gfx::Rect(200, 200);
-    params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-    widget_.Init(std::move(params));
-    View* container = new View();
-    widget_.SetContentsView(container);
-
-    label_ = new Label();
-    container->AddChildView(label_);
-
-    widget_.Show();
-  }
-
-  void TearDown() override {
-    widget_.Close();
-    ViewsTestBase::TearDown();
-  }
+  LabelTest(const LabelTest&) = delete;
+  LabelTest& operator=(const LabelTest&) = delete;
+  ~LabelTest() override = default;
 
  protected:
-  Label* label() { return label_; }
+  void CreateWidgetContent(View* container) override {
+    label_ = container->AddChildView(std::make_unique<Label>());
+  }
 
-  Widget* widget() { return &widget_; }
+  Label* label() { return label_; }
 
  private:
   Label* label_ = nullptr;
-  Widget widget_;
-
-  DISALLOW_COPY_AND_ASSIGN(LabelTest);
 };
 
 // Test fixture for text selection related tests.
@@ -215,31 +191,31 @@ class LabelSelectionTest : public LabelTest {
     SimulatePaint();
     gfx::RenderText* render_text =
         label()->GetRenderTextForSelectionController();
-    const gfx::Range range(index, index + 1);
-    const std::vector<gfx::Rect> bounds =
-        render_text->GetSubstringBounds(range);
-    DCHECK_EQ(1u, bounds.size());
-    const int mid_y = bounds[0].y() + bounds[0].height() / 2;
 
     // For single-line text, use the glyph bounds since it gives a better
     // representation of the midpoint between glyphs when considering selection.
-    // TODO(tapted): When GetCursorSpan() supports returning a vertical range
-    // as well as a horizontal range, just use that here.
+    // TODO(crbug.com/248597): Add multiline support to GetCursorBounds(...).
     if (!render_text->multiline()) {
-      return gfx::Point(render_text->GetCursorSpan(range).Round().start(),
-                        mid_y);
+      return render_text
+          ->GetCursorBounds(gfx::SelectionModel(index, gfx::CURSOR_FORWARD),
+                            true)
+          .left_center();
     }
 
-    // Otherwise, GetCursorSpan() will give incorrect results. Multiline
+    // Otherwise, GetCursorBounds() will give incorrect results. Multiline
     // editing is not supported (http://crbug.com/248597) so there hasn't been
     // a need to draw a cursor. Instead, derive a point from the selection
     // bounds, which always rounds up to an integer after the end of a glyph.
     // This rounding differs to the glyph bounds, which rounds to nearest
     // integer. See http://crbug.com/735346.
+    auto bounds = render_text->GetSubstringBounds({index, index + 1});
+    DCHECK_EQ(1u, bounds.size());
+
     const bool rtl =
         render_text->GetDisplayTextDirection() == base::i18n::RIGHT_TO_LEFT;
     // Return Point corresponding to the leading edge of the character.
-    return gfx::Point(rtl ? bounds[0].right() - 1 : bounds[0].x() + 1, mid_y);
+    return rtl ? bounds[0].right_center() + gfx::Vector2d(-1, 0)
+               : bounds[0].left_center() + gfx::Vector2d(1, 0);
   }
 
   size_t GetLineCount() {
@@ -261,8 +237,14 @@ class LabelSelectionTest : public LabelTest {
   DISALLOW_COPY_AND_ASSIGN(LabelSelectionTest);
 };
 
+TEST_F(LabelTest, Metadata) {
+  // Calling SetMultiLine() will DCHECK unless the label is in multi-line mode.
+  label()->SetMultiLine(true);
+  test::TestViewMetadata(label());
+}
+
 TEST_F(LabelTest, FontPropertySymbol) {
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // On linux, the fonts are mocked with a custom FontConfig. The "Courier New"
   // family name is mapped to Cousine-Regular.ttf (see: $build/test_fonts/*).
   std::string font_name("Courier New");
@@ -738,8 +720,8 @@ TEST_F(LabelTest, MultiLineSizing) {
             required_size.width() + border.width());
 }
 
-#if !defined(OS_MACOSX)
-// TODO(warx): Remove !defined(OS_MACOSX) once SetMaxLines() is applied to MAC
+#if !defined(OS_APPLE)
+// TODO(warx): Remove !defined(OS_APPLE) once SetMaxLines() is applied to MAC
 // (crbug.com/758720).
 TEST_F(LabelTest, MultiLineSetMaxLines) {
   // Ensure SetMaxLines clamps the line count of a string with returns.
@@ -920,11 +902,15 @@ TEST_F(LabelTest, MultilineSupportedRenderText) {
 // Ensures SchedulePaint() calls are not made in OnPaint().
 TEST_F(LabelTest, NoSchedulePaintInOnPaint) {
   TestLabel label;
+  int count = 0;
+  const auto expect_paint_count_increased = [&]() {
+    EXPECT_GT(label.schedule_paint_count(), count);
+    count = label.schedule_paint_count();
+  };
 
   // Initialization should schedule at least one paint, but the precise number
   // doesn't really matter.
-  int count = label.schedule_paint_count();
-  EXPECT_LT(0, count);
+  expect_paint_count_increased();
 
   // Painting should never schedule another paint.
   label.SimulatePaint();
@@ -932,16 +918,16 @@ TEST_F(LabelTest, NoSchedulePaintInOnPaint) {
 
   // Test a few things that should schedule paints. Multiple times is OK.
   label.SetEnabled(false);
-  EXPECT_TRUE(Increased(label.schedule_paint_count(), &count));
+  expect_paint_count_increased();
 
   label.SetText(label.GetText() + ASCIIToUTF16("Changed"));
-  EXPECT_TRUE(Increased(label.schedule_paint_count(), &count));
+  expect_paint_count_increased();
 
   label.SizeToPreferredSize();
-  EXPECT_TRUE(Increased(label.schedule_paint_count(), &count));
+  expect_paint_count_increased();
 
   label.SetEnabledColor(SK_ColorBLUE);
-  EXPECT_TRUE(Increased(label.schedule_paint_count(), &count));
+  expect_paint_count_increased();
 
   label.SimulatePaint();
   EXPECT_EQ(count, label.schedule_paint_count());  // Unchanged.
@@ -954,7 +940,7 @@ TEST_F(LabelTest, EmptyLabel) {
   EXPECT_TRUE(label()->size().IsEmpty());
 
   // With no text, neither links nor labels have a size in any dimension.
-  Link concrete_link((base::string16()));
+  Link concrete_link;
   EXPECT_TRUE(concrete_link.GetPreferredSize().IsEmpty());
 }
 

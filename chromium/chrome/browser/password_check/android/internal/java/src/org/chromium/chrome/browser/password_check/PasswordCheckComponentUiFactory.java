@@ -1,0 +1,42 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.password_check;
+
+import androidx.annotation.VisibleForTesting;
+import androidx.preference.PreferenceFragmentCompat;
+
+/**
+ * Use {@link #create()} to instantiate a {@link PasswordCheckComponentUi}.
+ */
+public class PasswordCheckComponentUiFactory {
+    /**
+     * The factory used to create components that connect to this fragment and provide data.
+     */
+    interface CreationStrategy {
+        /**
+         * Returns a component that connects to the given fragment and manipulates its data.
+         * @param fragmentView A {@link PasswordCheckFragmentView}.
+         * @return A non-null {@link PasswordCheckComponentUi}.
+         */
+        PasswordCheckComponentUi create(PasswordCheckFragmentView fragmentView);
+    }
+    private static CreationStrategy sCreationStrategy = PasswordCheckCoordinator::new;
+
+    private PasswordCheckComponentUiFactory() {}
+
+    /**
+     * Creates a {@link PasswordCheckComponentUi}.
+     * @param fragmentView the view which will be managed by the coordinator.
+     * @return A {@link PasswordCheckComponentUi}.
+     */
+    public static PasswordCheckComponentUi create(PreferenceFragmentCompat fragmentView) {
+        return sCreationStrategy.create((PasswordCheckFragmentView) fragmentView);
+    }
+
+    @VisibleForTesting
+    static void setCreationStrategy(CreationStrategy creationStrategy) {
+        sCreationStrategy = creationStrategy;
+    }
+}

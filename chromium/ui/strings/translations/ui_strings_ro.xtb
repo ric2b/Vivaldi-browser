@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">selectează</translation>
 <translation id="1859234291848436338">Direcție de scriere</translation>
 <translation id="1860796786778352021">Buton de închidere a notificării</translation>
+<translation id="186476001994626254">Conținut cu inserare inteligentă de pe web</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" />%</translation>
 <translation id="1901303067676059328">Select&amp;ează tot</translation>
+<translation id="19085484004813472">Aceasta este o funcție nouă</translation>
 <translation id="2006524834898217237">Verifică dacă dispozitivul este conectat la internet.</translation>
 <translation id="208586643495776849">Încearcă din nou</translation>
 <translation id="2090963878406559571">Pentru a trimite un număr de la <ph name="ORIGIN" /> pe telefonul Android, <ph name="TROUBLESHOOT_LINK" /> pentru ambele dispozitive din setări.</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">Gestionează setările</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{în 1 h}few{în # h}other{în # h}}</translation>
 <translation id="2583543531130364912">Calibrează ecranul tactil</translation>
+<translation id="2586657967955657006">Clipboard</translation>
 <translation id="2666092431469916601">Sus</translation>
 <translation id="2701330563083355633">Trimis de <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Nou</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">Deschideți dosarul</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{Acum 1 an}few{Acum # ani}other{Acum # de ani}}</translation>
+<translation id="2878511608894704031">Șterge tot</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{în o zi}few{în # zile}other{în # zile}}</translation>
 <translation id="2931838996092594335">dă clic</translation>
 <translation id="2981684127883932071">Se afișează sugestiile</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">Începeți să vorbiți</translation>
 <translation id="430191667033048642"><ph name="MOVED_APP_NAME" /> s-a mutat în dosarul <ph name="FOLDER_NAME" />.</translation>
 <translation id="4316910396681052118">TOATE APLICAȚIILE</translation>
+<translation id="4491109536499578614">Imagine</translation>
 <translation id="4588090240171750605">Derulează spre dreapta</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />, evaluare cu stele: <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />, aplicație recomandată</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{O zi și  }few{# zile și  }other{# de zile și  }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{în 1 an}few{în # ani}other{în # ani}}</translation>
+<translation id="588258955323874662">Ecran complet</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{O secundă rămasă}few{# secunde rămase}other{# de secunde rămase}}</translation>
 <translation id="5941711191222866238">Minimizează</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{o oră}few{# ore}other{# de ore}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">Asistent Google</translation>
 <translation id="6430678249303439055">Blochează toate notificările de la această aplicație</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{Acum 1 secundă}few{Acum # secunde}other{Acum # de secunde}}</translation>
+<translation id="6503257047630241175">Conținut RTF</translation>
 <translation id="6539092367496845964">A apărut o eroare. Încearcă din nou mai târziu.</translation>
 <translation id="654149438358937226">Blochează toate notificările</translation>
 <translation id="6567071839949112727">dă clic pe predecesor</translation>

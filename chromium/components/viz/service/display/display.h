@@ -6,6 +6,7 @@
 #define COMPONENTS_VIZ_SERVICE_DISPLAY_DISPLAY_H_
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/containers/circular_deque.h"
@@ -45,6 +46,8 @@ class ScopedAllowScheduleGpuTask;
 }
 
 namespace viz {
+class AggregatedFrame;
+class DelegatedInkPointRendererBase;
 class DirectRenderer;
 class DisplayClient;
 class DisplayResourceProvider;
@@ -80,6 +83,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   // subclasses are replaced by SkiaRenderer.
   Display(SharedBitmapManager* bitmap_manager,
           const RendererSettings& settings,
+          const DebugRendererSettings* debug_settings,
           const FrameSinkId& frame_sink_id,
           std::unique_ptr<OutputSurface> output_surface,
           std::unique_ptr<OverlayProcessorInterface> overlay_processor,
@@ -172,7 +176,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
 
   void ForceImmediateDrawAndSwapIfPossible();
   void SetNeedsOneBeginFrame();
-  void RemoveOverdrawQuads(CompositorFrame* frame);
+  void RemoveOverdrawQuads(AggregatedFrame* frame);
 
   void SetSupportedFrameIntervals(std::vector<base::TimeDelta> intervals);
 
@@ -180,6 +184,11 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
 
   bool IsRootFrameMissing() const;
   bool HasPendingSurfaces(const BeginFrameArgs& args) const;
+
+  // Return the delegated ink point renderer from |renderer_|, creating it if
+  // one doesn't exist. Should only be used when the delegated ink trails web
+  // API has been used.
+  DelegatedInkPointRendererBase* GetDelegatedInkPointRenderer();
 
  private:
   friend class DisplayTest;
@@ -222,6 +231,9 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
 
   SharedBitmapManager* const bitmap_manager_;
   const RendererSettings settings_;
+
+  // Points to the viz-global singleton.
+  const DebugRendererSettings* const debug_settings_;
 
   DisplayClient* client_ = nullptr;
   base::ObserverList<DisplayObserver>::Unchecked observers_;

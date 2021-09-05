@@ -8,8 +8,9 @@
 #include <string>
 #include <utility>
 
+#include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/public/cpp/ash_switches.h"
-#include "ash/public/cpp/fps_counter.h"
+#include "ash/public/cpp/metrics_util.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/tablet_mode.h"
@@ -18,6 +19,7 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/splitview/split_view_utils.h"
 #include "ash/wm/tablet_mode/internal_input_devices_event_blocker.h"
@@ -42,6 +44,7 @@
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window_observer.h"
 #include "ui/base/accelerators/accelerator.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_manager.h"
@@ -126,12 +129,6 @@ bool IsAngleBetweenAccelerometerReadingsStable(
          kNoisyMagnitudeDeviation;
 }
 
-// Returns true if the device's board is tablet mode capable.
-bool IsBoardTypeMarkedAsTabletCapable() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kAshEnableTabletMode);
-}
-
 // Returns the UiMode given by the force-table-mode command line.
 TabletModeController::UiMode GetUiMode() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -213,7 +210,7 @@ constexpr TabletModeController::TabletModeBehavior kOnBySensor{
     /*observe_pointer_device_events=*/true,
     /*block_internal_input_device=*/true,
     /*always_show_overview_button=*/false,
-    /*force_physical_tablet_state=*/false,
+    TabletModeController::ForcePhysicalTabletState::kDefault,
 };
 
 // Defines the behavior that sticks to tablet mode. Used to implement the
@@ -224,7 +221,7 @@ constexpr TabletModeController::TabletModeBehavior kLockInTabletMode{
     /*observe_pointer_device_events=*/false,
     /*block_internal_input_device=*/false,
     /*always_show_overview_button=*/true,
-    /*force_physical_tablet_state=*/false,
+    TabletModeController::ForcePhysicalTabletState::kDefault,
 };
 
 // Defines the behavior that sticks to tablet mode. Used to implement the
@@ -235,7 +232,7 @@ constexpr TabletModeController::TabletModeBehavior kLockInClamshellMode{
     /*observe_pointer_device_events=*/false,
     /*block_internal_input_device=*/false,
     /*always_show_overview_button=*/false,
-    /*force_physical_tablet_state=*/false,
+    TabletModeController::ForcePhysicalTabletState::kDefault,
 };
 
 // Defines the behavior used for testing. It prevents the device from
@@ -246,7 +243,31 @@ constexpr TabletModeController::TabletModeBehavior kOnForTest{
     /*observe_pointer_device_events=*/true,
     /*block_internal_input_device=*/true,
     /*always_show_overview_button=*/false,
-    /*force_physical_tablet_state=*/true,
+    TabletModeController::ForcePhysicalTabletState::kForceTabletMode,
+};
+
+// Used for the testing API to forcibly enter into the tablet mode. It should
+// not observe hardware events as tests want to stick with the tablet mode, and
+// it should not block internal keyboard as some tests may want to use keyboard
+// events in the tablet mode.
+// TODO(mukai): consolidate this with kOnFOrTest.
+constexpr TabletModeController::TabletModeBehavior kOnForAutotest{
+    /*use_sensor=*/false,
+    /*observe_display_events=*/false,
+    /*observe_pointer_device_events=*/false,
+    /*block_internal_input_device=*/false,
+    /*always_show_overview_button=*/false,
+    TabletModeController::ForcePhysicalTabletState::kForceTabletMode,
+};
+
+// Used for the testing API to forcibly exit from the tablet mode.
+constexpr TabletModeController::TabletModeBehavior kOffForAutotest{
+    /*use_sensor=*/false,
+    /*observe_display_events=*/false,
+    /*observe_pointer_device_events=*/false,
+    /*block_internal_input_device=*/false,
+    /*always_show_overview_button=*/false,
+    TabletModeController::ForcePhysicalTabletState::kForceClamshellMode,
 };
 
 // Used for development purpose (currently debug shortcut shift-ctrl-alt). This
@@ -258,7 +279,7 @@ constexpr TabletModeController::TabletModeBehavior kOnForDev{
     /*observe_pointer_device_events=*/true,
     /*block_internal_input_device=*/false,
     /*always_show_overview_button=*/true,
-    /*force_physical_tablet_state=*/true,
+    TabletModeController::ForcePhysicalTabletState::kForceTabletMode,
 };
 
 using LidState = chromeos::PowerManagerClient::LidState;
@@ -292,34 +313,14 @@ const char* ToString(TabletMode tablet_mode) {
   return "";
 }
 
+void ReportTrasitionSmoothness(bool enter_tablet_mode, int smoothness) {
+  if (enter_tablet_mode)
+    UMA_HISTOGRAM_PERCENTAGE(kTabletModeEnterHistogram, smoothness);
+  else
+    UMA_HISTOGRAM_PERCENTAGE(kTabletModeExitHistogram, smoothness);
+}
+
 }  // namespace
-
-// Class which records animation smoothness when entering or exiting tablet
-// mode. No stats should be recorded if no windows are animated.
-class TabletModeController::TabletModeTransitionFpsCounter : public FpsCounter {
- public:
-  TabletModeTransitionFpsCounter(ui::Compositor* compositor,
-                                 bool enter_tablet_mode)
-      : FpsCounter(compositor), enter_tablet_mode_(enter_tablet_mode) {}
-  ~TabletModeTransitionFpsCounter() override = default;
-
-  void LogUma() {
-    int smoothness = ComputeSmoothness();
-    if (smoothness < 0)
-      return;
-
-    if (enter_tablet_mode_)
-      UMA_HISTOGRAM_PERCENTAGE(kTabletModeEnterHistogram, smoothness);
-    else
-      UMA_HISTOGRAM_PERCENTAGE(kTabletModeExitHistogram, smoothness);
-  }
-
-  bool enter_tablet_mode() const { return enter_tablet_mode_; }
-
- private:
-  bool enter_tablet_mode_;
-  DISALLOW_COPY_AND_ASSIGN(TabletModeTransitionFpsCounter);
-};
 
 // An observer that observes the destruction of the |window_| and executes the
 // callback. Used to run cleanup when the window is destroyed in the middle of
@@ -523,9 +524,9 @@ void TabletModeController::StopObservingAnimation(bool record_stats,
     }
   }
 
-  if (record_stats && fps_counter_)
-    fps_counter_->LogUma();
-  fps_counter_.reset();
+  if (record_stats && transition_tracker_)
+    transition_tracker_->Stop();
+  transition_tracker_.reset();
 
   // Stop other animations (STEP_END), then update the tablet mode ui.
   if (tablet_mode_window_manager_ && delete_screenshot)
@@ -551,19 +552,22 @@ void TabletModeController::ForceUiTabletModeState(
     base::Optional<bool> enabled) {
   if (!enabled.has_value()) {
     tablet_mode_behavior_ = kDefault;
-    forced_ui_mode_ = UiMode::kNone;
+    AccelerometerReader::GetInstance()->SetEnabled(true);
     if (!SetIsInTabletPhysicalState(CalculateIsInTabletPhysicalState()))
       UpdateUiTabletState();
     return;
   }
   if (*enabled) {
-    tablet_mode_behavior_ = kLockInTabletMode;
-    forced_ui_mode_ = UiMode::kTabletMode;
+    tablet_mode_behavior_ = kOnForAutotest;
   } else {
-    tablet_mode_behavior_ = kLockInClamshellMode;
-    forced_ui_mode_ = UiMode::kClamshell;
+    tablet_mode_behavior_ = kOffForAutotest;
   }
-  UpdateUiTabletState();
+  // We want to suppress the accelerometer to auto-rotate the screen based on
+  // the physical orientation, as it will confuse the test scenarios. Note that
+  // this should not block ScreenOrientationController as the screen may want
+  // to be rotated for other factors.
+  AccelerometerReader::GetInstance()->SetEnabled(false);
+  SetIsInTabletPhysicalState(CalculateIsInTabletPhysicalState());
 }
 
 void TabletModeController::SetEnabledForTest(bool enabled) {
@@ -757,7 +761,7 @@ void TabletModeController::OnLayerAnimationStarted(
 
 void TabletModeController::OnLayerAnimationAborted(
     ui::LayerAnimationSequence* sequence) {
-  if (!fps_counter_ || !ShouldObserveSequence(sequence))
+  if (!transition_tracker_ || !ShouldObserveSequence(sequence))
     return;
 
   StopObservingAnimation(/*record_stats=*/false, /*delete_screenshot=*/true);
@@ -768,9 +772,9 @@ void TabletModeController::OnLayerAnimationEnded(
   // This may be called before |OnLayerAnimationScheduled()| if tablet is
   // entered/exited while an animation is in progress, so we won't get
   // stats/screenshot in those cases.
-  // TODO(sammiequon): We may want to remove the |fps_counter_| check and
+  // TODO(sammiequon): We may want to remove the |transition_tracker_| check and
   // simplify things since those are edge cases.
-  if (!fps_counter_ || !ShouldObserveSequence(sequence))
+  if (!transition_tracker_ || !ShouldObserveSequence(sequence))
     return;
 
   StopObservingAnimation(/*record_stats=*/true, /*delete_screenshot=*/true);
@@ -781,10 +785,11 @@ void TabletModeController::OnLayerAnimationScheduled(
   if (!ShouldObserveSequence(sequence))
     return;
 
-  if (!fps_counter_) {
-    fps_counter_ = std::make_unique<TabletModeTransitionFpsCounter>(
-        animating_layer_->GetCompositor(),
-        state_ == State::kEnteringTabletMode);
+  if (!transition_tracker_) {
+    transition_tracker_ =
+        animating_layer_->GetCompositor()->RequestNewThroughputTracker();
+    transition_tracker_->Start(metrics_util::ForSmoothness(base::BindRepeating(
+        &ReportTrasitionSmoothness, state_ == State::kEnteringTabletMode)));
     return;
   }
 
@@ -1174,7 +1179,7 @@ void TabletModeController::TakeScreenshot(aura::Window* top_window) {
       &TabletModeController::FinishInitTabletMode, weak_factory_.GetWeakPtr()));
 
   auto* screenshot_window = top_window->GetRootWindow()->GetChildById(
-      kShellWindowId_ScreenRotationContainer);
+      kShellWindowId_ScreenAnimationContainer);
   base::OnceClosure callback = screenshot_set_callback_.callback();
 
   aura::Window* root_window = top_window->GetRootWindow();
@@ -1230,11 +1235,18 @@ void TabletModeController::OnScreenshotTaken(
 }
 
 bool TabletModeController::CalculateIsInTabletPhysicalState() const {
+  switch (tablet_mode_behavior_.force_physical_tablet_state) {
+    case ForcePhysicalTabletState::kDefault:
+      // Don't return forced result. Check the hardware configuration.
+      break;
+    case ForcePhysicalTabletState::kForceTabletMode:
+      return true;
+    case ForcePhysicalTabletState::kForceClamshellMode:
+      return false;
+  }
+
   if (!HasActiveInternalDisplay())
     return false;
-
-  if (tablet_mode_behavior_.force_physical_tablet_state)
-    return true;
 
   // For updated EC, the tablet mode switch activates at 200 degrees, and
   // deactivates at 160 degrees.
@@ -1314,6 +1326,11 @@ bool TabletModeController::UpdateUiTabletState() {
     return false;
 
   SetTabletModeEnabledInternal(should_be_in_tablet_mode);
+  Shell::Get()
+      ->accessibility_controller()
+      ->TriggerAccessibilityAlertWithMessage(l10n_util::GetStringUTF8(
+          should_be_in_tablet_mode ? IDS_ASH_SWITCH_TO_TABLET_MODE
+                                   : IDS_ASH_SWITCH_TO_LAPTOP_MODE));
   return true;
 }
 

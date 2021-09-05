@@ -11,7 +11,6 @@
 
 #include "base/auto_reset.h"
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/numerics/ranges.h"
@@ -38,11 +37,9 @@
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
-#include "chrome/browser/ui/web_contents_sizer.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/feature_engagement/buildflags.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
@@ -54,11 +51,6 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/text_elider.h"
-
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-#include "chrome/browser/feature_engagement/new_tab/new_tab_tracker.h"
-#include "chrome/browser/feature_engagement/new_tab/new_tab_tracker_factory.h"
-#endif
 
 #include "app/vivaldi_apptools.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -135,6 +127,11 @@ class RenderWidgetHostVisibilityTracker
                                       "TabSwitchVisibilityRequest", this);
   }
 
+  RenderWidgetHostVisibilityTracker(const RenderWidgetHostVisibilityTracker&) =
+      delete;
+  RenderWidgetHostVisibilityTracker& operator=(
+      const RenderWidgetHostVisibilityTracker&) = delete;
+
   ~RenderWidgetHostVisibilityTracker() override {
     if (host_)
       host_->RemoveObserver(this);
@@ -162,8 +159,6 @@ class RenderWidgetHostVisibilityTracker
 
   content::RenderWidgetHost* host_ = nullptr;
   base::ElapsedTimer timer_;
-
-  DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostVisibilityTracker);
 };
 
 }  // namespace
@@ -176,6 +171,8 @@ class RenderWidgetHostVisibilityTracker
 class TabStripModel::WebContentsData : public content::WebContentsObserver {
  public:
   explicit WebContentsData(std::unique_ptr<WebContents> a_contents);
+  WebContentsData(const WebContentsData&) = delete;
+  WebContentsData& operator=(const WebContentsData&) = delete;
 
   // Changes the WebContents that this WebContentsData tracks.
   std::unique_ptr<WebContents> ReplaceWebContents(
@@ -237,8 +234,6 @@ class TabStripModel::WebContentsData : public content::WebContentsObserver {
   //   - The exact shape of the group-related changes to the TabStripModel API
   //     (and the relevant bits of the extension API) are TBD.
   base::Optional<tab_groups::TabGroupId> group_ = base::nullopt;
-
-  DISALLOW_COPY_AND_ASSIGN(WebContentsData);
 };
 
 TabStripModel::WebContentsData::WebContentsData(
@@ -280,6 +275,8 @@ struct TabStripModel::DetachedWebContents {
       : contents(std::move(contents)),
         index_before_any_removals(index_before_any_removals),
         index_at_time_of_removal(index_at_time_of_removal) {}
+  DetachedWebContents(const DetachedWebContents&) = delete;
+  DetachedWebContents& operator=(const DetachedWebContents&) = delete;
   ~DetachedWebContents() = default;
   DetachedWebContents(DetachedWebContents&&) = default;
 
@@ -294,9 +291,6 @@ struct TabStripModel::DetachedWebContents {
   // tabs are being simultaneously removed, the index reflects previously
   // removed tabs in this batch.
   const int index_at_time_of_removal;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(DetachedWebContents);
 };
 
 // Holds all state necessary to send notifications for detached tabs. Will
@@ -308,6 +302,8 @@ struct TabStripModel::DetachNotifications {
       : initially_active_web_contents(initially_active_web_contents),
         selection_model(selection_model),
         will_delete(will_delete) {}
+  DetachNotifications(const DetachNotifications&) = delete;
+  DetachNotifications& operator=(const DetachNotifications&) = delete;
   ~DetachNotifications() = default;
 
   // The WebContents that was active prior to any detaches happening.
@@ -328,9 +324,6 @@ struct TabStripModel::DetachNotifications {
 
   // Whether to delete the WebContents after sending notifications.
   const bool will_delete;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(DetachNotifications);
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1033,8 +1026,8 @@ void TabStripModel::AddWebContents(
   // new background tab.
   if (WebContents* old_contents = GetActiveWebContents()) {
     if ((add_types & ADD_ACTIVE) == 0) {
-      ResizeWebContents(raw_contents,
-                        gfx::Rect(old_contents->GetContainerBounds().size()));
+      raw_contents->Resize(
+          gfx::Rect(old_contents->GetContainerBounds().size()));
     }
   }
   } // Running Vivaldi
@@ -1079,6 +1072,7 @@ tab_groups::TabGroupId TabStripModel::AddToNewGroup(
   const tab_groups::TabGroupId new_group =
       tab_groups::TabGroupId::GenerateNew();
   AddToNewGroupImpl(indices, new_group);
+  OpenTabGroupEditor(new_group);
   return new_group;
 }
 
@@ -1158,6 +1152,12 @@ void TabStripModel::RemoveFromGroup(const std::vector<int>& indices) {
 
 void TabStripModel::CreateTabGroup(const tab_groups::TabGroupId& group) {
   TabGroupChange change(group, TabGroupChange::kCreated);
+  for (auto& observer : observers_)
+    observer.OnTabGroupChanged(change);
+}
+
+void TabStripModel::OpenTabGroupEditor(const tab_groups::TabGroupId& group) {
+  TabGroupChange change(group, TabGroupChange::kEditorOpened);
   for (auto& observer : observers_)
     observer.OnTabGroupChanged(change);
 }
@@ -1278,13 +1278,6 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
                                 TabStripModel::NEW_TAB_ENUM_COUNT);
       delegate()->AddTabAt(GURL(), context_index + 1, true,
                            GetTabGroupForTab(context_index));
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-      auto* new_tab_tracker =
-          feature_engagement::NewTabTrackerFactory::GetInstance()
-              ->GetForProfile(profile_);
-      new_tab_tracker->OnNewTabOpened();
-      new_tab_tracker->CloseBubble();
-#endif
       break;
     }
 
@@ -1590,7 +1583,7 @@ bool TabStripModel::RunUnloadListenerBeforeClosing(
 
 bool TabStripModel::ShouldRunUnloadListenerBeforeClosing(
     content::WebContents* contents) {
-  return contents->NeedToFireBeforeUnloadOrUnload() ||
+  return contents->NeedToFireBeforeUnloadOrUnloadEvents() ||
          delegate_->ShouldRunUnloadListenerBeforeClosing(contents);
 }
 
@@ -2101,8 +2094,10 @@ base::Optional<tab_groups::TabGroupId> TabStripModel::UngroupTab(int index) {
 
   // Update the tab.
   contents_data_[index]->set_group(base::nullopt);
-  for (auto& observer : observers_)
-    observer.TabGroupedStateChanged(base::nullopt, index);
+  for (auto& observer : observers_) {
+    observer.TabGroupedStateChanged(
+        base::nullopt, contents_data_[index]->web_contents(), index);
+  }
 
   // Update the group model.
   TabGroup* tab_group = group_model_->GetTabGroup(group.value());
@@ -2124,8 +2119,10 @@ void TabStripModel::GroupTab(int index, const tab_groups::TabGroupId& group) {
       UngroupTab(index);
   }
   contents_data_[index]->set_group(group);
-  for (auto& observer : observers_)
-    observer.TabGroupedStateChanged(group, index);
+  for (auto& observer : observers_) {
+    observer.TabGroupedStateChanged(
+        group, contents_data_[index]->web_contents(), index);
+  }
 
   group_model_->GetTabGroup(group)->AddTab();
 }

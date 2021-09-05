@@ -11,9 +11,6 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "content/common/ax_content_node_data.h"
-#include "content/common/ax_content_tree_data.h"
-#include "content/common/ax_content_tree_update.h"
 #include "content/common/content_export.h"
 #include "content/common/render_accessibility.mojom.h"
 #include "content/public/renderer/plugin_ax_tree_source.h"
@@ -24,10 +21,17 @@
 #include "third_party/blink/public/web/web_ax_context.h"
 #include "third_party/blink/public/web/web_ax_object.h"
 #include "ui/accessibility/ax_event.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_relative_bounds.h"
 #include "ui/accessibility/ax_tree.h"
+#include "ui/accessibility/ax_tree_data.h"
 #include "ui/accessibility/ax_tree_serializer.h"
+#include "ui/accessibility/ax_tree_update.h"
 #include "ui/gfx/geometry/rect_f.h"
+
+namespace base {
+class ElapsedTimer;
+}  // namespace base
 
 namespace blink {
 class WebDocument;
@@ -49,8 +53,8 @@ class AXImageAnnotator;
 class RenderFrameImpl;
 class RenderAccessibilityManager;
 
-using BlinkAXTreeSerializer = ui::
-    AXTreeSerializer<blink::WebAXObject, AXContentNodeData, AXContentTreeData>;
+using BlinkAXTreeSerializer =
+    ui::AXTreeSerializer<blink::WebAXObject, ui::AXNodeData, ui::AXTreeData>;
 
 class AXTreeSnapshotterImpl : public AXTreeSnapshotter {
  public:
@@ -62,11 +66,11 @@ class AXTreeSnapshotterImpl : public AXTreeSnapshotter {
                 size_t max_node_count,
                 ui::AXTreeUpdate* accessibility_tree) override;
 
-  // Same as above, but returns in |accessibility_tree| a AXContentTreeUpdate
+  // Same as above, but returns in |accessibility_tree| a ui::AXTreeUpdate
   // with content-specific metadata, instead of an AXTreeUpdate.
   void SnapshotContentTree(ui::AXMode ax_mode,
                            size_t max_node_count,
-                           AXContentTreeUpdate* accessibility_tree);
+                           ui::AXTreeUpdate* accessibility_tree);
 
  private:
   RenderFrameImpl* render_frame_;
@@ -104,7 +108,7 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
   // Request a one-time snapshot of the accessibility tree without
   // enabling accessibility if it wasn't already enabled.
   static void SnapshotAccessibilityTree(RenderFrameImpl* render_frame,
-                                        AXContentTreeUpdate* response,
+                                        ui::AXTreeUpdate* response,
                                         ui::AXMode ax_mode);
 
   RenderAccessibilityImpl(
@@ -114,7 +118,7 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
   ~RenderAccessibilityImpl() override;
 
   ui::AXMode GetAccessibilityMode() {
-    return tree_source_.accessibility_mode();
+    return tree_source_->accessibility_mode();
   }
 
   // RenderAccessibility implementation.
@@ -147,6 +151,9 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
 
   // Returns the page language.
   std::string GetLanguage();
+
+  // Access the UKM recorder.
+  ukm::MojoUkmRecorder* ukm_recorder() const { return ukm_recorder_.get(); }
 
  protected:
   // Send queued events from the renderer to the browser.
@@ -191,7 +198,7 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
   void OnLoadInlineTextBoxes(const ui::AXActionTarget* target);
   void OnGetImageData(const ui::AXActionTarget* target,
                       const gfx::Size& max_size);
-  void AddPluginTreeToUpdate(AXContentTreeUpdate* update,
+  void AddPluginTreeToUpdate(ui::AXTreeUpdate* update,
                              bool invalidate_plugin_subtree);
 
   // Creates and takes ownership of an instance of the class that automatically
@@ -218,7 +225,7 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
   void ScheduleSendPendingAccessibilityEvents(
       bool scheduling_from_task = false);
   void AddImageAnnotationDebuggingAttributes(
-      const std::vector<AXContentTreeUpdate>& updates);
+      const std::vector<ui::AXTreeUpdate>& updates);
 
   // Returns the document for the active popup if any.
   blink::WebDocument GetPopupDocument();
@@ -229,6 +236,16 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
 
   // Cancels scheduled events that are not yet in flight
   void CancelScheduledEvents();
+
+  // Sends the URL-keyed metrics for the maximum amount of time spent in
+  // SendPendingAccessibilityEvents if they meet the minimum criteria for
+  // sending.
+  void MaybeSendUKM();
+
+  // Reset all of the UKM data. This can be called after sending UKM data,
+  // or after navigating to a new page when any previous data will no
+  // longer be valid.
+  void ResetUKMData();
 
   // The RenderAccessibilityManager that owns us.
   RenderAccessibilityManager* render_accessibility_manager_;
@@ -252,10 +269,10 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
   std::vector<DirtyObject> dirty_objects_;
 
   // The adapter that exposes Blink's accessibility tree to AXTreeSerializer.
-  BlinkAXTreeSource tree_source_;
+  std::unique_ptr<BlinkAXTreeSource> tree_source_;
 
   // The serializer that sends accessibility messages to the browser process.
-  BlinkAXTreeSerializer serializer_;
+  std::unique_ptr<BlinkAXTreeSerializer> serializer_;
 
   using PluginAXTreeSerializer = ui::AXTreeSerializer<const ui::AXNode*,
                                                       ui::AXNodeData,
@@ -263,9 +280,6 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
   std::unique_ptr<PluginAXTreeSerializer> plugin_serializer_;
   PluginAXTreeSource* plugin_tree_source_;
   blink::WebAXObject plugin_host_node_;
-
-  // Current location of every object, so we can detect when it moves.
-  std::unordered_map<int, ui::AXRelativeBounds> locations_;
 
   // The most recently observed scroll offset of the root document element.
   // TODO(dmazzoni): remove once https://bugs.webkit.org/show_bug.cgi?id=73460
@@ -293,7 +307,22 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
   // The specified page language, or empty if unknown.
   std::string page_language_;
 
+  // The URL-keyed metrics recorder interface.
   std::unique_ptr<ukm::MojoUkmRecorder> ukm_recorder_;
+
+  // The longest amount of time spent serializing the accessibility tree
+  // in SendPendingAccessibilityEvents. This is periodically uploaded as
+  // a UKM and then reset.
+  int slowest_serialization_ms_ = 0;
+
+  // The amount of time since the last UKM upload.
+  std::unique_ptr<base::ElapsedTimer> ukm_timer_;
+
+  // The UKM Source ID that corresponds to the web page represented by
+  // slowest_serialization_ms_. We report UKM before the user navigates
+  // away, or every few minutes.
+  ukm::SourceId last_ukm_source_id_;
+  std::string last_ukm_url_;
 
   // So we can queue up tasks to be executed later.
   base::WeakPtrFactory<RenderAccessibilityImpl>
@@ -302,6 +331,7 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
   friend class AXImageAnnotatorTest;
   friend class PluginActionHandlingTest;
   friend class RenderAccessibilityImplTest;
+  friend class RenderAccessibilityImplUKMTest;
 
   DISALLOW_COPY_AND_ASSIGN(RenderAccessibilityImpl);
 };

@@ -47,7 +47,7 @@ void LayoutNGBlockFlowMixin<Base>::StyleDidChange(
     const ComputedStyle* old_style) {
   Base::StyleDidChange(diff, old_style);
 
-  if (diff.NeedsCollectInlines()) {
+  if (diff.NeedsReshape()) {
     Base::SetNeedsCollectInlines();
   }
 }
@@ -93,7 +93,8 @@ void LayoutNGBlockFlowMixin<Base>::AddScrollingOverflowFromChildren() {
   const NGPhysicalBoxFragment* physical_fragment = CurrentFragment();
   DCHECK(physical_fragment);
   PhysicalRect children_overflow =
-      physical_fragment->ScrollableOverflowFromChildren();
+      physical_fragment->ScrollableOverflowFromChildren(
+          NGPhysicalFragment::kNormalHeight);
 
   // LayoutOverflow takes flipped blocks coordinates, adjust as needed.
   const ComputedStyle& style = physical_fragment->Style();

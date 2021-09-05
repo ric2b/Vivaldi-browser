@@ -3460,6 +3460,12 @@ void GL_BINDING_CALL MockGLInterface::Mock_glPatchParameteri(GLenum pname,
   interface_->PatchParameteri(pname, value);
 }
 
+void GL_BINDING_CALL MockGLInterface::Mock_glPatchParameteriOES(GLenum pname,
+                                                                GLint value) {
+  MakeGlMockFunctionUnique("glPatchParameteriOES");
+  interface_->PatchParameteri(pname, value);
+}
+
 void GL_BINDING_CALL
 MockGLInterface::Mock_glPathCommandsCHROMIUM(GLuint path,
                                              GLsizei numCommands,
@@ -4744,6 +4750,22 @@ MockGLInterface::Mock_glTexStorageMem2DEXT(GLenum target,
   MakeGlMockFunctionUnique("glTexStorageMem2DEXT");
   interface_->TexStorageMem2DEXT(target, levels, internalFormat, width, height,
                                  memory, offset);
+}
+
+void GL_BINDING_CALL
+MockGLInterface::Mock_glTexStorageMemFlags2DANGLE(GLenum target,
+                                                  GLsizei levels,
+                                                  GLenum internalFormat,
+                                                  GLsizei width,
+                                                  GLsizei height,
+                                                  GLuint memory,
+                                                  GLuint64 offset,
+                                                  GLbitfield createFlags,
+                                                  GLbitfield usageFlags) {
+  MakeGlMockFunctionUnique("glTexStorageMemFlags2DANGLE");
+  interface_->TexStorageMemFlags2DANGLE(target, levels, internalFormat, width,
+                                        height, memory, offset, createFlags,
+                                        usageFlags);
 }
 
 void GL_BINDING_CALL MockGLInterface::Mock_glTexSubImage2D(GLenum target,
@@ -6342,6 +6364,8 @@ MockGLInterface::GetGLProcAddress(const char* name) {
     return reinterpret_cast<GLFunctionPointerType>(Mock_glObjectPtrLabelKHR);
   if (strcmp(name, "glPatchParameteri") == 0)
     return reinterpret_cast<GLFunctionPointerType>(Mock_glPatchParameteri);
+  if (strcmp(name, "glPatchParameteriOES") == 0)
+    return reinterpret_cast<GLFunctionPointerType>(Mock_glPatchParameteriOES);
   if (strcmp(name, "glPathCommandsCHROMIUM") == 0)
     return reinterpret_cast<GLFunctionPointerType>(Mock_glPathCommandsCHROMIUM);
   if (strcmp(name, "glPathCommandsNV") == 0)
@@ -6673,6 +6697,9 @@ MockGLInterface::GetGLProcAddress(const char* name) {
     return reinterpret_cast<GLFunctionPointerType>(Mock_glTexStorage3D);
   if (strcmp(name, "glTexStorageMem2DEXT") == 0)
     return reinterpret_cast<GLFunctionPointerType>(Mock_glTexStorageMem2DEXT);
+  if (strcmp(name, "glTexStorageMemFlags2DANGLE") == 0)
+    return reinterpret_cast<GLFunctionPointerType>(
+        Mock_glTexStorageMemFlags2DANGLE);
   if (strcmp(name, "glTexSubImage2D") == 0)
     return reinterpret_cast<GLFunctionPointerType>(Mock_glTexSubImage2D);
   if (strcmp(name, "glTexSubImage2DRobustANGLE") == 0)

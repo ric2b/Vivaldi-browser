@@ -21,6 +21,7 @@
 #include "chrome/browser/web_applications/components/web_app_ui_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/web_application_info.h"
+#include "content/public/common/content_features.h"
 #include "ui/gfx/skia_util.h"
 
 namespace web_app {
@@ -97,6 +98,7 @@ void ManifestUpdateTask::DidFinishLoad(
   InstallableParams params;
   params.valid_primary_icon = true;
   params.valid_manifest = true;
+  params.check_webapp_manifest_display = false;
   InstallableManager::FromWebContents(web_contents())
       ->GetData(params,
                 base::BindOnce(&ManifestUpdateTask::OnDidGetInstallableData,
@@ -159,13 +161,19 @@ bool ManifestUpdateTask::IsUpdateNeededForManifest() const {
     return true;
   }
 
+  if (base::FeatureList::IsEnabled(features::kWebAppManifestDisplayOverride) &&
+      web_application_info_->display_override !=
+          registrar_.GetAppDisplayModeOverride(app_id_)) {
+    return true;
+  }
+
   if (web_application_info_->icon_infos != registrar_.GetAppIconInfos(app_id_))
     return true;
 
   if (base::FeatureList::IsEnabled(
           features::kDesktopPWAsAppIconShortcutsMenu) &&
-      web_application_info_->shortcut_infos !=
-          registrar_.GetAppShortcutInfos(app_id_)) {
+      web_application_info_->shortcuts_menu_item_infos !=
+          registrar_.GetAppShortcutsMenuItemInfos(app_id_)) {
     return true;
   }
 
@@ -215,9 +223,8 @@ void ManifestUpdateTask::OnIconsDownloaded(bool success, IconsMap icons_map) {
                               std::move(icons_map)));
 }
 
-void ManifestUpdateTask::OnAllIconsRead(
-    IconsMap downloaded_icons_map,
-    std::map<SquareSizePx, SkBitmap> disk_icon_bitmaps) {
+void ManifestUpdateTask::OnAllIconsRead(IconsMap downloaded_icons_map,
+                                        IconBitmaps disk_icon_bitmaps) {
   DCHECK(stage_ == Stage::kPendingIconReadFromDisk);
 
   if (disk_icon_bitmaps.empty()) {
@@ -247,12 +254,20 @@ void ManifestUpdateTask::OnAllIconsRead(
 }
 
 bool ManifestUpdateTask::IsUpdateNeededForIconContents(
-    const std::map<SquareSizePx, SkBitmap>& disk_icon_bitmaps) const {
+    const IconBitmaps& disk_icon_bitmaps) const {
   DCHECK(web_application_info_.has_value());
-  const std::map<SquareSizePx, SkBitmap>& downloaded_icon_bitmaps =
-      web_application_info_->icon_bitmaps;
-  if (HaveIconContentsChanged(disk_icon_bitmaps, downloaded_icon_bitmaps))
+  const std::map<SquareSizePx, SkBitmap>& downloaded_icon_bitmaps_any =
+      web_application_info_->icon_bitmaps_any;
+  if (HaveIconContentsChanged(disk_icon_bitmaps.any,
+                              downloaded_icon_bitmaps_any)) {
     return true;
+  }
+  const std::map<SquareSizePx, SkBitmap>& downloaded_icon_bitmaps_maskable =
+      web_application_info_->icon_bitmaps_maskable;
+  if (HaveIconContentsChanged(disk_icon_bitmaps.maskable,
+                              downloaded_icon_bitmaps_maskable)) {
+    return true;
+  }
 
   return false;
 }

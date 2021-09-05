@@ -151,11 +151,17 @@
     "dependencies": [ "permission:tabsPrivate" ],
     "contexts": [ "blessed_extension" ]
   },
-  "thumbnails": {
+  "thumbnails": [{
     "vivaldi": true,
     "dependencies": [ "permission:thumbnails" ],
     "contexts": [ "blessed_extension" ]
-  },
+  }, {
+    "channel": "stable",
+    "contexts": ["webui"],
+    "matches": [
+      "chrome://game/*"
+    ]
+  }],
   "utilities": {
     "vivaldi": true,
     "dependencies": [ "permission:utilities" ],

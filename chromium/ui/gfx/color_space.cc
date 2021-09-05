@@ -40,6 +40,35 @@ static bool FloatsEqualWithinTolerance(const float* a,
   return true;
 }
 
+skcms_TransferFunction GetPQSkTransferFunction(float sdr_white_level) {
+  // Note that SkColorSpace doesn't have the notion of an unspecified SDR white
+  // level.
+  if (sdr_white_level == 0.f)
+    sdr_white_level = ColorSpace::kDefaultSDRWhiteLevel;
+
+  // The generic PQ transfer function produces normalized luminance values i.e.
+  // the range 0-1 represents 0-10000 nits for the reference display, but we
+  // want to map 1.0 to |sdr_white_level| nits so we need to scale accordingly.
+  const double w = 10000. / sdr_white_level;
+  // Distribute scaling factor W by scaling A and B with X ^ (1/F):
+  // ((A + Bx^C) / (D + Ex^C))^F * W = ((A + Bx^C) / (D + Ex^C) * W^(1/F))^F
+  // See https://crbug.com/1058580#c32 for discussion.
+  skcms_TransferFunction fn = SkNamedTransferFn::kPQ;
+  const double ws = pow(w, 1. / fn.f);
+  fn.a = ws * fn.a;
+  fn.b = ws * fn.b;
+  return fn;
+}
+
+float GetSDRWhiteLevelFromPQSkTransferFunction(
+    const skcms_TransferFunction& fn) {
+  DCHECK_EQ(fn.g, SkNamedTransferFn::kPQ.g);
+  const double ws_a = static_cast<double>(fn.a) / SkNamedTransferFn::kPQ.a;
+  const double w_a = pow(ws_a, fn.f);
+  const double sdr_white_level_a = 10000.0f / w_a;
+  return sdr_white_level_a;
+}
+
 }  // namespace
 
 // static
@@ -68,20 +97,15 @@ ColorSpace::ColorSpace(const SkColorSpace& sk_color_space)
                  TransferID::INVALID,
                  MatrixID::RGB,
                  RangeID::FULL) {
-  // Special case the HDR transfer functions since they're not numerical
-  auto transfer_eq = [](skcms_TransferFunction x, skcms_TransferFunction y) {
-    return x.g == y.g && x.a == y.a && x.b == y.b && x.c == y.c && x.d == y.d &&
-           x.e == y.e && x.f == y.f;
-  };
-
   skcms_TransferFunction fn;
   if (sk_color_space.isNumericalTransferFn(&fn)) {
     transfer_ = TransferID::CUSTOM;
     SetCustomTransferFunction(fn);
-  } else if (transfer_eq(fn, SkNamedTransferFn::kHLG)) {
+  } else if (skcms_TransferFunction_isHLGish(&fn)) {
     transfer_ = TransferID::ARIB_STD_B67;
-  } else if (transfer_eq(fn, SkNamedTransferFn::kPQ)) {
+  } else if (skcms_TransferFunction_isPQish(&fn)) {
     transfer_ = TransferID::SMPTEST2084;
+    transfer_params_[0] = GetSDRWhiteLevelFromPQSkTransferFunction(fn);
   } else {
     // Construct an invalid result: Unable to extract necessary parameters
     return;
@@ -101,24 +125,26 @@ bool ColorSpace::IsValid() const {
 }
 
 // static
-ColorSpace ColorSpace::CreateSCRGBLinear(float slope) {
-  if (slope == 1.f) {
-    return ColorSpace(PrimaryID::BT709, TransferID::LINEAR_HDR, MatrixID::RGB,
-                      RangeID::FULL);
-  }
+ColorSpace ColorSpace::CreateSCRGBLinear(float sdr_white_level) {
   skcms_TransferFunction fn = {0};
-  fn.g = 1.f;
-  fn.a = slope;
+  fn.g = 1.0f;
+  fn.a = kDefaultScrgbLinearSdrWhiteLevel / sdr_white_level;
   return ColorSpace(PrimaryID::BT709, TransferID::CUSTOM_HDR, MatrixID::RGB,
                     RangeID::FULL, nullptr, &fn);
 }
 
 // static
-ColorSpace ColorSpace::CreateHDR10(float sdr_white_point) {
+ColorSpace ColorSpace::CreateHDR10(float sdr_white_level) {
   ColorSpace result(PrimaryID::BT2020, TransferID::SMPTEST2084, MatrixID::RGB,
                     RangeID::FULL);
-  result.transfer_params_[0] = sdr_white_point;
+  result.transfer_params_[0] = sdr_white_level;
   return result;
+}
+
+// static
+ColorSpace ColorSpace::CreateHLG() {
+  return ColorSpace(PrimaryID::BT2020, TransferID::ARIB_STD_B67, MatrixID::RGB,
+                    RangeID::FULL);
 }
 
 // static
@@ -446,6 +472,12 @@ std::string ColorSpace::ToString() const {
     case TransferID::CUSTOM_HDR: {
       skcms_TransferFunction fn;
       GetTransferFunction(&fn);
+      if (fn.g == 1.0f && fn.a > 0.0f && fn.b == 0.0f && fn.c == 0.0f &&
+          fn.d == 0.0f && fn.e == 0.0f && fn.f == 0.0f) {
+        ss << "LINEAR_HDR (slope " << fn.a << ", SDR white point "
+           << kDefaultScrgbLinearSdrWhiteLevel / fn.a << " nits)";
+        break;
+      }
       ss << fn.c << "*x + " << fn.f << " if |x| < " << fn.d << " else sign(x)*("
          << fn.a << "*|x| + " << fn.b << ")**" << fn.g << " + " << fn.e;
       break;
@@ -523,16 +555,6 @@ ColorSpace ColorSpace::GetScaledColorSpace(float factor) const {
   return result;
 }
 
-ColorSpace ColorSpace::GetRasterColorSpace() const {
-  // Rasterization doesn't support more than 8 bit unorm values. If the output
-  // space has an extended range, use Display P3 for the rasterization space,
-  // to get a somewhat wider color gamut.
-  if (IsHDR())
-    return CreateDisplayP3D65();
-
-  return *this;
-}
-
 bool ColorSpace::IsSuitableForBlending() const {
   switch (transfer_) {
     case TransferID::SMPTEST2084:
@@ -571,10 +593,17 @@ ColorSpace ColorSpace::GetWithMatrixAndRange(MatrixID matrix,
   return result;
 }
 
-ColorSpace ColorSpace::GetWithPQSDRWhiteLevel(float sdr_white_level) const {
+ColorSpace ColorSpace::GetWithSDRWhiteLevel(float sdr_white_level) const {
   ColorSpace result = *this;
-  if (transfer_ == TransferID::SMPTEST2084 && transfer_params_[0] == 0.f)
+  if (transfer_ == TransferID::SMPTEST2084) {
     result.transfer_params_[0] = sdr_white_level;
+  } else if (transfer_ == TransferID::LINEAR_HDR) {
+    result.transfer_ = TransferID::CUSTOM_HDR;
+    skcms_TransferFunction fn = {0};
+    fn.g = 1.f;
+    fn.a = kDefaultScrgbLinearSdrWhiteLevel / sdr_white_level;
+    result.SetCustomTransferFunction(fn);
+  }
   return result;
 }
 
@@ -613,7 +642,7 @@ sk_sp<SkColorSpace> ColorSpace::ToSkColorSpace() const {
       transfer_fn = SkNamedTransferFn::kHLG;
       break;
     case TransferID::SMPTEST2084:
-      GetPQTransferFunction(&transfer_fn);
+      transfer_fn = GetPQSkTransferFunction(transfer_params_[0]);
       break;
     default:
       if (!GetTransferFunction(&transfer_fn)) {
@@ -945,23 +974,6 @@ bool ColorSpace::GetTransferFunction(skcms_TransferFunction* fn) const {
   }
 }
 
-void ColorSpace::GetPQTransferFunction(skcms_TransferFunction* fn) const {
-  DCHECK_EQ(transfer_, TransferID::SMPTEST2084);
-  const float sdr_white_level =
-      transfer_params_[0] == 0.0f ? kDefaultSDRWhiteLevel : transfer_params_[0];
-  // The generic PQ transfer function produces normalized luminance values i.e.
-  // the range 0-1 represents 0-10000 nits for the reference display, but we
-  // want to map 1.0 to |sdr_white_level| nits so we need to scale accordingly.
-  const float w = 10000.0f / sdr_white_level;
-  // Distribute scaling factor W by scaling A and B with X ^ (1/F):
-  // ((A + Bx^C) / (D + Ex^C))^F * W = ((A + Bx^C) / (D + Ex^C) * W^(1/F))^F
-  // See https://crbug.com/1058580#c32 for discussion.
-  *fn = SkNamedTransferFn::kPQ;
-  const float ws = powf(w, 1 / fn->f);
-  fn->a = ws * fn->a;
-  fn->b = ws * fn->b;
-}
-
 bool ColorSpace::GetInverseTransferFunction(skcms_TransferFunction* fn) const {
   if (!GetTransferFunction(fn))
     return false;
@@ -1127,26 +1139,36 @@ void ColorSpace::GetRangeAdjustMatrix(int bit_depth, SkMatrix44* matrix) const {
   }
 }
 
-bool ColorSpace::ToSkYUVColorSpace(SkYUVColorSpace* out) const {
-  if (range_ == RangeID::FULL) {
-    if (matrix_ == MatrixID::BT470BG || matrix_ == MatrixID::SMPTE170M) {
-      *out = kJPEG_SkYUVColorSpace;
-      return true;
-    }
-  }
+bool ColorSpace::ToSkYUVColorSpace(int bit_depth, SkYUVColorSpace* out) const {
   switch (matrix_) {
     case MatrixID::BT709:
-      *out = kRec709_SkYUVColorSpace;
+      *out = range_ == RangeID::FULL ? kRec709_Full_SkYUVColorSpace
+                                     : kRec709_Limited_SkYUVColorSpace;
       return true;
 
     case MatrixID::BT470BG:
     case MatrixID::SMPTE170M:
-      *out = kRec601_SkYUVColorSpace;
+      *out = range_ == RangeID::FULL ? kJPEG_SkYUVColorSpace
+                                     : kRec601_Limited_SkYUVColorSpace;
       return true;
 
     case MatrixID::BT2020_NCL:
-      *out = kBT2020_SkYUVColorSpace;
-      return true;
+      if (bit_depth == 8) {
+        *out = range_ == RangeID::FULL ? kBT2020_8bit_Full_SkYUVColorSpace
+                                       : kBT2020_8bit_Limited_SkYUVColorSpace;
+        return true;
+      }
+      if (bit_depth == 10) {
+        *out = range_ == RangeID::FULL ? kBT2020_10bit_Full_SkYUVColorSpace
+                                       : kBT2020_10bit_Limited_SkYUVColorSpace;
+        return true;
+      }
+      if (bit_depth == 12) {
+        *out = range_ == RangeID::FULL ? kBT2020_12bit_Full_SkYUVColorSpace
+                                       : kBT2020_12bit_Limited_SkYUVColorSpace;
+        return true;
+      }
+      return false;
 
     default:
       break;

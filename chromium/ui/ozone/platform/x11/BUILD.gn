@@ -58,7 +58,7 @@ source_set("x11") {
     "//ui/ozone:ozone_base",
     "//ui/ozone/common",
     "//ui/platform_window",
-    "//ui/platform_window/platform_window_handler",
+    "//ui/platform_window/wm",
     "//ui/platform_window/x11",
   ]
 
@@ -102,7 +102,6 @@ source_set("x11_unittests") {
     "//ui/events:test_support",
     "//ui/events/devices/x11",
     "//ui/events/platform/x11",
-    "//ui/events/x:unittests",
     "//ui/ozone:platform",
     "//ui/ozone:test_support",
     "//ui/ozone/common",

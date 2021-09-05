@@ -38,7 +38,7 @@ namespace cc {
 class EventMetrics;
 class ScrollElasticityHelper;
 
-enum PointerResultType { kUnhandled = 0, kScrollbarScroll };
+enum class PointerResultType { kUnhandled = 0, kScrollbarScroll };
 
 // These enum values are reported in UMA. So these values should never be
 // removed or changed.
@@ -53,7 +53,7 @@ struct CC_EXPORT InputHandlerPointerResult {
   InputHandlerPointerResult() = default;
   // Tells what type of processing occurred in the input handler as a result of
   // the pointer event.
-  PointerResultType type = kUnhandled;
+  PointerResultType type = PointerResultType::kUnhandled;
 
   // Tells what scroll_units should be used.
   ui::ScrollGranularity scroll_units =
@@ -120,6 +120,36 @@ class CC_EXPORT InputHandlerClient {
   InputHandlerClient() = default;
 };
 
+// Data passed from the input handler to the main thread.  Used to notify the
+// main thread about changes that have occurred as a result of input since the
+// last commit.
+struct InputHandlerCommitData {
+  // Defined in threaded_input_handler.cc to avoid inlining since flat_set has
+  // non-trivial size destructor.
+  InputHandlerCommitData();
+  ~InputHandlerCommitData();
+
+  // Unconsumed scroll delta since the last commit.
+  gfx::Vector2dF overscroll_delta;
+
+  // Elements that have scroll snapped to a new target since the last commit.
+  base::flat_set<ElementId> updated_snapped_elements;
+
+  // If a scroll was active at any point since the last commit, this will
+  // identify the scroller (even if it has since ended).
+  ElementId last_latched_scroller;
+
+  // True if a scroll gesture has ended since the last commit.
+  bool scroll_gesture_did_end = false;
+
+  // The following bits are set if a gesture of any type was started since
+  // the last commit.
+  bool has_pinch_zoomed = false;
+  bool has_scrolled_by_wheel = false;
+  bool has_scrolled_by_touch = false;
+  bool has_scrolled_by_precisiontouchpad = false;
+};
+
 // The InputHandler is a way for the embedders to interact with the impl thread
 // side of the compositor implementation. There is one InputHandler per
 // LayerTreeHost. To use the input handler, implement the InputHanderClient
@@ -128,7 +158,7 @@ class CC_EXPORT InputHandler {
  public:
   // Note these are used in a histogram. Do not reorder or delete existing
   // entries.
-  enum ScrollThread {
+  enum class ScrollThread {
     SCROLL_ON_MAIN_THREAD = 0,
     SCROLL_ON_IMPL_THREAD,
     SCROLL_IGNORED,
@@ -150,7 +180,7 @@ class CC_EXPORT InputHandler {
         : thread(thread),
           main_thread_scrolling_reasons(main_thread_scrolling_reasons),
           needs_main_thread_hit_test(needs_main_thread_hit_test) {}
-    ScrollThread thread = SCROLL_ON_IMPL_THREAD;
+    ScrollThread thread = ScrollThread::SCROLL_ON_IMPL_THREAD;
     uint32_t main_thread_scrolling_reasons =
         MainThreadScrollingReason::kNotScrollingOnMain;
     bool bubble = false;
@@ -226,7 +256,7 @@ class CC_EXPORT InputHandler {
       const gfx::PointF& mouse_position) = 0;
   virtual void MouseLeave() = 0;
 
-  // Returns frame_element_id from the layer hit by the given point.
+  // Returns visible_frame_element_id from the layer hit by the given point.
   // If the hit test failed, an invalid element ID is returned.
   virtual ElementId FindFrameElementIdAtPoint(
       const gfx::PointF& mouse_position) = 0;

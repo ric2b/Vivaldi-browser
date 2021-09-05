@@ -15,6 +15,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "components/autofill/core/common/field_data_manager.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/renderer_id.h"
 #include "components/autofill/core/common/signatures.h"
@@ -81,6 +82,10 @@ class PasswordFormManager : public PasswordFormManagerForUI,
   // view. It is used for detecting that a form is reappeared after navigation
   // for success detection.
   bool IsEqualToSubmittedForm(const autofill::FormData& form) const;
+
+  // Clears potentially submitted or pending form. Used to forget the state when
+  // Autofill Assistant has handled a submission.
+  void ResetState();
 
   // If |submitted_form| is managed by *this (i.e. DoesManage returns true for
   // |submitted_form| and |driver|) then saves |submitted_form| to
@@ -201,6 +206,10 @@ class PasswordFormManager : public PasswordFormManagerForUI,
                               const base::string16& field_value);
 
   void SetDriver(const base::WeakPtr<PasswordManagerDriver>& driver);
+
+  // Copies all known field data from FieldDataManager to |observed_form_|.
+  void UpdateObservedFormDataWithFieldDataManagerInfo(
+      const autofill::FieldDataManager* field_data_manager);
 #endif  // defined(OS_IOS)
 
   // Create a copy of |*this| which can be passed to the code handling

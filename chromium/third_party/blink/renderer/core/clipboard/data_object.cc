@@ -30,6 +30,7 @@
 
 #include "third_party/blink/renderer/core/clipboard/data_object.h"
 
+#include "base/notreached.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
 #include "third_party/blink/renderer/core/clipboard/clipboard_mime_types.h"
@@ -225,11 +226,14 @@ Vector<String> DataObject::Filenames() const {
   return results;
 }
 
-void DataObject::AddFilename(const String& filename,
-                             const String& display_name,
-                             const String& file_system_id) {
+void DataObject::AddFilename(
+    const String& filename,
+    const String& display_name,
+    const String& file_system_id,
+    scoped_refptr<NativeFileSystemDropData> native_file_system_entry) {
   InternalAddFileItem(DataObjectItem::CreateFromFileWithFileSystemId(
-      File::CreateForUserProvidedFile(filename, display_name), file_system_id));
+      File::CreateForUserProvidedFile(filename, display_name), file_system_id,
+      std::move(native_file_system_entry)));
 }
 
 void DataObject::AddSharedBuffer(scoped_refptr<SharedBuffer> buffer,
@@ -303,7 +307,8 @@ DataObject* DataObject::Create(WebDragData data) {
       case WebDragData::Item::kStorageTypeFilename:
         has_file_system = true;
         data_object->AddFilename(item.filename_data, item.display_name_data,
-                                 data.FilesystemId());
+                                 data.FilesystemId(),
+                                 item.native_file_system_entry);
         break;
       case WebDragData::Item::kStorageTypeBinaryData:
         // This should never happen when dragging in.
@@ -333,7 +338,6 @@ DataObject* DataObject::Create(WebDragData data) {
 
 WebDragData DataObject::ToWebDragData() {
   WebDragData data;
-  data.SetModifierKeyState(modifiers_);
   WebVector<WebDragData::Item> item_list(length());
 
   for (wtf_size_t i = 0; i < length(); ++i) {

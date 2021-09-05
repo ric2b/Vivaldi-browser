@@ -125,7 +125,7 @@ cc::LayerTreeSettings GetSynchronousSingleThreadLayerTreeSettings() {
   // test makes progress.
   settings.single_thread_proxy_scheduler = false;
   settings.use_layer_lists = true;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   settings.enable_elastic_overscroll = true;
 #endif
   return settings;
@@ -278,12 +278,15 @@ WebLocalFrameImpl* CreateProvisional(WebRemoteFrame& old_frame,
         widget_client.get(), frame, frame_widget_host.Unbind(),
         std::move(frame_widget_receiver), widget_client->BindNewWidgetHost(),
         std::move(widget_receiver));
-    widget_client->SetFrameWidget(frame_widget);
+    widget_client->SetFrameWidget(frame_widget, std::move(widget_remote));
     // The WebWidget requires the compositor to be set before it is used.
+    cc::LayerTreeSettings layer_tree_settings =
+        GetSynchronousSingleThreadLayerTreeSettings();
     widget_client->set_layer_tree_host(frame_widget->InitializeCompositing(
-        widget_client->task_graph_runner(),
-        GetSynchronousSingleThreadLayerTreeSettings(),
-        std::make_unique<cc::TestUkmRecorderFactory>()));
+        false, widget_client->main_thread_scheduler(),
+        widget_client->task_graph_runner(), true,
+        widget_client->GetInitialScreenInfo(),
+        std::make_unique<cc::TestUkmRecorderFactory>(), &layer_tree_settings));
     frame_widget->SetCompositorVisible(true);
   } else if (frame->Parent()->IsWebRemoteFrame()) {
     widget_client = std::make_unique<TestWebWidgetClient>();
@@ -292,12 +295,15 @@ WebLocalFrameImpl* CreateProvisional(WebRemoteFrame& old_frame,
         widget_client.get(), frame, frame_widget_host.Unbind(),
         std::move(frame_widget_receiver), widget_client->BindNewWidgetHost(),
         std::move(widget_receiver));
-    widget_client->SetFrameWidget(frame_widget);
+    widget_client->SetFrameWidget(frame_widget, std::move(widget_remote));
     // The WebWidget requires the compositor to be set before it is used.
+    cc::LayerTreeSettings layer_tree_settings =
+        GetSynchronousSingleThreadLayerTreeSettings();
     widget_client->set_layer_tree_host(frame_widget->InitializeCompositing(
-        widget_client->task_graph_runner(),
-        GetSynchronousSingleThreadLayerTreeSettings(),
-        std::make_unique<cc::TestUkmRecorderFactory>()));
+        false, widget_client->main_thread_scheduler(),
+        widget_client->task_graph_runner(), true,
+        widget_client->GetInitialScreenInfo(),
+        std::make_unique<cc::TestUkmRecorderFactory>(), &layer_tree_settings));
     frame_widget->SetCompositorVisible(true);
     frame_widget->Resize(WebSize());
   }
@@ -357,11 +363,14 @@ WebLocalFrameImpl* CreateLocalChild(WebRemoteFrame& parent,
       std::move(frame_widget_receiver), widget_client->BindNewWidgetHost(),
       std::move(widget_receiver));
   // The WebWidget requires the compositor to be set before it is used.
-  widget_client->SetFrameWidget(frame_widget);
+  widget_client->SetFrameWidget(frame_widget, std::move(widget_remote));
+  cc::LayerTreeSettings layer_tree_settings =
+      GetSynchronousSingleThreadLayerTreeSettings();
   widget_client->set_layer_tree_host(frame_widget->InitializeCompositing(
-      widget_client->task_graph_runner(),
-      GetSynchronousSingleThreadLayerTreeSettings(),
-      std::make_unique<cc::TestUkmRecorderFactory>()));
+      false, widget_client->main_thread_scheduler(),
+      widget_client->task_graph_runner(), true,
+      widget_client->GetInitialScreenInfo(),
+      std::make_unique<cc::TestUkmRecorderFactory>(), &layer_tree_settings));
   frame_widget->SetCompositorVisible(true);
   // Set an initial size for subframes.
   if (frame->Parent())
@@ -443,11 +452,14 @@ WebViewImpl* WebViewHelper::InitializeWithOpener(
       std::move(frame_widget_receiver),
       test_web_widget_client_->BindNewWidgetHost(), std::move(widget_receiver));
   // The WebWidget requires the compositor to be set before it is used.
-  test_web_widget_client_->SetFrameWidget(widget);
+  test_web_widget_client_->SetFrameWidget(widget, std::move(widget_remote));
+  cc::LayerTreeSettings layer_tree_settings =
+      GetSynchronousSingleThreadLayerTreeSettings();
   test_web_widget_client_->set_layer_tree_host(widget->InitializeCompositing(
-      test_web_widget_client_->task_graph_runner(),
-      GetSynchronousSingleThreadLayerTreeSettings(),
-      std::make_unique<cc::TestUkmRecorderFactory>()));
+      false, test_web_widget_client_->main_thread_scheduler(),
+      test_web_widget_client_->task_graph_runner(), true,
+      test_web_widget_client_->GetInitialScreenInfo(),
+      std::make_unique<cc::TestUkmRecorderFactory>(), &layer_tree_settings));
   widget->SetCompositorVisible(true);
 
   // We inform the WebView when it has a local main frame attached once the
@@ -455,8 +467,7 @@ WebViewImpl* WebViewHelper::InitializeWithOpener(
   // the case by this point).
   web_view_->DidAttachLocalMainFrame();
 
-  web_view_->SetDeviceScaleFactor(
-      test_web_widget_client_->GetScreenInfo().device_scale_factor);
+  widget->UpdateScreenInfo(test_web_widget_client_->GetInitialScreenInfo());
 
   // Set an initial size for subframes.
   if (frame->Parent())
@@ -573,6 +584,7 @@ void WebViewHelper::InitializeWebView(TestWebViewClient* web_view_client,
   web_view_ = static_cast<WebViewImpl*>(WebView::Create(
       test_web_view_client_,
       /*is_hidden=*/false,
+      /*is_inside_portal=*/false,
       /*compositing_enabled=*/true, opener, mojo::NullAssociatedReceiver()));
   // This property must be set at initialization time, it is not supported to be
   // changed afterward, and does nothing.
@@ -620,7 +632,7 @@ void TestWebFrameClient::BindWidgetClient(
   owned_widget_client_ = std::move(client);
 }
 
-void TestWebFrameClient::FrameDetached(DetachType type) {
+void TestWebFrameClient::FrameDetached() {
   if (frame_->FrameWidget())
     frame_->FrameWidget()->Close();
 
@@ -724,28 +736,31 @@ void TestWebRemoteFrameClient::FrameDetached(DetachType type) {
 
 TestWebWidgetClient::TestWebWidgetClient() = default;
 
-void TestWebWidgetClient::SetFrameWidget(WebFrameWidget* widget) {
+void TestWebWidgetClient::SetFrameWidget(
+    WebFrameWidget* widget,
+    mojo::AssociatedRemote<mojom::blink::Widget> widget_remote) {
   frame_widget_ = widget;
+
+  mojo::Remote<mojom::blink::WidgetInputHandler> input_handler;
+  widget_remote->GetWidgetInputHandler(
+      input_handler.BindNewPipeAndPassReceiver(),
+      GetInputHandlerHost()->BindNewRemote());
+}
+
+TestWidgetInputHandlerHost* TestWebWidgetClient::GetInputHandlerHost() {
+  if (!widget_input_handler_host_)
+    widget_input_handler_host_ = std::make_unique<TestWidgetInputHandlerHost>();
+  return widget_input_handler_host_.get();
+}
+
+ScreenInfo TestWebWidgetClient::GetInitialScreenInfo() {
+  return ScreenInfo();
 }
 
 mojo::PendingAssociatedRemote<mojom::blink::WidgetHost>
 TestWebWidgetClient::BindNewWidgetHost() {
   receiver_.reset();
   return receiver_.BindNewEndpointAndPassDedicatedRemoteForTesting();
-}
-
-void TestWebWidgetClient::SetPageScaleStateAndLimits(
-    float page_scale_factor,
-    bool is_pinch_gesture_active,
-    float minimum,
-    float maximum) {
-  layer_tree_host()->SetPageScaleFactorAndLimits(page_scale_factor, minimum,
-                                                 maximum);
-}
-
-void TestWebWidgetClient::QueueSyntheticEvent(
-    std::unique_ptr<blink::WebCoalescedInputEvent> event) {
-  injected_scroll_events_.push_back(std::move(event));
 }
 
 bool TestWebWidgetClient::HaveScrollEventHandlers() const {
@@ -778,6 +793,12 @@ void TestWebWidgetClient::RequestNewLayerTreeFrameSink(
   std::move(callback).Run(cc::FakeLayerTreeFrameSink::Create3d(), nullptr);
 }
 
+void TestWebWidgetClient::WillQueueSyntheticEvent(
+    const WebCoalescedInputEvent& event) {
+  injected_scroll_events_.push_back(
+      std::make_unique<WebCoalescedInputEvent>(event));
+}
+
 void TestWebWidgetClient::SetCursor(const ui::Cursor& cursor) {}
 
 void TestWebWidgetClient::SetToolTipText(
@@ -804,13 +825,41 @@ WebView* TestWebViewClient::CreateView(WebLocalFrame* opener,
                                        const WebString& name,
                                        WebNavigationPolicy,
                                        network::mojom::blink::WebSandboxFlags,
-                                       const FeaturePolicy::FeatureState&,
+                                       const FeaturePolicyFeatureState&,
                                        const SessionStorageNamespaceId&) {
   auto webview_helper = std::make_unique<WebViewHelper>();
   WebView* result = webview_helper->InitializeWithOpener(opener);
   child_web_views_.push_back(std::move(webview_helper));
   return result;
 }
+
+mojo::PendingRemote<mojom::blink::WidgetInputHandlerHost>
+TestWidgetInputHandlerHost::BindNewRemote() {
+  receiver_.reset();
+  return receiver_.BindNewPipeAndPassRemote();
+}
+
+void TestWidgetInputHandlerHost::SetTouchActionFromMain(
+    cc::TouchAction touch_action) {}
+
+void TestWidgetInputHandlerHost::DidOverscroll(
+    mojom::blink::DidOverscrollParamsPtr params) {}
+
+void TestWidgetInputHandlerHost::DidStartScrollingViewport() {}
+
+void TestWidgetInputHandlerHost::ImeCancelComposition() {}
+
+void TestWidgetInputHandlerHost::ImeCompositionRangeChanged(
+    const gfx::Range& range,
+    const WTF::Vector<gfx::Rect>& bounds) {}
+
+void TestWidgetInputHandlerHost::SetMouseCapture(bool capture) {}
+
+void TestWidgetInputHandlerHost::RequestMouseLock(
+    bool from_user_gesture,
+    bool privileged,
+    bool unadjusted_movement,
+    RequestMouseLockCallback callback) {}
 
 }  // namespace frame_test_helpers
 }  // namespace blink

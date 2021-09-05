@@ -12,230 +12,29 @@
 #include "base/base64.h"
 #include "base/base_paths.h"
 #include "base/files/file_util.h"
-#include "base/json/json_writer.h"
-#include "base/lazy_instance.h"
+#include "base/logging.h"
 #include "base/path_service.h"
 #include "base/rand_util.h"
-#include "base/strings/utf_string_conversions.h"
-#include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/extensions/api/enterprise_reporting_private/prefs.h"
-#include "chrome/browser/policy/browser_dm_token_storage.h"
-#include "chrome/browser/policy/chrome_browser_policy_connector.h"
-#include "chrome/browser/policy/chrome_policy_conversions_client.h"
-#include "chrome/browser/profiles/profile.h"
-#include "chrome/common/channel_info.h"
-#include "chrome/common/pref_names.h"
-#include "components/policy/core/browser/policy_conversions.h"
-#include "components/policy/core/common/cloud/cloud_policy_client.h"
-#include "components/policy/core/common/cloud/cloud_policy_util.h"
-#include "components/policy/core/common/cloud/machine_level_user_cloud_policy_manager.h"
-#include "components/policy/proto/device_management_backend.pb.h"
-#include "components/prefs/pref_service.h"
-#include "components/version_info/channel.h"
-#include "components/version_info/version_info.h"
+#include "components/enterprise/browser/controller/browser_dm_token_storage.h"
 
 #if defined(OS_WIN)
 #include "base/win/registry.h"
 #endif
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include "base/environment.h"
 #include "base/nix/xdg_util.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
+#include "base/mac/foundation_util.h"
+#include "chrome/browser/extensions/api/enterprise_reporting_private/keychain_data_helper_mac.h"
 #include "crypto/apple_keychain.h"
 #endif
 
-namespace em = enterprise_management;
-
 namespace extensions {
 namespace {
-
-// JSON keys in the extension arguments.
-const char kBrowserReport[] = "browserReport";
-const char kChromeUserProfileReport[] = "chromeUserProfileReport";
-const char kChromeSignInUser[] = "chromeSignInUser";
-const char kExtensionData[] = "extensionData";
-const char kPlugins[] = "plugins";
-const char kSafeBrowsingWarnings[] = "safeBrowsingWarnings";
-const char kSafeBrowsingWarningsClickThrough[] =
-    "safeBrowsingWarningsClickThrough";
-
-// JSON keys in the os_info field.
-const char kOS[] = "os";
-const char kOSArch[] = "arch";
-const char kOSVersion[] = "os_version";
-
-const char kDefaultDictionary[] = "{}";
-const char kDefaultList[] = "[]";
-
-enum Type {
-  LIST,
-  DICTIONARY,
-};
-
-std::string GetChromePath() {
-  base::FilePath path;
-  base::PathService::Get(base::DIR_EXE, &path);
-  return path.AsUTF8Unsafe();
-}
-
-std::string GetProfileId(const Profile* profile) {
-  return profile->GetOriginalProfile()->GetPath().AsUTF8Unsafe();
-}
-
-// Returns last policy fetch timestamp of machine level user cloud policy if
-// it exists. Otherwise, returns zero.
-int64_t GetMachineLevelUserCloudPolicyFetchTimestamp() {
-  policy::MachineLevelUserCloudPolicyManager* manager =
-      g_browser_process->browser_policy_connector()
-          ->machine_level_user_cloud_policy_manager();
-  if (!manager || !manager->IsClientRegistered())
-    return 0;
-  return manager->core()->client()->last_policy_timestamp().ToJavaTime();
-}
-
-void AppendAdditionalBrowserInformation(em::ChromeDesktopReportRequest* request,
-                                        Profile* profile) {
-  const PrefService* prefs = profile->GetPrefs();
-
-  // Set Chrome version number
-  request->mutable_browser_report()->set_browser_version(
-      version_info::GetVersionNumber());
-  // Set Chrome channel
-  request->mutable_browser_report()->set_channel(
-      policy::ConvertToProtoChannel(chrome::GetChannel()));
-
-  // Add a new profile report if extension doesn't report any profile.
-  if (request->browser_report().chrome_user_profile_reports_size() == 0)
-    request->mutable_browser_report()->add_chrome_user_profile_reports();
-
-  DCHECK_EQ(1, request->browser_report().chrome_user_profile_reports_size());
-
-  // Set Chrome executable path
-  request->mutable_browser_report()->set_executable_path(GetChromePath());
-
-  // Set profile ID for the first profile.
-  request->mutable_browser_report()
-      ->mutable_chrome_user_profile_reports(0)
-      ->set_id(GetProfileId(profile));
-
-  // Set the profile name
-  request->mutable_browser_report()
-      ->mutable_chrome_user_profile_reports(0)
-      ->set_name(prefs->GetString(prefs::kProfileName));
-
-  if (prefs->GetBoolean(enterprise_reporting::kReportPolicyData)) {
-    // Set policy data of the first profile. Extension will report this data in
-    // the future.
-    auto client =
-        std::make_unique<policy::ChromePolicyConversionsClient>(profile);
-    request->mutable_browser_report()
-        ->mutable_chrome_user_profile_reports(0)
-        ->set_policy_data(policy::DictionaryPolicyConversions(std::move(client))
-                              .EnablePrettyPrint(false)
-                              .ToJSON());
-
-    int64_t timestamp = GetMachineLevelUserCloudPolicyFetchTimestamp();
-    if (timestamp > 0) {
-      request->mutable_browser_report()
-          ->mutable_chrome_user_profile_reports(0)
-          ->set_policy_fetched_timestamp(timestamp);
-    }
-  }
-}
-
-bool UpdateJSONEncodedStringEntry(const base::Value& dict_value,
-                                  const char key[],
-                                  std::string* entry,
-                                  const Type type) {
-  if (const base::Value* value = dict_value.FindKey(key)) {
-    if ((type == DICTIONARY && !value->is_dict()) ||
-        (type == LIST && !value->is_list())) {
-      return false;
-    }
-    base::JSONWriter::Write(*value, entry);
-  } else {
-    if (type == DICTIONARY)
-      *entry = kDefaultDictionary;
-    else if (type == LIST)
-      *entry = kDefaultList;
-  }
-
-  return true;
-}
-
-void AppendPlatformInformation(em::ChromeDesktopReportRequest* request,
-                               const PrefService* prefs) {
-  base::Value os_info = base::Value(base::Value::Type::DICTIONARY);
-  os_info.SetKey(kOS, base::Value(policy::GetOSPlatform()));
-  os_info.SetKey(kOSVersion, base::Value(policy::GetOSVersion()));
-  os_info.SetKey(kOSArch, base::Value(policy::GetOSArchitecture()));
-  base::JSONWriter::Write(os_info, request->mutable_os_info());
-
-  const char kComputerName[] = "computername";
-  base::Value machine_name = base::Value(base::Value::Type::DICTIONARY);
-  machine_name.SetKey(kComputerName, base::Value(policy::GetMachineName()));
-  base::JSONWriter::Write(machine_name, request->mutable_machine_name());
-
-  const char kUsername[] = "username";
-  base::Value os_user = base::Value(base::Value::Type::DICTIONARY);
-  os_user.SetKey(kUsername, base::Value(policy::GetOSUsername()));
-  base::JSONWriter::Write(os_user, request->mutable_os_user());
-
-#if defined(OS_WIN)
-  request->set_serial_number(
-      policy::BrowserDMTokenStorage::Get()->RetrieveSerialNumber());
-#endif
-}
-
-std::unique_ptr<em::ChromeUserProfileReport>
-GenerateChromeUserProfileReportRequest(const base::Value& profile_report,
-                                       const PrefService* prefs) {
-  if (!profile_report.is_dict())
-    return nullptr;
-
-  std::unique_ptr<em::ChromeUserProfileReport> request =
-      std::make_unique<em::ChromeUserProfileReport>();
-
-  if (!UpdateJSONEncodedStringEntry(profile_report, kChromeSignInUser,
-                                    request->mutable_chrome_signed_in_user(),
-                                    DICTIONARY)) {
-    return nullptr;
-  }
-
-  if (prefs->GetBoolean(
-          enterprise_reporting::kReportExtensionsAndPluginsData)) {
-    if (!UpdateJSONEncodedStringEntry(profile_report, kExtensionData,
-                                      request->mutable_extension_data(),
-                                      LIST) ||
-        !UpdateJSONEncodedStringEntry(profile_report, kPlugins,
-                                      request->mutable_plugins(), LIST)) {
-      return nullptr;
-    }
-  }
-
-  if (prefs->GetBoolean(enterprise_reporting::kReportSafeBrowsingData)) {
-    if (const base::Value* count =
-            profile_report.FindKey(kSafeBrowsingWarnings)) {
-      if (!count->is_int())
-        return nullptr;
-      request->set_safe_browsing_warnings(count->GetInt());
-    }
-
-    if (const base::Value* count =
-            profile_report.FindKey(kSafeBrowsingWarningsClickThrough)) {
-      if (!count->is_int())
-        return nullptr;
-      request->set_safe_browsing_warnings_click_through(count->GetInt());
-    }
-  }
-
-  return request;
-}
 
 #if defined(OS_WIN)
 const wchar_t kDefaultRegistryPath[] =
@@ -329,10 +128,35 @@ LONG CreateRandomSecret(std::string* secret) {
   return result;
 }
 
-#elif defined(OS_MACOSX)  // defined(OS_WIN)
+#elif defined(OS_MAC)  // defined(OS_WIN)
 
 constexpr char kServiceName[] = "Endpoint Verification Safe Storage";
 constexpr char kAccountName[] = "Endpoint Verification";
+
+class ScopedKeychianUserInteractionAllowed {
+ public:
+  explicit ScopedKeychianUserInteractionAllowed(Boolean allowed) {
+    status_ = SecKeychainGetUserInteractionAllowed(&was_allowed_);
+    if (status_ != noErr)
+      return;
+    if (was_allowed_ == allowed)
+      return;
+    status_ = SecKeychainSetUserInteractionAllowed(allowed);
+    needs_reset_ = true;
+  }
+
+  ~ScopedKeychianUserInteractionAllowed() {
+    if (needs_reset_)
+      SecKeychainSetUserInteractionAllowed(was_allowed_);
+  }
+
+  OSStatus status() { return status_; }
+
+ private:
+  OSStatus status_;
+  Boolean was_allowed_;
+  bool needs_reset_ = false;
+};
 
 OSStatus AddRandomPasswordToKeychain(const crypto::AppleKeychain& keychain,
                                      std::string* secret) {
@@ -340,39 +164,55 @@ OSStatus AddRandomPasswordToKeychain(const crypto::AppleKeychain& keychain,
   const int kBytes = 128 / 8;
   std::string password;
   base::Base64Encode(base::RandBytesAsString(kBytes), &password);
-  void* password_data =
-      const_cast<void*>(static_cast<const void*>(password.data()));
 
-  OSStatus error = keychain.AddGenericPassword(
-      strlen(kServiceName), kServiceName, strlen(kAccountName), kAccountName,
-      password.size(), password_data, nullptr);
-
-  if (error == noErr)
+  OSStatus status = WriteKeychainItem(kServiceName, kAccountName, password);
+  if (status == noErr)
     *secret = password;
   else
     secret->clear();
-  return error;
+  return status;
 }
 
-OSStatus ReadEncryptedSecret(std::string* secret) {
+OSStatus ReadEncryptedSecret(std::string* password, bool force_recreate) {
   UInt32 password_length = 0;
   void* password_data = nullptr;
   crypto::AppleKeychain keychain;
-  secret->clear();
-  OSStatus error = keychain.FindGenericPassword(
+  password->clear();
+  base::ScopedCFTypeRef<SecKeychainItemRef> item_ref;
+  ScopedKeychianUserInteractionAllowed user_interaction_allowed(FALSE);
+  if (user_interaction_allowed.status() != noErr)
+    return user_interaction_allowed.status();
+  OSStatus status = keychain.FindGenericPassword(
       strlen(kServiceName), kServiceName, strlen(kAccountName), kAccountName,
-      &password_length, &password_data, nullptr);
+      &password_length, &password_data, item_ref.InitializeInto());
 
-  if (error == noErr) {
-    *secret = std::string(static_cast<char*>(password_data), password_length);
+  if (status == noErr) {
+    *password = std::string(static_cast<char*>(password_data), password_length);
     keychain.ItemFreeContent(password_data);
-  } else if (error == errSecItemNotFound) {
-    error = AddRandomPasswordToKeychain(keychain, secret);
+    return status;
   }
-  return error;
+
+  if (status == errSecItemNotFound || force_recreate) {
+    if (status != errSecItemNotFound) {
+      // If the item is present but can't be read. Try to delete it first.
+      // If any of those steps fail don't try to proceed any further.
+      item_ref.reset();
+      status = keychain.FindGenericPassword(
+          strlen(kServiceName), kServiceName, strlen(kAccountName),
+          kAccountName, nullptr, nullptr, item_ref.InitializeInto());
+      if (status != noErr)
+        return status;
+      status = keychain.ItemDelete(item_ref.get());
+      if (status != noErr)
+        return status;
+    }
+    status = AddRandomPasswordToKeychain(keychain, password);
+  }
+
+  return status;
 }
 
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
 base::FilePath* GetEndpointVerificationDirOverride() {
   static base::NoDestructor<base::FilePath> dir_override;
@@ -386,18 +226,18 @@ base::FilePath GetEndpointVerificationDir() {
     return *GetEndpointVerificationDirOverride();
 #if defined(OS_WIN)
   if (!base::PathService::Get(base::DIR_LOCAL_APP_DATA, &path))
-#elif defined(OS_LINUX)
+#elif defined(OS_LINUX) || defined(OS_CHROMEOS)
   std::unique_ptr<base::Environment> env(base::Environment::Create());
   path = base::nix::GetXDGDirectory(env.get(), base::nix::kXdgConfigHomeEnvVar,
                                     base::nix::kDotConfigDir);
   if (path.empty())
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   if (!base::PathService::Get(base::DIR_APP_DATA, &path))
 #else
   if (true)
 #endif
     return path;
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   path = path.AppendASCII("google");
 #else
   path = path.AppendASCII("Google");
@@ -407,40 +247,6 @@ base::FilePath GetEndpointVerificationDir() {
 }
 
 }  // namespace
-
-std::unique_ptr<em::ChromeDesktopReportRequest>
-GenerateChromeDesktopReportRequest(const base::DictionaryValue& report,
-                                   Profile* profile) {
-  std::unique_ptr<em::ChromeDesktopReportRequest> request =
-      std::make_unique<em::ChromeDesktopReportRequest>();
-
-  const PrefService* prefs = profile->GetPrefs();
-
-  AppendPlatformInformation(request.get(), prefs);
-
-  if (const base::Value* browser_report =
-          report.FindKeyOfType(kBrowserReport, base::Value::Type::DICTIONARY)) {
-    if (const base::Value* profile_reports = browser_report->FindKeyOfType(
-            kChromeUserProfileReport, base::Value::Type::LIST)) {
-      if (!profile_reports->GetList().empty()) {
-        DCHECK_EQ(1u, profile_reports->GetList().size());
-        // Currently, profile send their browser reports individually.
-        std::unique_ptr<em::ChromeUserProfileReport> profile_report_request =
-            GenerateChromeUserProfileReportRequest(
-                profile_reports->GetList()[0], prefs);
-        if (!profile_report_request)
-          return nullptr;
-        request->mutable_browser_report()
-            ->mutable_chrome_user_profile_reports()
-            ->AddAllocated(profile_report_request.release());
-      }
-    }
-  }
-
-  AppendAdditionalBrowserInformation(request.get(), profile);
-
-  return request;
-}
 
 // Sets the path used to store Endpoint Verification data for tests.
 void OverrideEndpointVerificationDirForTesting(const base::FilePath& path) {
@@ -522,6 +328,7 @@ void RetrieveDeviceData(
 }
 
 void RetrieveDeviceSecret(
+    bool force_recreate,
     base::OnceCallback<void(const std::string&, long int)> callback) {
   std::string secret;
 #if defined(OS_WIN)
@@ -531,8 +338,11 @@ void RetrieveDeviceSecret(
     result = CreateRandomSecret(&secret);
   else if (result == ERROR_SUCCESS)
     result = DecryptString(encrypted_secret, &secret);
-#elif defined(OS_MACOSX)
-  OSStatus result = ReadEncryptedSecret(&secret);
+  // If something failed above [re]try creating the secret if forced.
+  if (result != ERROR_SUCCESS && force_recreate)
+    result = CreateRandomSecret(&secret);
+#elif defined(OS_MAC)
+  OSStatus result = ReadEncryptedSecret(&secret, force_recreate);
 #else
   long int result = -1;  // Anything but 0 is a failure.
 #endif

@@ -32,7 +32,9 @@
 
 #include <memory>
 #include "base/feature_list.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/loader/worker_main_script_load_parameters.h"
 #include "third_party/blink/public/mojom/appcache/appcache.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/post_message_helper.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
@@ -61,7 +63,8 @@ namespace blink {
 DedicatedWorkerGlobalScope* DedicatedWorkerGlobalScope::Create(
     std::unique_ptr<GlobalScopeCreationParams> creation_params,
     DedicatedWorkerThread* thread,
-    base::TimeTicks time_origin) {
+    base::TimeTicks time_origin,
+    ukm::SourceId ukm_source_id) {
   std::unique_ptr<Vector<String>> outside_origin_trial_tokens =
       std::move(creation_params->origin_trial_tokens);
   BeginFrameProviderParams begin_frame_provider_params =
@@ -75,7 +78,8 @@ DedicatedWorkerGlobalScope* DedicatedWorkerGlobalScope::Create(
 
   auto* global_scope = MakeGarbageCollected<DedicatedWorkerGlobalScope>(
       std::move(creation_params), thread, time_origin,
-      std::move(outside_origin_trial_tokens), begin_frame_provider_params);
+      std::move(outside_origin_trial_tokens), begin_frame_provider_params,
+      ukm_source_id);
 
   if (global_scope->IsOffMainThreadScriptFetchDisabled()) {
     // Legacy on-the-main-thread worker script fetch (to be removed):
@@ -97,18 +101,54 @@ DedicatedWorkerGlobalScope* DedicatedWorkerGlobalScope::Create(
   }
 }
 
+struct ProcessedCreationParams {
+  std::unique_ptr<GlobalScopeCreationParams> creation_params;
+  ExecutionContextToken parent_context_token;
+};
+
+// static
+DedicatedWorkerGlobalScope::ParsedCreationParams
+DedicatedWorkerGlobalScope::ParseCreationParams(
+    std::unique_ptr<GlobalScopeCreationParams> creation_params) {
+  ParsedCreationParams parsed_creation_params;
+  parsed_creation_params.parent_context_token =
+      creation_params->parent_context_token.value();
+  parsed_creation_params.creation_params = std::move(creation_params);
+  return parsed_creation_params;
+}
+
 DedicatedWorkerGlobalScope::DedicatedWorkerGlobalScope(
     std::unique_ptr<GlobalScopeCreationParams> creation_params,
     DedicatedWorkerThread* thread,
     base::TimeTicks time_origin,
     std::unique_ptr<Vector<String>> outside_origin_trial_tokens,
-    const BeginFrameProviderParams& begin_frame_provider_params)
-    : WorkerGlobalScope(std::move(creation_params), thread, time_origin),
+    const BeginFrameProviderParams& begin_frame_provider_params,
+    ukm::SourceId ukm_source_id)
+    : DedicatedWorkerGlobalScope(
+          ParseCreationParams(std::move(creation_params)),
+          thread,
+          time_origin,
+          std::move(outside_origin_trial_tokens),
+          begin_frame_provider_params,
+          ukm_source_id) {}
+
+DedicatedWorkerGlobalScope::DedicatedWorkerGlobalScope(
+    ParsedCreationParams parsed_creation_params,
+    DedicatedWorkerThread* thread,
+    base::TimeTicks time_origin,
+    std::unique_ptr<Vector<String>> outside_origin_trial_tokens,
+    const BeginFrameProviderParams& begin_frame_provider_params,
+    ukm::SourceId ukm_source_id)
+    : WorkerGlobalScope(std::move(parsed_creation_params.creation_params),
+                        thread,
+                        time_origin,
+                        ukm_source_id),
+      token_(thread->WorkerObjectProxy().token()),
+      parent_token_(parsed_creation_params.parent_context_token),
       animation_frame_provider_(
           MakeGarbageCollected<WorkerAnimationFrameProvider>(
               this,
               begin_frame_provider_params)) {
-
   // Dedicated workers don't need to pause after script fetch.
   ReadyToRunWorkerScript();
   // Inherit the outside's origin trial tokens.
@@ -141,7 +181,7 @@ void DedicatedWorkerGlobalScope::Initialize(
   SetReferrerPolicy(response_referrer_policy);
 
   // https://wicg.github.io/cors-rfc1918/#integration-html
-  GetSecurityContext().SetAddressSpace(response_address_space);
+  SetAddressSpace(response_address_space);
 
   // Step 12.6. "Execute the Initialize a global object's CSP list algorithm
   // on worker global scope and response. [CSP]"
@@ -165,6 +205,8 @@ void DedicatedWorkerGlobalScope::Initialize(
 // https://html.spec.whatwg.org/C/#worker-processing-model
 void DedicatedWorkerGlobalScope::FetchAndRunClassicScript(
     const KURL& script_url,
+    std::unique_ptr<WorkerMainScriptLoadParameters>
+        worker_main_script_load_params,
     const FetchClientSettingsObjectSnapshot& outside_settings_object,
     WorkerResourceTimingNotifier& outside_resource_timing_notifier,
     const v8_inspector::V8StackTraceId& stack_id) {
@@ -188,7 +230,8 @@ void DedicatedWorkerGlobalScope::FetchAndRunClassicScript(
       *this,
       CreateOutsideSettingsFetcher(outside_settings_object,
                                    outside_resource_timing_notifier),
-      script_url, context_type, destination,
+      script_url, std::move(worker_main_script_load_params),
+      CloneResourceLoadInfoNotifier(), context_type, destination,
       network::mojom::RequestMode::kSameOrigin,
       network::mojom::CredentialsMode::kSameOrigin,
       WTF::Bind(&DedicatedWorkerGlobalScope::DidReceiveResponseForClassicScript,
@@ -202,11 +245,19 @@ void DedicatedWorkerGlobalScope::FetchAndRunClassicScript(
 // https://html.spec.whatwg.org/C/#worker-processing-model
 void DedicatedWorkerGlobalScope::FetchAndRunModuleScript(
     const KURL& module_url_record,
+    std::unique_ptr<WorkerMainScriptLoadParameters>
+        worker_main_script_load_params,
     const FetchClientSettingsObjectSnapshot& outside_settings_object,
     WorkerResourceTimingNotifier& outside_resource_timing_notifier,
     network::mojom::CredentialsMode credentials_mode,
     RejectCoepUnsafeNone reject_coep_unsafe_none) {
   reject_coep_unsafe_none_ = reject_coep_unsafe_none;
+
+  if (worker_main_script_load_params) {
+    SetWorkerMainScriptLoadingParametersForModules(
+        std::move(worker_main_script_load_params));
+  }
+
   // Step 12: "Let destination be "sharedworker" if is shared is true, and
   // "worker" otherwise."
   mojom::RequestContextType context_type = mojom::RequestContextType::WORKER;

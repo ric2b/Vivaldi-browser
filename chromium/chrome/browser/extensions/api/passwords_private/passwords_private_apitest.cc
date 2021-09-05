@@ -44,12 +44,6 @@ class PasswordsPrivateApiTest : public ExtensionApiTest {
   PasswordsPrivateApiTest() = default;
   ~PasswordsPrivateApiTest() override = default;
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    ExtensionApiTest::SetUpCommandLine(command_line);
-  }
-
-  void SetUp() override { ExtensionApiTest::SetUp(); }
-
   void SetUpOnMainThread() override {
     ExtensionApiTest::SetUpOnMainThread();
     s_test_delegate_ = static_cast<TestPasswordsPrivateDelegate*>(
@@ -120,8 +114,33 @@ class PasswordsPrivateApiTest : public ExtensionApiTest {
 
 }  // namespace
 
-IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, ChangeSavedPassword) {
-  EXPECT_TRUE(RunPasswordsSubtest("changeSavedPassword")) << message_;
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, ChangeSavedPasswordSucceeds) {
+  EXPECT_TRUE(RunPasswordsSubtest("changeSavedPasswordSucceeds")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
+                       ChangeSavedPasswordWithIncorrectIdFails) {
+  EXPECT_TRUE(RunPasswordsSubtest("changeSavedPasswordWithIncorrectIdFails"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
+                       ChangeSavedPasswordWithOneIncorrectIdFromArrayFails) {
+  EXPECT_TRUE(RunPasswordsSubtest(
+      "changeSavedPasswordWithOneIncorrectIdFromArrayFails"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
+                       ChangeSavedPasswordWithEmptyPasswordFails) {
+  EXPECT_TRUE(RunPasswordsSubtest("changeSavedPasswordWithEmptyPasswordFails"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
+                       ChangeSavedPasswordWithEmptyArrayIdFails) {
+  EXPECT_TRUE(RunPasswordsSubtest("changeSavedPasswordWithEmptyArrayIdFails"))
+      << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
@@ -210,6 +229,13 @@ IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
                        GetPlaintextCompromisedPasswordFails) {
   ResetPlaintextPassword();
   EXPECT_TRUE(RunPasswordsSubtest("getPlaintextCompromisedPasswordFails"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
+                       ChangeCompromisedCredentialWithEmptyPasswordFails) {
+  EXPECT_TRUE(
+      RunPasswordsSubtest("changeCompromisedCredentialWithEmptyPasswordFails"))
       << message_;
 }
 

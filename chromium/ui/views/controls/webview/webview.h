@@ -42,11 +42,12 @@ class WEBVIEW_EXPORT WebView : public View,
  public:
   METADATA_HEADER(WebView);
 
-  explicit WebView(content::BrowserContext* browser_context);
+  explicit WebView(content::BrowserContext* browser_context = nullptr);
   ~WebView() override;
 
-  // This creates a WebContents if none is yet associated with this WebView. The
-  // WebView owns this implicitly created WebContents.
+  // This creates a WebContents if |kBrowserContext| has been set and there is
+  // not yet a WebContents associated with this WebView, otherwise it will
+  // return a nullptr.
   content::WebContents* GetWebContents();
 
   // WebView does not assume ownership of WebContents set via this method, only
@@ -59,7 +60,8 @@ class WEBVIEW_EXPORT WebView : public View,
   // widget or restore the normal WebContentsView.
   void SetEmbedFullscreenWidgetMode(bool mode);
 
-  content::BrowserContext* browser_context() { return browser_context_; }
+  content::BrowserContext* GetBrowserContext();
+  void SetBrowserContext(content::BrowserContext* browser_context);
 
   // Loads the initial URL to display in the attached WebContents. Creates the
   // WebContents if none is attached yet. Note that this is intended as a
@@ -86,6 +88,11 @@ class WEBVIEW_EXPORT WebView : public View,
   // when the web contents is in a crashed state. This is cleared automatically
   // if the web contents is changed.
   void SetCrashedOverlayView(View* crashed_overlay_view);
+
+  // Sets whether this is the primary web contents for the window.
+  void set_is_primary_web_contents_for_window(bool is_primary) {
+    is_primary_web_contents_for_window_ = is_primary;
+  }
 
   // When used to host UI, we need to explicitly allow accelerators to be
   // processed. Default is false.
@@ -157,6 +164,7 @@ class WEBVIEW_EXPORT WebView : public View,
   void OnWebContentsFocused(
       content::RenderWidgetHost* render_widget_host) override;
   void RenderProcessGone(base::TerminationStatus status) override;
+  void AXTreeIDForMainFrameHasChanged() override;
 
   // Override from ui::AXModeObserver
   void OnAXModeAdded(ui::AXMode mode) override;
@@ -196,6 +204,7 @@ class WEBVIEW_EXPORT WebView : public View,
   content::BrowserContext* browser_context_;
   bool allow_accelerators_ = false;
   View* crashed_overlay_view_ = nullptr;
+  bool is_primary_web_contents_for_window_ = false;
 
   // Minimum and maximum sizes to determine WebView bounds for auto-resizing.
   // Empty if auto resize is not enabled.

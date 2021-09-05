@@ -20,10 +20,22 @@
 namespace autofill {
 namespace features {
 
+// Controls if Autofill sends votes for the new address types.
+const base::Feature kAutofillAddressEnhancementVotes{
+    "kAutofillAddressEnhancementVotes", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls whether the AddressNormalizer is supplied. If available, it may be
 // used to normalize address and will incur fetching rules from the server.
 const base::Feature kAutofillAddressNormalizer{
     "AutofillAddressNormalizer", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// By default, AutofillAgent and, if |kAutofillProbableFormSubmissionInBrowser|
+// is enabled, also ContentAutofillDriver omit duplicate form submissions, even
+// though the form's data may have changed substantially. If enabled, the
+// below feature allows duplicate form submissions.
+// TODO(crbug/1117451): Remove once the form-submission experiment is over.
+const base::Feature kAutofillAllowDuplicateFormSubmissions{
+    "AutofillAllowDuplicateFormSubmissions", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls if a full country name instead of a country code in a field with a
 // type derived from HTML_TYPE_COUNTRY_CODE can be used to set the profile
@@ -78,6 +90,12 @@ const base::Feature kAutofillEnableCompanyName{
 // Controls whether we show "Hide suggestions" item in the suggestions menu.
 const base::Feature kAutofillEnableHideSuggestionsUI{
     "AutofillEnableHideSuggestionsUI", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls if Autofill supports new structure in names.
+// TODO(crbug.com/1098943): Remove once launched.
+const base::Feature kAutofillEnableSupportForMoreStructureInNames{
+    "AutofillEnableSupportForMoreStructureInNames",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether or not a minimum number of fields is required before
 // heuristic field type prediction is run for a form.
@@ -151,6 +169,18 @@ const base::Feature kAutofillOverrideWithRaterConsensus{
 
 const base::Feature kAutofillPreferServerNamePredictions{
     "AutofillPreferServerNamePredictions", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If feature is enabled, autofill will be disabled for mixed forms (forms on
+// HTTPS sites that submit over HTTP).
+const base::Feature kAutofillPreventMixedFormsFilling{
+    "AutofillPreventMixedFormsFilling", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If the feature is enabled, FormTracker's probable-form-submission detection
+// is disabled and replaced with browser-side detection.
+// TODO(crbug/1117451): Remove once it works.
+const base::Feature kAutofillProbableFormSubmissionInBrowser{
+    "AutofillProbableFormSubmissionInBrowser",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kAutofillProfileClientValidation{
     "AutofillProfileClientValidation", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -231,6 +261,12 @@ const base::Feature kAutofillShowTypePredictions{
 const base::Feature kAutofillSkipComparingInferredLabels{
     "AutofillSkipComparingInferredLabels", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Controls whether to skip fields whose last seen value differs from the
+// initially value.
+const base::Feature kAutofillSkipFillingFieldsWithChangedValues{
+    "AutofillSkipFillingFieldsWithChangedValues",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls whether Autofill should search prefixes of all words/tokens when
 // filtering profiles, or only on prefixes of the whole string.
 const base::Feature kAutofillTokenPrefixMatching{
@@ -238,7 +274,7 @@ const base::Feature kAutofillTokenPrefixMatching{
 
 // Enables the touch to fill feature for Android.
 const base::Feature kAutofillTouchToFill = {"TouchToFillAndroid",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kAutofillUploadThrottling{"AutofillUploadThrottling",
                                               base::FEATURE_ENABLED_BY_DEFAULT};

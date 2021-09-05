@@ -5,13 +5,10 @@
 import {browserProxy} from './browser_proxy/browser_proxy.js';
 import {assert} from './chrome_util.js';
 // eslint-disable-next-line no-unused-vars
-import {Intent} from './intent.js';
-// eslint-disable-next-line no-unused-vars
 import {PerfEvent} from './perf.js';
 import * as state from './state.js';
-// eslint-disable-next-line no-unused-vars
-import {Facing} from './type.js';
 import {
+  Facing,  // eslint-disable-line no-unused-vars
   Mode,
   Resolution,  // eslint-disable-line no-unused-vars
 } from './type.js';
@@ -23,7 +20,7 @@ import {
 const GA_ID = 'UA-134822711-1';
 
 /**
- * @type {?Map<number, Object>}
+ * @type {?Map<number, !Object>}
  */
 let baseDimen = null;
 
@@ -33,12 +30,33 @@ let baseDimen = null;
 let ready = null;
 
 /**
+ * @type {boolean}
+ */
+let isMetricsEnabled = false;
+
+/**
+ * Disable metrics sending if either the logging consent option is disabled or
+ * metrics is disabled for current session. (e.g. Running tests)
+ * @return {!Promise}
+ */
+async function disableMetricsIfNotAllowed() {
+  // This value reflects the logging constent option in OS settings.
+  const canSendMetrics = await browserProxy.isMetricsAndCrashReportingEnabled();
+  window[`ga-disable-${GA_ID}`] = !isMetricsEnabled || !canSendMetrics;
+}
+
+/**
  * Send the event to GA backend.
  * @param {!ga.Fields} event The event to send.
- * @param {Map<number, Object>=} dimen Optional object contains dimension
+ * @param {?Map<number, !Object>=} dimen Optional object contains dimension
  *     information.
  */
-function sendEvent(event, dimen = null) {
+async function sendEvent(event, dimen = null) {
+  assert(window.ga !== null);
+  assert(ready !== null);
+  await ready;
+  await disableMetricsIfNotAllowed();
+
   const assignDimension = (e, d) => {
     d.forEach((value, key) => e[`dimension${key}`] = value);
   };
@@ -58,12 +76,7 @@ function sendEvent(event, dimen = null) {
  */
 export function setMetricsEnabled(enabled) {
   assert(ready !== null);
-
-  ready.then(async() => {
-    // This value reflects the logging constent option in OS settings.
-    const canSendMetrics = await browserProxy.isCrashReportingEnabled();
-    window[`ga-disable-${GA_ID}`] = !enabled || !canSendMetrics;
-  });
+  isMetricsEnabled = enabled;
 }
 
 /**
@@ -119,17 +132,24 @@ export function initMetrics() {
     window.ga('set', 'checkProtocolTask', null);
   })();
 
-  ready.then(async() => {
+  ready.then(async () => {
     // The metrics is default enabled.
     await setMetricsEnabled(true);
   });
 }
 
 /**
- * Sends launch type event.
- * @param {boolean} ackMigrate Whether acknowledged to migrate during launch.
+ * Parameters for logging launch event. |ackMigrate| stands for whether
+ * the user acknowledged to migrate during launch.
+ * @typedef {{ackMigrate: boolean}}
  */
-function sendLaunchEvent(ackMigrate) {
+export let LaunchEventParam;
+
+/**
+ * Sends launch type event.
+ * @param {!LaunchEventParam} param
+ */
+export function sendLaunchEvent({ackMigrate}) {
   sendEvent({
     eventCategory: 'launch',
     eventAction: 'start',
@@ -164,6 +184,9 @@ export const ShutterType = {
  * @record
  */
 export class CaptureEventParam {
+  /**
+   * @public
+   */
   constructor() {
     /**
      * @type {!Facing} Camera facing of the capture.
@@ -181,7 +204,7 @@ export class CaptureEventParam {
     this.resolution;
 
     /**
-     * @type {(IntentResultType|undefined)}
+     * @type {!IntentResultType|undefined}
      */
     this.intentResult;
 
@@ -192,13 +215,13 @@ export class CaptureEventParam {
 
     /**
      * Whether the event is for video snapshot.
-     * @type {(boolean|undefined)}
+     * @type {boolean|undefined}
      */
     this.isVideoSnapshot;
 
     /**
      * Whether the video have ever paused and resumed in the recording.
-     * @type {(boolean|undefined)}
+     * @type {boolean|undefined}
      */
     this.everPaused;
   }
@@ -208,7 +231,7 @@ export class CaptureEventParam {
  * Sends capture type event.
  * @param {!CaptureEventParam} param
  */
-function sendCaptureEvent({
+export function sendCaptureEvent({
   facing,
   duration = 0,
   resolution,
@@ -218,8 +241,8 @@ function sendCaptureEvent({
   everPaused = false,
 }) {
   /**
-   * @param {!Array<state.StateUnion>} states
-   * @param {state.StateUnion=} cond
+   * @param {!Array<!state.StateUnion>} states
+   * @param {!state.StateUnion=} cond
    * @param {boolean=} strict
    * @return {string}
    */
@@ -262,13 +285,38 @@ function sendCaptureEvent({
       ]));
 }
 
+
+/**
+ * Parameters for logging perf event.
+ * @record
+ */
+export class PerfEventParam {
+  /**
+   * @public
+   */
+  constructor() {
+    /**
+     * @type {!PerfEvent} Target event type.
+     */
+    this.event;
+
+    /**
+     * @type {number} Duration of the event in ms.
+     */
+    this.duration;
+
+    /**
+     * @type {!Object|undefined} Optional information for the event.
+     */
+    this.extras;
+  }
+}
+
 /**
  * Sends perf type event.
- * @param {PerfEvent} event The target event type.
- * @param {number} duration The duration of the event in ms.
- * @param {Object=} extras Optional information for the event.
+ * @param {!PerfEventParam} param
  */
-function sendPerfEvent(event, duration, extras = {}) {
+export function sendPerfEvent({event, duration, extras = {}}) {
   const {resolution = '', facing = ''} = extras;
   sendEvent(
       {
@@ -286,38 +334,59 @@ function sendPerfEvent(event, duration, extras = {}) {
 }
 
 /**
- * Sends intent type event.
- * @param {!Intent} intent Intent to be logged.
- * @param {!IntentResultType} intentResult
+ * See Intent class in intent.js for the descriptions of each field.
+ * TODO(b/131133953): Pass an Intent directly once the type-only import feature
+ * is implemented in Closure Compiler.
+ * @typedef {{
+ *   mode: !Mode,
+ *   result: !IntentResultType,
+ *   shouldHandleResult: boolean,
+ *   shouldDownScale: boolean,
+ *   isSecure: boolean,
+ * }}
  */
-function sendIntentEvent(intent, intentResult) {
+export let IntentEventParam;
+
+/**
+ * Sends intent type event.
+ * @param {!IntentEventParam} param
+ */
+export function sendIntentEvent(
+    {mode, result, shouldHandleResult, shouldDownScale, isSecure}) {
   const getBoolValue = (b) => b ? '1' : '0';
   sendEvent(
       {
         eventCategory: 'intent',
-        eventAction: intent.mode,
-        eventLabel: intentResult,
+        eventAction: mode,
+        eventLabel: result,
       },
       new Map([
-        [12, intentResult],
-        [13, getBoolValue(intent.shouldHandleResult)],
-        [14, getBoolValue(intent.shouldDownScale)],
-        [15, getBoolValue(intent.isSecure)],
+        [12, result],
+        [13, getBoolValue(shouldHandleResult)],
+        [14, getBoolValue(shouldDownScale)],
+        [15, getBoolValue(isSecure)],
       ]));
 }
 
 /**
- * Sends error type event.
- * @param {string} type
- * @param {string} level
- * @param {string} errorName
- * @param {string} fileName
- * @param {string} funcName
- * @param {string} lineNo
- * @param {string} colNo
+ * @typedef {{
+ *   type: string,
+ *   level: string,
+ *   errorName: string,
+ *   fileName: string,
+ *   funcName: string,
+ *   lineNo: string,
+ *   colNo: string,
+ * }}
  */
-function sendErrorEvent(
-    type, level, errorName, fileName, funcName, lineNo, colNo) {
+export let ErrorEventParam;
+
+/**
+ * Sends error type event.
+ * @param {!ErrorEventParam} param
+ */
+export function sendErrorEvent(
+    {type, level, errorName, fileName, funcName, lineNo, colNo}) {
   sendEvent(
       {
         eventCategory: 'error',
@@ -331,30 +400,4 @@ function sendErrorEvent(
         [19, lineNo],
         [20, colNo],
       ]));
-}
-
-/**
- * Metrics types.
- * @enum {function(...)}
- */
-export const Type = {
-  LAUNCH: sendLaunchEvent,
-  CAPTURE: sendCaptureEvent,
-  PERF: sendPerfEvent,
-  INTENT: sendIntentEvent,
-  ERROR: sendErrorEvent,
-};
-
-/**
- * Logs the given metrics.
- * @param {!Type} type Metrics type.
- * @param {...*} args Optional rest parameters for logging metrics.
- * @return {!Promise}
- */
-export async function log(type, ...args) {
-  assert(window.ga !== null);
-  assert(ready !== null);
-
-  await ready;
-  type(...args);
 }

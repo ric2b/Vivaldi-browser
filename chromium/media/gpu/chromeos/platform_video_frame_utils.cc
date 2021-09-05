@@ -20,6 +20,7 @@
 #include "media/base/format_utils.h"
 #include "media/base/scopedfd_helper.h"
 #include "media/base/video_frame_layout.h"
+#include "media/base/video_util.h"
 #include "media/gpu/buffer_validation.h"
 #include "media/gpu/macros.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -33,6 +34,7 @@ gfx::GpuMemoryBufferHandle AllocateGpuMemoryBufferHandle(
     gpu::GpuMemoryBufferFactory* factory,
     VideoPixelFormat pixel_format,
     const gfx::Size& coded_size,
+    const gfx::Rect& visible_rect,
     gfx::BufferUsage buffer_usage) {
   DCHECK(factory);
   gfx::GpuMemoryBufferHandle gmb_handle;
@@ -51,7 +53,8 @@ gfx::GpuMemoryBufferHandle AllocateGpuMemoryBufferHandle(
 
   // TODO(hiroh): Rename the client id to more generic one.
   gmb_handle = factory->CreateGpuMemoryBuffer(
-      gfx::GpuMemoryBufferId(gpu_memory_buffer_id), coded_size, *buffer_format,
+      gfx::GpuMemoryBufferId(gpu_memory_buffer_id), coded_size,
+      /*framebuffer_size=*/GetRectSizeFromOrigin(visible_rect), *buffer_format,
       buffer_usage, gpu::kPlatformVideoFramePoolClientId,
       gfx::kNullAcceleratedWidget);
   DCHECK(gmb_handle.is_null() || gmb_handle.type != gfx::NATIVE_PIXMAP ||
@@ -71,8 +74,8 @@ scoped_refptr<VideoFrame> CreateGpuMemoryBufferVideoFrame(
     base::TimeDelta timestamp,
     gfx::BufferUsage buffer_usage) {
   DCHECK(factory);
-  auto gmb_handle = AllocateGpuMemoryBufferHandle(factory, pixel_format,
-                                                  coded_size, buffer_usage);
+  auto gmb_handle = AllocateGpuMemoryBufferHandle(
+      factory, pixel_format, coded_size, visible_rect, buffer_usage);
   if (gmb_handle.is_null())
     return nullptr;
 
@@ -113,8 +116,8 @@ scoped_refptr<VideoFrame> CreatePlatformVideoFrame(
     base::TimeDelta timestamp,
     gfx::BufferUsage buffer_usage) {
   DCHECK(factory);
-  auto gmb_handle = AllocateGpuMemoryBufferHandle(factory, pixel_format,
-                                                  coded_size, buffer_usage);
+  auto gmb_handle = AllocateGpuMemoryBufferHandle(
+      factory, pixel_format, coded_size, visible_rect, buffer_usage);
   if (gmb_handle.is_null())
     return nullptr;
 
@@ -173,6 +176,11 @@ gfx::GpuMemoryBufferHandle CreateGpuMemoryBufferHandle(
   switch (video_frame->storage_type()) {
     case VideoFrame::STORAGE_GPU_MEMORY_BUFFER:
       handle = video_frame->GetGpuMemoryBuffer()->CloneHandle();
+      // TODO(crbug.com/1097956): handle a failure gracefully.
+      CHECK_EQ(handle.type, gfx::NATIVE_PIXMAP)
+          << "The cloned handle has an unexpected type: " << handle.type;
+      CHECK(!handle.native_pixmap_handle.planes.empty())
+          << "The cloned handle has no planes";
       break;
     case VideoFrame::STORAGE_DMABUFS: {
       const size_t num_planes = VideoFrame::NumPlanes(video_frame->format());
@@ -184,10 +192,8 @@ gfx::GpuMemoryBufferHandle CreateGpuMemoryBufferHandle(
       while (num_planes != duped_fds.size()) {
         int duped_fd = -1;
         duped_fd = HANDLE_EINTR(dup(duped_fds.back().get()));
-        if (duped_fd == -1) {
-          DLOG(ERROR) << "Failed duplicating dmabuf fd";
-          return handle;
-        }
+        // TODO(crbug.com/1097956): handle a failure gracefully.
+        PCHECK(duped_fd >= 0) << "Failed duplicating a dma-buf fd";
         duped_fds.emplace_back(duped_fd);
       }
 

@@ -62,7 +62,7 @@ export class Camera extends View {
    * @param {!DeviceInfoUpdater} infoUpdater
    * @param {!PhotoConstraintsPreferrer} photoPreferrer
    * @param {!VideoConstraintsPreferrer} videoPreferrer
-   * @param {Mode} defaultMode
+   * @param {!Mode} defaultMode
    * @param {!PerfLogger} perfLogger
    */
   constructor(
@@ -132,7 +132,7 @@ export class Camera extends View {
 
     /**
      * Modes for the camera.
-     * @type {Modes}
+     * @type {!Modes}
      * @private
      */
     this.modes_ = new Modes(
@@ -231,13 +231,13 @@ export class Camera extends View {
       element: videoShutter,
       state: state.State.TAKING,
       onLabel: 'record_video_stop_button',
-      offLabel: 'record_video_start_button'
+      offLabel: 'record_video_start_button',
     });
     util.bindElementAriaLabelWithState({
       element: pauseShutter,
       state: state.State.RECORDING_PAUSED,
       onLabel: 'record_video_resume_button',
-      offLabel: 'record_video_pause_button'
+      offLabel: 'record_video_pause_button',
     });
 
     // Monitor the states to stop camera when locked/minimized.
@@ -247,7 +247,9 @@ export class Camera extends View {
         this.start();
       }
     });
-    chrome.app.window.current().onMinimized.addListener(() => this.start());
+    browserProxy.addOnMinimizedListener(() => {
+      this.start();
+    });
 
     document.addEventListener('visibilitychange', () => {
       const recording = state.get(state.State.TAKING) && state.get(Mode.VIDEO);
@@ -255,10 +257,6 @@ export class Camera extends View {
         this.start();
       }
     });
-
-    state.addObserver(state.State.SCREEN_OFF_AUTO, () => this.start());
-
-    this.configuring_ = null;
   }
 
   /**
@@ -278,6 +276,32 @@ export class Camera extends View {
     };
     const screenState = await helper.initScreenStateMonitor(setScreenOffAuto);
     setScreenOffAuto(screenState);
+
+    const updateExternalScreen = (hasExternalScreen) => {
+      state.set(state.State.HAS_EXTERNAL_SCREEN, hasExternalScreen);
+    };
+    const hasExternalScreen =
+        await helper.initExternalScreenMonitor(updateExternalScreen);
+    updateExternalScreen(hasExternalScreen);
+
+    const checkScreenOff = () => {
+      if (this.screenOff_) {
+        this.start();
+      }
+    };
+
+    state.addObserver(state.State.SCREEN_OFF_AUTO, checkScreenOff);
+    state.addObserver(state.State.HAS_EXTERNAL_SCREEN, checkScreenOff);
+  }
+
+  /**
+   * @return {boolean} If the App window is invisible to user with respect to
+   * screen off state.
+   * @private
+   */
+  get screenOff_() {
+    return state.get(state.State.SCREEN_OFF_AUTO) &&
+        !state.get(state.State.HAS_EXTERNAL_SCREEN);
   }
 
   /**
@@ -302,9 +326,9 @@ export class Camera extends View {
    * @return {boolean}
    */
   isSuspended() {
-    return this.locked_ || chrome.app.window.current().isMinimized() ||
-        state.get(state.State.SUSPEND) ||
-        state.get(state.State.SCREEN_OFF_AUTO) || this.isTabletBackground_();
+    return this.locked_ || browserProxy.isMinimized() ||
+        state.get(state.State.SUSPEND) || this.screenOff_ ||
+        this.isTabletBackground_();
   }
 
   /**
@@ -318,7 +342,7 @@ export class Camera extends View {
 
   /**
    * Begins to take photo or recording with the current options, e.g. timer.
-   * @param {metrics.ShutterType} shutterType The shutter is triggered by which
+   * @param {!metrics.ShutterType} shutterType The shutter is triggered by which
    *     shutter type.
    * @return {?Promise} Promise resolved when take action completes. Returns
    *     null if CCA can't start take action.
@@ -372,7 +396,7 @@ export class Camera extends View {
    * @protected
    */
   async doSavePhoto_({resolution, blob, isVideoSnapshot = false}, name) {
-    metrics.log(metrics.Type.CAPTURE, {
+    metrics.sendCaptureEvent({
       facing: this.facingMode_,
       resolution,
       shutterType: this.shutterType_,
@@ -393,7 +417,7 @@ export class Camera extends View {
    * @protected
    */
   async doSaveVideo_({resolution, duration, videoSaver, everPaused}) {
-    metrics.log(metrics.Type.CAPTURE, {
+    metrics.sendCaptureEvent({
       facing: this.facingMode_,
       duration,
       resolution,
@@ -420,7 +444,7 @@ export class Camera extends View {
    */
   handlingKey(key) {
     if (key === 'Ctrl-R') {
-      toast.show(this.preview_.toString());
+      toast.showDebugMessage(this.preview_.toString());
       return true;
     }
     if ((key === 'AudioVolumeUp' || key === 'AudioVolumeDown') &&
@@ -475,10 +499,7 @@ export class Camera extends View {
     let resolCandidates = null;
     if (deviceOperator !== null) {
       if (deviceId !== null) {
-        const previewRs =
-            (await this.infoUpdater_.getDeviceResolutions(deviceId)).video;
-        resolCandidates =
-            this.modes_.getResolutionCandidates(mode, deviceId, previewRs);
+        resolCandidates = this.modes_.getResolutionCandidates(mode, deviceId);
       } else {
         console.error(
             'Null device id present on HALv3 device. Fallback to v1.');
@@ -559,8 +580,7 @@ export class Camera extends View {
               this.activeDeviceId_ = currentId;
               const info = await this.infoUpdater_.getDeviceInfo(currentId);
               if (info !== null) {
-                toast.speak(browserProxy.getI18nMessage(
-                    'status_msg_camera_switched', info.label));
+                toast.speak('status_msg_camera_switched', info.label);
               }
               return;
             }

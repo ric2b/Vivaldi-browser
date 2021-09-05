@@ -1,6 +1,7 @@
 include_rules = [
   "+apps",
   "+cc/paint",
+  "+cc/test",
   "+chrome/android/native_j_unittests_jni_headers",
   "+chrome/android/chrome_jni_headers",
   "+chrome/android/features/autofill_assistant/jni_headers",
@@ -12,6 +13,7 @@ include_rules = [
   "+chrome/browser/preferences/android",
   "+chrome/browser/profiles/android/jni_headers",
   "+chrome/browser/util/android",
+  "+chrome/browser/video_tutorials",
   "+chrome/credential_provider/common",
   "+chrome/grit",
   "+chrome/install_static",
@@ -20,6 +22,7 @@ include_rules = [
   "+chrome/services/cups_proxy",
   "+chrome/services/diagnosticsd/public",
   "+chrome/services/file_util/public",
+  "+chrome/services/machine_learning/public",
   "+chrome/services/media_gallery_util/public",
   "+chrome/services/printing/public",
   "+chrome/services/sharing/public",
@@ -109,6 +112,8 @@ include_rules = [
   "+components/drive",
   "+components/embedder_support",
   "+components/encrypted_messages",
+  "+components/enterprise",
+  "+components/error_page/content/browser",
   "+components/exo",
   "+components/external_intents",
   "+components/favicon_base",
@@ -317,7 +322,6 @@ include_rules = [
   "+extensions/buildflags",
   "+extensions/grit",
   "+extensions/test",
-  "+google/cacheinvalidation",  # Sync invalidation API protobuf files.
   "+google_apis",
   "+google_update",
   "+installer_util_strings",  # For generated headers
@@ -371,6 +375,7 @@ include_rules = [
   "+third_party/metrics_proto",
   "+third_party/widevine/cdm/buildflags.h",
   "+third_party/widevine/cdm/widevine_cdm_common.h",
+  "+chrome/services/machine_learning",
 
   # Code under //ash should be accessed via its public API. See //ash/README.md.
   "-ash",
@@ -396,12 +401,16 @@ include_rules = [
   "+storage/browser",
   "+storage/common",
 
+  # chrome/browser/ui/views/ is an implementation, not a public interface.
+  # Parent directories should not depend on it directly.
+  # TODO(crbug.com/1112591): Remove the exceptions below.
   "-chrome/browser/ui/views",
   "+chrome/browser/ui/views/ash/chrome_browser_main_extra_parts_ash.h",
   "+chrome/browser/ui/views/chrome_browser_main_extra_parts_views.h",
   "+chrome/browser/ui/views/chrome_browser_main_extra_parts_views_linux.h",
   "+chrome/browser/ui/views/chrome_browser_main_extra_parts_views_linux_x11.h",
   "+chrome/browser/ui/views/extensions/request_file_system_dialog_view.h",
+  "+chrome/browser/ui/views/sharesheet_bubble_view.h",
   "+chrome/browser/ui/views/try_chrome_dialog_win/try_chrome_dialog.h",
 
   # Ensure that only the public interface of performance_manager gets used.
@@ -445,7 +454,7 @@ include_rules = [
 ]
 
 specific_include_rules = {
-  '.*InstrumentationTest\.java': [
+  '.*Test\.java': [
     # Android instrumentation tests depend on the whole app.
     "+chrome/android",
   ],

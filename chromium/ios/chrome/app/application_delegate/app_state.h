@@ -7,6 +7,8 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/ui/scoped_ui_blocker/ui_blocker_manager.h"
+
 @class AppState;
 @protocol BrowserLauncher;
 @class CommandDispatcher;
@@ -30,11 +32,14 @@
 // Called after the app exits safe mode.
 - (void)appStateDidExitSafeMode:(AppState*)appState;
 
+// Called when |AppState.lastTappedWindow| changes.
+- (void)appState:(AppState*)appState lastTappedWindowChanged:(UIWindow*)window;
+
 @end
 
 // Represents the application state and responds to application state changes
 // and system events.
-@interface AppState : NSObject
+@interface AppState : NSObject <UIBlockerManager>
 
 - (instancetype)init NS_UNAVAILABLE;
 
@@ -52,14 +57,25 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 // application has been woken up by the system for background work.
 @property(nonatomic, readonly) BOOL userInteracted;
 
+// YES if the sign-in upgrade promo has been presented to the user, once.
+@property(nonatomic) BOOL signinUpgradePromoPresentedOnce;
+
+// YES if the default browser fullscreen promo has met the qualifications to be
+// shown after the last cold start.
+@property(nonatomic) BOOL shouldShowDefaultBrowserPromo;
+
 // When multiwindow is unavailable, this is the only scene state. It is created
 // by the app delegate.
 @property(nonatomic, strong) SceneState* mainSceneState;
 
-// When a modal UI (that requires user to interact with it before any further
-// interaction with the app is allowed) is shown, this tracks the scene where it
-// is shown. When there is no blocking UI shown in any scene, this is nil.
-@property(nonatomic, strong) SceneState* sceneShowingBlockingUI;
+// Indicates that this app launch is one after a crash.
+@property(nonatomic, assign) BOOL postCrashLaunch;
+
+// Indicates that session restoration might be required for connecting scenes.
+@property(nonatomic, assign) BOOL sessionRestorationRequired;
+
+// The last window which received a tap.
+@property(nonatomic, weak) UIWindow* lastTappedWindow;
 
 // Saves the launchOptions to be used from -newTabFromLaunchOptions. If the
 // application is in background, initialize the browser to basic. If not, launch
@@ -80,6 +96,12 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 // requests, config updates, clears the device sharing manager and stops the
 // mainChrome instance.
 - (void)applicationWillTerminate:(UIApplication*)application;
+
+// Called when the application discards set of scene sessions, these sessions
+// can no longer be accessed and all their associated data should be destroyed.
+- (void)application:(UIApplication*)application
+    didDiscardSceneSessions:(NSSet<UISceneSession*>*)sceneSessions
+    API_AVAILABLE(ios(13));
 
 // Resumes the session: reinitializing metrics and opening new tab if necessary.
 // User sessions are defined in terms of BecomeActive/ResignActive so that

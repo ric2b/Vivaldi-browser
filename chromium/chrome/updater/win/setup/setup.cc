@@ -49,7 +49,8 @@ void AddComServerWorkItems(HKEY root,
   }
 
   for (const auto& clsid :
-       {__uuidof(UpdaterClass), __uuidof(GoogleUpdate3WebUserClass)}) {
+       {__uuidof(UpdaterClass), CLSID_UpdaterControlServiceClass,
+        CLSID_GoogleUpdate3WebUserClass}) {
     const base::string16 clsid_reg_path = GetComServerClsidRegistryPath(clsid);
 
     // Delete any old registrations first.
@@ -93,7 +94,7 @@ void AddComServiceWorkItems(const base::FilePath& com_service_path,
   list->AddWorkItem(new installer::InstallServiceWorkItem(
       kWindowsServiceName, kWindowsServiceName,
       base::CommandLine(com_service_path), base::ASCIIToUTF16(UPDATER_KEY),
-      __uuidof(UpdaterServiceClass), GUID_NULL));
+      {CLSID_UpdaterServiceClass}, {}));
 }
 
 // Adds work items to register the COM Interfaces with Windows.
@@ -106,10 +107,10 @@ void AddComInterfacesWorkItems(HKEY root,
     return;
   }
 
-  for (const auto& iid :
-       {__uuidof(IUpdater), __uuidof(IUpdaterObserver),
-        __uuidof(ICompleteStatus), __uuidof(IGoogleUpdate3Web),
-        __uuidof(IAppBundleWeb), __uuidof(IAppWeb), __uuidof(ICurrentState)}) {
+  for (const auto& iid : {__uuidof(IUpdater), __uuidof(IUpdaterControl),
+                          __uuidof(IUpdaterObserver), __uuidof(ICompleteStatus),
+                          __uuidof(IGoogleUpdate3Web), __uuidof(IAppBundleWeb),
+                          __uuidof(IAppWeb), __uuidof(ICurrentState)}) {
     const base::string16 iid_reg_path = GetComIidRegistryPath(iid);
     const base::string16 typelib_reg_path = GetComTypeLibRegistryPath(iid);
 
@@ -131,7 +132,7 @@ void AddComInterfacesWorkItems(HKEY root,
                                   WorkItem::kWow64Default);
     list->AddSetRegValueWorkItem(root, iid_reg_path + L"\\TypeLib",
                                  WorkItem::kWow64Default, L"",
-                                 base::win::String16FromGUID(iid), true);
+                                 base::win::WStringFromGUID(iid), true);
 
     // The TypeLib registration for the Ole Automation marshaler.
     list->AddCreateRegKeyWorkItem(root, typelib_reg_path + L"\\1.0\\0\\win32",

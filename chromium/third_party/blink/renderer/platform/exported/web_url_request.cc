@@ -278,6 +278,10 @@ bool WebURLRequest::HasUserGesture() const {
   return resource_request_->HasUserGesture();
 }
 
+bool WebURLRequest::HasTextFragmentToken() const {
+  return resource_request_->HasTextFragmentToken();
+}
+
 void WebURLRequest::SetHasUserGesture(bool has_user_gesture) {
   resource_request_->SetHasUserGesture(has_user_gesture);
 }
@@ -368,12 +372,11 @@ void WebURLRequest::SetFetchIntegrity(const WebString& integrity) {
   return resource_request_->SetFetchIntegrity(integrity);
 }
 
-WebURLRequest::PreviewsState WebURLRequest::GetPreviewsState() const {
+PreviewsState WebURLRequest::GetPreviewsState() const {
   return resource_request_->GetPreviewsState();
 }
 
-void WebURLRequest::SetPreviewsState(
-    WebURLRequest::PreviewsState previews_state) {
+void WebURLRequest::SetPreviewsState(PreviewsState previews_state) {
   return resource_request_->SetPreviewsState(previews_state);
 }
 

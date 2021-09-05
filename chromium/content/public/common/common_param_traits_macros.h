@@ -27,7 +27,6 @@
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "ui/accessibility/ax_param_traits.h"
-#include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/ipc/geometry/gfx_param_traits.h"
@@ -157,7 +156,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(password_echo_enabled)
   IPC_STRUCT_TRAITS_MEMBER(should_clear_document_background)
   IPC_STRUCT_TRAITS_MEMBER(touch_event_feature_detection_enabled)
-  IPC_STRUCT_TRAITS_MEMBER(touch_adjustment_enabled)
   IPC_STRUCT_TRAITS_MEMBER(pointer_events_max_touch_points)
   IPC_STRUCT_TRAITS_MEMBER(available_pointer_types)
   IPC_STRUCT_TRAITS_MEMBER(primary_pointer_type)
@@ -179,7 +177,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(cookie_enabled)
   IPC_STRUCT_TRAITS_MEMBER(navigate_on_drag_drop)
   IPC_STRUCT_TRAITS_MEMBER(spatial_navigation_enabled)
-  IPC_STRUCT_TRAITS_MEMBER(caret_browsing_enabled)
   IPC_STRUCT_TRAITS_MEMBER(v8_cache_options)
   IPC_STRUCT_TRAITS_MEMBER(accelerated_video_decode_enabled)
   IPC_STRUCT_TRAITS_MEMBER(animation_policy)
@@ -247,6 +244,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(lazy_image_first_k_fully_load)
   IPC_STRUCT_TRAITS_MEMBER(allow_mixed_content_upgrades)
   IPC_STRUCT_TRAITS_MEMBER(always_show_focus)
+  IPC_STRUCT_TRAITS_MEMBER(touch_drag_drop_enabled)
 
   // Vivaldi
   IPC_STRUCT_TRAITS_MEMBER(pictograph_font_family_map)
@@ -323,7 +321,8 @@ IPC_STRUCT_TRAITS_BEGIN(blink::mojom::RendererPreferences)
   IPC_STRUCT_TRAITS_MEMBER(accept_languages)
   IPC_STRUCT_TRAITS_MEMBER(disable_client_blocked_error_page)
   IPC_STRUCT_TRAITS_MEMBER(plugin_fullscreen_allowed)
-#if defined(OS_LINUX)
+  IPC_STRUCT_TRAITS_MEMBER(caret_browsing_enabled)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   IPC_STRUCT_TRAITS_MEMBER(system_font_family_name)
 #endif
 #if defined(OS_WIN)
@@ -342,6 +341,9 @@ IPC_STRUCT_TRAITS_BEGIN(blink::mojom::RendererPreferences)
   IPC_STRUCT_TRAITS_MEMBER(arrow_bitmap_height_vertical_scroll_bar_in_dips)
   IPC_STRUCT_TRAITS_MEMBER(arrow_bitmap_width_horizontal_scroll_bar_in_dips)
 #endif
+#if defined(USE_X11) || defined(USE_OZONE)
+  IPC_STRUCT_TRAITS_MEMBER(selection_clipboard_buffer_available)
+#endif
   IPC_STRUCT_TRAITS_MEMBER(should_show_images)
   IPC_STRUCT_TRAITS_MEMBER(should_ask_plugin_content)
   IPC_STRUCT_TRAITS_MEMBER(should_enable_plugin_content)
@@ -351,8 +353,6 @@ IPC_STRUCT_TRAITS_BEGIN(blink::mojom::RendererPreferences)
 IPC_STRUCT_TRAITS_END()
 
 IPC_ENUM_TRAITS(blink::WebDragOperation)  // Bitmask.
-IPC_ENUM_TRAITS_MAX_VALUE(ui::DragDropTypes::DragEventSource,
-                          ui::DragDropTypes::DRAG_EVENT_SOURCE_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(content::DropData::Kind,
                           content::DropData::Kind::LAST)
 
@@ -362,7 +362,6 @@ IPC_STRUCT_TRAITS_BEGIN(ui::FileInfo)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::DropData)
-  IPC_STRUCT_TRAITS_MEMBER(key_modifiers)
   IPC_STRUCT_TRAITS_MEMBER(url)
   IPC_STRUCT_TRAITS_MEMBER(url_title)
   IPC_STRUCT_TRAITS_MEMBER(download_metadata)

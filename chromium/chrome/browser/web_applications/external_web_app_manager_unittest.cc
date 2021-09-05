@@ -18,6 +18,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_path_override.h"
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
+#include "chrome/browser/web_applications/components/external_app_install_features.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
@@ -116,7 +117,8 @@ class ScanDirForExternalWebAppsTest : public testing::Test {
   std::vector<ExternalInstallOptions> ScanTestDirForExternalWebApps(
       const std::string& dir) {
     return ExternalWebAppManager::ScanDirForExternalWebAppsForTesting(
-        GetTestDir(dir), CreateProfile().get());
+        std::make_unique<FileUtilsWrapper>(), GetTestDir(dir),
+        CreateProfile().get());
   }
 
   // Helper that creates simple test profile.
@@ -337,9 +339,9 @@ TEST_F(ScanDirForExternalWebAppsTest, DefaultWebAppInstallDisabled) {
 }
 
 TEST_F(ScanDirForExternalWebAppsTest, EnabledByFinch) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      base::Feature{"test_feature_name", base::FEATURE_DISABLED_BY_DEFAULT});
+  base::AutoReset<bool> testing_scope =
+      SetExternalAppInstallFeatureAlwaysEnabledForTesting();
+
   const auto app_infos = ScanTestDirForExternalWebApps("enabled_by_finch");
 
   // The enabled_by_finch directory contains two JSON file containing apps

@@ -280,11 +280,6 @@ struct StructTraits<autofill::mojom::FormDataDataView, autofill::FormData> {
 template <>
 struct StructTraits<autofill::mojom::FormFieldDataPredictionsDataView,
                     autofill::FormFieldDataPredictions> {
-  static const autofill::FormFieldData& field(
-      const autofill::FormFieldDataPredictions& r) {
-    return r.field;
-  }
-
   static const std::string& signature(
       const autofill::FormFieldDataPredictions& r) {
     return r.signature;
@@ -414,10 +409,6 @@ struct StructTraits<autofill::mojom::PasswordFormFillDataDataView,
     return r.wait_for_username;
   }
 
-  static bool has_renderer_ids(const autofill::PasswordFormFillData& r) {
-    return r.has_renderer_ids;
-  }
-
   static bool Read(autofill::mojom::PasswordFormFillDataDataView data,
                    autofill::PasswordFormFillData* out);
 };
@@ -514,10 +505,6 @@ struct StructTraits<autofill::mojom::PasswordFormDataView,
     return r.username_element;
   }
 
-  static bool username_marked_by_site(const autofill::PasswordForm& r) {
-    return r.username_marked_by_site;
-  }
-
   static const base::string16& username_value(const autofill::PasswordForm& r) {
     return r.username_value;
   }
@@ -555,10 +542,6 @@ struct StructTraits<autofill::mojom::PasswordFormDataView,
     return r.new_password_value;
   }
 
-  static bool new_password_marked_by_site(const autofill::PasswordForm& r) {
-    return r.new_password_marked_by_site;
-  }
-
   static const base::string16& confirmation_password_element(
       const autofill::PasswordForm& r) {
     return r.confirmation_password_element;
@@ -572,8 +555,8 @@ struct StructTraits<autofill::mojom::PasswordFormDataView,
     return r.date_synced;
   }
 
-  static bool blacklisted_by_user(const autofill::PasswordForm& r) {
-    return r.blacklisted_by_user;
+  static bool blocked_by_user(const autofill::PasswordForm& r) {
+    return r.blocked_by_user;
   }
 
   static autofill::PasswordForm::Type type(const autofill::PasswordForm& r) {

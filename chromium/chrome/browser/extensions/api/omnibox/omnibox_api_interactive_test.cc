@@ -259,7 +259,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxApiTest, OnInputEntered) {
 IN_PROC_BROWSER_TEST_F(OmniboxApiTest, DISABLED_IncognitoSplitMode) {
   Profile* profile = browser()->profile();
   ResultCatcher catcher_incognito;
-  catcher_incognito.RestrictToBrowserContext(profile->GetOffTheRecordProfile());
+  catcher_incognito.RestrictToBrowserContext(profile->GetPrimaryOTRProfile());
 
   ASSERT_TRUE(RunExtensionTestIncognito("omnibox")) << message_;
 
@@ -421,7 +421,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxApiTest, MAYBE_DeleteOmniboxSuggestionResult) {
 // This test portion is excluded from Mac because the Mac key combination
 // FN+SHIFT+DEL used to delete an omnibox suggestion cannot be reproduced.
 // This is because the FN key is not supported in interactive_test_util.h.
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   ExtensionTestMessageListener delete_suggestion_listener(
       "onDeleteSuggestion: des1", false);
 

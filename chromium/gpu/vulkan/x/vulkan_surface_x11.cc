@@ -6,8 +6,11 @@
 
 #include "base/logging.h"
 #include "gpu/vulkan/vulkan_function_pointers.h"
+#include "ui/base/x/x11_util.h"
 #include "ui/events/platform/x11/x11_event_source.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/x/connection.h"
+#include "ui/gfx/x/xproto.h"
 
 namespace gpu {
 
@@ -60,6 +63,7 @@ std::unique_ptr<VulkanSurfaceX11> VulkanSurfaceX11::Create(
     return nullptr;
   }
   XMapWindow(display, window);
+  XFlush(display);
 
   VkSurfaceKHR vk_surface;
   VkXlibSurfaceCreateInfoKHR surface_create_info = {
@@ -86,32 +90,42 @@ VulkanSurfaceX11::VulkanSurfaceX11(VkInstance vk_instance,
                     false /* use_protected_memory */),
       parent_window_(parent_window),
       window_(window),
-      expose_event_forwarder_(new ExposeEventForwarder(this)) {}
+      expose_event_forwarder_(std::make_unique<ExposeEventForwarder>(this)) {}
 
 VulkanSurfaceX11::~VulkanSurfaceX11() = default;
 
-// VulkanSurface:
+void VulkanSurfaceX11::Destroy() {
+  VulkanSurface::Destroy();
+  expose_event_forwarder_.reset();
+  if (window_ != x11::Window::None) {
+    Display* display = gfx::GetXDisplay();
+    XDestroyWindow(display, static_cast<uint32_t>(window_));
+    window_ = x11::Window::None;
+    XFlush(display);
+  }
+}
+
 bool VulkanSurfaceX11::Reshape(const gfx::Size& size,
                                gfx::OverlayTransform pre_transform) {
   DCHECK_EQ(pre_transform, gfx::OVERLAY_TRANSFORM_NONE);
 
-  XResizeWindow(gfx::GetXDisplay(), static_cast<uint32_t>(window_),
-                size.width(), size.height());
+  Display* display = gfx::GetXDisplay();
+  XResizeWindow(display, static_cast<uint32_t>(window_), size.width(),
+                size.height());
+  XFlush(display);
   return VulkanSurface::Reshape(size, pre_transform);
 }
 
 bool VulkanSurfaceX11::CanDispatchXEvent(const x11::Event* x11_event) {
-  const XEvent* event = &x11_event->xlib_event();
-  return event->type == Expose &&
-         event->xexpose.window == static_cast<uint32_t>(window_);
+  auto* expose = x11_event->As<x11::ExposeEvent>();
+  return expose && expose->window == window_;
 }
 
 void VulkanSurfaceX11::ForwardXExposeEvent(const x11::Event* event) {
-  XEvent forwarded_event = event->xlib_event();
-  forwarded_event.xexpose.window = static_cast<uint32_t>(parent_window_);
-  XSendEvent(gfx::GetXDisplay(), static_cast<uint32_t>(parent_window_), False,
-             ExposureMask, &forwarded_event);
-  XFlush(gfx::GetXDisplay());
+  auto forwarded_event = *event->As<x11::ExposeEvent>();
+  forwarded_event.window = parent_window_;
+  ui::SendEvent(forwarded_event, parent_window_, x11::EventMask::Exposure);
+  x11::Connection::Get()->Flush();
 }
 
 }  // namespace gpu

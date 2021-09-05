@@ -42,7 +42,7 @@ AwRenderProcess::AwRenderProcess(RenderProcessHost* render_process_host)
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   java_obj_.Reset(Java_AwRenderProcess_create(AttachCurrentThread()));
-  CHECK(!java_obj_.is_null());
+  CHECK(java_obj_);
   if (render_process_host_->IsReady()) {
     Ready();
   }
@@ -79,12 +79,12 @@ bool AwRenderProcess::TerminateChildProcess(
   return render_process_host_->Shutdown(0);
 }
 
-bool AwRenderProcess::IsLockedToOriginForTesting(
+bool AwRenderProcess::IsProcessLockedForTesting(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  return render_process_host_->IsLockedToOriginForTesting();
+  return render_process_host_->IsProcessLockedForTesting();
 }
 
 base::android::ScopedJavaLocalRef<jobject> AwRenderProcess::GetJavaObject() {

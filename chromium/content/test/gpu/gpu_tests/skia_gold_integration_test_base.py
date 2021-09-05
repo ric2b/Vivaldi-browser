@@ -10,9 +10,10 @@ import shutil
 import sys
 import tempfile
 
+from gpu_tests import color_profile_manager
+from gpu_tests import common_browser_args as cba
 from gpu_tests import gpu_integration_test
 from gpu_tests import path_util
-from gpu_tests import color_profile_manager
 from gpu_tests.skia_gold import gpu_skia_gold_properties
 from gpu_tests.skia_gold import gpu_skia_gold_session
 from gpu_tests.skia_gold import gpu_skia_gold_session_manager
@@ -79,7 +80,7 @@ class SkiaGoldIntegrationTestBase(gpu_integration_test.GpuIntegrationTest):
     color_profile_manager.ForceUntilExitSRGB(
         options.dont_restore_color_profile_after_test)
     super(SkiaGoldIntegrationTestBase, cls).SetUpProcess()
-    cls.CustomizeBrowserArgs(cls._AddDefaultArgs([]))
+    cls.CustomizeBrowserArgs([])
     cls.StartBrowser()
     cls.SetStaticServerDirs(TEST_DATA_DIRS)
     cls._skia_gold_temp_dir = tempfile.mkdtemp()
@@ -100,20 +101,24 @@ class SkiaGoldIntegrationTestBase(gpu_integration_test.GpuIntegrationTest):
               cls._skia_gold_temp_dir, cls.GetSkiaGoldProperties())
     return cls._skia_gold_session_manager
 
-  @staticmethod
-  def _AddDefaultArgs(browser_args):
-    if not browser_args:
-      browser_args = []
+  @classmethod
+  def GenerateBrowserArgs(cls, additional_args):
+    """Adds default arguments to |additional_args|.
+
+    See the parent class' method documentation for additional information.
+    """
+    default_args = super(SkiaGoldIntegrationTestBase,
+                         cls).GenerateBrowserArgs(additional_args)
+    default_args.extend([cba.ENABLE_GPU_BENCHMARKING, cba.TEST_TYPE_GPU])
     force_color_profile_arg = [
-        arg for arg in browser_args if arg.startswith('--force-color-profile=')
+        arg for arg in default_args if arg.startswith('--force-color-profile=')
     ]
     if not force_color_profile_arg:
-      browser_args = browser_args + [
-          '--force-color-profile=srgb',
-          '--ensure-forced-color-profile',
-      ]
-    # All tests receive the following options.
-    return browser_args + ['--enable-gpu-benchmarking', '--test-type=gpu']
+      default_args.extend([
+          cba.FORCE_COLOR_PROFILE_SRGB,
+          cba.ENSURE_FORCED_COLOR_PROFILE,
+      ])
+    return default_args
 
   @classmethod
   def StopBrowser(cls):
@@ -237,7 +242,7 @@ class SkiaGoldIntegrationTestBase(gpu_integration_test.GpuIntegrationTest):
       raise Exception('GPU device information was incomplete')
     # TODO(senorblanco): This should probably be checking
     # for the presence of the extensions in system_info.gpu_aux_attributes
-    # in order to check for MSAA, rather than sniffing the blacklist.
+    # in order to check for MSAA, rather than sniffing the blocklist.
     params.msaa = not (('disable_chromium_framebuffer_multisample' in
                         system_info.gpu.driver_bug_workarounds) or
                        ('disable_multisample_render_to_texture' in system_info.
@@ -272,9 +277,20 @@ class SkiaGoldIntegrationTestBase(gpu_integration_test.GpuIntegrationTest):
         screenshot,
         public=True)
 
-  def _CompareScreenshotSamples(self, tab, screenshot, expected_colors,
-                                tolerance, device_pixel_ratio,
-                                test_machine_name):
+  def _CompareScreenshotSamples(self, tab, screenshot, page,
+                                device_pixel_ratio):
+    """Checks a screenshot for expected colors.
+
+    Args:
+      tab: the Telemetry Tab object that the test was run in.
+      screenshot: the screenshot of the test page as a Telemetry Bitmap.
+      page: the GPU PixelTestPage object for the test.
+      device_pixel_ratio: the device pixel ratio for the test device as a float.
+
+    Raises:
+      AssertionError if the check fails for some reason.
+    """
+
     def _CompareScreenshotWithExpectation(expectation):
       """Compares a portion of the screenshot to the given expectation.
 
@@ -310,6 +326,10 @@ class SkiaGoldIntegrationTestBase(gpu_integration_test.GpuIntegrationTest):
                       ' to be ' + str(expectation["color"]) + " but got [" +
                       str(actual_color.r) + ", " + str(actual_color.g) + ", " +
                       str(actual_color.b) + ", " + str(actual_color.a) + "]")
+
+    expected_colors = page.expected_colors
+    tolerance = page.tolerance
+    test_machine_name = self.GetParsedCommandLineOptions().test_machine_name
 
     # First scan through the expected_colors and see if there are any scale
     # factor overrides that would preempt the device pixel ratio. This
@@ -414,9 +434,13 @@ class SkiaGoldIntegrationTestBase(gpu_integration_test.GpuIntegrationTest):
     use_luci = not (gold_properties.local_pixel_tests
                     or gold_properties.no_luci_auth)
 
-    status, error = gold_session.RunComparison(name=image_name,
-                                               png_file=png_temp_file,
-                                               use_luci=use_luci)
+    inexact_matching_args = page.matching_algorithm.GetCmdline()
+
+    status, error = gold_session.RunComparison(
+        name=image_name,
+        png_file=png_temp_file,
+        inexact_matching_args=inexact_matching_args,
+        use_luci=use_luci)
     if not status:
       return
 
@@ -426,7 +450,10 @@ class SkiaGoldIntegrationTestBase(gpu_integration_test.GpuIntegrationTest):
     elif status == status_codes.INIT_FAILURE:
       logging.error('Gold initialization failed with output %s', error)
     elif status == status_codes.COMPARISON_FAILURE_REMOTE:
-      triage_link = gold_session.GetTriageLink(image_name)
+      # We currently don't have an internal instance + public mirror like the
+      # general Chrome Gold instance, so just report the "internal" link, which
+      # points to the correct instance.
+      _, triage_link = gold_session.GetTriageLinks(image_name)
       if not triage_link:
         logging.error('Failed to get triage link for %s, raw output: %s',
                       image_name, error)
@@ -487,10 +514,7 @@ class SkiaGoldIntegrationTestBase(gpu_integration_test.GpuIntegrationTest):
       device_pixel_ratio: the device pixel ratio for the test device as a float.
     """
     try:
-      self._CompareScreenshotSamples(
-          tab, screenshot, page.expected_colors, page.tolerance,
-          device_pixel_ratio,
-          self.GetParsedCommandLineOptions().test_machine_name)
+      self._CompareScreenshotSamples(tab, screenshot, page, device_pixel_ratio)
     except Exception as comparison_exception:
       # An exception raised from self.fail() indicates a failure.
       image_name = self._UrlToImageName(page.name)
@@ -498,7 +522,7 @@ class SkiaGoldIntegrationTestBase(gpu_integration_test.GpuIntegrationTest):
       # related to Gold.
       try:
         self._UploadTestResultToSkiaGold(image_name, screenshot, page)
-      except Exception as gold_exception:
+      except Exception as gold_exception:  # pylint: disable=broad-except
         logging.error(str(gold_exception))
       # TODO(https://crbug.com/1043129): Switch this to just "raise" once these
       # tests are run with Python 3. Python 2's behavior with nested try/excepts

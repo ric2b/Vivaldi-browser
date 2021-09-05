@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/authpolicy/authpolicy_helper.h"
@@ -30,7 +31,8 @@ namespace policy {
 namespace {
 
 // List of policies where variables like ${MACHINE_NAME} should be expanded.
-constexpr const char* kPoliciesToExpand[] = {key::kNativePrinters};
+constexpr const char* kPoliciesToExpand[] = {key::kNativePrinters,
+                                             key::kPrinters};
 
 // Fetch policy every 90 minutes which matches the Windows default:
 // https://technet.microsoft.com/en-us/library/cc940895.aspx

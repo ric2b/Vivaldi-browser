@@ -19,7 +19,6 @@
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/performance_manager/policies/policy_features.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit_observer.h"
-#include "chrome/browser/resource_coordinator/local_site_characteristics_data_unittest_utils.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_observer.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
@@ -55,14 +54,13 @@
 
 using content::OpenURLParams;
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
+#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) || \
     defined(OS_CHROMEOS)
 
 namespace resource_coordinator {
 
 namespace {
 
-constexpr char kBlinkPageLifecycleFeature[] = "PageLifecycle";
 constexpr base::TimeDelta kShortDelay = base::TimeDelta::FromSeconds(1);
 
 bool ObserveNavEntryCommitted(const GURL& expected_url,
@@ -153,11 +151,6 @@ class TabManagerTest : public InProcessBrowserTest {
     test_clock_.Advance(kShortDelay);
   }
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
-                                    kBlinkPageLifecycleFeature);
-  }
-
   void SetUpOnMainThread() override {
     InProcessBrowserTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
@@ -173,8 +166,6 @@ class TabManagerTest : public InProcessBrowserTest {
                         ui::PAGE_TRANSITION_TYPED, false);
     content::WebContents* web_contents = browser()->OpenURL(open1);
     load1.Wait();
-    if (URLShouldBeStoredInLocalDatabase(first_url))
-      testing::ExpireLocalDBObservationWindows(web_contents);
 
     content::WindowedNotificationObserver load2(
         content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
@@ -184,10 +175,6 @@ class TabManagerTest : public InProcessBrowserTest {
                         ui::PAGE_TRANSITION_TYPED, false);
     web_contents = browser()->OpenURL(open2);
     load2.Wait();
-    // Expire all the observation windows to prevent the discarding intervention
-    // to fail because of a lack of observations.
-    if (URLShouldBeStoredInLocalDatabase(second_url))
-      testing::ExpireLocalDBObservationWindows(web_contents);
 
     ASSERT_EQ(2, tsm()->count());
   }
@@ -957,8 +944,9 @@ Browser* CreateBrowserWithTabs(int num_tabs) {
 
 }  // namespace
 
-// Do not run in debug builds to avoid timeouts due to multiple navigations.
-#if !defined(NDEBUG)
+// Do not run in debug or ASAN builds to avoid timeouts due to multiple
+// navigations. https://crbug.com/1106485
+#if !defined(NDEBUG) || defined(ADDRESS_SANITIZER)
 #define MAYBE_DiscardTabsWithMinimizedWindow \
   DISABLED_DiscardTabsWithMinimizedWindow
 #else
@@ -994,8 +982,9 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, MAYBE_DiscardTabsWithMinimizedWindow) {
       IsTabDiscarded(browser()->tab_strip_model()->GetWebContentsAt(1)));
 }
 
-// Do not run in debug builds to avoid timeouts due to multiple navigations.
-#if !defined(NDEBUG)
+// Do not run in debug or ASAN builds to avoid timeouts due to multiple
+// navigations. https://crbug.com/1106485
+#if !defined(NDEBUG) || defined(ADDRESS_SANITIZER)
 #define MAYBE_DiscardTabsWithOccludedWindow \
   DISABLED_DiscardTabsWithOccludedWindow
 #else
@@ -1034,7 +1023,7 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, MAYBE_DiscardTabsWithOccludedWindow) {
 }
 
 // On Linux, memory pressure listener is not implemented yet.
-#if !defined(OS_LINUX)
+#if !defined(OS_LINUX) && !defined(OS_CHROMEOS)
 
 class TabManagerMemoryPressureTest : public TabManagerTest {
  public:
@@ -1180,7 +1169,7 @@ IN_PROC_BROWSER_TEST_F(TabManagerMemoryPressureTest,
   EXPECT_TRUE(IsTabDiscarded(GetWebContentsAt(2)));
 }
 
-#endif  // !OS_LINUX
+#endif  // !defined(OS_LINUX) && !defined(OS_CHROMEOS)
 
 }  // namespace resource_coordinator
 

@@ -4,18 +4,17 @@
 
 #include "chrome/updater/app/app_wake.h"
 
-#include <utility>
-
 #include "base/bind.h"
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "chrome/updater/app/app.h"
-#include "chrome/updater/configurator.h"
-#include "chrome/updater/prefs.h"
-#include "chrome/updater/update_apps.h"
-#include "chrome/updater/update_service.h"
+#include "chrome/updater/control_service.h"
 
 namespace updater {
 
+// AppWake is a simple client which dials the same-versioned server via RPC and
+// tells that server to run its control tasks. This is done via the
+// ControlService interface.
 class AppWake : public App {
  public:
   AppWake() = default;
@@ -25,33 +24,23 @@ class AppWake : public App {
 
   // Overrides for App.
   void FirstTaskRun() override;
-  void Initialize() override;
   void Uninitialize() override;
 
-  scoped_refptr<Configurator> config_;
-  scoped_refptr<UpdateService> update_service_;
+  scoped_refptr<ControlService> control_service_;
 };
 
-void AppWake::Initialize() {
-  config_ = base::MakeRefCounted<Configurator>(CreateGlobalPrefs());
+void AppWake::FirstTaskRun() {
+  // The service creation might need task runners and the control service needs
+  // to be instantiated after the base class has initialized the thread pool.
+  //
+  // TODO(crbug.com/1113448) - consider initializing the thread pool in the
+  // constructor of the base class or earlier, in the updater main.
+  control_service_ = CreateControlService();
+  control_service_->Run(base::BindOnce(&AppWake::Shutdown, this, 0));
 }
 
 void AppWake::Uninitialize() {
-  update_service_->Uninitialize();
-}
-
-// AppWake triggers an update of all registered applications.
-void AppWake::FirstTaskRun() {
-  update_service_ = CreateUpdateService(config_);
-  update_service_->UpdateAll(
-      base::BindRepeating([](UpdateService::UpdateState) {}),
-      base::BindOnce(
-          [](base::OnceCallback<void(int)> quit, UpdateService::Result result) {
-            const int exit_code = static_cast<int>(result);
-            VLOG(0) << "UpdateAll complete: exit_code = " << exit_code;
-            std::move(quit).Run(exit_code);
-          },
-          base::BindOnce(&AppWake::Shutdown, this)));
+  control_service_->Uninitialize();
 }
 
 scoped_refptr<App> MakeAppWake() {

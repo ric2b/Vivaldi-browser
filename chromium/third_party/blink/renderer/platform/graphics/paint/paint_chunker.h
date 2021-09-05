@@ -32,11 +32,11 @@ class PLATFORM_EXPORT PaintChunker final {
   bool IsInInitialState() const;
 #endif
 
-  const PropertyTreeState& CurrentPaintChunkProperties() const {
+  const PropertyTreeStateOrAlias& CurrentPaintChunkProperties() const {
     return current_properties_;
   }
   void UpdateCurrentPaintChunkProperties(const PaintChunk::Id*,
-                                         const PropertyTreeState&);
+                                         const PropertyTreeStateOrAlias&);
 
   // Sets the forcing new chunk status on or off. If the status is on, even the
   // properties haven't change, we'll force a new paint chunk for the next
@@ -72,13 +72,17 @@ class PLATFORM_EXPORT PaintChunker final {
       const TransformPaintPropertyNode* scroll_translation,
       const IntRect&);
 
+  void ProcessBackgroundColorCandidate(const PaintChunk::Id& id,
+                                       Color color,
+                                       uint64_t area);
+
   // Releases the generated paint chunk list and raster invalidations and
   // resets the state of this object.
   Vector<PaintChunk> ReleasePaintChunks();
 
  private:
   PaintChunk& EnsureCurrentChunk(const PaintChunk::Id&);
-  void UpdateLastChunkKnownToBeOpaque();
+  void FinalizeLastChunkProperties();
 
   Vector<PaintChunk> chunks_;
 
@@ -90,7 +94,7 @@ class PLATFORM_EXPORT PaintChunker final {
   // forced to create a new chunk).
   base::Optional<PaintChunk::Id> next_chunk_id_;
 
-  PropertyTreeState current_properties_;
+  PropertyTreeStateOrAlias current_properties_;
 
   Region last_chunk_known_to_be_opaque_region_;
 
@@ -98,6 +102,9 @@ class PLATFORM_EXPORT PaintChunker final {
   // the item following a forced chunk. PaintController also forces new chunks
   // before and after subsequences by calling ForceNewChunk().
   bool force_new_chunk_;
+
+  Color candidate_background_color_ = Color::kTransparent;
+  uint64_t candidate_background_area_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(PaintChunker);
 };

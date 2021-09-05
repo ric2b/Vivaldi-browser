@@ -26,6 +26,7 @@
 #include "base/timer/timer.h"
 #include "base/unguessable_token.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/drive/drivefs_native_message_host.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -92,7 +93,7 @@ void DeleteDirectoryContents(const base::FilePath& dir) {
                       base::FileEnumerator::SHOW_SYM_LINKS);
   for (base::FilePath path = content_enumerator.Next(); !path.empty();
        path = content_enumerator.Next()) {
-    base::DeleteFileRecursively(path);
+    base::DeletePathRecursively(path);
   }
 }
 
@@ -288,6 +289,10 @@ DriveMountStatus ConvertMountFailure(
   NOTREACHED();
 }
 
+bool EnsureDirectoryExists(const base::FilePath& path) {
+  return base::DirectoryExists(path) || base::CreateDirectory(path);
+}
+
 void UmaEmitMountStatus(DriveMountStatus status) {
   UMA_HISTOGRAM_ENUMERATION("DriveCommon.Lifecycle.Mount", status);
 }
@@ -463,6 +468,9 @@ class DriveIntegrationService::DriveFsHolder
   }
 
   std::string GetObfuscatedAccountId() override {
+    if (!GetAccountId().HasAccountIdKey()) {
+      return "";
+    }
     return base::MD5String(GetProfileSalt() + "-" +
                            GetAccountId().GetAccountIdKey());
   }
@@ -521,6 +529,14 @@ class DriveIntegrationService::DriveFsHolder
   bool IsVerboseLoggingEnabled() override {
     return profile_->GetPrefs()->GetBoolean(
         prefs::kDriveFsEnableVerboseLogging);
+  }
+
+  drivefs::mojom::DriveFsDelegate::ExtensionConnectionStatus ConnectToExtension(
+      drivefs::mojom::ExtensionConnectionParamsPtr params,
+      mojo::PendingReceiver<drivefs::mojom::NativeMessagingPort> port,
+      mojo::PendingRemote<drivefs::mojom::NativeMessagingHost> host) override {
+    return ConnectToDriveFsNativeMessageExtension(
+        profile_, params->extension_id, std::move(port), std::move(host));
   }
 
   Profile* const profile_;
@@ -728,7 +744,7 @@ void DriveIntegrationService::ClearCacheAndRemountFileSystemAfterUnmount(
     if (path == logs_path) {
       continue;
     }
-    if (!base::DeleteFileRecursively(path)) {
+    if (!base::DeletePathRecursively(path)) {
       success = false;
       break;
     }
@@ -781,9 +797,22 @@ void DriveIntegrationService::AddDriveMountPoint() {
     if (mount_start_.is_null() || was_ever_mounted) {
       mount_start_ = base::TimeTicks::Now();
     }
-    drivefs_holder_->drivefs_host()->Mount();
+    base::PostTaskAndReplyWithResult(
+        blocking_task_runner_.get(), FROM_HERE,
+        base::BindOnce(&EnsureDirectoryExists,
+                       drivefs_holder_->drivefs_host()->GetDataPath()),
+        base::BindOnce(&DriveIntegrationService::MaybeMountDrive,
+                       weak_ptr_factory_.GetWeakPtr()));
   } else {
     AddDriveMountPointAfterMounted();
+  }
+}
+
+void DriveIntegrationService::MaybeMountDrive(bool data_directory_exists) {
+  if (!data_directory_exists) {
+    LOG(ERROR) << "Could not create DriveFS data directory";
+  } else {
+    drivefs_holder_->drivefs_host()->Mount();
   }
 }
 

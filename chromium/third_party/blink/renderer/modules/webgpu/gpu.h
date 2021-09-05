@@ -24,7 +24,6 @@ class DawnControlClientHolder;
 class GPU final : public ScriptWrappable,
                   public ExecutionContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(GPU);
 
  public:
   static GPU* Create(ExecutionContext& execution_context);
@@ -44,7 +43,7 @@ class GPU final : public ScriptWrappable,
 
  private:
   void OnRequestAdapterCallback(ScriptPromiseResolver* resolver,
-                                uint32_t adapter_server_id,
+                                int32_t adapter_server_id,
                                 const WGPUDeviceProperties& properties);
 
   scoped_refptr<DawnControlClientHolder> dawn_control_client_;

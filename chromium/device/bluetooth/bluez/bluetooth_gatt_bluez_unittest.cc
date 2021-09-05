@@ -104,34 +104,38 @@ class BluetoothGattBlueZTest : public testing::Test {
   void SetUp() override {
     std::unique_ptr<bluez::BluezDBusManagerSetter> dbus_setter =
         bluez::BluezDBusManager::GetSetterForTesting();
-    fake_bluetooth_device_client_ = new bluez::FakeBluetoothDeviceClient;
+
+    auto fake_bluetooth_device_client =
+        std::make_unique<bluez::FakeBluetoothDeviceClient>();
+    auto fake_bluetooth_gatt_service_client =
+        std::make_unique<bluez::FakeBluetoothGattServiceClient>();
+    auto fake_bluetooth_gatt_characteristic_client =
+        std::make_unique<bluez::FakeBluetoothGattCharacteristicClient>();
+    auto fake_bluetooth_gatt_descriptor_client =
+        std::make_unique<bluez::FakeBluetoothGattDescriptorClient>();
+
+    fake_bluetooth_device_client_ = fake_bluetooth_device_client.get();
     fake_bluetooth_gatt_service_client_ =
-        new bluez::FakeBluetoothGattServiceClient;
+        fake_bluetooth_gatt_service_client.get();
     fake_bluetooth_gatt_characteristic_client_ =
-        new bluez::FakeBluetoothGattCharacteristicClient;
+        fake_bluetooth_gatt_characteristic_client.get();
     fake_bluetooth_gatt_descriptor_client_ =
-        new bluez::FakeBluetoothGattDescriptorClient;
+        fake_bluetooth_gatt_descriptor_client.get();
+
     dbus_setter->SetBluetoothDeviceClient(
-        std::unique_ptr<bluez::BluetoothDeviceClient>(
-            fake_bluetooth_device_client_));
+        std::move(fake_bluetooth_device_client));
     dbus_setter->SetBluetoothGattServiceClient(
-        std::unique_ptr<bluez::BluetoothGattServiceClient>(
-            fake_bluetooth_gatt_service_client_));
+        std::move(fake_bluetooth_gatt_service_client));
     dbus_setter->SetBluetoothGattCharacteristicClient(
-        std::unique_ptr<bluez::BluetoothGattCharacteristicClient>(
-            fake_bluetooth_gatt_characteristic_client_));
+        std::move(fake_bluetooth_gatt_characteristic_client));
     dbus_setter->SetBluetoothGattDescriptorClient(
-        std::unique_ptr<bluez::BluetoothGattDescriptorClient>(
-            fake_bluetooth_gatt_descriptor_client_));
+        std::move(fake_bluetooth_gatt_descriptor_client));
     dbus_setter->SetBluetoothAdapterClient(
-        std::unique_ptr<bluez::BluetoothAdapterClient>(
-            new bluez::FakeBluetoothAdapterClient));
+        std::make_unique<bluez::FakeBluetoothAdapterClient>());
     dbus_setter->SetBluetoothInputClient(
-        std::unique_ptr<bluez::BluetoothInputClient>(
-            new bluez::FakeBluetoothInputClient));
+        std::make_unique<bluez::FakeBluetoothInputClient>());
     dbus_setter->SetBluetoothAgentManagerClient(
-        std::unique_ptr<bluez::BluetoothAgentManagerClient>(
-            new bluez::FakeBluetoothAgentManagerClient));
+        std::make_unique<bluez::FakeBluetoothAgentManagerClient>());
 
     GetAdapter();
 
@@ -463,10 +467,10 @@ TEST_F(BluetoothGattBlueZTest, GattConnection) {
   ASSERT_TRUE(gatt_conn_.get());
   EXPECT_TRUE(gatt_conn_->IsConnected());
 
-  device->Disconnect(base::Bind(&BluetoothGattBlueZTest::SuccessCallback,
-                                base::Unretained(this)),
-                     base::Bind(&BluetoothGattBlueZTest::ErrorCallback,
-                                base::Unretained(this)));
+  device->Disconnect(base::BindOnce(&BluetoothGattBlueZTest::SuccessCallback,
+                                    base::Unretained(this)),
+                     base::BindOnce(&BluetoothGattBlueZTest::ErrorCallback,
+                                    base::Unretained(this)));
 
   EXPECT_EQ(3, success_callback_count_);
   EXPECT_EQ(0, error_callback_count_);
@@ -649,10 +653,10 @@ TEST_F(BluetoothGattBlueZTest, ServicesDiscoveredAfterAdapterIsCreated) {
             observer.last_device_address());
 
   // Disconnect from the device:
-  device->Disconnect(base::Bind(&BluetoothGattBlueZTest::SuccessCallback,
-                                base::Unretained(this)),
-                     base::Bind(&BluetoothGattBlueZTest::ErrorCallback,
-                                base::Unretained(this)));
+  device->Disconnect(base::BindOnce(&BluetoothGattBlueZTest::SuccessCallback,
+                                    base::Unretained(this)),
+                     base::BindOnce(&BluetoothGattBlueZTest::ErrorCallback,
+                                    base::Unretained(this)));
   fake_bluetooth_gatt_service_client_->HideHeartRateService();
   properties->connected.ReplaceValue(false);
   properties->services_resolved.ReplaceValue(false);
@@ -2315,10 +2319,11 @@ TEST_F(BluetoothGattBlueZTest, ReliableWrite) {
   EXPECT_EQ(0, observer.gatt_characteristic_value_changed_count());
 
   // Abort.
-  device->AbortWrite(base::Bind(&BluetoothGattBlueZTest::SuccessCallback,
-                                base::Unretained(this)),
-                     base::Bind(&BluetoothGattBlueZTest::ServiceErrorCallback,
-                                base::Unretained(this)));
+  device->AbortWrite(
+      base::BindOnce(&BluetoothGattBlueZTest::SuccessCallback,
+                     base::Unretained(this)),
+      base::BindOnce(&BluetoothGattBlueZTest::ServiceErrorCallback,
+                     base::Unretained(this)));
   EXPECT_EQ(1001, success_callback_count_);
   EXPECT_EQ(0, error_callback_count_);
   EXPECT_EQ(0, observer.gatt_characteristic_value_changed_count());
@@ -2340,10 +2345,11 @@ TEST_F(BluetoothGattBlueZTest, ReliableWrite) {
   EXPECT_EQ(0, observer.gatt_characteristic_value_changed_count());
 
   // Execute.
-  device->ExecuteWrite(base::Bind(&BluetoothGattBlueZTest::SuccessCallback,
-                                  base::Unretained(this)),
-                       base::Bind(&BluetoothGattBlueZTest::ServiceErrorCallback,
-                                  base::Unretained(this)));
+  device->ExecuteWrite(
+      base::BindOnce(&BluetoothGattBlueZTest::SuccessCallback,
+                     base::Unretained(this)),
+      base::BindOnce(&BluetoothGattBlueZTest::ServiceErrorCallback,
+                     base::Unretained(this)));
   EXPECT_EQ(1001, success_callback_count_);
   EXPECT_EQ(0, error_callback_count_);
   EXPECT_EQ(1000, observer.gatt_characteristic_value_changed_count());

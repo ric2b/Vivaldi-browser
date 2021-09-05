@@ -94,6 +94,10 @@ gfx::NativeViewAccessible AXPlatformNodeDelegateBase::ChildAtIndex(int index) {
   return nullptr;
 }
 
+bool AXPlatformNodeDelegateBase::HasModalDialog() const {
+  return false;
+}
+
 gfx::NativeViewAccessible AXPlatformNodeDelegateBase::GetFirstChild() {
   if (GetChildCount() > 0)
     return ChildAtIndex(0);
@@ -139,6 +143,10 @@ bool AXPlatformNodeDelegateBase::IsChildOfLeaf() const {
 
 bool AXPlatformNodeDelegateBase::IsLeaf() const {
   return !GetChildCount();
+}
+
+bool AXPlatformNodeDelegateBase::IsToplevelBrowserWindow() {
+  return false;
 }
 
 bool AXPlatformNodeDelegateBase::IsChildOfPlainTextField() const {
@@ -519,6 +527,10 @@ bool AXPlatformNodeDelegateBase::IsOffscreen() const {
 
 bool AXPlatformNodeDelegateBase::IsMinimized() const {
   return false;
+}
+
+bool AXPlatformNodeDelegateBase::IsText() const {
+  return ui::IsText(GetData().role);
 }
 
 bool AXPlatformNodeDelegateBase::IsWebContent() const {

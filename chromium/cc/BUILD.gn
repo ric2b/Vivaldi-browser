@@ -1,5 +1,5 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
-# Use of this source code is governed by a BSD-style license that can be
+# Copyright 2014 The Chromium Authors.All rights reserved.
+# Use of this source code is governed by a BSD - style license that can be
 # found in the LICENSE file.
 import("//build/config/sanitizers/sanitizers.gni")
 import("//gpu/vulkan/features.gni")
@@ -32,6 +32,7 @@ cc_component("cc") {
     "input/browser_controls_offset_manager.cc",
     "input/browser_controls_offset_manager.h",
     "input/browser_controls_offset_manager_client.h",
+    "input/compositor_input_interfaces.h",
     "input/input_handler.h",
     "input/layer_selection_bound.cc",
     "input/layer_selection_bound.h",
@@ -63,6 +64,8 @@ cc_component("cc") {
     "input/snap_fling_curve.h",
     "input/snap_selection_strategy.cc",
     "input/snap_selection_strategy.h",
+    "input/threaded_input_handler.cc",
+    "input/threaded_input_handler.h",
     "input/touch_action.h",
     "layers/append_quads_data.cc",
     "layers/append_quads_data.h",
@@ -149,6 +152,10 @@ cc_component("cc") {
     "layers/video_layer_impl.h",
     "layers/viewport.cc",
     "layers/viewport.h",
+    "metrics/average_lag_tracker.cc",
+    "metrics/average_lag_tracker.h",
+    "metrics/average_lag_tracking_manager.cc",
+    "metrics/average_lag_tracking_manager.h",
     "metrics/begin_main_frame_metrics.cc",
     "metrics/begin_main_frame_metrics.h",
     "metrics/compositor_frame_reporter.cc",
@@ -169,12 +176,16 @@ cc_component("cc") {
     "metrics/frame_sequence_tracker.h",
     "metrics/frame_sequence_tracker_collection.cc",
     "metrics/frame_sequence_tracker_collection.h",
+    "metrics/jank_metrics.cc",
+    "metrics/jank_metrics.h",
     "metrics/latency_ukm_reporter.cc",
     "metrics/latency_ukm_reporter.h",
     "metrics/lcd_text_metrics_reporter.cc",
     "metrics/lcd_text_metrics_reporter.h",
     "metrics/throughput_ukm_reporter.cc",
     "metrics/throughput_ukm_reporter.h",
+    "metrics/total_frame_counter.cc",
+    "metrics/total_frame_counter.h",
     "metrics/video_playback_roughness_reporter.cc",
     "metrics/video_playback_roughness_reporter.h",
     "raster/bitmap_raster_buffer_provider.cc",
@@ -303,6 +314,8 @@ cc_component("cc") {
     "trees/clip_expander.h",
     "trees/clip_node.cc",
     "trees/clip_node.h",
+    "trees/compositor_commit_data.cc",
+    "trees/compositor_commit_data.h",
     "trees/compositor_mode.h",
     "trees/damage_tracker.cc",
     "trees/damage_tracker.h",
@@ -365,8 +378,6 @@ cc_component("cc") {
     "trees/render_frame_metadata.h",
     "trees/render_frame_metadata_observer.h",
     "trees/scoped_abort_remaining_swap_promises.h",
-    "trees/scroll_and_scale_set.cc",
-    "trees/scroll_and_scale_set.h",
     "trees/scroll_node.cc",
     "trees/scroll_node.h",
     "trees/single_thread_proxy.cc",
@@ -589,6 +600,7 @@ cc_test_static_library("test_support") {
     "//services/viz/privileged/mojom",
     "//skia",
     "//testing/gtest",
+    "//ui/base:features",
     "//ui/gfx",
     "//ui/gfx:test_support",
     "//ui/gfx/geometry",
@@ -660,14 +672,19 @@ cc_test("cc_unittests") {
     "layers/video_frame_provider_client_impl_unittest.cc",
     "layers/video_layer_impl_unittest.cc",
     "layers/viewport_unittest.cc",
+    "metrics/average_lag_tracker_unittest.cc",
+    "metrics/average_lag_tracking_manager_unittest.cc",
     "metrics/compositor_frame_reporter_unittest.cc",
     "metrics/compositor_frame_reporting_controller_unittest.cc",
     "metrics/compositor_timing_history_unittest.cc",
     "metrics/events_metrics_manager_unittest.cc",
     "metrics/frame_sequence_metrics_unittest.cc",
     "metrics/frame_sequence_tracker_unittest.cc",
+    "metrics/jank_metrics_unittest.cc",
+    "metrics/total_frame_counter_unittest.cc",
     "metrics/video_playback_roughness_reporter_unittest.cc",
     "mojo_embedder/async_layer_tree_frame_sink_unittest.cc",
+    "paint/clear_for_opaque_raster_unittest.cc",
     "paint/discardable_image_map_unittest.cc",
     "paint/display_item_list_unittest.cc",
     "paint/filter_operations_unittest.cc",
@@ -825,7 +842,7 @@ cc_test("cc_unittests") {
     }
   }
 
-  if (skia_use_dawn) {
+  if (skia_use_dawn && enable_skia_dawn_gtests) {
     defines += [ "ENABLE_CC_DAWN_TESTS" ]
   }
 }

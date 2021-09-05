@@ -8,6 +8,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/handoff/pref_names_ios.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
@@ -74,8 +75,7 @@ class PrivacyTableViewControllerTest : public ChromeTableViewControllerTest {
   }
 
   ChromeTableViewController* InstantiateController() override {
-    return [[PrivacyTableViewController alloc] initWithBrowser:browser_.get()
-                                            cookiesDescription:nil];
+    return [[PrivacyTableViewController alloc] initWithBrowser:browser_.get()];
   }
 
   web::WebTaskEnvironment task_environment_;

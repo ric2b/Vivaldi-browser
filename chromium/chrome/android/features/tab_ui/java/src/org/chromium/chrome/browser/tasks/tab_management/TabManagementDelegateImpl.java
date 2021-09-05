@@ -13,8 +13,8 @@ import android.view.ViewGroup;
 import org.chromium.base.SysUtils;
 import org.chromium.base.annotations.UsedByReflection;
 import org.chromium.base.supplier.ObservableSupplier;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ThemeColorProvider;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
@@ -29,6 +29,7 @@ import org.chromium.chrome.browser.tasks.tab_management.suggestions.TabSuggestio
 import org.chromium.chrome.browser.tasks.tab_management.suggestions.TabSuggestionsOrchestrator;
 import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.chrome.features.start_surface.StartSurfaceDelegate;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -56,7 +57,7 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
 
         return new TabSwitcherCoordinator(activity, activity.getLifecycleDispatcher(),
                 activity.getTabModelSelector(), activity.getTabContentManager(),
-                activity.getFullscreenManager(), activity,
+                activity.getBrowserControlsManager(), activity,
                 activity.getMenuOrKeyboardActionController(), containerView,
                 activity.getShareDelegateSupplier(), activity.getMultiWindowModeStateDispatcher(),
                 scrimCoordinator,
@@ -71,7 +72,7 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
             ChromeActivity activity, ViewGroup containerView, ScrimCoordinator scrimCoordinator) {
         return new TabSwitcherCoordinator(activity, activity.getLifecycleDispatcher(),
                 activity.getTabModelSelector(), activity.getTabContentManager(),
-                activity.getFullscreenManager(), activity,
+                activity.getBrowserControlsManager(), activity,
                 activity.getMenuOrKeyboardActionController(), containerView,
                 activity.getShareDelegateSupplier(), activity.getMultiWindowModeStateDispatcher(),
                 scrimCoordinator, TabListCoordinator.TabListMode.CAROUSEL);
@@ -92,9 +93,9 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
     }
 
     @Override
-    public StartSurface createStartSurface(
-            ChromeActivity activity, ScrimCoordinator scrimCoordinator) {
-        return StartSurfaceDelegate.createStartSurface(activity, scrimCoordinator);
+    public StartSurface createStartSurface(ChromeActivity activity,
+            ScrimCoordinator scrimCoordinator, BottomSheetController sheetController) {
+        return StartSurfaceDelegate.createStartSurface(activity, scrimCoordinator, sheetController);
     }
 
     @Override

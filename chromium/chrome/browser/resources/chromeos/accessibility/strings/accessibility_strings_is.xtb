@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Listaatriði</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Strjúktu tveimur fingrum til hægri</translation>
+<translation id="1016393160682012902">Ýttu á qwerty-lykil, blindraleturslykil sem hægt er að endurnýja eða snertibendingu til að fræðast um virknina. Ýttu á Control og w eða Esc til að loka.</translation>
 <translation id="1022586497894531524">Ertu að nota raddsvörun ChromeVox í fyrsta skipti? Þessi stutta kynning útskýrir það helsta sem þarf til að hefjast handa með ChromeVox.</translation>
 <translation id="1025074108959230262">Lyklafesting óvirk</translation>
 <translation id="1031961866430398710">og svo</translation>
@@ -504,7 +505,6 @@ Til að opna vafravalmynd Chrome skal ýta á Alt+F.</translation>
 <translation id="489907760999452556">Innri tengill</translation>
 <translation id="4909019435900810068">Færa aftur um eitt orð</translation>
 <translation id="4911349081560453449">Enginn fyrri gátreitur</translation>
-<translation id="4915087353619183190">Kveikir á fræðslustillingu. Ýttu á qwerty-lykil, blindraleturslykil sem hægt er að endurnýja eða snertibendingu til að fræðast um virknina. Ýttu á Control og W eða Escape til að loka.</translation>
 <translation id="492295894462528572">Inngangsorð</translation>
 <translation id="495046168593986294">Fletta upp</translation>
 <translation id="495170559598752135">Aðgerðir</translation>
@@ -647,6 +647,7 @@ Til að opna vafravalmynd Chrome skal ýta á Alt+F.</translation>
 <translation id="6017514345406065928">Grænn</translation>
 <translation id="602001110135236999">Fletta til vinstri</translation>
 <translation id="6034000775414344507">Ljósgrár</translation>
+<translation id="6036135911048686884">Snertikönnun</translation>
 <translation id="6037602951055904232">Skima áfram</translation>
 <translation id="6044160928851315051">Dekkja skjá</translation>
 <translation id="6082768461603900813">Grunnatriði flettingar</translation>
@@ -923,6 +924,7 @@ Til að opna vafravalmynd Chrome skal ýta á Alt+F.</translation>
 <translation id="8345569862449483843">{COUNT,plural, =1{myllumerki}one{# myllumerki}other{# myllumerki}}</translation>
 <translation id="8378855320830505539">Svæði</translation>
 <translation id="8382679411218029383">Flýtiritun í línu og lista</translation>
+<translation id="8394908167088220973">Spila/gera hlé á margmiðlunarefni</translation>
 <translation id="8428213095426709021">Stillingar</translation>
 <translation id="8428603554127842284">stig <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@ Til að opna vafravalmynd Chrome skal ýta á Alt+F.</translation>
 <translation id="8770473310765924354">loka skipulegu efni á borð við töflur</translation>
 <translation id="8779057862865475116">Enginn fyrri tengill</translation>
 <translation id="8796411681063377102">Næsta 3. stigs fyrirsögn</translation>
+<translation id="8823311177246872527">Síða <ph name="CURRENTPAGE" /> af <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">borði</translation>
 <translation id="8851136666856101339">aðal</translation>
 <translation id="8882002077197914455">Línuhaus</translation>

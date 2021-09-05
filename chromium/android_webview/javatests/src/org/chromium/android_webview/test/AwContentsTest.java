@@ -22,6 +22,7 @@ import android.view.View;
 import android.webkit.JavascriptInterface;
 
 import androidx.test.filters.LargeTest;
+import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
@@ -36,6 +37,7 @@ import org.chromium.android_webview.renderer_priority.RendererPriority;
 import org.chromium.android_webview.test.TestAwContentsClient.OnDownloadStartHelper;
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.base.BuildInfo;
+import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
@@ -54,6 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -61,6 +64,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @RunWith(AwJUnit4ClassRunner.class)
 public class AwContentsTest {
+    private static final String TAG = "AwContentsTest";
+
     @Rule
     public AwActivityTestRule mActivityTestRule = new AwActivityTestRule();
 
@@ -190,6 +195,29 @@ public class AwContentsTest {
         boolean newBlockNetworkLoads = !awSettings.getBlockNetworkLoads();
         awSettings.setBlockNetworkLoads(newBlockNetworkLoads);
         Assert.assertEquals(newBlockNetworkLoads, awSettings.getBlockNetworkLoads());
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testBackgroundColorInDarkMode() throws Throwable {
+        mActivityTestRule.runOnUiThread(() -> {
+            AwContents awContents =
+                    mActivityTestRule.createAwTestContainerView(mContentsClient).getAwContents();
+            AwSettings awSettings = awContents.getSettings();
+
+            Assert.assertEquals(awContents.getEffectiveBackgroundColorForTesting(), Color.WHITE);
+
+            awSettings.setForceDarkMode(AwSettings.FORCE_DARK_ON);
+            Assert.assertTrue(awSettings.isDarkMode());
+            Assert.assertEquals(awContents.getEffectiveBackgroundColorForTesting(), Color.BLACK);
+
+            awContents.setBackgroundColor(Color.RED);
+            Assert.assertEquals(awContents.getEffectiveBackgroundColorForTesting(), Color.RED);
+
+            awContents.destroy();
+            Assert.assertEquals(awContents.getEffectiveBackgroundColorForTesting(), Color.RED);
+        });
     }
 
     private int callDocumentHasImagesSync(final AwContents awContents)
@@ -802,26 +830,26 @@ public class AwContentsTest {
                 mContentsClient.getOnPageFinishedHelper(), html, "text/html", false);
         mActivityTestRule.waitForVisualStateCallback(testView.getAwContents());
 
+        int[] lastQuadrantColors = null;
         // Poll for 10s in case raster is slow.
-        final Object lock = new Object();
-        final Object[] resultHolder = new Object[1];
         for (int i = 0; i < 100; ++i) {
+            final CallbackHelper callbackHelper = new CallbackHelper();
+            final Object[] resultHolder = new Object[1];
             mActivityTestRule.runOnUiThread(() -> {
                 testView.readbackQuadrantColors((int[] result) -> {
-                    synchronized (lock) {
-                        resultHolder[0] = result;
-                        lock.notifyAll();
-                    }
+                    resultHolder[0] = result;
+                    callbackHelper.notifyCalled();
                 });
             });
-            int[] quadrantColors;
-            synchronized (lock) {
-                while (resultHolder[0] == null) {
-                    lock.wait();
-                }
-                quadrantColors = (int[]) resultHolder[0];
+            try {
+                callbackHelper.waitForFirst();
+            } catch (TimeoutException e) {
+                Log.w(TAG, "Timeout", e);
+                continue;
             }
-            if (Color.rgb(255, 0, 0) == quadrantColors[0]
+            int[] quadrantColors = (int[]) resultHolder[0];
+            lastQuadrantColors = quadrantColors;
+            if (quadrantColors != null && Color.rgb(255, 0, 0) == quadrantColors[0]
                     && Color.rgb(0, 255, 0) == quadrantColors[1]
                     && Color.rgb(0, 0, 255) == quadrantColors[2]
                     && Color.rgb(128, 128, 128) == quadrantColors[3]) {
@@ -829,26 +857,26 @@ public class AwContentsTest {
             }
             Thread.sleep(100);
         }
+        Assert.assertNotNull(lastQuadrantColors);
         // If this test is failing for your CL, then chances are your change is breaking Android
         // WebView hardware rendering. Please build the "real" webview and check if this is the
         // case and if so, fix your CL.
-        int[] quadrantColors = (int[]) resultHolder[0];
-        Assert.assertEquals(Color.rgb(255, 0, 0), quadrantColors[0]);
-        Assert.assertEquals(Color.rgb(0, 255, 0), quadrantColors[1]);
-        Assert.assertEquals(Color.rgb(0, 0, 255), quadrantColors[2]);
-        Assert.assertEquals(Color.rgb(128, 128, 128), quadrantColors[3]);
+        Assert.assertEquals(Color.rgb(255, 0, 0), lastQuadrantColors[0]);
+        Assert.assertEquals(Color.rgb(0, 255, 0), lastQuadrantColors[1]);
+        Assert.assertEquals(Color.rgb(0, 0, 255), lastQuadrantColors[2]);
+        Assert.assertEquals(Color.rgb(128, 128, 128), lastQuadrantColors[3]);
     }
 
     @Test
     @Feature({"AndroidWebView"})
-    @SmallTest
+    @MediumTest
     public void testHardwareRenderingSmokeTest() throws Throwable {
         doHardwareRenderingSmokeTest();
     }
 
     @Test
     @Feature({"AndroidWebView"})
-    @SmallTest
+    @MediumTest
     @CommandLineFlags.Add({"enable-features=UseSkiaRenderer", "disable-oop-rasterization"})
     public void testHardwareRenderingSmokeTestSkiaRenderer() throws Throwable {
         doHardwareRenderingSmokeTest();
@@ -1074,7 +1102,7 @@ public class AwContentsTest {
             // Until AW gets site isolation, ordinary web content should not be
             // locked to origin.
             boolean isLocked = TestThreadUtils.runOnUiThreadBlocking(
-                    () -> rendererProcess1.isLockedToOriginForTesting());
+                    () -> rendererProcess1.isProcessLockedForTesting());
             Assert.assertFalse("Initial renderer process should not be locked", isLocked);
 
             mActivityTestRule.loadUrlSync(
@@ -1085,7 +1113,7 @@ public class AwContentsTest {
             Assert.assertNotEquals(rendererProcess1, webuiProcess);
             // WebUI pages should be locked to origin even on AW.
             isLocked = TestThreadUtils.runOnUiThreadBlocking(
-                    () -> webuiProcess.isLockedToOriginForTesting());
+                    () -> webuiProcess.isProcessLockedForTesting());
             Assert.assertTrue("WebUI process should be locked", isLocked);
 
             mActivityTestRule.loadUrlSync(
@@ -1096,7 +1124,7 @@ public class AwContentsTest {
                     HELLO_WORLD_TITLE, mActivityTestRule.getTitleOnUiThread(awContents));
             Assert.assertNotEquals(rendererProcess2, webuiProcess);
             isLocked = TestThreadUtils.runOnUiThreadBlocking(
-                    () -> rendererProcess2.isLockedToOriginForTesting());
+                    () -> rendererProcess2.isProcessLockedForTesting());
             Assert.assertFalse("Final renderer process should not be locked", isLocked);
         } finally {
             testServer.stopAndDestroyServer();

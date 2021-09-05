@@ -95,6 +95,10 @@ void TrayPopupItemStyle::SetupLabel(views::Label* label) const {
                                                gfx::Font::NORMAL,
                                                gfx::Font::Weight::MEDIUM));
       break;
+    case FontStyle::SMALL_TITLE:
+      label->SetFontList(base_font_list.Derive(1, gfx::Font::NORMAL,
+                                               gfx::Font::Weight::MEDIUM));
+      break;
     case FontStyle::SUB_HEADER:
       label->SetFontList(base_font_list.Derive(4, gfx::Font::NORMAL,
                                                gfx::Font::Weight::MEDIUM));
@@ -114,6 +118,11 @@ void TrayPopupItemStyle::SetupLabel(views::Label* label) const {
     case FontStyle::CAPTION:
       label->SetFontList(base_font_list.Derive(0, gfx::Font::NORMAL,
                                                gfx::Font::Weight::NORMAL));
+      break;
+    case FontStyle::HOLDING_SPACE_TITLE:
+      label->SetFontList(base_font_list.Derive(3, gfx::Font::NORMAL,
+                                               gfx::Font::Weight::NORMAL));
+      label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
       break;
   }
 }

@@ -107,10 +107,12 @@ std::unique_ptr<syncer::DeviceInfo> CreateDeviceInfo(
         /*chrome_version=*/std::string(), /*sync_user_agent=*/std::string(),
         /*device_type=*/sync_pb::SyncEnums::TYPE_UNSET,
         /*signin_scoped_device_id=*/std::string(),
-        /*hardware_info=*/base::SysInfo::HardwareInfo(),
+        /*manufacturer_name=*/std::string(),
+        /*model_name=*/std::string(),
         /*last_updated_timestamp=*/base::Time(),
         /*pulse_interval=*/base::TimeDelta(),
-        /*send_tab_to_self_receiving_enabled=*/true, std::move(sharing_info));
+        /*send_tab_to_self_receiving_enabled=*/true, std::move(sharing_info),
+        /*fcm_registration_token=*/std::string());
   }
 
   // We want to send to the passed |fcm_configuration| as it is the most up to
@@ -146,8 +148,8 @@ void OnMessageSent(
 }  // namespace
 
 struct SharingWebRtcMojoPipes {
-  MojoPipe<sharing::mojom::SignallingSender> signalling_sender;
-  MojoPipe<sharing::mojom::SignallingReceiver> signalling_receiver;
+  MojoPipe<sharing::mojom::SignalingSender> signaling_sender;
+  MojoPipe<sharing::mojom::SignalingReceiver> signaling_receiver;
   MojoPipe<sharing::mojom::SharingWebRtcConnectionDelegate> delegate;
   MojoPipe<sharing::mojom::SharingWebRtcConnection> connection;
   MojoPipe<network::mojom::P2PTrustedSocketManagerClient> socket_manager_client;
@@ -264,8 +266,8 @@ SharingWebRtcConnectionHost* SharingServiceHost::CreateConnection(
   auto pipes = std::make_unique<SharingWebRtcMojoPipes>();
 
   auto signalling_host = std::make_unique<WebRtcSignallingHostFCM>(
-      std::move(pipes->signalling_sender.receiver),
-      std::move(pipes->signalling_receiver.remote), message_sender_,
+      std::move(pipes->signaling_sender.receiver),
+      std::move(pipes->signaling_receiver.remote), message_sender_,
       CreateDeviceInfo(device_guid, fcm_configuration, device_source_));
 
   // base::Unretained is safe as the connection is owned by |this|.
@@ -310,8 +312,8 @@ void SharingServiceHost::OnIceServersReceived(
   }
 
   sharing_utility_service_->CreateSharingWebRtcConnection(
-      std::move(pipes->signalling_sender.remote),
-      std::move(pipes->signalling_receiver.receiver),
+      std::move(pipes->signaling_sender.remote),
+      std::move(pipes->signaling_receiver.receiver),
       std::move(pipes->delegate.remote), std::move(pipes->connection.receiver),
       std::move(pipes->socket_manager.remote),
       std::move(pipes->mdns_responder.remote), std::move(ice_servers));

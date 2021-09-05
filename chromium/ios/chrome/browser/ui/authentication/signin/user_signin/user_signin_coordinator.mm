@@ -150,9 +150,11 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
   DCHECK(self.signinIntent != UserSigninIntentFirstRun);
 
   if (self.mediator.isAuthenticationInProgress) {
-    // TODO(crbug.com/971989): Rename this metric after the architecture
-    // migration.
-    [self.logger logUndoSignin];
+    [self.logger
+        logSigninCompletedWithResult:SigninCoordinatorResultInterrupted
+                        addedAccount:self.addAccountSigninCoordinator != nil
+               advancedSettingsShown:self.advancedSettingsSigninCoordinator !=
+                                     nil];
   }
 
   __weak UserSigninCoordinator* weakSelf = self;
@@ -217,7 +219,7 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
 - (void)unifiedConsentCoordinatorNeedPrimaryButtonUpdate:
     (UnifiedConsentCoordinator*)coordinator {
   DCHECK_EQ(self.unifiedConsentCoordinator, coordinator);
-  [self.viewController updatePrimaryButtonStyle];
+  [self.viewController setConfirmationButtonProperties];
 }
 
 #pragma mark - UserSigninViewControllerDelegate
@@ -328,7 +330,7 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
   [self.unifiedConsentCoordinator resetSettingLinkTapped];
   self.unifiedConsentCoordinator.uiDisabled = NO;
   [self.viewController signinDidStop];
-  [self.viewController updatePrimaryButtonStyle];
+  [self.viewController setConfirmationButtonProperties];
 }
 
 #pragma mark - Private
@@ -337,9 +339,6 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
 // if the sign-in is not in progress.
 - (void)cancelSignin {
   [self.mediator cancelSignin];
-  // TODO(crbug.com/971989): Remove this metric after the architecture
-  // migration.
-  [self.logger logUndoSignin];
 }
 
 // Notifies the observers that the user is attempting sign-in.

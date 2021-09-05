@@ -11,8 +11,8 @@
 
 #include "ash/ash_export.h"
 #include "ash/metrics/user_metrics_recorder.h"
+#include "ash/public/cpp/session/session_observer.h"
 #include "ash/public/cpp/shelf_types.h"
-#include "ash/session/session_observer.h"
 #include "ash/wm/system_modal_container_event_filter_delegate.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -95,6 +95,7 @@ class BluetoothNotificationController;
 class BluetoothPowerController;
 class BrightnessControlDelegate;
 class AshColorProvider;
+class CaptureModeController;
 class CrosDisplayConfig;
 class DesksController;
 class DetachableBaseHandler;
@@ -114,11 +115,14 @@ class EventClientImpl;
 class EventRewriterControllerImpl;
 class EventTransformationHandler;
 class FocusCycler;
+class FrameThrottlingController;
 class HighContrastController;
 class HighlighterController;
+class HoldingSpaceController;
 class HomeScreenController;
 class ImeControllerImpl;
 class ImmersiveContext;
+class InSessionAuthDialogControllerImpl;
 class KeyAccessibilityEnabler;
 class KeyboardBrightnessControlDelegate;
 class KeyboardControllerImpl;
@@ -177,6 +181,7 @@ class SystemTrayModel;
 class SystemTrayNotifier;
 class ToastManagerImpl;
 class ToplevelWindowEventHandler;
+class ClipboardHistoryController;
 class TouchDevicesController;
 class TrayAction;
 class TrayBluetoothHelper;
@@ -266,7 +271,7 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   // Creates a default views::NonClientFrameView for use by windows in the
   // Ash environment.
-  views::NonClientFrameView* CreateDefaultNonClientFrameView(
+  std::unique_ptr<views::NonClientFrameView> CreateDefaultNonClientFrameView(
       views::Widget* widget);
 
   // Sets work area insets of the display containing |window|, pings observers.
@@ -382,6 +387,9 @@ class ASH_EXPORT Shell : public SessionObserver,
     return high_contrast_controller_.get();
   }
   ImeControllerImpl* ime_controller() { return ime_controller_.get(); }
+  InSessionAuthDialogControllerImpl* in_session_auth_dialog_controller() {
+    return in_session_auth_dialog_controller_.get();
+  }
   KeyAccessibilityEnabler* key_accessibility_enabler() {
     return key_accessibility_enabler_.get();
   }
@@ -492,6 +500,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   views::corewm::TooltipController* tooltip_controller() {
     return tooltip_controller_.get();
   }
+  ClipboardHistoryController* clipboard_history_controller() {
+    return clipboard_history_controller_.get();
+  }
   TouchDevicesController* touch_devices_controller() {
     return touch_devices_controller_.get();
   }
@@ -526,6 +537,10 @@ class ASH_EXPORT Shell : public SessionObserver,
   AshColorProvider* ash_color_provider() { return ash_color_provider_.get(); }
 
   PrefService* local_state() { return local_state_; }
+
+  FrameThrottlingController* frame_throttling_controller() {
+    return frame_throttling_controller_.get();
+  }
 
   // Force the shelf to query for it's current visibility state.
   // TODO(jamescook): Move to Shelf.
@@ -661,9 +676,12 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<DisplaySpeakerController> display_speaker_controller_;
   std::unique_ptr<DragDropController> drag_drop_controller_;
   std::unique_ptr<FocusCycler> focus_cycler_;
+  std::unique_ptr<HoldingSpaceController> holding_space_controller_;
   std::unique_ptr<HomeScreenController> home_screen_controller_;
   std::unique_ptr<ImeControllerImpl> ime_controller_;
   std::unique_ptr<ImmersiveContext> immersive_context_;
+  std::unique_ptr<InSessionAuthDialogControllerImpl>
+      in_session_auth_dialog_controller_;
   std::unique_ptr<KeyboardBrightnessControlDelegate>
       keyboard_brightness_control_delegate_;
   std::unique_ptr<LocaleUpdateControllerImpl> locale_update_controller_;
@@ -689,11 +707,13 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<ShelfController> shelf_controller_;
   std::unique_ptr<ShelfWindowWatcher> shelf_window_watcher_;
   std::unique_ptr<ShellDelegate> shell_delegate_;
+  std::unique_ptr<CaptureModeController> capture_mode_controller_;
   std::unique_ptr<ShutdownControllerImpl> shutdown_controller_;
   std::unique_ptr<SystemNotificationController> system_notification_controller_;
   std::unique_ptr<SystemTrayModel> system_tray_model_;
   std::unique_ptr<SystemTrayNotifier> system_tray_notifier_;
   std::unique_ptr<ToastManagerImpl> toast_manager_;
+  std::unique_ptr<ClipboardHistoryController> clipboard_history_controller_;
   std::unique_ptr<TouchDevicesController> touch_devices_controller_;
   std::unique_ptr<TrayAction> tray_action_;
   std::unique_ptr<WallpaperControllerImpl> wallpaper_controller_;
@@ -805,6 +825,8 @@ class ASH_EXPORT Shell : public SessionObserver,
   // Enables spoken feedback accessibility based on a press and hold of both
   // volume keys.
   std::unique_ptr<KeyAccessibilityEnabler> key_accessibility_enabler_;
+
+  std::unique_ptr<FrameThrottlingController> frame_throttling_controller_;
 
   // For testing only: simulate that a modal window is open
   bool simulate_modal_window_open_for_test_ = false;

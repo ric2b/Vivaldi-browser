@@ -42,7 +42,9 @@ EntityData::EntityData(EntityData&& other)
       parent_id(std::move(other.parent_id)),
       is_folder(other.is_folder),
       is_bookmark_guid_in_specifics_preprocessed(
-          other.is_bookmark_guid_in_specifics_preprocessed) {
+          other.is_bookmark_guid_in_specifics_preprocessed),
+      is_note_guid_in_specifics_preprocessed(
+          other.is_note_guid_in_specifics_preprocessed) {
   specifics.Swap(&other.specifics);
   unique_position.Swap(&other.unique_position);
 }
@@ -62,6 +64,8 @@ EntityData& EntityData::operator=(EntityData&& other) {
   is_folder = other.is_folder;
   is_bookmark_guid_in_specifics_preprocessed =
       other.is_bookmark_guid_in_specifics_preprocessed;
+  is_note_guid_in_specifics_preprocessed =
+      other.is_note_guid_in_specifics_preprocessed;
   specifics.Swap(&other.specifics);
   unique_position.Swap(&other.unique_position);
   return *this;

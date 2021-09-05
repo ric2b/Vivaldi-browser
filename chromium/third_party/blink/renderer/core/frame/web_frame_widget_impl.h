@@ -84,12 +84,10 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
   ~WebFrameWidgetImpl() override;
 
   // WebWidget functions:
-  void Close(scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner,
-             base::OnceCallback<void()> cleanup_task) override;
+  void Close(
+      scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner) override;
   WebSize Size() override;
   void Resize(const WebSize&) override;
-  void DidEnterFullscreen() override;
-  void DidExitFullscreen() override;
   void UpdateLifecycle(WebLifecycleUpdate requested_update,
                        DocumentUpdateReason reason) override;
   void ThemeChanged() override;
@@ -111,6 +109,9 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
   void DidDetachLocalFrameTree() override;
   WebInputMethodController* GetActiveWebInputMethodController() const override;
   bool ScrollFocusedEditableElementIntoView() override;
+  void SetZoomLevelForTesting(double zoom_level) override;
+  void ResetZoomLevelForTesting() override;
+  void SetDeviceScaleFactorForTesting(float factor) override;
 
   Frame* FocusedCoreFrame() const;
 
@@ -121,14 +122,20 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
 
   // WebFrameWidgetBase overrides:
   bool ForSubframe() const override { return true; }
+  bool ForTopLevelFrame() const override { return false; }
   void IntrinsicSizingInfoChanged(
       mojom::blink::IntrinsicSizingInfoPtr) override;
   void DidCreateLocalRootView() override;
   HitTestResult CoreHitTestResultAt(const gfx::PointF&) override;
   void ZoomToFindInPageRect(const WebRect& rect_in_root_frame) override;
+  void SetAutoResizeMode(bool auto_resize,
+                         const gfx::Size& min_size_before_dsf,
+                         const gfx::Size& max_size_before_dsf,
+                         float device_scale_factor) override;
 
   // FrameWidget overrides:
   void SetRootLayer(scoped_refptr<cc::Layer>) override;
+  bool ShouldHandleImeEvents() override;
 
   // WidgetBaseClient overrides:
   void BeginMainFrame(base::TimeTicks last_frame_time) override;
@@ -145,6 +152,11 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
   void EndCommitCompositorFrame(base::TimeTicks commit_start_time) override;
   void DidBeginMainFrame() override;
   void FocusChanged(bool enable) override;
+  gfx::Rect ViewportVisibleRect() override;
+
+  // blink::mojom::FrameWidget
+  void EnableDeviceEmulation(const DeviceEmulationParams& parameters) override;
+  void DisableDeviceEmulation() override;
 
   void UpdateMainFrameLayoutSize();
 
@@ -203,6 +215,8 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
   // when there is no page focus?
   // Represents whether or not this object should process incoming IME events.
   bool ime_accept_events_ = true;
+
+  gfx::Rect compositor_visible_rect_;
 
   SelfKeepAlive<WebFrameWidgetImpl> self_keep_alive_;
 };

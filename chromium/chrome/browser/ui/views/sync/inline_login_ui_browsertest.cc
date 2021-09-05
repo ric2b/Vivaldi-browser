@@ -287,7 +287,7 @@ void InlineLoginUIBrowserTest::SetAllowedUsernamePattern(
   local_state->SetString(prefs::kGoogleServicesUsernamePattern, pattern);
 }
 
-#if defined(OS_LINUX) || defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
 // crbug.com/422868
 #define MAYBE_DifferentStorageId DISABLED_DifferentStorageId
 #else
@@ -425,9 +425,9 @@ class InlineLoginHelperBrowserTest : public InProcessBrowserTest {
   }
 
   void SetUpInProcessBrowserTestFixture() override {
-    will_create_browser_context_services_subscription_ =
+    create_services_subscription_ =
         BrowserContextDependencyManager::GetInstance()
-            ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
+            ->RegisterCreateServicesCallbackForTesting(
                 base::Bind(&InlineLoginHelperBrowserTest::
                                OnWillCreateBrowserContextServices,
                            base::Unretained(this)));
@@ -516,8 +516,8 @@ class InlineLoginHelperBrowserTest : public InProcessBrowserTest {
   std::unique_ptr<IdentityTestEnvironmentProfileAdaptor>
       identity_test_env_profile_adaptor_;
   std::unique_ptr<
-      base::CallbackList<void(content::BrowserContext*)>::Subscription>
-      will_create_browser_context_services_subscription_;
+      BrowserContextDependencyManager::CreateServicesCallbackList::Subscription>
+      create_services_subscription_;
   Profile* profile_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(InlineLoginHelperBrowserTest);
@@ -794,7 +794,7 @@ IN_PROC_BROWSER_TEST_F(InlineLoginUISafeIframeBrowserTest, Basic) {
 }
 
 // Flaky on MacOS - crbug.com/1021209
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_NoWebUIInIframe DISABLED_NoWebUIInIframe
 #else
 #define MAYBE_NoWebUIInIframe NoWebUIInIframe
@@ -824,7 +824,10 @@ IN_PROC_BROWSER_TEST_F(InlineLoginUISafeIframeBrowserTest,
   EXPECT_EQ(url, contents->GetVisibleURL());
 
   content::NavigationController& controller = contents->GetController();
-  EXPECT_TRUE(controller.GetPendingEntry() == NULL);
+  EXPECT_FALSE(controller.GetPendingEntry());
+
+  contents->ClosePage();
+  base::RunLoop().RunUntilIdle();
 }
 
 // Tracks the URLs requested while running a browser test and returns a default

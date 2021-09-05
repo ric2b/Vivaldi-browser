@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/enterprise/reporting/report_request_queue_generator.h"
+#include "components/enterprise/browser/reporting/report_request_queue_generator.h"
 
 #include <vector>
 
@@ -11,11 +11,12 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
-#include "chrome/browser/enterprise/reporting/browser_report_generator.h"
+#include "chrome/browser/enterprise/reporting/reporting_delegate_factory_desktop.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/account_id/account_id.h"
+#include "components/enterprise/browser/reporting/browser_report_generator.h"
 #include "components/enterprise/browser/reporting/report_request_definition.h"
 #include "components/policy/core/common/mock_policy_service.h"
 #include "components/policy/core/common/policy_map.h"
@@ -38,12 +39,16 @@ const char kActiveProfileName2[] = "active_profile2";
 
 }  // namespace
 
+// TODO(crbug.com/1103732): Get rid of chrome/browser dependencies and then
+// move this file to components/enterprise/browser.
 class ReportRequestQueueGeneratorTest : public ::testing::Test {
  public:
   using ReportRequest = definition::ReportRequest;
 
   ReportRequestQueueGeneratorTest()
-      : profile_manager_(TestingBrowserProcess::GetGlobal()) {}
+      : profile_manager_(TestingBrowserProcess::GetGlobal()),
+        browser_report_generator_(&reporting_delegate_factory_),
+        report_request_queue_generator_(&reporting_delegate_factory_) {}
 
   ~ReportRequestQueueGeneratorTest() override = default;
 
@@ -195,6 +200,7 @@ class ReportRequestQueueGeneratorTest : public ::testing::Test {
 
   content::BrowserTaskEnvironment task_environment_;
   TestingProfileManager profile_manager_;
+  ReportingDelegateFactoryDesktop reporting_delegate_factory_;
   BrowserReportGenerator browser_report_generator_;
   ReportRequestQueueGenerator report_request_queue_generator_;
   std::unique_ptr<base::HistogramTester> histogram_tester_;
@@ -296,11 +302,10 @@ TEST_F(ReportRequestQueueGeneratorTest, ChromePoliciesCollection) {
 
   policy_map.Set("kPolicyName1", policy::POLICY_LEVEL_MANDATORY,
                  policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-                 std::make_unique<base::Value>(std::vector<base::Value>()),
-                 nullptr);
+                 base::Value(std::vector<base::Value>()), nullptr);
   policy_map.Set("kPolicyName2", policy::POLICY_LEVEL_RECOMMENDED,
                  policy::POLICY_SCOPE_MACHINE, policy::POLICY_SOURCE_MERGED,
-                 std::make_unique<base::Value>(true), nullptr);
+                 base::Value(true), nullptr);
 
   CreateActiveProfileWithPolicies(kActiveProfileName1,
                                   std::move(policy_service));

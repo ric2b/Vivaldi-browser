@@ -20,49 +20,34 @@
 namespace network {
 
 InitiatorLockCompatibility VerifyRequestInitiatorLock(
-    const base::Optional<url::Origin>& request_initiator_site_lock,
+    const base::Optional<url::Origin>& request_initiator_origin_lock,
     const base::Optional<url::Origin>& request_initiator) {
-  if (!request_initiator_site_lock.has_value())
+  if (!request_initiator_origin_lock.has_value())
     return InitiatorLockCompatibility::kNoLock;
-  const url::Origin& lock = request_initiator_site_lock.value();
+  const url::Origin& lock = request_initiator_origin_lock.value();
 
   if (!request_initiator.has_value())
     return InitiatorLockCompatibility::kNoInitiator;
   const url::Origin& initiator = request_initiator.value();
 
-  // TODO(lukasza, nasko): Also consider equality of precursor origins (e.g. if
-  // |initiator| is opaque, then it's precursor origin should match the |lock|
-  // [or |lock|'s precursor if |lock| is also opaque]).
-  if (initiator.opaque() || (initiator == lock))
+  if (initiator == lock)
     return InitiatorLockCompatibility::kCompatibleLock;
 
-  // TODO(lukasza): https://crbug.com/891872: Return kIncorrectLock if
-  // the origins do not match exactly in the previous if statement.  This should
-  // be possible to do once we no longer vend process-wide factory.
-  if (!initiator.opaque() && !lock.opaque() &&
-      initiator.scheme() == lock.scheme() &&
-      initiator.GetURL().SchemeIsHTTPOrHTTPS()) {
-    if (initiator.GetURL().HostIsIPAddress()) {
-      // For IP addresses, we require host equality (allowing ports to differ,
-      // since site_url ignores ports).  See also https://crbug.com/1051674.
-      if (initiator.host() == lock.host())
-        return InitiatorLockCompatibility::kCompatibleLock;
-    } else {
-      // For non-IP-address origins, we require sites (eTLD+1) to match
-      // (again ignoring ports).
-      std::string lock_domain = lock.host();
-      if (!lock_domain.empty() && lock_domain.back() == '.')
-        lock_domain.erase(lock_domain.length() - 1);
-      if (initiator.DomainIs(lock_domain))
-        return InitiatorLockCompatibility::kCompatibleLock;
-    }
+  // Opaque |initiator| is always allowed.  In particular, a factory locked to a
+  // non-opaque |lock| may be used by an opaque |initiator| - for example when
+  // the factory is inherited by a data: URL frame.
+  if (initiator.opaque()) {
+    // TODO(lukasza, nasko): Also consider equality of precursor origins (e.g.
+    // if |initiator| is opaque, then it's precursor origin should match the
+    // |lock| [or |lock|'s precursor if |lock| is also opaque]).
+    return InitiatorLockCompatibility::kCompatibleLock;
   }
 
   return InitiatorLockCompatibility::kIncorrectLock;
 }
 
 url::Origin GetTrustworthyInitiator(
-    const base::Optional<url::Origin>& request_initiator_site_lock,
+    const base::Optional<url::Origin>& request_initiator_origin_lock,
     const base::Optional<url::Origin>& request_initiator) {
   // Returning a unique origin as a fallback should be safe - such origin will
   // be considered cross-origin from all other origins.
@@ -75,7 +60,7 @@ url::Origin GetTrustworthyInitiator(
     return request_initiator.value();
 
   InitiatorLockCompatibility initiator_compatibility =
-      VerifyRequestInitiatorLock(request_initiator_site_lock,
+      VerifyRequestInitiatorLock(request_initiator_origin_lock,
                                  request_initiator);
   if (initiator_compatibility == InitiatorLockCompatibility::kIncorrectLock)
     return unique_origin_fallback;

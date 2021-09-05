@@ -40,6 +40,8 @@ class Surface;
 #if defined(OS_CHROMEOS)
 class InputMethodSurface;
 class ShellSurface;
+class ToastSurface;
+class ToastSurfaceManager;
 class XdgShellSurface;
 #endif
 
@@ -55,9 +57,11 @@ class Display {
   Display();
 
 #if defined(OS_CHROMEOS)
-  Display(NotificationSurfaceManager* notification_surface_manager,
-          InputMethodSurfaceManager* input_method_surface_manager,
-          std::unique_ptr<FileHelper> file_helper);
+  Display(
+      std::unique_ptr<NotificationSurfaceManager> notification_surface_manager,
+      std::unique_ptr<InputMethodSurfaceManager> input_method_surface_manager,
+      std::unique_ptr<ToastSurfaceManager> toast_surface_manager,
+      std::unique_ptr<FileHelper> file_helper);
 #endif  // defined(OS_CHROMEOS)
 
   ~Display();
@@ -87,11 +91,11 @@ class Display {
   std::unique_ptr<XdgShellSurface> CreateXdgShellSurface(Surface* surface);
 
   // Creates a remote shell surface for an existing surface using |container|.
-  // The surface is scaled by 1 / |default_device_scale_factor|.
   std::unique_ptr<ClientControlledShellSurface>
   CreateClientControlledShellSurface(Surface* surface,
                                      int container,
-                                     double default_device_scale_factor);
+                                     double default_device_scale_factor,
+                                     bool default_scale_cancellation);
 
   // Creates a notification surface for a surface and notification id.
   std::unique_ptr<NotificationSurface> CreateNotificationSurface(
@@ -101,7 +105,14 @@ class Display {
   // Creates a input method surface for a surface.
   std::unique_ptr<InputMethodSurface> CreateInputMethodSurface(
       Surface* surface,
-      double default_device_scale_factor);
+      double default_device_scale_factor,
+      bool default_scale_cancellation);
+
+  // Creates a toast surface for a surface.
+  std::unique_ptr<ToastSurface> CreateToastSurface(
+      Surface* surface,
+      double default_device_scale_factor,
+      bool default_scale_cancellation);
 #endif  // defined(OS_CHROMEOS)
 
   // Creates a sub-surface for an existing surface. The sub-surface will be
@@ -115,10 +126,17 @@ class Display {
   // Obtains seat instance.
   Seat* seat() { return &seat_; }
 
+#if defined(OS_CHROMEOS)
+  InputMethodSurfaceManager* input_method_surface_manager() {
+    return input_method_surface_manager_.get();
+  }
+#endif
+
  private:
 #if defined(OS_CHROMEOS)
-  NotificationSurfaceManager* notification_surface_manager_ = nullptr;
-  InputMethodSurfaceManager* input_method_surface_manager_ = nullptr;
+  std::unique_ptr<NotificationSurfaceManager> notification_surface_manager_;
+  std::unique_ptr<InputMethodSurfaceManager> input_method_surface_manager_;
+  std::unique_ptr<ToastSurfaceManager> toast_surface_manager_;
 #endif  // defined(OS_CHROMEOS)
 
   std::unique_ptr<FileHelper> file_helper_;

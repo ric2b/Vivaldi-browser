@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">ছানগ্লাছ</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">কেটালান</translation>
+<translation id="1172970565351728681">প্ৰায় <ph name="REMAINING_TIME" /> বাকী আছে</translation>
 <translation id="1173894706177603556">নতুন নাম দিয়ক</translation>
 <translation id="117624967391683467"><ph name="FILE_NAME" /> প্ৰতিলিপি কৰি থকা হৈছে...</translation>
 <translation id="1178581264944972037">পজ কৰক</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">"<ph name="FILENAME" />" নামৰ এটা ফাইল ইতিমধ্যে আছেই। আপুনি কি কৰিব বিচাৰে?</translation>
 <translation id="2121825465123208577">আকাৰ সলনি কৰক</translation>
 <translation id="2136953289241069843">লিপ্যন্তৰণ (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">"<ph name="PATH" />" খুলিবলৈ সক্ষম নহ’ল: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">অমান্য বৰ্ণ: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">ভিয়েটনামীজ কীব’ৰ্ড (TCVN)</translation>
 <translation id="2168214441502403371">পার্চীয়ান কীব’র্ড</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187"><ph name="DESTINATION_DOMAIN" />লৈ গৰাকীস্বত্ব স্থানান্তৰ কৰা হ’ব।</translation>
 <translation id="3241720467332021590">আইৰিশ্ব</translation>
 <translation id="3245321423178950146">অজ্ঞাত শিল্পী</translation>
+<translation id="3248185426436836442">বিবেচনাধীন</translation>
 <translation id="3252266817569339921">ফৰাচী</translation>
 <translation id="3254434849914415189"><ph name="FILE_TYPE" /> ফাইলৰ বাবে ডিফ'ল্ট এপ্ বাছনি কৰক:</translation>
 <translation id="3264582393905923483">প্ৰসংগ</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">বছৰ ৰেকর্ড কৰা হৈছে</translation>
 <translation id="3338239663705455570">শ্ল’ভেনিয়ান কীব’র্ড</translation>
 <translation id="3353984535370177728">আপল’ড কৰিবলৈ এটা ফ’ল্ডাৰ বাছনি কৰক</translation>
+<translation id="3356580349448036450">সম্পূৰ্ণ হ’ল</translation>
 <translation id="3399597614303179694">মেচেড’নিয়ান কীব’র্ড</translation>
 <translation id="3437801641691368414">সৃষ্টি কৰাৰ সময়</translation>
 <translation id="3466147780910026086">আপোনাৰ মিডিয়া ডিভাইচ স্কেন কৰি থকা হৈছে...</translation>
@@ -242,6 +244,7 @@
 <translation id="3780536599611287598">আপোনাৰ ’<ph name="FOLDER_NAME" />’লৈ ফাইল স্থানান্তৰ কৰাৰ অনুমতি নাই।</translation>
 <translation id="3786301125658655746">আপুনি অফলাইন হৈ আছে</translation>
 <translation id="3789841737615482174">ইনষ্টল কৰক</translation>
+<translation id="3793469551756281394">প্ৰায় <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /> বাকী আছে</translation>
 <translation id="3798449238516105146">সংস্কৰণ</translation>
 <translation id="3801082500826908679">Faroese</translation>
 <translation id="3809272675881623365">শহা</translation>
@@ -297,6 +300,7 @@
 <translation id="4481711095103932593">এই ফ’ল্ডাৰটো Windowsৰ সৈতে শ্বেয়াৰ কৰা হৈছে</translation>
 <translation id="4487088045714738411">বেলজিয়ান কীব’ৰ্ড</translation>
 <translation id="4522570452068850558">সবিশেষ</translation>
+<translation id="4542387084127299777">"<ph name="PATH" />" খুলিব পৰা নাই</translation>
 <translation id="4552678318981539154">অধিক ষ্ট’ৰেজ কিনক</translation>
 <translation id="4559767610552730302">ব’কে’</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> ফাইল</translation>
@@ -507,6 +511,7 @@
 <translation id="6629841649550503054">সকলো ফাইল <ph name="BEGIN_LINK" />Google Drive<ph name="END_LINK" />ত বেক আপ কৰা হ’ল!</translation>
 <translation id="6643016212128521049">মচক</translation>
 <translation id="6650726141019353908">গুলপীয়া পখিলা</translation>
+<translation id="6657585470893396449">পাছৱৰ্ড</translation>
 <translation id="6710213216561001401">পূৰ্বৱৰ্তী</translation>
 <translation id="6718273304615422081">জিপ কৰি থকা হৈছে...</translation>
 <translation id="6751256176799620176">১টা ফ’ল্ডাৰ বাছনি কৰা হ’ল</translation>
@@ -546,7 +551,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">ইনষ্টল কৰিব পৰা নগ’ল।</translation>
 <translation id="7040138676081995583">ইয়াৰ জৰিয়তে খোলক...</translation>
-<translation id="7059566040011178088"><ph name="REMAINING_TIME" />তকৈ কম</translation>
 <translation id="7100897339030255923"><ph name="COUNT" />টা বস্তু বাছনি কৰা হৈছে</translation>
 <translation id="7106346894903675391">ষ্ট’ৰ কৰাৰ অধিক ঠাই কিনক...</translation>
 <translation id="7126604456862387217">’&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;’ - &lt;em&gt;সন্ধানৰ ড্ৰাইভ&lt;/em&gt;</translation>
@@ -655,7 +659,6 @@
 <translation id="8193175696669055101">ডিভাইচৰ মডেল</translation>
 <translation id="8208580316430297579">শিল্পকৰ্ম</translation>
 <translation id="8223479393428528563">এই ফাইলবোৰ অফলাইন অৱস্থাত ব্যৱহাৰ কৰাৰ বাবে ছেভ কৰিবলৈ অনলাইন হওক আৰু তাৰপিছত ফাইলত সোঁফালে ক্লিক কৰি <ph name="OFFLINE_CHECKBOX_NAME" /> বিকল্পটো বাছনি কৰক।</translation>
-<translation id="8231972167769262174"><ph name="REMAINING_TIME" />ৰ বিষয়ে</translation>
 <translation id="8249296373107784235">নিষ্ফল কৰক</translation>
 <translation id="8261506727792406068">মচক</translation>
 <translation id="8269755669432358899">ফাইলসমূহৰ প্ৰতিক্ৰিয়াৰ পেনেলটো সংকোচন কৰক</translation>
@@ -716,6 +719,7 @@
 <translation id="9065203028668620118">সম্পাদনা কৰক</translation>
 <translation id="9099674669267916096">পৃষ্ঠাৰ সংখ্যা</translation>
 <translation id="9110990317705400362">আমি আপোনাৰ ব্ৰাউজিং সুৰক্ষিত কৰিবলৈ সদায়েই উপায় বিচাৰি আছোঁ। পূৰ্বতে, যিকোনো ৱেবছাইটে আপোনাৰ ব্ৰাউজাৰত এক্সটেনশ্বন যোগ কৰিবলৈ আপোনাক প্ৰ’ম্প্‌ট কৰিব পাৰিছিল। Google Chromeৰ শেহতীয়া সংস্কৰণত আপুনি Chromeক স্পষ্টভাৱে ক’ব লাগিব যে আপুনি এক্সটেনশ্বন পৃষ্ঠাটোৰ জৰিয়তে এই এক্সটেনশ্বনসমূহ ইনষ্টল কৰিবলৈ বিচাৰে। <ph name="BEGIN_LINK" />অধিক জানক<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">আনলক</translation>
 <translation id="912419004897138677">ক’ডেক</translation>
 <translation id="9129931661813833980">ফ’ল্ডাৰ পিন কৰক</translation>
 <translation id="9130775360844693113">‘<ph name="DESTINATION_NAME" />’ৰ সদস্যসকলে এই বস্তুবোৰলৈ এক্সেছ পাব।</translation>

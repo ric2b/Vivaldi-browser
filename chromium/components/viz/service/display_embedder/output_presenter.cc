@@ -4,6 +4,8 @@
 
 #include "components/viz/service/display_embedder/output_presenter.h"
 
+#include <utility>
+
 #include "components/viz/service/display_embedder/skia_output_surface_dependency.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "third_party/skia/include/gpu/GrBackendSemaphore.h"
@@ -62,8 +64,10 @@ void OutputPresenter::Image::BeginWriteSkia() {
       gpu::SharedImageRepresentation::AllowUnclearedAccess::kYes);
   DCHECK(scoped_skia_write_access_);
   if (!begin_semaphores.empty()) {
-    scoped_skia_write_access_->surface()->wait(begin_semaphores.size(),
-                                               begin_semaphores.data());
+    scoped_skia_write_access_->surface()->wait(
+        begin_semaphores.size(),
+        begin_semaphores.data(),
+        /*deleteSemaphoresAfterWait=*/false);
   }
 }
 
@@ -85,12 +89,10 @@ void OutputPresenter::Image::EndWriteSkia() {
   DCHECK(scoped_skia_write_access_);
   if (!end_semaphores_.empty()) {
     GrFlushInfo flush_info = {
-        .fFlags = kNone_GrFlushFlags,
         .fNumSemaphores = end_semaphores_.size(),
         .fSignalSemaphores = end_semaphores_.data(),
     };
-    scoped_skia_write_access_->surface()->flush(
-        SkSurface::BackendSurfaceAccess::kNoAccess, flush_info);
+    scoped_skia_write_access_->surface()->flush(flush_info);
     DCHECK(scoped_skia_write_access_->surface()->getContext());
     scoped_skia_write_access_->surface()->getContext()->submit();
   }
@@ -101,6 +103,14 @@ void OutputPresenter::Image::EndWriteSkia() {
   skia_representation_->SetCleared();
 }
 
+void OutputPresenter::Image::PreGrContextSubmit() {
+  DCHECK(scoped_skia_write_access_);
+  if (scoped_skia_write_access_->end_state()) {
+    scoped_skia_write_access_->surface()->flush(
+        {}, scoped_skia_write_access_->end_state());
+  }
+}
+
 OutputPresenter::OverlayData::OverlayData(
     std::unique_ptr<gpu::SharedImageRepresentationOverlay> representation,
     std::unique_ptr<gpu::SharedImageRepresentationOverlay::ScopedReadAccess>
@@ -109,7 +119,30 @@ OutputPresenter::OverlayData::OverlayData(
       scoped_read_access_(std::move(scoped_read_access)) {}
 OutputPresenter::OverlayData::OverlayData(OverlayData&&) = default;
 OutputPresenter::OverlayData::~OverlayData() = default;
+
 OutputPresenter::OverlayData& OutputPresenter::OverlayData::operator=(
-    OverlayData&&) = default;
+    OverlayData&& other) {
+  // If the default assignment operator is called when |this| is populated, then
+  // the members will be moved in declared order. As a consequence,
+  // |this->representation_| will be overwritten and therefore deleted before
+  // |this_->scoped_read_access_|, which will cause a DCHECK (because scoped
+  // accesses may not outlive their representation).
+  scoped_read_access_ = std::move(other.scoped_read_access_);
+  representation_ = std::move(other.representation_);
+  return *this;
+}
+
+const gpu::Mailbox& OutputPresenter::OverlayData::mailbox() const {
+  return representation_->mailbox();
+}
+
+bool OutputPresenter::OverlayData::IsInUseByWindowServer() const {
+  if (!scoped_read_access_)
+    return false;
+  auto* gl_image = scoped_read_access_->gl_image();
+  if (!gl_image)
+    return false;
+  return gl_image->IsInUseByWindowServer();
+}
 
 }  // namespace viz

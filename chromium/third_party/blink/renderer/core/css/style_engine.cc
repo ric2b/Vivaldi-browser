@@ -115,8 +115,10 @@ StyleEngine::StyleEngine(Document& document)
   if (document.GetFrame()) {
     // We don't need to create CSSFontSelector for imported document or
     // HTMLTemplateElement's document, because those documents have no frame.
+    // Likewise for the StyleResolver.
     font_selector_ = CreateCSSFontSelectorFor(document);
     font_selector_->RegisterForInvalidationCallbacks(this);
+    resolver_ = MakeGarbageCollected<StyleResolver>(document);
   }
   if (document.IsInMainFrame())
     viewport_resolver_ = MakeGarbageCollected<ViewportStyleResolver>(document);
@@ -673,15 +675,12 @@ RuleSet* StyleEngine::RuleSetForSheet(CSSStyleSheet& sheet) {
     return nullptr;
 
   AddRuleFlags add_rule_flags = kRuleHasNoSpecialState;
-  if (document_->GetSecurityOrigin()->CanRequest(sheet.BaseURL()))
+  if (document_->GetExecutionContext()->GetSecurityOrigin()->CanRequest(
+          sheet.BaseURL())) {
     add_rule_flags = kRuleHasDocumentSecurityOrigin;
+  }
   return &sheet.Contents()->EnsureRuleSet(*media_query_evaluator_,
                                           add_rule_flags);
-}
-
-void StyleEngine::CreateResolver() {
-  resolver_ = MakeGarbageCollected<StyleResolver>(*document_);
-  resolver_->SetRuleUsageTracker(tracker_);
 }
 
 void StyleEngine::ClearResolvers() {
@@ -1491,6 +1490,7 @@ enum RuleSetFlags {
   kKeyframesRules = 1 << 1,
   kFullRecalcRules = 1 << 2,
   kPropertyRules = 1 << 3,
+  kScrollTimelineRules = 1 << 4,
 };
 
 unsigned GetRuleSetFlags(const HeapHashSet<Member<RuleSet>> rule_sets) {
@@ -1505,6 +1505,8 @@ unsigned GetRuleSetFlags(const HeapHashSet<Member<RuleSet>> rule_sets) {
       flags |= kFullRecalcRules;
     if (!rule_set->PropertyRules().IsEmpty())
       flags |= kPropertyRules;
+    if (!rule_set->ScrollTimelineRules().IsEmpty())
+      flags |= kScrollTimelineRules;
   }
   return flags;
 }
@@ -1655,6 +1657,20 @@ void StyleEngine::ApplyRuleSetChanges(
     }
   }
 
+  // TODO(crbug.com/1097055): Support user origin rules.
+  if (changed_rule_flags & kScrollTimelineRules) {
+    // @scroll-timeline rules are currently not allowed in shadow trees.
+    // https://drafts.csswg.org/scroll-animations-1/#scroll-timeline-at-rule
+    if (tree_scope.RootNode().IsDocumentNode()) {
+      scroll_timeline_map_.clear();
+
+      for (const ActiveStyleSheet& active_sheet : new_style_sheets) {
+        if (RuleSet* rule_set = active_sheet.second)
+          AddScrollTimelineRules(*rule_set);
+      }
+    }
+  }
+
   bool has_rebuilt_font_face_cache = false;
   if (rebuild_font_face_cache)
     has_rebuilt_font_face_cache = ClearFontFaceCacheAndAddUserFonts();
@@ -1759,11 +1775,10 @@ bool StyleEngine::UpdateRemUnits(const ComputedStyle* old_root_style,
     return false;
   if (!old_root_style || old_root_style->SpecifiedFontSize() !=
                              new_root_style->SpecifiedFontSize()) {
-    DCHECK(Resolver());
     // Resolved rem units are stored in the matched properties cache so we need
     // to make sure to invalidate the cache if the documentElement font size
     // changes.
-    Resolver()->InvalidateMatchedPropertiesCache();
+    GetStyleResolver().InvalidateMatchedPropertiesCache();
     return true;
   }
   return false;
@@ -1920,6 +1935,13 @@ void StyleEngine::AddPropertyRules(const RuleSet& rule_set) {
   }
 }
 
+void StyleEngine::AddScrollTimelineRules(const RuleSet& rule_set) {
+  const HeapVector<Member<StyleRuleScrollTimeline>> scroll_timeline_rules =
+      rule_set.ScrollTimelineRules();
+  for (const auto& rule : scroll_timeline_rules)
+    scroll_timeline_map_.Set(AtomicString(rule->GetName()), rule);
+}
+
 StyleRuleKeyframes* StyleEngine::KeyframeStylesForAnimation(
     const AtomicString& animation_name) {
   if (keyframes_rule_map_.IsEmpty())
@@ -1930,6 +1952,11 @@ StyleRuleKeyframes* StyleEngine::KeyframeStylesForAnimation(
     return nullptr;
 
   return it->value.Get();
+}
+
+StyleRuleScrollTimeline* StyleEngine::FindScrollTimelineRule(
+    const AtomicString& name) {
+  return scroll_timeline_map_.at(name);
 }
 
 DocumentStyleEnvironmentVariables& StyleEngine::EnsureEnvironmentVariables() {
@@ -2069,14 +2096,24 @@ void StyleEngine::UpdateStyleInvalidationRoot(ContainerNode* ancestor,
 
 void StyleEngine::UpdateStyleRecalcRoot(ContainerNode* ancestor,
                                         Node* dirty_node) {
-  if (GetDocument().IsActive()) {
-    DCHECK(!in_layout_tree_rebuild_);
-    if (in_dom_removal_) {
-      ancestor = nullptr;
-      dirty_node = document_;
-    }
-    style_recalc_root_.Update(ancestor, dirty_node);
+  if (!GetDocument().IsActive())
+    return;
+  // We have at least one instance where we mark style dirty from style recalc
+  // (from LayoutTextControl::StyleDidChange()). That means we are in the
+  // process of traversing down the tree from the recalc root. Any updates to
+  // the style recalc root will be cleared after the style recalc traversal
+  // finishes and updating it may just trigger sanity DCHECKs in
+  // StyleTraversalRoot. Just return here instead.
+  if (GetDocument().InStyleRecalc()) {
+    DCHECK(allow_mark_style_dirty_from_recalc_);
+    return;
   }
+  DCHECK(!in_layout_tree_rebuild_);
+  if (in_dom_removal_) {
+    ancestor = nullptr;
+    dirty_node = document_;
+  }
+  style_recalc_root_.Update(ancestor, dirty_node);
 }
 
 void StyleEngine::UpdateLayoutTreeRebuildRoot(ContainerNode* ancestor,
@@ -2187,7 +2224,7 @@ void StyleEngine::UpdateForcedBackgroundColor() {
 
 Color StyleEngine::ColorAdjustBackgroundColor() const {
   if (use_dark_background_ && forced_colors_ == ForcedColors::kNone)
-    return Color::kBlack;
+    return Color(0x12, 0x12, 0x12);
 
   DCHECK(forced_colors_ != ForcedColors::kNone);
   return ForcedBackgroundColor();
@@ -2205,14 +2242,7 @@ void StyleEngine::UpdateViewportStyle() {
 
   viewport_style_dirty_ = false;
 
-  // TODO(futhark@chromium.org): Cannot access the EnsureStyleResolver()
-  // before calling StyleForViewport() below because apparently the
-  // StyleResolver's constructor has side effects. We should fix it. See
-  // printing/setPrinting.html, printing/width-overflow.html though they only
-  // fail on mac when accessing the resolver by what appears to be a viewport
-  // size difference.
-  scoped_refptr<ComputedStyle> viewport_style =
-      StyleResolver::StyleForViewport(GetDocument());
+  scoped_refptr<ComputedStyle> viewport_style = resolver_->StyleForViewport();
   if (ComputedStyle::ComputeDifference(
           viewport_style.get(), GetDocument().GetLayoutView()->Style()) !=
       ComputedStyle::Difference::kEqual) {
@@ -2238,6 +2268,7 @@ void StyleEngine::Trace(Visitor* visitor) const {
   visitor->Trace(active_user_style_sheets_);
   visitor->Trace(custom_element_default_style_sheets_);
   visitor->Trace(keyframes_rule_map_);
+  visitor->Trace(scroll_timeline_map_);
   visitor->Trace(inspector_style_sheet_);
   visitor->Trace(document_style_sheet_collection_);
   visitor->Trace(style_sheet_collection_map_);

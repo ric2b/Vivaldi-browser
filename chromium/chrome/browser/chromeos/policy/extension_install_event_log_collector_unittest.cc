@@ -7,6 +7,8 @@
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -18,6 +20,8 @@
 #include "chromeos/network/network_handler.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/user_manager/scoped_user_manager.h"
+#include "components/user_manager/user_names.h"
 #include "content/public/test/browser_task_environment.h"
 #include "extensions/common/extension_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -35,6 +39,9 @@ constexpr char kWifiServicePath[] = "/service/wifi1";
 constexpr char kExtensionId1[] = "abcdefghijklmnopabcdefghijklmnop";
 
 constexpr char kExtensionName1[] = "name1";
+
+constexpr char kEmailId[] = "test@example.com";
+constexpr char kGaiaId[] = "12345";
 
 class FakeExtensionInstallEventLogCollectorDelegate
     : public ExtensionInstallEventLogCollector::Delegate {
@@ -164,6 +171,29 @@ class ExtensionInstallEventLogCollectorTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
   }
 
+  testing::AssertionResult VerifyEventAddedSuccessfully(
+      int expected_add_count,
+      int expected_add_all_count) {
+    if (expected_add_count != delegate()->add_count()) {
+      return testing::AssertionFailure()
+             << "Expected add count: " << expected_add_count
+             << " but actual add count: " << delegate()->add_count();
+    }
+    if (expected_add_all_count != delegate()->add_for_all_count()) {
+      return testing::AssertionFailure()
+             << "Expected add all count: " << expected_add_all_count
+             << " but actual add all count: "
+             << delegate()->add_for_all_count();
+    }
+    if (delegate()->last_request().extension_id != kExtensionId1) {
+      return testing::AssertionFailure()
+             << "Expected extension id: " << kExtensionId1
+             << " but actual extension id: "
+             << delegate()->last_request().extension_id;
+    }
+    return testing::AssertionSuccess();
+  }
+
   TestingProfile* profile() { return profile_.get(); }
   extensions::ExtensionRegistry* registry() { return registry_; }
   FakeExtensionInstallEventLogCollectorDelegate* delegate() {
@@ -195,6 +225,18 @@ TEST_F(ExtensionInstallEventLogCollectorTest, NoEventsByDefault) {
 }
 
 TEST_F(ExtensionInstallEventLogCollectorTest, LoginLogout) {
+  chromeos::FakeChromeUserManager* fake_user_manager =
+      new chromeos::FakeChromeUserManager();
+  user_manager::ScopedUserManager scoped_user_manager(
+      base::WrapUnique(fake_user_manager));
+  AccountId account_id = AccountId::FromUserEmailGaiaId(kEmailId, kGaiaId);
+  user_manager::User* user =
+      fake_user_manager->AddUserWithAffiliationAndTypeAndProfile(
+          account_id, false /*is_affiliated*/, user_manager::USER_TYPE_REGULAR,
+          profile());
+  fake_user_manager->UserLoggedIn(account_id, user->username_hash(),
+                                  false /* browser_restart */,
+                                  false /* is_child */);
   std::unique_ptr<ExtensionInstallEventLogCollector> collector =
       std::make_unique<ExtensionInstallEventLogCollector>(
           registry(), delegate(), profile());
@@ -207,24 +249,26 @@ TEST_F(ExtensionInstallEventLogCollectorTest, LoginLogout) {
             delegate()->last_event().event_type());
   EXPECT_EQ(em::ExtensionInstallReportLogEvent::LOGIN,
             delegate()->last_event().session_state_change_type());
+  EXPECT_EQ(em::ExtensionInstallReportLogEvent::USER_TYPE_REGULAR,
+            delegate()->last_event().user_type());
+  EXPECT_EQ(true, delegate()->last_event().is_new_user());
   EXPECT_TRUE(delegate()->last_event().has_online());
   EXPECT_FALSE(delegate()->last_event().online());
-
-  collector->AddLogoutEvent();
-  EXPECT_EQ(2, delegate()->add_for_all_count());
-  EXPECT_EQ(em::ExtensionInstallReportLogEvent::SESSION_STATE_CHANGE,
-            delegate()->last_event().event_type());
-  EXPECT_EQ(em::ExtensionInstallReportLogEvent::LOGOUT,
-            delegate()->last_event().session_state_change_type());
-  EXPECT_FALSE(delegate()->last_event().has_online());
-
-  collector.reset();
-
-  EXPECT_EQ(2, delegate()->add_for_all_count());
-  EXPECT_EQ(0, delegate()->add_count());
 }
 
 TEST_F(ExtensionInstallEventLogCollectorTest, LoginTypes) {
+  chromeos::FakeChromeUserManager* fake_user_manager =
+      new chromeos::FakeChromeUserManager();
+  user_manager::ScopedUserManager scoped_user_manager(
+      base::WrapUnique(fake_user_manager));
+  AccountId account_id = AccountId::FromUserEmailGaiaId(kEmailId, kGaiaId);
+  user_manager::User* user =
+      fake_user_manager->AddUserWithAffiliationAndTypeAndProfile(
+          account_id, false /*is_affiliated*/, user_manager::USER_TYPE_REGULAR,
+          profile());
+  fake_user_manager->UserLoggedIn(account_id, user->username_hash(),
+                                  false /* browser_restart */,
+                                  false /* is_child */);
   {
     ExtensionInstallEventLogCollector collector(registry(), delegate(),
                                                 profile());
@@ -234,6 +278,9 @@ TEST_F(ExtensionInstallEventLogCollectorTest, LoginTypes) {
               delegate()->last_event().event_type());
     EXPECT_EQ(em::ExtensionInstallReportLogEvent::LOGIN,
               delegate()->last_event().session_state_change_type());
+    EXPECT_EQ(em::ExtensionInstallReportLogEvent::USER_TYPE_REGULAR,
+              delegate()->last_event().user_type());
+    EXPECT_EQ(true, delegate()->last_event().is_new_user());
     EXPECT_TRUE(delegate()->last_event().has_online());
     EXPECT_FALSE(delegate()->last_event().online());
   }
@@ -295,6 +342,18 @@ TEST_F(ExtensionInstallEventLogCollectorTest, SuspendResume) {
 // Then, pass the captive portal. Verify that a connectivity change is recorded.
 TEST_F(ExtensionInstallEventLogCollectorTest, ConnectivityChanges) {
   SetNetworkState(nullptr, kEthernetServicePath, shill::kStateOnline);
+  chromeos::FakeChromeUserManager* fake_user_manager =
+      new chromeos::FakeChromeUserManager();
+  user_manager::ScopedUserManager scoped_user_manager(
+      base::WrapUnique(fake_user_manager));
+  AccountId account_id = AccountId::FromUserEmailGaiaId(kEmailId, kGaiaId);
+  user_manager::User* user =
+      fake_user_manager->AddUserWithAffiliationAndTypeAndProfile(
+          account_id, false /*is_affiliated*/, user_manager::USER_TYPE_REGULAR,
+          profile());
+  fake_user_manager->UserLoggedIn(account_id, user->username_hash(),
+                                  false /* browser_restart */,
+                                  false /* is_child */);
 
   std::unique_ptr<ExtensionInstallEventLogCollector> collector =
       std::make_unique<ExtensionInstallEventLogCollector>(
@@ -308,6 +367,9 @@ TEST_F(ExtensionInstallEventLogCollectorTest, ConnectivityChanges) {
             delegate()->last_event().event_type());
   EXPECT_EQ(em::ExtensionInstallReportLogEvent::LOGIN,
             delegate()->last_event().session_state_change_type());
+  EXPECT_EQ(em::ExtensionInstallReportLogEvent::USER_TYPE_REGULAR,
+            delegate()->last_event().user_type());
+  EXPECT_EQ(true, delegate()->last_event().is_new_user());
   EXPECT_TRUE(delegate()->last_event().online());
 
   SetNetworkState(collector.get(), kWifiServicePath, shill::kStateOnline);
@@ -347,11 +409,37 @@ TEST_F(ExtensionInstallEventLogCollectorTest, ExtensionInstallFailed) {
   collector->OnExtensionInstallationFailed(
       kExtensionId1,
       extensions::InstallStageTracker::FailureReason::CRX_FETCH_URL_EMPTY);
-  ASSERT_EQ(1, delegate()->add_count());
-  ASSERT_EQ(0, delegate()->add_for_all_count());
-  EXPECT_EQ(kExtensionId1, delegate()->last_request().extension_id);
+  ASSERT_TRUE(VerifyEventAddedSuccessfully(1 /*expected_add_count*/,
+                                           0 /*expected_add_all_count*/));
   EXPECT_EQ(em::ExtensionInstallReportLogEvent::INSTALLATION_FAILED,
             delegate()->last_request().event.event_type());
+  EXPECT_EQ(em::ExtensionInstallReportLogEvent::CRX_FETCH_URL_EMPTY,
+            delegate()->last_request().event.failure_reason());
+}
+
+// Simulate failure after unpacking, so extension type should be reported.
+TEST_F(ExtensionInstallEventLogCollectorTest, ExtensionInstallFailedWithType) {
+  std::unique_ptr<ExtensionInstallEventLogCollector> collector =
+      std::make_unique<ExtensionInstallEventLogCollector>(
+          registry(), delegate(), profile());
+
+  extensions::InstallStageTracker* tracker =
+      extensions::InstallStageTracker::Get(profile());
+
+  // One extension failed.
+  tracker->ReportExtensionType(kExtensionId1,
+                               extensions::Manifest::TYPE_LEGACY_PACKAGED_APP);
+  tracker->ReportFailure(kExtensionId1,
+                         extensions::InstallStageTracker::FailureReason::
+                             CRX_INSTALL_ERROR_DECLINED);
+  ASSERT_TRUE(VerifyEventAddedSuccessfully(1 /*expected_add_count*/,
+                                           0 /*expected_add_all_count*/));
+  EXPECT_EQ(em::ExtensionInstallReportLogEvent::INSTALLATION_FAILED,
+            delegate()->last_request().event.event_type());
+  EXPECT_EQ(em::ExtensionInstallReportLogEvent::CRX_INSTALL_ERROR_DECLINED,
+            delegate()->last_request().event.failure_reason());
+  EXPECT_EQ(em::Extension::TYPE_LEGACY_PACKAGED_APP,
+            delegate()->last_request().event.extension_type());
 }
 
 TEST_F(ExtensionInstallEventLogCollectorTest, InstallExtension) {
@@ -364,11 +452,75 @@ TEST_F(ExtensionInstallEventLogCollectorTest, InstallExtension) {
                  .SetID(kExtensionId1)
                  .Build();
   collector->OnExtensionLoaded(profile(), ext.get());
-  ASSERT_EQ(1, delegate()->add_count());
-  ASSERT_EQ(0, delegate()->add_for_all_count());
-  EXPECT_EQ(kExtensionId1, delegate()->last_request().extension_id);
+  ASSERT_TRUE(VerifyEventAddedSuccessfully(1 /*expected_add_count*/,
+                                           0 /*expected_add_all_count*/));
   EXPECT_EQ(em::ExtensionInstallReportLogEvent::SUCCESS,
             delegate()->last_request().event.event_type());
+  EXPECT_EQ(em::Extension::TYPE_EXTENSION,
+            delegate()->last_request().event.extension_type());
+}
+
+// Verifies that a new event is created when the installation stage is changed
+// during the installation process.
+TEST_F(ExtensionInstallEventLogCollectorTest, InstallationStageChanged) {
+  std::unique_ptr<ExtensionInstallEventLogCollector> collector =
+      std::make_unique<ExtensionInstallEventLogCollector>(
+          registry(), delegate(), profile());
+
+  // One extension installation succeeded.
+  auto ext = extensions::ExtensionBuilder(kExtensionName1)
+                 .SetID(kExtensionId1)
+                 .Build();
+  collector->OnExtensionInstallationStageChanged(
+      kExtensionId1, extensions::InstallStageTracker::Stage::DOWNLOADING);
+  ASSERT_TRUE(VerifyEventAddedSuccessfully(1 /*expected_add_count*/,
+                                           0 /*expected_add_all_count*/));
+  EXPECT_EQ(em::ExtensionInstallReportLogEvent::DOWNLOADING,
+            delegate()->last_request().event.installation_stage());
+  collector->OnExtensionInstallationStageChanged(
+      kExtensionId1, extensions::InstallStageTracker::Stage::INSTALLING);
+  EXPECT_EQ(em::ExtensionInstallReportLogEvent::INSTALLING,
+            delegate()->last_request().event.installation_stage());
+  ASSERT_TRUE(VerifyEventAddedSuccessfully(2 /*expected_add_count*/,
+                                           0 /*expected_add_all_count*/));
+}
+
+// Verifies that a new event is created when the downloading stage is changed
+// during the downloading process.
+TEST_F(ExtensionInstallEventLogCollectorTest, DownloadingStageChanged) {
+  std::unique_ptr<ExtensionInstallEventLogCollector> collector =
+      std::make_unique<ExtensionInstallEventLogCollector>(
+          registry(), delegate(), profile());
+
+  auto ext = extensions::ExtensionBuilder(kExtensionName1)
+                 .SetID(kExtensionId1)
+                 .Build();
+  collector->OnExtensionDownloadingStageChanged(
+      kExtensionId1, extensions::ExtensionDownloaderDelegate::Stage::PENDING);
+  ASSERT_TRUE(VerifyEventAddedSuccessfully(1 /*expected_add_count*/,
+                                           0 /*expected_add_all_count*/));
+  EXPECT_EQ(em::ExtensionInstallReportLogEvent::DOWNLOAD_PENDING,
+            delegate()->last_request().event.downloading_stage());
+  collector->OnExtensionDownloadingStageChanged(
+      kExtensionId1,
+      extensions::ExtensionDownloaderDelegate::Stage::DOWNLOADING_MANIFEST);
+  ASSERT_TRUE(VerifyEventAddedSuccessfully(2 /*expected_add_count*/,
+                                           0 /*expected_add_all_count*/));
+  EXPECT_EQ(em::ExtensionInstallReportLogEvent::DOWNLOADING_MANIFEST,
+            delegate()->last_request().event.downloading_stage());
+  collector->OnExtensionDownloadingStageChanged(
+      kExtensionId1,
+      extensions::ExtensionDownloaderDelegate::Stage::DOWNLOADING_CRX);
+  ASSERT_TRUE(VerifyEventAddedSuccessfully(3 /*expected_add_count*/,
+                                           0 /*expected_add_all_count*/));
+  EXPECT_EQ(em::ExtensionInstallReportLogEvent::DOWNLOADING_CRX,
+            delegate()->last_request().event.downloading_stage());
+  collector->OnExtensionDownloadingStageChanged(
+      kExtensionId1, extensions::ExtensionDownloaderDelegate::Stage::FINISHED);
+  ASSERT_TRUE(VerifyEventAddedSuccessfully(4 /*expected_add_count*/,
+                                           0 /*expected_add_all_count*/));
+  EXPECT_EQ(em::ExtensionInstallReportLogEvent::FINISHED,
+            delegate()->last_request().event.downloading_stage());
 }
 
 }  // namespace policy

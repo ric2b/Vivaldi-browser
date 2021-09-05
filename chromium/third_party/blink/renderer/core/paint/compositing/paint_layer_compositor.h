@@ -32,6 +32,7 @@
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
 #include "third_party/blink/renderer/core/paint/compositing/compositing_inputs_root.h"
 #include "third_party/blink/renderer/core/paint/compositing/compositing_reason_finder.h"
+#include "third_party/blink/renderer/core/paint/compositing/compositing_update_type.h"
 
 namespace blink {
 
@@ -42,13 +43,6 @@ class LayoutView;
 class Page;
 class Scrollbar;
 class ScrollingCoordinator;
-
-enum CompositingUpdateType {
-  kCompositingUpdateNone,
-  kCompositingUpdateAfterGeometryChange,
-  kCompositingUpdateAfterCompositingInputChange,
-  kCompositingUpdateRebuildTree,
-};
 
 enum CompositingStateTransitionType {
   kNoCompositingStateChange,
@@ -81,7 +75,10 @@ class CORE_EXPORT PaintLayerCompositor {
   // pointers out of this object become invalid.
   void CleanUp();
 
-  void UpdateIfNeededRecursive(DocumentLifecycle::LifecycleState target_state);
+  void UpdateInputsIfNeededRecursive(
+      DocumentLifecycle::LifecycleState target_state);
+  void UpdateAssignmentsIfNeededRecursive(
+      DocumentLifecycle::LifecycleState target_state);
 
   // Return true if this LayoutView is in "compositing mode" (i.e. has one or
   // more composited Layers)
@@ -97,7 +94,11 @@ class CORE_EXPORT PaintLayerCompositor {
   void UpdateAcceleratedCompositingSettings();
 
   // Used to indicate that a compositing update will be needed for the next
-  // frame that gets drawn.
+  // frame that gets drawn. If called from before the compositing inputs
+  // step has run, and the type is > kCompositingUpdateNone, compositing
+  // inputs will be re-computed. If called during pre-paint (which is after
+  // compositing inputs and before the rest of compositing), it will cause
+  // the rest of compositing to run, but not compositing inputs.
   void SetNeedsCompositingUpdate(CompositingUpdateType);
 
   // Whether the given layer needs an extra 'contents' layer.
@@ -105,7 +106,7 @@ class CORE_EXPORT PaintLayerCompositor {
 
   // Issue paint invalidations of the appropriate layers when the given Layer
   // starts or stops being composited.
-  void PaintInvalidationOnCompositingChange(PaintLayer*);
+  static void PaintInvalidationOnCompositingChange(PaintLayer*);
 
   void FullyInvalidatePaint();
 
@@ -151,23 +152,21 @@ class CORE_EXPORT PaintLayerCompositor {
     compositing_inputs_root_.Update(layer);
   }
 
-  void ForceRecomputeVisualRectsIncludingNonCompositingDescendants(
-      LayoutObject&);
-
  private:
 #if DCHECK_IS_ON()
   void AssertNoUnresolvedDirtyBits();
 #endif
 
-  void UpdateIfNeededRecursiveInternal(
+  void UpdateAssignmentsIfNeededRecursiveInternal(
       DocumentLifecycle::LifecycleState target_state,
       CompositingReasonsStats&);
+  void UpdateInputsIfNeededRecursiveInternal(
+      DocumentLifecycle::LifecycleState target_state);
 
-  void UpdateWithoutAcceleratedCompositing(CompositingUpdateType);
-  void UpdateIfNeeded(DocumentLifecycle::LifecycleState target_state,
-                      CompositingReasonsStats&);
+  void UpdateAssignmentsIfNeeded(DocumentLifecycle::LifecycleState target_state,
+                                 CompositingReasonsStats&);
 
-  void SetOwnerNeedsCompositingUpdate();
+  void SetOwnerNeedsCompositingInputsUpdate();
 
   Page* GetPage() const;
 
@@ -180,7 +179,7 @@ class CORE_EXPORT PaintLayerCompositor {
 
   bool IsMainFrame() const;
 
-  LayoutView& layout_view_;
+  LayoutView* const layout_view_;
 
   bool compositing_ = false;
   bool root_layer_attachment_dirty_ = false;

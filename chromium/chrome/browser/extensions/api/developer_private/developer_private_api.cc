@@ -113,8 +113,6 @@ namespace developer = api::developer_private;
 namespace {
 
 const char kNoSuchExtensionError[] = "No such extension.";
-const char kCannotModifyPolicyExtensionError[] =
-    "Cannot modify the extension by policy.";
 const char kRequiresUserGestureError[] =
     "This action requires a user gesture.";
 const char kCouldNotShowSelectFileDialogError[] =
@@ -185,23 +183,6 @@ void GetManifestError(const std::string& error,
       base::BindOnce(&ReadFileToString,
                      extension_path.Append(kManifestFilename)),
       base::BindOnce(std::move(callback), extension_path, error, line));
-}
-
-bool UserCanModifyExtensionConfiguration(
-    const Extension* extension,
-    content::BrowserContext* browser_context,
-    std::string* error) {
-  ManagementPolicy* management_policy =
-      ExtensionSystem::Get(browser_context)->management_policy();
-  if (!management_policy->UserMayModifySettings(extension, nullptr)) {
-    LOG(ERROR) << "Attempt to change settings of an extension that is "
-               << "non-usermanagable was made. Extension id : "
-               << extension->id();
-    *error = kCannotModifyPolicyExtensionError;
-    return false;
-  }
-
-  return true;
 }
 
 // Runs the install verifier for all extensions that are enabled, disabled, or
@@ -911,12 +892,6 @@ DeveloperPrivateUpdateExtensionConfigurationFunction::Run() {
     return RespondNow(Error(kRequiresUserGestureError));
 
   if (update.file_access) {
-    std::string error;
-    if (!UserCanModifyExtensionConfiguration(extension,
-                                             browser_context(),
-                                             &error)) {
-      return RespondNow(Error(std::move(error)));
-    }
     util::SetAllowFileAccess(
         extension->id(), browser_context(), *update.file_access);
   }
@@ -1108,7 +1083,7 @@ ExtensionFunction::ResponseAction DeveloperPrivateLoadUnpackedFunction::Run() {
         Error("Must be in developer mode to load unpacked extensions."));
   }
   if (ExtensionManagementFactory::GetForBrowserContext(browser_context())
-          ->BlacklistedByDefault()) {
+          ->BlocklistedByDefault()) {
     return RespondNow(Error("Extension installation is blocked by policy."));
   }
 
@@ -1490,7 +1465,7 @@ void DeveloperPrivateLoadDirectoryFunction::Load() {
 void DeveloperPrivateLoadDirectoryFunction::ClearExistingDirectoryContent(
     const base::FilePath& project_path) {
   // Clear the project directory before copying new files.
-  base::DeleteFileRecursively(project_path);
+  base::DeletePathRecursively(project_path);
 
   pending_copy_operations_count_ = 1;
 
@@ -1776,7 +1751,7 @@ DeveloperPrivateOpenDevToolsFunction::Run() {
 
     Profile* profile = Profile::FromBrowserContext(browser_context());
     if (properties.incognito && *properties.incognito)
-      profile = profile->GetOffTheRecordProfile();
+      profile = profile->GetPrimaryOTRProfile();
 
     // Wakes up the background page and opens the inspect window.
     devtools_util::InspectBackgroundPage(extension, profile);

@@ -42,7 +42,7 @@
 
 namespace blink {
 
-class DisplayItemClient;
+class CaretDisplayItemClient;
 class Element;
 class LayoutBlock;
 class LayoutText;
@@ -126,8 +126,6 @@ struct LayoutTextSelectionStatus {
 class CORE_EXPORT FrameSelection final
     : public GarbageCollected<FrameSelection>,
       public SynchronousMutationObserver {
-  USING_GARBAGE_COLLECTED_MIXIN(FrameSelection);
-
  public:
   explicit FrameSelection(LocalFrame&);
   ~FrameSelection();
@@ -221,7 +219,6 @@ class CORE_EXPORT FrameSelection final
   void ScheduleVisualUpdateForPaintInvalidationIfNeeded() const;
 
   // Paint invalidation methods delegating to FrameCaret.
-  void ClearPreviousCaretVisualRect(const LayoutBlock&);
   void LayoutBlockWillBeDestroyed(const LayoutBlock&);
   void UpdateStyleAndLayoutIfNeeded();
   void InvalidatePaint(const LayoutBlock&, const PaintInvalidatorContext&);
@@ -295,11 +292,7 @@ class CORE_EXPORT FrameSelection final
   friend class PaintControllerPaintTestBase;
   friend class SelectionControllerTest;
 
-  const DisplayItemClient& CaretDisplayItemClientForTesting() const;
-
-  // Note: We have |selectionInFlatTree()| for unit tests, we should
-  // use |visibleSelection<EditingInFlatTreeStrategy>()|.
-  VisibleSelectionInFlatTree GetSelectionInFlatTree() const;
+  const CaretDisplayItemClient& CaretDisplayItemClientForTesting() const;
 
   void NotifyAccessibilityForSelectionChange();
   void NotifyCompositorForSelectionChange();

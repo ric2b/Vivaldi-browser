@@ -37,9 +37,9 @@
     if (base::StringToInt(delayString, &commandLineDelay)) {
       std::vector<base::Value> parameters;
       parameters.push_back(base::Value(commandLineDelay));
-      autofill::ExecuteJavaScriptFunction(
-          "autofill.setDelay", parameters, frame,
-          base::OnceCallback<void(NSString*)>());
+      autofill::ExecuteJavaScriptFunction("autofill.setDelay", parameters,
+                                          frame,
+                                          autofill::JavaScriptResultCallback());
     }
   }
 }
@@ -55,8 +55,9 @@
   std::vector<base::Value> parameters;
   parameters.push_back(base::Value(static_cast<int>(requiredFieldsCount)));
   parameters.push_back(base::Value(restrictUnownedFieldsToFormlessCheckout));
-  autofill::ExecuteJavaScriptFunction("autofill.extractForms", parameters,
-                                      frame, base::BindOnce(completionHandler));
+  autofill::ExecuteJavaScriptFunction(
+      "autofill.extractForms", parameters, frame,
+      autofill::CreateStringCallback(completionHandler));
 }
 
 #pragma mark -
@@ -64,15 +65,13 @@
 
 - (void)fillActiveFormField:(std::unique_ptr<base::Value>)data
                     inFrame:(web::WebFrame*)frame
-          completionHandler:(ProceduralBlock)completionHandler {
+          completionHandler:(void (^)(BOOL))completionHandler {
   DCHECK(data);
   std::vector<base::Value> parameters;
   parameters.push_back(std::move(*data));
-  autofill::ExecuteJavaScriptFunction("autofill.fillActiveFormField",
-                                      parameters, frame,
-                                      base::BindOnce(^(NSString*) {
-                                        completionHandler();
-                                      }));
+  autofill::ExecuteJavaScriptFunction(
+      "autofill.fillActiveFormField", parameters, frame,
+      autofill::CreateBoolCallback(completionHandler));
 }
 
 - (void)toggleTrackingFormMutations:(BOOL)state inFrame:(web::WebFrame*)frame {
@@ -80,7 +79,7 @@
   parameters.push_back(base::Value(state ? 200 : 0));
   autofill::ExecuteJavaScriptFunction("formHandlers.trackFormMutations",
                                       parameters, frame,
-                                      base::OnceCallback<void(NSString*)>());
+                                      autofill::JavaScriptResultCallback());
 }
 
 - (void)toggleTrackingUserEditedFields:(BOOL)state
@@ -89,13 +88,13 @@
   parameters.push_back(base::Value(static_cast<bool>(state)));
   autofill::ExecuteJavaScriptFunction(
       "formHandlers.toggleTrackingUserEditedFields", parameters, frame,
-      base::OnceCallback<void(NSString*)>());
+      autofill::JavaScriptResultCallback());
 }
 
 - (void)fillForm:(std::unique_ptr<base::Value>)data
     forceFillFieldIdentifier:(NSString*)forceFillFieldIdentifier
                      inFrame:(web::WebFrame*)frame
-           completionHandler:(ProceduralBlock)completionHandler {
+           completionHandler:(void (^)(NSString*))completionHandler {
   DCHECK(data);
   DCHECK(completionHandler);
   std::string fieldIdentifier =
@@ -105,25 +104,23 @@
   std::vector<base::Value> parameters;
   parameters.push_back(std::move(*data));
   parameters.push_back(base::Value(fieldIdentifier));
-  autofill::ExecuteJavaScriptFunction("autofill.fillForm", parameters, frame,
-                                      base::BindOnce(^(NSString*) {
-                                        completionHandler();
-                                      }));
+  autofill::ExecuteJavaScriptFunction(
+      "autofill.fillForm", parameters, frame,
+      autofill::CreateStringCallback(completionHandler));
 }
 
 - (void)clearAutofilledFieldsForFormName:(NSString*)formName
                          fieldIdentifier:(NSString*)fieldIdentifier
                                  inFrame:(web::WebFrame*)frame
-                       completionHandler:(ProceduralBlock)completionHandler {
+                       completionHandler:
+                           (void (^)(NSString*))completionHandler {
   DCHECK(completionHandler);
   std::vector<base::Value> parameters;
   parameters.push_back(base::Value(base::SysNSStringToUTF8(formName)));
   parameters.push_back(base::Value(base::SysNSStringToUTF8(fieldIdentifier)));
-  autofill::ExecuteJavaScriptFunction("autofill.clearAutofilledFields",
-                                      parameters, frame,
-                                      base::BindOnce(^(NSString*) {
-                                        completionHandler();
-                                      }));
+  autofill::ExecuteJavaScriptFunction(
+      "autofill.clearAutofilledFields", parameters, frame,
+      autofill::CreateStringCallback(completionHandler));
 }
 
 - (void)fillPredictionData:(std::unique_ptr<base::Value>)data
@@ -133,7 +130,7 @@
   parameters.push_back(std::move(*data));
   autofill::ExecuteJavaScriptFunction("autofill.fillPredictionData", parameters,
                                       frame,
-                                      base::OnceCallback<void(NSString*)>());
+                                      autofill::JavaScriptResultCallback());
 }
 
 @end

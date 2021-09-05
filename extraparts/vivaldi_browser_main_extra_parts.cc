@@ -25,10 +25,12 @@
 #include "components/datasource/vivaldi_data_source_api.h"
 #include "components/translate/core/browser/translate_language_list.h"
 #include "contact/contact_service_factory.h"
+#include "content/public/browser/web_ui_controller_factory.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/buildflags/buildflags.h"
 #include "notes/notes_factory.h"
 #include "ui/lazy_load_service_factory.h"
+#include "ui/webui/vivaldi_web_ui_controller_factory.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/api/bookmark_context_menu/bookmark_context_menu_api.h"
@@ -65,18 +67,15 @@ VivaldiBrowserMainExtraParts::~VivaldiBrowserMainExtraParts() {}
 
 // Overridden from ChromeBrowserMainExtraParts:
 void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
-  if (!vivaldi::IsVivaldiRunning()) {
-    return;
-  }
   stats_reporter_ = vivaldi::StatsReporter::CreateInstance();
-#if defined(OS_LINUX) || defined(OS_MACOSX)
+#if defined(OS_LINUX) || defined(OS_MAC)
   base::FilePath messaging(
     // Hardcoded from chromium/chrome/common/chrome_paths.cc
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     FILE_PATH_LITERAL("/Library/Google/Chrome/NativeMessagingHosts")
-#else   // OS_MACOSX
+#else   // OS_MAC
     FILE_PATH_LITERAL("/etc/opt/chrome/native-messaging-hosts")
-#endif  // OS_MACOSX
+#endif  // OS_MAC
   );
   base::PathService::Override(chrome::DIR_NATIVE_MESSAGING, messaging);
 #endif
@@ -107,6 +106,7 @@ void VivaldiBrowserMainExtraParts::
   calendar::CalendarServiceFactory::GetInstance();
   contact::ContactServiceFactory::GetInstance();
 #endif
+  VivaldiDataSourcesAPI::InitFactory();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::BookmarkContextMenuAPI::GetFactoryInstance();
   extensions::CalendarAPI::GetFactoryInstance();
@@ -121,7 +121,6 @@ void VivaldiBrowserMainExtraParts::
   extensions::TabsPrivateAPI::GetFactoryInstance();
   extensions::SyncAPI::GetFactoryInstance();
   extensions::VivaldiAccountAPI::GetFactoryInstance();
-  extensions::VivaldiDataSourcesAPI::InitFactory();
   extensions::VivaldiExtensionInit::GetFactoryInstance();
   extensions::VivaldiPrefsApiNotificationFactory::GetInstance();
   extensions::VivaldiRuntimeFeaturesFactory::GetInstance();
@@ -131,8 +130,6 @@ void VivaldiBrowserMainExtraParts::
   extensions::HistoryPrivateAPI::GetFactoryInstance();
 #endif
   VivaldiAdverseAdFilterListFactory::GetFactoryInstance();
-  if (!vivaldi::IsVivaldiRunning())
-    return;
 
 #if !defined(OS_ANDROID)
   vivaldi::LazyLoadServiceFactory::GetInstance();
@@ -144,10 +141,10 @@ void VivaldiBrowserMainExtraParts::PreProfileInit() {
 }
 
 void VivaldiBrowserMainExtraParts::PostProfileInit() {
-#if !defined(OS_ANDROID)
-  if (!vivaldi::IsVivaldiRunning())
-    return;
+  content::WebUIControllerFactory::RegisterFactory(
+    vivaldi::VivaldiWebUIControllerFactory::GetInstance());
 
+#if !defined(OS_ANDROID)
   vivaldi::CommandLineAppendSwitchNoDup(base::CommandLine::ForCurrentProcess(),
                                         switches::kSavePageAsMHTML);
 
@@ -192,7 +189,5 @@ void VivaldiBrowserMainExtraParts::PostProfileInit() {
                                                      default_setting);
     }
   }
-
 #endif //OS_ANDROID
-
 }

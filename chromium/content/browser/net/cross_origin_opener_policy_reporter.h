@@ -11,12 +11,13 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/global_routing_id.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
-#include "services/network/public/mojom/cross_origin_embedder_policy.mojom.h"
 #include "services/network/public/mojom/cross_origin_opener_policy.mojom.h"
+#include "services/network/public/mojom/source_location.mojom-forward.h"
 #include "url/gurl.h"
 
 namespace content {
 
+class FrameTreeNode;
 class StoragePartition;
 class RenderFrameHostImpl;
 
@@ -31,60 +32,64 @@ class RenderFrameHostImpl;
 class CONTENT_EXPORT CrossOriginOpenerPolicyReporter final
     : public network::mojom::CrossOriginOpenerPolicyReporter {
  public:
-  CrossOriginOpenerPolicyReporter(
-      StoragePartition* storage_partition,
-      RenderFrameHostImpl* current_frame_host,
-      const GURL& context_url,
-      const network::CrossOriginOpenerPolicy& coop,
-      const network::CrossOriginEmbedderPolicy& coep);
+  CrossOriginOpenerPolicyReporter(StoragePartition* storage_partition,
+                                  const GURL& context_url,
+                                  const network::CrossOriginOpenerPolicy& coop);
   ~CrossOriginOpenerPolicyReporter() override;
   CrossOriginOpenerPolicyReporter(const CrossOriginOpenerPolicyReporter&) =
       delete;
   CrossOriginOpenerPolicyReporter& operator=(
       const CrossOriginOpenerPolicyReporter&) = delete;
 
+  void set_storage_partition(StoragePartition* storage_partition) {
+    storage_partition_ = storage_partition;
+  }
+
   // network::mojom::CrossOriginOpenerPolicyReporter implementation.
-  void QueueOpenerBreakageReport(const GURL& other_url,
-                                 bool is_reported_from_document,
-                                 bool is_report_only) override;
+  void QueueAccessReport(
+      network::mojom::CoopAccessReportType report_type,
+      const std::string& property,
+      network::mojom::SourceLocationPtr source_location) final;
 
-  // Returns the "previous" URL that is safe to expose.
-  // Reference, "Next document URL for reporting" section:
-  // https://github.com/camillelamy/explainers/blob/master/coop_reporting.md#safe-urls-for-reporting
-  GURL GetPreviousDocumentUrlForReporting(
-      const std::vector<GURL>& redirect_chain,
-      const GURL& referrer_url);
+  // Sends reports when COOP causing a browsing context group switch that
+  // breaks opener relationships.
+  void QueueNavigationToCOOPReport(const GURL& previous_url,
+                                   const GURL& referrer_url,
+                                   bool same_origin_with_previous,
+                                   bool is_report_only);
+  void QueueNavigationAwayFromCOOPReport(const GURL& next_url,
+                                         bool is_current_source,
+                                         bool same_origin_with_next,
+                                         bool is_report_only);
 
-  // Returns the "next" URL that is safe to expose.
-  // Reference, "Next document URL for reporting" section:
-  // https://github.com/camillelamy/explainers/blob/master/coop_reporting.md#safe-urls-for-reporting
-  GURL GetNextDocumentUrlForReporting(
-      const std::vector<GURL>& redirect_chain,
-      const GlobalFrameRoutingId& initiator_routing_id);
+  // For every other window in the same browsing context group, but in a
+  // different virtual browsing context group, install the necessary
+  // CoopAccessMonitor. The first window is identified by |node|.
+  static void InstallAccessMonitorsIfNeeded(FrameTreeNode* node);
 
   void Clone(
       mojo::PendingReceiver<network::mojom::CrossOriginOpenerPolicyReporter>
           receiver) override;
 
- private:
-  friend class CrossOriginOpenerPolicyReporterTest;
+  // Generate a new, previously unused, virtualBrowsingContextId.
+  static int NextVirtualBrowsingContextGroup();
 
-  // Used in unit_tests that do not have access to a RenderFrameHost.
-  CrossOriginOpenerPolicyReporter(
-      StoragePartition* storage_partition,
-      const GURL& source_url,
-      const GlobalFrameRoutingId source_routing_id,
-      const GURL& context_url,
-      const network::CrossOriginOpenerPolicy& coop,
-      const network::CrossOriginEmbedderPolicy& coep);
+ private:
+  void QueueNavigationReport(base::DictionaryValue body,
+                             const std::string& endpoint,
+                             bool is_report_only);
+
+  // Install the CoopAccessMonitors monitoring accesses from |accessing_node|
+  // toward |accessed_node|.
+  void MonitorAccesses(FrameTreeNode* accessing_node,
+                       FrameTreeNode* accessed_node);
 
   // See the class comment.
-  StoragePartition* const storage_partition_;
+  StoragePartition* storage_partition_;
   GURL source_url_;
   GlobalFrameRoutingId source_routing_id_;
   const GURL context_url_;
-  network::CrossOriginOpenerPolicy coop_;
-  network::CrossOriginEmbedderPolicy coep_;
+  const network::CrossOriginOpenerPolicy coop_;
 
   mojo::ReceiverSet<network::mojom::CrossOriginOpenerPolicyReporter>
       receiver_set_;

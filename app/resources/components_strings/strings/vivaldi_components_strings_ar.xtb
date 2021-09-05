@@ -2,14 +2,11 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ar">
 <translation id="1110994991967754504">اختيار صلاحيات لـ <ph name="PERMISSION_NAME" /></translation>
-<translation id="1152921474424827756">الدخول إلى <ph name="BEGIN_LINK" />النسخة المخزنة مؤقتًا<ph name="END_LINK" /> من <ph name="URL" /></translation>
 <translation id="1158211211994409885">أغلق <ph name="HOST_NAME" /> الاتصال على نحو غير متوقع.</translation>
 <translation id="1375198122581997741">معلومات عن الإصدار</translation>
 <translation id="139305205187523129">لم يرسل <ph name="HOST_NAME" /> أي بيانات.</translation>
 <translation id="1559528461873125649">لا وجود لمثل هذا الملف أو الدليل</translation>
 <translation id="1710259589646384581">نظام التشغيل</translation>
-<translation id="194030505837763158">الانتقال إلى <ph name="LINK" /></translation>
-<translation id="2030481566774242610">هل تقصد <ph name="LINK" />؟</translation>
 <translation id="2166378884831602661">لا يمكن لموقع الويب هذا توفير اتصال آمن</translation>
 <translation id="2224337661447660594">لا يوجد الإنترنت</translation>
 <translation id="2292556288342944218">تم حظر دخولك إلى الإنترنت</translation>
@@ -46,12 +43,10 @@
 <translation id="4764776831041365478">قد تكون صفحة الويب على العنوان <ph name="URL" /> غير متاحة مؤقتًا أو قد يكون تم نقلها نهائيًا إلى عنوان ويب جديد.</translation>
 <translation id="5023310440958281426">التحقق من سياسات المشرف</translation>
 <translation id="5115563688576182185">(64 بت)</translation>
-<translation id="5431657950005405462">لم يتم العثور على ملفك</translation>
 <translation id="5452270690849572955">لا يمكن العثور على صفحة <ph name="HOST_NAME" /> هذه.</translation>
 <translation id="5492298309214877701">‏يكون لموقع الويب هذا على الشبكة الداخلية للشركة أو المؤسسة أو المدرسة نفس عنوان URL لأحد مواقع الويب الخارجية.
     <ph name="LINE_BREAK" />
     حاول الاتصال بمشرف النظام.</translation>
-<translation id="5510766032865166053">ربما يكون تم نقله أو حذفه.</translation>
 <translation id="5556459405103347317">إعادة تحميل</translation>
 <translation id="5617949217645503996">أعاد <ph name="HOST_NAME" /> توجيهك مرات كثيرة جدًا.</translation>
 <translation id="5675650730144413517">يتعذّر على هذه الصفحة العمل</translation>

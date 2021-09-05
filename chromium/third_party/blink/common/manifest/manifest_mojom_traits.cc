@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "mojo/public/cpp/base/string16_mojom_traits.h"
-#include "third_party/blink/public/common/screen_orientation/web_screen_orientation_mojom_traits.h"
 #include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
 #include "url/mojom/url_gurl_mojom_traits.h"
 
@@ -90,6 +89,9 @@ bool StructTraits<blink::mojom::ManifestDataView, ::blink::Manifest>::Read(
     out->background_color = data.background_color();
 
   if (!data.ReadDisplay(&out->display))
+    return false;
+
+  if (!data.ReadDisplayOverride(&out->display_override))
     return false;
 
   if (!data.ReadOrientation(&out->orientation))

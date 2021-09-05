@@ -2,23 +2,30 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// eslint-disable-next-line no-unused-vars
+import {BackgroundOps} from '../background_ops.js';
+import {
+  AbstractDirectoryEntry,   // eslint-disable-line no-unused-vars
+  AbstractFileEntry,        // eslint-disable-line no-unused-vars
+  AbstractFileSystemEntry,  // eslint-disable-line no-unused-vars
+} from '../models/file_system_entry.js';
+
 /**
  * The abstract interface for the CCA's interaction with the browser.
  * @interface
  */
 export class BrowserProxy {
   /**
-   * @return {!Promise<?Array<!chrome.fileSystem.Volume>>}
+   * @return {!Promise<boolean>}
    * @abstract
    */
-  async getVolumeList() {}
+  async requestEnumerateDevicesPermission() {}
 
   /**
-   * @param {!chrome.fileSystem.RequestFileSystemOptions} options
-   * @return {!Promise<?FileSystem>}
+   * @return {!Promise<?AbstractDirectoryEntry>}
    * @abstract
    */
-  async requestFileSystem(options) {}
+  async getExternalDir() {}
 
   /**
    * @param {(string|!Array<string>|!Object)} keys
@@ -49,20 +56,20 @@ export class BrowserProxy {
 
   /**
    * @param {string} name
-   * @param {Array<string>|string=} substitutions
+   * @param {...(string|number)} substitutions
    * @return {string}
    * @abstract
    */
-  getI18nMessage(name, substitutions = undefined) {}
+  getI18nMessage(name, ...substitutions) {}
 
   /**
    * @return {!Promise<boolean>}
    * @abstract
    */
-  async isCrashReportingEnabled() {}
+  async isMetricsAndCrashReportingEnabled() {}
 
   /**
-   * @param {!FileEntry} file
+   * @param {!AbstractFileEntry} file
    * @return {!Promise}
    * @abstract
    */
@@ -94,7 +101,7 @@ export class BrowserProxy {
   addOnMessageExternalListener(listener) {}
 
   /**
-   * @param {function(Port)} listener
+   * @param {function(!Port)} listener
    * @abstract
    */
   addOnConnectExternalListener(listener) {}
@@ -116,4 +123,44 @@ export class BrowserProxy {
    * @abstract
    */
   isMp4RecordingEnabled() {}
+
+  /**
+   * @return {!BackgroundOps}
+   * @abstract
+   */
+  getBackgroundOps() {}
+
+  /**
+   * @return {boolean}
+   * @abstract
+   */
+  isFullscreenOrMaximized() {}
+
+  /**
+   * @return {!Promise}
+   * @abstract
+   */
+  async fitWindow() {}
+
+  /**
+   * @abstract
+   */
+  showWindow() {}
+
+  /**
+   * @abstract
+   */
+  hideWindow() {}
+
+  /**
+   * @return {boolean}
+   * @abstract
+   */
+  isMinimized() {}
+
+  /**
+   * @param {function(): void} listener
+   * @abstract
+   */
+  addOnMinimizedListener(listener) {}
 }

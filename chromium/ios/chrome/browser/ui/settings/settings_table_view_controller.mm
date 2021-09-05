@@ -19,6 +19,7 @@
 #import "components/prefs/ios/pref_observer_bridge.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
+#include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/util.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -44,6 +45,7 @@
 #import "ios/chrome/browser/ui/authentication/cells/table_view_account_item.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_signin_promo_item.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/settings/about_chrome_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/autofill/autofill_credit_card_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/autofill/autofill_profile_table_view_controller.h"
@@ -52,6 +54,7 @@
 #import "ios/chrome/browser/ui/settings/cells/settings_switch_cell.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_switch_item.h"
 #import "ios/chrome/browser/ui/settings/content_settings_table_view_controller.h"
+#import "ios/chrome/browser/ui/settings/elements/enterprise_info_popover_view_controller.h"
 #import "ios/chrome/browser/ui/settings/google_services/accounts_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/google_services/google_services_settings_coordinator.h"
 #import "ios/chrome/browser/ui/settings/language/language_settings_mediator.h"
@@ -65,10 +68,13 @@
 #import "ios/chrome/browser/ui/settings/table_cell_catalog_view_controller.h"
 #import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
 #import "ios/chrome/browser/ui/settings/voice_search_table_view_controller.h"
-#import "ios/chrome/browser/ui/signin_interaction/public/signin_presenter.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_cells_constants.h"
+#include "ios/chrome/browser/ui/table_view/cells/table_view_cells_constants.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_detail_icon_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_image_item.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_info_button_cell.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_info_button_item.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/ui/table_view/table_view_model.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
@@ -79,8 +85,10 @@
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity.h"
+#import "ios/public/provider/chrome/browser/signin/signin_presenter.h"
 #import "ios/public/provider/chrome/browser/signin/signin_resources_provider.h"
 #include "ios/public/provider/chrome/browser/voice/voice_search_prefs.h"
+#import "net/base/mac/url_conversions.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -104,6 +112,7 @@ NSString* const kSettingsAutofillCreditCardImageName =
     @"settings_payment_methods";
 NSString* const kSettingsAutofillProfileImageName = @"settings_addresses";
 NSString* const kSettingsVoiceSearchImageName = @"settings_voice_search";
+NSString* const kSettingsSafetyCheckImageName = @"settings_safety_check";
 NSString* const kSettingsPrivacyImageName = @"settings_privacy";
 NSString* const kSettingsLanguageSettingsImageName =
     @"settings_language_settings";
@@ -122,6 +131,7 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierAdvanced,
   SectionIdentifierInfo,
   SectionIdentifierDebug,
+  SectionIdentifierDefaultBrowser,
 };
 
 typedef NS_ENUM(NSInteger, ItemType) {
@@ -131,6 +141,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemGoogleServices,
   ItemTypeHeader,
   ItemTypeSearchEngine,
+  ItemTypeManagedDefaultSearchEngine,
   ItemTypePasswords,
   ItemTypeAutofillCreditCard,
   ItemTypeAutofillProfile,
@@ -145,6 +156,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeTableCellCatalog,
   ItemTypeArticlesForYou,
   ItemTypeSafetyCheck,
+  ItemTypeDefaultBrowser,
 };
 
 #if BUILDFLAG(CHROMIUM_BRANDING) && !defined(NDEBUG)
@@ -160,6 +172,7 @@ NSString* kDevViewSourceKey = @"DevViewSource";
     ChromeIdentityServiceObserver,
     GoogleServicesSettingsCoordinatorDelegate,
     IdentityManagerObserverBridgeDelegate,
+    PopoverLabelViewControllerDelegate,
     PrefObserverDelegate,
     PrivacyCoordinatorDelegate,
     SafetyCheckCoordinatorDelegate,
@@ -393,10 +406,25 @@ NSString* kDevViewSourceKey = @"DevViewSource";
   [model addItem:[self googleServicesCellItem]
       toSectionWithIdentifier:SectionIdentifierAccount];
 
+  if (@available(iOS 14, *)) {
+    if (base::FeatureList::IsEnabled(kDefaultBrowserSettings)) {
+      [model addSectionWithIdentifier:SectionIdentifierDefaultBrowser];
+      [model addItem:[self defaultBrowserCellItem]
+          toSectionWithIdentifier:SectionIdentifierDefaultBrowser];
+    }
+  }
+
   // Basics section
   [model addSectionWithIdentifier:SectionIdentifierBasics];
-  [model addItem:[self searchEngineDetailItem]
-      toSectionWithIdentifier:SectionIdentifierBasics];
+  // Show managed UI if default search engine is managed by policy.
+  if (base::FeatureList::IsEnabled(kEnableIOSManagedSettingsUI) &&
+      [self isDefaultSearchEngineManagedByPolicy]) {
+    [model addItem:[self managedSearchEngineItem]
+        toSectionWithIdentifier:SectionIdentifierBasics];
+  } else {
+    [model addItem:[self searchEngineDetailItem]
+        toSectionWithIdentifier:SectionIdentifierBasics];
+  }
   [model addItem:[self passwordsDetailItem]
       toSectionWithIdentifier:SectionIdentifierBasics];
   [model addItem:[self autoFillCreditCardDetailItem]
@@ -493,6 +521,17 @@ NSString* kDevViewSourceKey = @"DevViewSource";
   return googleServicesItem;
 }
 
+- (TableViewItem*)defaultBrowserCellItem {
+  TableViewTextItem* defaultBrowser =
+      [[TableViewTextItem alloc] initWithType:ItemTypeDefaultBrowser];
+  defaultBrowser.text =
+      l10n_util::GetNSString(IDS_IOS_SETTINGS_SET_DEFAULT_BROWSER);
+  defaultBrowser.accessibilityTraits |= UIAccessibilityTraitButton;
+  defaultBrowser.textColor = [UIColor colorNamed:kBlueColor];
+
+  return defaultBrowser;
+}
+
 - (TableViewItem*)accountCellItem {
   TableViewAccountItem* identityAccountItem =
       [[TableViewAccountItem alloc] initWithType:ItemTypeAccount];
@@ -516,6 +555,33 @@ NSString* kDevViewSourceKey = @"DevViewSource";
                     iconImageName:kSettingsSearchEngineImageName
           accessibilityIdentifier:kSettingsSearchEngineCellId];
   return _defaultSearchEngineItem;
+}
+
+- (TableViewInfoButtonItem*)managedSearchEngineItem {
+  TableViewInfoButtonItem* managedDefaultSearchEngineItem =
+      [[TableViewInfoButtonItem alloc]
+          initWithType:ItemTypeManagedDefaultSearchEngine];
+  managedDefaultSearchEngineItem.text =
+      l10n_util::GetNSString(IDS_IOS_SEARCH_ENGINE_SETTING_TITLE);
+  managedDefaultSearchEngineItem.iconImageName = kSettingsSearchEngineImageName;
+
+  const base::DictionaryValue* dict = _browserState->GetPrefs()->GetDictionary(
+      DefaultSearchManager::kDefaultSearchProviderDataPrefName);
+  if (dict->FindBoolPath(DefaultSearchManager::kDisabledByPolicy)) {
+    // Default search engine is disabled by policy.
+    managedDefaultSearchEngineItem.statusText =
+        l10n_util::GetNSString(IDS_IOS_SEARCH_ENGINE_SETTING_DISABLED_STATUS);
+  } else {
+    // Default search engine is enabled and set by policy.
+    const std::string* status =
+        dict->FindStringPath(DefaultSearchManager::kShortName);
+    managedDefaultSearchEngineItem.statusText =
+        base::SysUTF8ToNSString(*status);
+  }
+
+  managedDefaultSearchEngineItem.accessibilityIdentifier =
+      kSettingsManagedSearchEngineCellId;
+  return managedDefaultSearchEngineItem;
 }
 
 - (TableViewItem*)passwordsDetailItem {
@@ -592,7 +658,7 @@ NSString* kDevViewSourceKey = @"DevViewSource";
   return [self detailItemWithType:ItemTypeSafetyCheck
                              text:safetyCheckTitle
                        detailText:nil
-                    iconImageName:kSettingsPrivacyImageName
+                    iconImageName:kSettingsSafetyCheckImageName
           accessibilityIdentifier:nil];
 }
 
@@ -654,10 +720,14 @@ NSString* kDevViewSourceKey = @"DevViewSource";
 }
 
 - (SettingsSwitchItem*)articlesForYouSwitchItem {
+  NSString* settingTitle =
+      IsDiscoverFeedEnabled()
+          ? l10n_util::GetNSString(IDS_IOS_DISCOVER_FEED_TITLE)
+          : l10n_util::GetNSString(IDS_IOS_CONTENT_SUGGESTIONS_SETTING_TITLE);
+
   SettingsSwitchItem* articlesForYouSwitchItem =
       [self switchItemWithType:ItemTypeArticlesForYou
-                            title:l10n_util::GetNSString(
-                                      IDS_IOS_CONTENT_SUGGESTIONS_SETTING_TITLE)
+                            title:settingTitle
                     iconImageName:kSettingsArticleSuggestionsImageName
                   withDefaultsKey:nil
           accessibilityIdentifier:kSettingsArticleSuggestionsCellId];
@@ -783,6 +853,15 @@ NSString* kDevViewSourceKey = @"DevViewSource";
 #endif  // BUILDFLAG(CHROMIUM_BRANDING) && !defined(NDEBUG)
       break;
     }
+    case ItemTypeManagedDefaultSearchEngine: {
+      TableViewInfoButtonCell* managedCell =
+          base::mac::ObjCCastStrict<TableViewInfoButtonCell>(cell);
+      [managedCell.trailingButton
+                 addTarget:self
+                    action:@selector(didTapManagedUIInfoButton:)
+          forControlEvents:UIControlEventTouchUpInside];
+      break;
+    }
     default:
       break;
   }
@@ -824,6 +903,15 @@ NSString* kDevViewSourceKey = @"DevViewSource";
       base::RecordAction(base::UserMetricsAction("Settings.GoogleServices"));
       [self showSyncGoogleService];
       break;
+    case ItemTypeDefaultBrowser:
+      [tableView deselectRowAtIndexPath:indexPath animated:YES];
+      base::RecordAction(base::UserMetricsAction("Settings.DefaultBrowser"));
+      [[UIApplication sharedApplication]
+                    openURL:
+                        [NSURL URLWithString:UIApplicationOpenSettingsURLString]
+                    options:{}
+          completionHandler:nil];
+      break;
     case ItemTypeSearchEngine:
       base::RecordAction(base::UserMetricsAction("EditSearchEngines"));
       controller = [[SearchEngineTableViewController alloc]
@@ -832,8 +920,8 @@ NSString* kDevViewSourceKey = @"DevViewSource";
     case ItemTypePasswords:
       base::RecordAction(
           base::UserMetricsAction("Options_ShowPasswordManager"));
-      controller = [[PasswordsTableViewController alloc]
-          initWithBrowserState:_browserState];
+      controller =
+          [[PasswordsTableViewController alloc] initWithBrowser:_browser];
       break;
     case ItemTypeAutofillCreditCard:
       base::RecordAction(base::UserMetricsAction("AutofillCreditCardsViewed"));
@@ -903,6 +991,32 @@ NSString* kDevViewSourceKey = @"DevViewSource";
   }
 }
 
+#pragma mark - Actions
+
+// Called when the user clicks on the information button of a managed
+// settings UI cell. Shows a contextual bubble with the information of the
+// enterprise.
+- (void)didTapManagedUIInfoButton:(UIButton*)buttonView {
+  EnterpriseInfoPopoverViewController* bubbleViewController =
+      [[EnterpriseInfoPopoverViewController alloc] initWithEnterpriseName:nil];
+  bubbleViewController.delegate = self;
+
+  // Disable the button when showing the bubble.
+  // The button will be enabled when close the bubble in
+  // (void)popoverPresentationControllerDidDismissPopover: of
+  // EnterpriseInfoPopoverViewController.
+  buttonView.enabled = NO;
+
+  // Set the anchor and arrow direction of the bubble.
+  bubbleViewController.popoverPresentationController.sourceView = buttonView;
+  bubbleViewController.popoverPresentationController.sourceRect =
+      buttonView.bounds;
+  bubbleViewController.popoverPresentationController.permittedArrowDirections =
+      UIPopoverArrowDirectionAny;
+
+  [self presentViewController:bubbleViewController animated:YES completion:nil];
+}
+
 #pragma mark Switch Actions
 
 - (void)memorySwitchToggled:(UISwitch*)sender {
@@ -958,7 +1072,7 @@ NSString* kDevViewSourceKey = @"DevViewSource";
           initWithBaseNavigationController:self.navigationController
                                    browser:_browser
                                       mode:GoogleServicesSettingsModeSettings];
-  _googleServicesSettingsCoordinator.dispatcher = self.dispatcher;
+  _googleServicesSettingsCoordinator.handler = self.dispatcher;
   _googleServicesSettingsCoordinator.delegate = self;
   [_googleServicesSettingsCoordinator start];
 }
@@ -1093,6 +1207,19 @@ NSString* kDevViewSourceKey = @"DevViewSource";
   DCHECK(googleServicesItem);
   [self updateGoogleServicesItem:googleServicesItem];
   [self reconfigureCellsForItems:@[ googleServicesItem ]];
+}
+
+// Check if the default search engine is managed by policy.
+- (BOOL)isDefaultSearchEngineManagedByPolicy {
+  const base::DictionaryValue* dict = _browserState->GetPrefs()->GetDictionary(
+      DefaultSearchManager::kDefaultSearchProviderDataPrefName);
+
+  if (dict) {
+    if (dict->FindBoolPath(DefaultSearchManager::kDisabledByPolicy) ||
+        dict->FindBoolPath(prefs::kDefaultSearchProviderEnabled))
+      return YES;
+  }
+  return NO;
 }
 
 #pragma mark - SigninPresenter
@@ -1336,10 +1463,10 @@ NSString* kDevViewSourceKey = @"DevViewSource";
 
 #pragma mark - SafetyCheckCoordinatorDelegate
 
-- (void)safetyCheckCoordinatorViewControllerWasRemoved:
-    (SafetyCheckCoordinator*)coordinator {
+- (void)safetyCheckCoordinatorDidRemove:(SafetyCheckCoordinator*)coordinator {
   DCHECK_EQ(_safetyCheckCoordinator, coordinator);
   [_safetyCheckCoordinator stop];
+  _safetyCheckCoordinator.delegate = nil;
   _safetyCheckCoordinator = nil;
 }
 
@@ -1381,6 +1508,13 @@ NSString* kDevViewSourceKey = @"DevViewSource";
 - (void)presentationControllerDidDismiss:
     (UIPresentationController*)presentationController {
   base::RecordAction(base::UserMetricsAction("IOSSettingsCloseWithSwipe"));
+}
+
+#pragma mark - PopoverLabelViewControllerDelegate
+
+- (void)didTapLinkURL:(NSURL*)URL {
+  GURL convertedURL = net::GURLWithNSURL(URL);
+  [self view:nil didTapLinkURL:convertedURL];
 }
 
 @end

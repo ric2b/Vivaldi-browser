@@ -28,15 +28,15 @@ import("//v8/gni/v8.gni")
 
 if (is_android) {
   import("//build/config/android/rules.gni")
-} else if (is_linux) {
+} else if (is_linux || is_chromeos) {
   import("//build/linux/extract_symbols.gni")
 } else if (is_mac) {
+  import("//build/apple/tweak_info_plist.gni")
   import("//build/compiled_action.gni")
   import("//build/config/mac/base_rules.gni")
   import("//build/config/mac/mac_sdk.gni")
   import("//build/config/mac/rules.gni")
   import("//build/config/mac/symbols.gni")
-  import("//build/mac/tweak_info_plist.gni")
   import("//build/util/branding.gni")
   import("//build/util/version.gni")
   import("//content/public/app/mac_helpers.gni")
@@ -136,7 +136,7 @@ if (!is_android && !is_mac) {
     deps = [ "//printing/buildflags" ]
 
     data = [ "$root_out_dir/resources.pak" ]
-    if (is_linux || is_win) {
+    if (is_linux || is_chromeos || is_win) {
       data_deps = [ "//chrome:packed_resources" ]
     }
 
@@ -175,7 +175,7 @@ if (!is_android && !is_mac) {
         "//content/public/common:static_switches",
         "//crypto",
         "//sandbox",
-        "//services/service_manager/sandbox",
+        "//sandbox/policy",
         "//third_party/breakpad:breakpad_handler",
         "//third_party/breakpad:breakpad_sender",
         "//third_party/crashpad/crashpad/util",
@@ -216,7 +216,7 @@ if (!is_android && !is_mac) {
       sources += [ "app/chrome_exe_main_aura.cc" ]
     }
 
-    if (is_linux) {
+    if (is_linux || is_chromeos) {
       sources += [
         "app/chrome_dll_resource.h",
         "app/chrome_main.cc",
@@ -587,8 +587,6 @@ if (is_win) {
 
     outputs = [ _stamp_file ]
 
-    _old_versions_dir =
-        "$root_out_dir/$chrome_product_full_name.app/Contents/Versions"
     _versions_dir = "$root_out_dir/$chrome_product_full_name.app/Contents/Frameworks/$chrome_framework_name.framework/Versions"
 
     args = [
@@ -600,8 +598,6 @@ if (is_win) {
       chrome_version_full,
       "--keep",
       "Current",
-      "--delete",
-      rebase_path(_old_versions_dir, root_build_dir),
     ]
   }
 
@@ -616,6 +612,11 @@ if (is_win) {
 
   compile_entitlements("entitlements") {
     entitlements_templates = [ "app/app-entitlements.plist" ]
+    if (is_chrome_branded) {
+      # These entitlements are bound to the official Google Chrome signing
+      # certificate and will not necessarily work in any other build.
+      entitlements_templates += [ "app/app-entitlements-chrome.plist" ]
+    }
     output_name = "$target_gen_dir/app-entitlements.plist"
     substitutions = [
       "CHROMIUM_BUNDLE_ID=$chrome_mac_bundle_id",
@@ -946,6 +947,7 @@ if (is_win) {
     deps = [
       ":browser_dependencies",
       ":child_dependencies",
+      "//build:lacros_buildflags",
       "//chrome/app:command_ids",
       "//chrome/common:buildflags",
       "//chrome/common/profiler",
@@ -959,7 +961,7 @@ if (is_win) {
     ]
 
     if (is_component_build) {
-      libs = [ "Carbon.framework" ]
+      frameworks = [ "Carbon.framework" ]
     }
 
     ldflags = [
@@ -1231,6 +1233,7 @@ group("child_dependencies") {
     "//components/services/heap_profiling",
     "//content/public/child",
     "//pdf",
+    "//pdf:pdf_ppapi",
     "//services/tracing/public/cpp",
     "//third_party/blink/public:blink_devtools_frontend_resources",
     "//third_party/blink/public:blink_devtools_inspector_resources",
@@ -1337,6 +1340,7 @@ group("extra_resources") {
   if (is_chromeos) {
     public_deps += [
       "//chrome/browser/resources:bluetooth_pairing_dialog_resources",
+      "//chrome/browser/resources:multidevice_internals_resources",
       "//chrome/browser/resources:os_settings_resources",
       "//chrome/browser/resources/chromeos:cellular_setup_resources",
       "//chrome/browser/resources/chromeos:multidevice_setup_resources",
@@ -1364,6 +1368,10 @@ group("extra_resources") {
       "//chrome/browser/resources:print_preview_pdf_resources",
       "//chrome/browser/resources:print_preview_resources",
     ]
+  }
+
+  if (enable_tab_search) {
+    public_deps += [ "//chrome/browser/resources:tab_search_resources" ]
   }
 }
 
@@ -1550,7 +1558,7 @@ if (enable_resource_whitelist_generation) {
   }
 }
 
-if (is_linux) {
+if (is_linux || is_chromeos) {
   if (is_official_build) {
     group("linux_symbols") {
       deps = [

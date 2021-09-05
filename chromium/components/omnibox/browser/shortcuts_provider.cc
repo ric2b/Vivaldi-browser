@@ -15,6 +15,7 @@
 #include "base/check_op.h"
 #include "base/i18n/case_conversion.h"
 #include "base/metrics/histogram.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -33,6 +34,7 @@
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/url_prefix.h"
 #include "components/prefs/pref_service.h"
+#include "components/search_engines/omnibox_focus_type.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/url_formatter/url_fixer.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
@@ -121,7 +123,7 @@ void ShortcutsProvider::Start(const AutocompleteInput& input,
   TRACE_EVENT0("omnibox", "ShortcutsProvider::Start");
   matches_.clear();
 
-  if (input.from_omnibox_focus() ||
+  if (input.focus_type() != OmniboxFocusType::DEFAULT ||
       (input.type() == metrics::OmniboxInputType::EMPTY) ||
       input.text().empty() || !initialized_)
     return;
@@ -385,8 +387,7 @@ int ShortcutsProvider::CalculateScore(
   base::TimeDelta time_passed = base::Time::Now() - shortcut.last_access_time;
   // Clamp to 0 in case time jumps backwards (e.g. due to DST).
   double decay_exponent =
-      std::max(0.0, kLn2 * static_cast<double>(time_passed.InMicroseconds()) /
-                        base::Time::kMicrosecondsPerWeek);
+      std::max(0.0, kLn2 * time_passed / base::TimeDelta::FromDays(7));
 
   // We modulate the decay factor based on how many times the shortcut has been
   // used. Newly created shortcuts decay at full speed; otherwise, decaying by
@@ -394,11 +395,10 @@ int ShortcutsProvider::CalculateScore(
   // (1.0 / each 5 additional hits), up to a maximum of 5x as long.
   const double kMaxDecaySpeedDivisor = 5.0;
   const double kNumUsesPerDecaySpeedDivisorIncrement = 5.0;
-  double decay_divisor = std::min(
+  const double decay_divisor = std::min(
       kMaxDecaySpeedDivisor,
       (shortcut.number_of_hits + kNumUsesPerDecaySpeedDivisorIncrement - 1) /
           kNumUsesPerDecaySpeedDivisorIncrement);
 
-  return static_cast<int>((base_score / exp(decay_exponent / decay_divisor)) +
-                          0.5);
+  return base::ClampRound(base_score / exp(decay_exponent / decay_divisor));
 }

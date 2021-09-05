@@ -4,6 +4,8 @@
 
 #include "components/omnibox/browser/local_history_zero_suggest_provider.h"
 
+#include <algorithm>
+#include <cmath>
 #include <set>
 #include <string>
 
@@ -15,6 +17,7 @@
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "components/google/core/common/google_util.h"
 #include "components/history/core/browser/history_database.h"
 #include "components/history/core/browser/history_service.h"
@@ -30,6 +33,7 @@
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/omnibox/common/omnibox_features.h"
+#include "components/search_engines/omnibox_focus_type.h"
 #include "components/search_engines/template_url_service.h"
 #include "url/gurl.h"
 
@@ -59,7 +63,12 @@ bool AllowLocalHistoryZeroSuggestSuggestions(const AutocompleteInput& input) {
 #else
   if (!base::FeatureList::IsEnabled(omnibox::kNewSearchFeatures))
     return false;
+#endif
 
+#if !defined(OS_IOS)  // Enabled by default on Desktop if not disabled by
+                      // kNewSearchFeatures.
+  return true;
+#else
   const auto current_page_classification = input.current_page_classification();
   // Reactive Zero-Prefix Suggestions (rZPS) and basically all remote ZPS on the
   // NTP are expected to be displayed alongside local history zero-prefix
@@ -83,6 +92,18 @@ bool AllowLocalHistoryZeroSuggestSuggestions(const AutocompleteInput& input) {
       OmniboxFieldTrial::GetZeroSuggestVariants(current_page_classification),
       LocalHistoryZeroSuggestProvider::kZeroSuggestLocalVariant);
 #endif
+}
+
+// Helper function for calculating frecency of a visit based on this formula:
+// frecency = (frequency ^ 1.15 + 60) / (recency_in_seconds + 60)
+// a frecency score combines frequency and recency of occurrences favoring ones
+// that are more frequent and more recent (see go/local-zps-frecency-ranking).
+double CalculateFrecency(const history::NormalizedKeywordSearchTermVisit& visit,
+                         base::Time now) {
+  double recency_in_secs =
+      base::TimeDelta(now - visit.most_recent_visit_time).InSeconds();
+  double frequency_powered = pow(visit.visits, 1.15);
+  return (frequency_powered + 60) / (recency_in_secs + 60);
 }
 
 }  // namespace
@@ -112,7 +133,7 @@ void LocalHistoryZeroSuggestProvider::Start(const AutocompleteInput& input,
 
   // Allow local history query suggestions only when the omnibox is empty and is
   // focused from the NTP.
-  if (!input.from_omnibox_focus() ||
+  if (input.focus_type() == OmniboxFocusType::DEFAULT ||
       input.type() != metrics::OmniboxInputType::EMPTY ||
       !BaseSearchProvider::IsNTPPage(input.current_page_classification())) {
     return;
@@ -171,7 +192,7 @@ void LocalHistoryZeroSuggestProvider::DeleteMatch(
   // number of suggestions shown and the async nature of this lookup.
   history::QueryOptions opts;
   opts.duplicate_policy = history::QueryOptions::KEEP_ALL_DUPLICATES;
-  opts.begin_time = history::AutocompleteAgeThreshold();
+  opts.begin_time = OmniboxFieldTrial::GetLocalHistoryZeroSuggestAgeThreshold();
   history_service->QueryHistory(
       base::ASCIIToUTF16(google_search_url), opts,
       base::BindOnce(&LocalHistoryZeroSuggestProvider::OnHistoryQueryResults,
@@ -217,36 +238,28 @@ void LocalHistoryZeroSuggestProvider::QueryURLDatabase(
     return;
   }
 
-  // Request 5x more search terms than the number of matches the provider
-  // intends to return hoping to have enough left once ineligible ones are
-  // filtered out.
-  const auto& results = url_db->GetMostRecentKeywordSearchTerms(
-      template_url_service->GetDefaultSearchProvider()->id(), max_matches_ * 5);
+  const base::TimeTicks db_query_time = base::TimeTicks::Now();
+  auto results = url_db->GetMostRecentNormalizedKeywordSearchTerms(
+      template_url_service->GetDefaultSearchProvider()->id(),
+      OmniboxFieldTrial::GetLocalHistoryZeroSuggestAgeThreshold());
 
-  // Used to filter out duplicate query suggestions.
-  std::set<base::string16> seen_suggestions_set;
+  bool frecency_ranking = base::FeatureList::IsEnabled(
+      omnibox::kOmniboxLocalZeroSuggestFrecencyRanking);
+  const base::Time now = base::Time::Now();
+  std::sort(results.begin(), results.end(),
+            [frecency_ranking, now](const auto& a, const auto& b) {
+              return frecency_ranking
+                         ? CalculateFrecency(a, now) > CalculateFrecency(b, now)
+                         : a.most_recent_visit_time > b.most_recent_visit_time;
+            });
 
   int relevance = kLocalHistoryZeroSuggestRelevance;
-  size_t search_terms_seen_count = 0;
   for (const auto& result : results) {
-    search_terms_seen_count++;
-    // Discard the result if it is not fresh enough.
-    if (result.time < history::AutocompleteAgeThreshold())
-      continue;
-
-    base::string16 search_terms = result.normalized_term;
-    if (search_terms.empty())
-      continue;
-
-    // Filter out duplicate query suggestions.
-    if (seen_suggestions_set.count(search_terms))
-      continue;
-    seen_suggestions_set.insert(search_terms);
-
     SearchSuggestionParser::SuggestResult suggestion(
-        /*suggestion=*/search_terms, AutocompleteMatchType::SEARCH_HISTORY,
-        /*subtype_identifier=*/0, /*from_keyword=*/false, relevance--,
-        /*relevance_from_server=*/0,
+        /*suggestion=*/result.normalized_term,
+        AutocompleteMatchType::SEARCH_HISTORY,
+        /*subtypes=*/{}, /*from_keyword=*/false, relevance--,
+        /*relevance_from_server=*/false,
         /*input_text=*/base::ASCIIToUTF16(std::string()));
 
     AutocompleteMatch match = BaseSearchProvider::CreateSearchSuggestion(
@@ -262,11 +275,12 @@ void LocalHistoryZeroSuggestProvider::QueryURLDatabase(
       break;
   }
 
-  UMA_HISTOGRAM_COUNTS_1000(
-      "Omnibox.LocalHistoryZeroSuggest.SearchTermsSeenCount",
-      search_terms_seen_count);
-  UMA_HISTOGRAM_COUNTS_1000("Omnibox.LocalHistoryZeroSuggest.MaxMatchesCount",
-                            max_matches_);
+  UMA_HISTOGRAM_TIMES(
+      "Omnibox.LocalHistoryZeroSuggest.SearchTermsExtractionTime",
+      base::TimeTicks::Now() - db_query_time);
+  UMA_HISTOGRAM_COUNTS_10000(
+      "Omnibox.LocalHistoryZeroSuggest.SearchTermsExtractedCount",
+      results.size());
 
   listener_->OnProviderUpdate(true);
 }

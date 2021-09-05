@@ -53,8 +53,9 @@ class PathOutput {
   void WriteFile(std::ostream& out, const OutputFile& file) const;
   void WriteFile(std::ostream& out, const base::FilePath& file) const;
 
-  // Writes the given OutputFiles with spaces separating them. This will also
-  // write an initial space before the first item.
+  // Writes the given SourceFiles/OutputFiles with spaces separating them. This
+  // will also write an initial space before the first item.
+  void WriteFiles(std::ostream& out, const std::vector<SourceFile>& file) const;
   void WriteFiles(std::ostream& out,
                   const std::vector<OutputFile>& files) const;
   void WriteFiles(std::ostream& out,

@@ -10,7 +10,6 @@
 #include "content/shell/common/web_test/web_test_string_util.h"
 #include "content/shell/renderer/web_test/blink_test_runner.h"
 #include "content/shell/renderer/web_test/mock_screen_orientation_client.h"
-#include "content/shell/renderer/web_test/test_interfaces.h"
 #include "content/shell/renderer/web_test/test_runner.h"
 #include "content/shell/renderer/web_test/web_frame_test_proxy.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -23,9 +22,13 @@ namespace content {
 
 WebViewTestProxy::WebViewTestProxy(CompositorDependencies* compositor_deps,
                                    const mojom::CreateViewParams& params,
-                                   TestInterfaces* interfaces)
-    : RenderViewImpl(compositor_deps, params), test_interfaces_(interfaces) {
-  test_interfaces_->WindowOpened(this);
+                                   TestRunner* test_runner)
+    : RenderViewImpl(compositor_deps, params), test_runner_(test_runner) {
+  test_runner_->AddRenderView(this);
+}
+
+WebViewTestProxy::~WebViewTestProxy() {
+  test_runner_->RemoveRenderView(this);
 }
 
 blink::WebView* WebViewTestProxy::CreateView(
@@ -35,20 +38,20 @@ blink::WebView* WebViewTestProxy::CreateView(
     const blink::WebString& frame_name,
     blink::WebNavigationPolicy policy,
     network::mojom::WebSandboxFlags sandbox_flags,
-    const blink::FeaturePolicy::FeatureState& opener_feature_state,
+    const blink::FeaturePolicyFeatureState& opener_feature_state,
     const blink::SessionStorageNamespaceId& session_storage_namespace_id) {
-  if (GetTestRunner()->ShouldDumpNavigationPolicy()) {
-    blink_test_runner()->PrintMessage(
+  if (test_runner_->ShouldDumpNavigationPolicy()) {
+    test_runner_->PrintMessage(
         "Default policy for createView for '" +
         web_test_string_util::URLDescription(request.Url()) + "' is '" +
         web_test_string_util::WebNavigationPolicyToString(policy) + "'\n");
   }
 
-  if (!GetTestRunner()->CanOpenWindows())
+  if (!test_runner_->CanOpenWindows())
     return nullptr;
 
-  if (GetTestRunner()->ShouldDumpCreateView()) {
-    blink_test_runner()->PrintMessage(
+  if (test_runner_->ShouldDumpCreateView()) {
+    test_runner_->PrintMessage(
         std::string("createView(") +
         web_test_string_util::URLDescription(request.Url()) + ")\n");
   }
@@ -70,7 +73,7 @@ void WebViewTestProxy::PrintPage(blink::WebLocalFrame* frame) {
 }
 
 blink::WebString WebViewTestProxy::AcceptLanguages() {
-  return blink::WebString::FromUTF8(GetTestRunner()->GetAcceptLanguages());
+  return blink::WebString::FromUTF8(test_runner_->GetAcceptLanguages());
 }
 
 void WebViewTestProxy::Reset() {
@@ -78,30 +81,12 @@ void WebViewTestProxy::Reset() {
   // |text_input_controller_| doesn't have any state to reset.
 
   // Resets things on the WebView that TestRunnerBindings can modify.
-  GetTestRunner()->ResetWebView(this);
-
-  for (blink::WebFrame* frame = GetWebView()->MainFrame(); frame;
-       frame = frame->TraverseNext()) {
-    if (frame->IsWebLocalFrame()) {
-      RenderFrame* render_frame =
-          RenderFrame::FromWebFrame(frame->ToWebLocalFrame());
-      auto* frame_proxy = static_cast<WebFrameTestProxy*>(render_frame);
-      frame_proxy->Reset();
-    }
-  }
+  test_runner_->ResetWebView(this);
 }
 
 void WebViewTestProxy::Install(blink::WebLocalFrame* frame) {
   accessibility_controller_.Install(frame);
   text_input_controller_.Install(frame);
-}
-
-WebViewTestProxy::~WebViewTestProxy() {
-  test_interfaces_->WindowClosed(this);
-}
-
-TestRunner* WebViewTestProxy::GetTestRunner() {
-  return test_interfaces_->GetTestRunner();
 }
 
 }  // namespace content

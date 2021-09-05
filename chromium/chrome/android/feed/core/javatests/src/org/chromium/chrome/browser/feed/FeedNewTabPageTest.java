@@ -291,7 +291,7 @@ public class FeedNewTabPageTest {
 
         mIsCachePopulatedInAccountManagerFacade = true;
         TestThreadUtils.runOnUiThreadBlocking(mTab::reload);
-        ChromeTabUtils.waitForTabPageLoaded(mTab, mTab.getUrlString());
+        ChromeTabUtils.waitForTabPageLoaded(mTab, ChromeTabUtils.getUrlStringOnUiThread(mTab));
 
         // Check that the sign-in promo is displayed this time.
         onView(instanceOf(RecyclerView.class))
@@ -480,7 +480,7 @@ public class FeedNewTabPageTest {
                                 ARTICLE_SECTION_HEADER_POSITION, click()));
         waitForView(rootView,
                 allOf(withId(R.id.header_status),
-                        withText(expanded ? R.string.hide : R.string.show)));
+                        withText(expanded ? R.string.hide_content : R.string.show_content)));
     }
 
     private boolean getPreferenceForArticleSectionHeader() throws Exception {

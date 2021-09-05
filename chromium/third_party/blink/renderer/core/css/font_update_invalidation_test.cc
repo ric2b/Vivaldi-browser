@@ -34,7 +34,8 @@ class FontUpdateInvalidationTest
 
 TEST_F(FontUpdateInvalidationTest, PartialLayoutInvalidationAfterFontLoading) {
   SimRequest main_resource("https://example.com", "text/html");
-  SimRequest font_resource("https://example.com/Ahem.woff2", "font/woff2");
+  SimSubresourceRequest font_resource("https://example.com/Ahem.woff2",
+                                      "font/woff2");
 
   LoadURL("https://example.com");
   main_resource.Write(R"HTML(
@@ -86,7 +87,8 @@ TEST_F(FontUpdateInvalidationTest, PartialLayoutInvalidationAfterFontLoading) {
 TEST_F(FontUpdateInvalidationTest,
        PartialLayoutInvalidationAfterFontFaceDeletion) {
   SimRequest main_resource("https://example.com", "text/html");
-  SimRequest font_resource("https://example.com/Ahem.woff2", "font/woff2");
+  SimSubresourceRequest font_resource("https://example.com/Ahem.woff2",
+                                      "font/woff2");
 
   LoadURL("https://example.com");
   main_resource.Write(R"HTML(
@@ -111,6 +113,7 @@ TEST_F(FontUpdateInvalidationTest,
 
   // First render the page with the custom font
   font_resource.Complete(ReadAhemWoff2());
+  test::RunPendingTasks();
   Compositor().BeginFrame();
 
   Element* target = GetDocument().getElementById("target");
@@ -141,7 +144,8 @@ TEST_F(FontUpdateInvalidationTest,
 // https://crbug.com/1092411
 TEST_F(FontUpdateInvalidationTest, LayoutInvalidationOnModalDialog) {
   SimRequest main_resource("https://example.com", "text/html");
-  SimRequest font_resource("https://example.com/Ahem.woff2", "font/woff2");
+  SimSubresourceRequest font_resource("https://example.com/Ahem.woff2",
+                                      "font/woff2");
 
   LoadURL("https://example.com");
   main_resource.Write(R"HTML(
@@ -178,6 +182,91 @@ TEST_F(FontUpdateInvalidationTest, LayoutInvalidationOnModalDialog) {
   EXPECT_EQ(250, target->OffsetWidth());
 
   main_resource.Finish();
+}
+
+// https://crbug.com/1101483
+TEST_F(FontUpdateInvalidationTest, FallbackBetweenPendingAndLoadedCustomFonts) {
+  SimRequest main_resource("https://example.com", "text/html");
+  SimSubresourceRequest slow_font_resource("https://example.com/nonexist.woff2",
+                                           "font/woff2");
+  SimSubresourceRequest fast_font_resource("https://example.com/Ahem.woff2",
+                                           "font/woff2");
+
+  LoadURL("https://example.com");
+  main_resource.Complete(R"HTML(
+    <!doctype html>
+    <link rel="preload" href="https://example.com/Ahem.woff2" as="font" crossorigin>
+    <style>
+      @font-face {
+        font-family: slow-font;
+        src: url(https://example.com/nonexist.woff2) format("woff2");
+      }
+      @font-face {
+        font-family: fast-font;
+        src: url(https://example.com/Ahem.woff2) format("woff2");
+      }
+      #target {
+        font: 25px/1 slow-font, fast-font, monospace;
+      }
+    </style>
+    <span id=target>0123456789</span>
+  )HTML");
+
+  fast_font_resource.Complete(ReadAhemWoff2());
+  test::RunPendingTasks();
+
+  // While slow-font is pending and fast-font is already available, we should
+  // use it to render the page.
+  Compositor().BeginFrame();
+  Element* target = GetDocument().getElementById("target");
+  DCHECK_EQ(250, target->OffsetWidth());
+
+  slow_font_resource.Complete();
+
+  Compositor().BeginFrame();
+  EXPECT_EQ(250, target->OffsetWidth());
+}
+
+// https://crrev.com/1397423004
+TEST_F(FontUpdateInvalidationTest, NoRedundantLoadingForSegmentedFont) {
+  SimRequest main_resource("https://example.com", "text/html");
+  SimSubresourceRequest font_resource("https://example.com/font2.woff2",
+                                      "font/woff2");
+
+  LoadURL("https://example.com");
+  main_resource.Complete(R"HTML(
+    <!doctype html>
+    <style>
+      @font-face {
+        font-family: custom-font;
+        /* We intentionally leave it unmocked, so that the test fails if it
+         * attempts to load font1.woff. */
+        src: url(https://example.com/font1.woff2) format("woff2");
+        unicode-range: 0x00-0xFF;
+      }
+      @font-face {
+        font-family: custom-font;
+        src: url(https://example.com/font2.woff2) format("woff2");
+        unicode-range: 0x30-0x39; /* '0' to '9' */
+      }
+      #target {
+        font: 25px/1 custom-font, monospace;
+      }
+    </style>
+    <span id=target>0123456789</span>
+  )HTML");
+
+  // Trigger frame to start font loading
+  Compositor().BeginFrame();
+  Element* target = GetDocument().getElementById("target");
+  DCHECK_GT(250, target->OffsetWidth());
+
+  font_resource.Complete(ReadAhemWoff2());
+
+  Compositor().BeginFrame();
+  DCHECK_EQ(250, target->OffsetWidth());
+
+  // Test finishes without triggering a redundant load of font1.woff.
 }
 
 }  // namespace blink

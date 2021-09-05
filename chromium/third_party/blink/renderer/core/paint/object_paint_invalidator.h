@@ -56,7 +56,6 @@ class CORE_EXPORT ObjectPaintInvalidator {
   }
 
   void InvalidatePaintIncludingNonCompositingDescendants();
-  void InvalidatePaintIncludingNonSelfPaintingLayerDescendants();
 
  protected:
 #if DCHECK_IS_ON()
@@ -80,9 +79,6 @@ class ObjectPaintInvalidatorWithContext : public ObjectPaintInvalidator {
   void InvalidatePaintWithComputedReason(PaintInvalidationReason);
 
  private:
-  PaintInvalidationReason InvalidateSelection(PaintInvalidationReason);
-  PaintInvalidationReason InvalidatePartialRect(PaintInvalidationReason);
-
   const PaintInvalidatorContext& context_;
 };
 

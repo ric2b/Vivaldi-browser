@@ -61,11 +61,10 @@
 #include "third_party/blink/public/platform/scheduler/web_rail_mode_observer.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/public/platform/web_connection_type.h"
-#include "third_party/blink/public/platform/web_isolate.h"
 #include "third_party/blink/public/web/web_memory_statistics.h"
 #include "ui/gfx/native_widget_types.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "third_party/blink/public/platform/mac/web_scrollbar_theme.h"
 #endif
 
@@ -195,11 +194,7 @@ class CONTENT_EXPORT RenderThreadImpl
   scoped_refptr<base::SingleThreadTaskRunner> GetIOTaskRunner() override;
 
   // CompositorDependencies implementation.
-  int GetGpuRasterizationMSAASampleCount() override;
   bool IsLcdTextEnabled() override;
-  bool IsZeroCopyEnabled() override;
-  bool IsPartialRasterEnabled() override;
-  bool IsGpuMemoryBufferCompositorResourcesEnabled() override;
   bool IsElasticOverscrollEnabled() override;
   bool IsUseZoomForDSFEnabled() override;
   bool IsSingleThreaded() override;
@@ -210,13 +205,9 @@ class CONTENT_EXPORT RenderThreadImpl
   std::unique_ptr<cc::UkmRecorderFactory> CreateUkmRecorderFactory() override;
   void RequestNewLayerTreeFrameSink(
       RenderWidget* render_widget,
-      scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue,
       const GURL& url,
       LayerTreeFrameSinkCallback callback,
       const char* client_name) override;
-#ifdef OS_ANDROID
-  bool UsingSynchronousCompositing() override;
-#endif
 
   bool IsThreadedAnimationEnabled();
   scoped_refptr<base::SingleThreadTaskRunner>
@@ -634,8 +625,6 @@ class CONTENT_EXPORT RenderThreadImpl
   mojo::AssociatedReceiver<mojom::Renderer> renderer_receiver_{this};
 
   mojo::AssociatedRemote<mojom::RenderMessageFilter> render_message_filter_;
-
-  std::unique_ptr<blink::WebIsolate> isolate_;
 
   RendererMemoryMetrics purge_and_suspend_memory_metrics_;
   bool needs_to_record_first_active_paint_;

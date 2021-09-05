@@ -269,6 +269,7 @@ class APIPermission {
     kCrashReportPrivate = 225,
     kAutofillAssistantPrivate = 226,
     kEnterpriseNetworkingAttributes = 227,
+    kSearch = 228,
 
     // vivaldi permissions
 

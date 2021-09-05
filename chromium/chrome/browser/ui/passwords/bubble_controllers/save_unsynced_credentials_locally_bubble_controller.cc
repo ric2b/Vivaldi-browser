@@ -20,8 +20,8 @@ SaveUnsyncedCredentialsLocallyBubbleController::
           std::move(delegate),
           /*display_disposition=*/metrics_util::
               AUTOMATIC_SAVE_UNSYNCED_CREDENTIALS_LOCALLY),
-      dismissal_reason_(metrics_util::NO_DIRECT_INTERACTION) {
-}
+      dismissal_reason_(metrics_util::NO_DIRECT_INTERACTION),
+      unsynced_credentials_(delegate_->GetUnsyncedCredentials()) {}
 
 SaveUnsyncedCredentialsLocallyBubbleController::
     ~SaveUnsyncedCredentialsLocallyBubbleController() {
@@ -29,17 +29,19 @@ SaveUnsyncedCredentialsLocallyBubbleController::
     OnBubbleClosing();
 }
 
-void SaveUnsyncedCredentialsLocallyBubbleController::OnSaveClicked() {
-  delegate_->SaveUnsyncedCredentialsInProfileStore();
+void SaveUnsyncedCredentialsLocallyBubbleController::OnSaveClicked(
+    const std::vector<bool>& was_credential_selected) {
+  DCHECK(was_credential_selected.size() == unsynced_credentials_.size());
+  std::vector<autofill::PasswordForm> credentials_to_save;
+  for (size_t i = 0; i < unsynced_credentials_.size(); i++) {
+    if (was_credential_selected[i])
+      credentials_to_save.push_back(unsynced_credentials_[i]);
+  }
+  delegate_->SaveUnsyncedCredentialsInProfileStore(credentials_to_save);
 }
 
 void SaveUnsyncedCredentialsLocallyBubbleController::OnCancelClicked() {
   delegate_->DiscardUnsyncedCredentials();
-}
-
-const std::vector<autofill::PasswordForm>&
-SaveUnsyncedCredentialsLocallyBubbleController::GetUnsyncedCredentials() const {
-  return delegate_->GetUnsyncedCredentials();
 }
 
 void SaveUnsyncedCredentialsLocallyBubbleController::ReportInteractions() {

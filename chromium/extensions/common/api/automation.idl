@@ -524,10 +524,13 @@ enum EventMoveDirectionType {
   [nocompile, noinline_doc] dictionary SetDocumentSelectionParams {
     // The node where the selection begins.
     [instanceOf=AutomationNode] object anchorObject;
+
     // The offset in the anchor node where the selection begins.
     long anchorOffset;
+
     // The node where the selection ends.
     [instanceOf=AutomationNode] object focusObject;
+
     // The offset within the focus node where the selection ends.
     long focusOffset;
   };
@@ -631,6 +634,78 @@ enum EventMoveDirectionType {
     object flags;
   };
 
+  // A position in the automation tree.
+  // See ui/accessibility/ax_position.h for documentation. All members need to
+  // be kept in sync with
+  // extensions/renderer/api/automation/automation_position.h.
+  // Some members there are kept private and not represented here.
+  [nocompile, noinline_doc] dictionary AutomationPosition {
+
+    AutomationNode? node;
+    long childIndex;
+    long textOffset;
+    DOMString affinity;
+
+    static boolean isNullPosition();
+    static boolean isTreePosition();
+    static boolean isTextPosition();
+    static boolean isLeafTextPosition();
+    static boolean atStartOfAnchor();
+    static boolean atEndOfAnchor();
+    static boolean atStartOfWord();
+    static boolean atEndOfWord();
+    static boolean atStartOfLine();
+    static boolean atEndOfLine();
+    static boolean atStartOfParagraph();
+    static boolean atEndOfParagraph();
+    static boolean atStartOfPage();
+    static boolean atEndOfPage();
+    static boolean atStartOfFormat();
+    static boolean atEndOfFormat();
+    static boolean atStartOfDocument();
+    static boolean atEndOfDocument();
+    static void asTreePosition();
+    static void asTextPosition();
+    static void asLeafTextPosition();
+    static void moveToPositionAtStartOfAnchor();
+    static void moveToPositionAtEndOfAnchor();
+    static void moveToPositionAtStartOfDocument();
+    static void moveToPositionAtEndOfDocument();
+    static void moveToParentPosition();
+    static void moveToNextLeafTreePosition();
+    static void moveToPreviousLeafTreePosition();
+    static void moveToNextLeafTextPosition();
+    static void moveToPreviousLeafTextPosition();
+    static void moveToNextCharacterPosition();
+    static void moveToPreviousCharacterPosition();
+    static void moveToNextWordStartPosition();
+    static void moveToPreviousWordStartPosition();
+    static void moveToNextWordEndPosition();
+    static void moveToPreviousWordEndPosition();
+    static void moveToNextLineStartPosition();
+    static void moveToPreviousLineStartPosition();
+    static void moveToNextLineEndPosition();
+    static void moveToPreviousLineEndPosition();
+    static void moveToPreviousFormatStartPosition();
+    static void moveToNextFormatEndPosition();
+    static void moveToNextParagraphStartPosition();
+    static void moveToPreviousParagraphStartPosition();
+    static void moveToNextParagraphEndPosition();
+    static void moveToPreviousParagraphEndPosition();
+    static void moveToNextPageStartPosition();
+    static void moveToPreviousPageStartPosition();
+    static void moveToNextPageEndPosition();
+    static void moveToPreviousPageEndPosition();
+    static void moveToNextAnchorPosition();
+    static void moveToPreviousAnchorPosition();
+    static long maxTextOffset();
+    static boolean isInLineBreak();
+    static boolean isInTextObject();
+    static boolean isInWhiteSpace();
+    static boolean isValid();
+    static DOMString getText();
+  };
+
   // A single node in an Automation tree.
   [nocompile, noinline_doc] dictionary AutomationNode {
     // The root node of the tree containing this AutomationNode.
@@ -654,8 +729,17 @@ enum EventMoveDirectionType {
     // Determines the location of the text within the node specified by
     // |startIndex| and |endIndex|, inclusively. Invokes |callback| with the
     // bounding rectangle, in screen coordinates. |callback| can be invoked
-    // either synchronously or asynchronously.
+    // either synchronously or asynchronously. The bounds are clipped to
+    // ancestors.
     static void boundsForRange(long startIndex, long endIndex,
+        BoundsForRangeCallback callback);
+
+    // Determines the location of the text within the node specified by
+    // |startIndex| and |endIndex|, inclusively. Invokes |callback| with the
+    // bounding rectangle, in screen coordinates. |callback| can be invoked
+    // either synchronously or asynchronously. The bounds are not clipped to
+    // ancestors.
+    static void unclippedBoundsForRange(long startIndex, long endIndex,
         BoundsForRangeCallback callback);
 
     // The location (as a bounding box) of this node in global screen
@@ -1167,22 +1251,28 @@ enum EventMoveDirectionType {
     static void suspendMedia();
 
     // Scrolls this scrollable container backward.
-    static void scrollBackward(PerformActionCallback callback);
+    static void scrollBackward(optional PerformActionCallback callback);
 
     // Scrolls this scrollable container forward.
-    static void scrollForward(PerformActionCallback callback);
+    static void scrollForward(optional PerformActionCallback callback);
 
     // Scrolls this scrollable container up.
-    static void scrollUp(PerformActionCallback callback);
+    static void scrollUp(optional PerformActionCallback callback);
 
     // Scrolls this scrollable container down.
-    static void scrollDown(PerformActionCallback callback);
+    static void scrollDown(optional PerformActionCallback callback);
 
     // Scrolls this scrollable container left.
-    static void scrollLeft(PerformActionCallback callback);
+    static void scrollLeft(optional PerformActionCallback callback);
 
     // Scrolls this scrollable container right.
-    static void scrollRight(PerformActionCallback callback);
+    static void scrollRight(optional PerformActionCallback callback);
+
+    // Scrolls this scrollable container to the given point.
+    static void scrollToPoint(long x, long y);
+
+    // Sets this scrollable container's scroll offset.
+    static void setScrollOffset(long x, long y);
 
     // Adds a listener for the given event type and event phase.
     static void addEventListener(
@@ -1232,6 +1322,9 @@ enum EventMoveDirectionType {
     // 3. LanguageSpans are non-overlapping and contain exactly one language.
     static LanguageSpan[] languageAnnotationForStringAttribute(
         DOMString attribute);
+
+    // Creates a position object backed by Chrome's accessibility position support.
+    static AutomationPosition createPosition(long offset, optional boolean isUpstream);
   };
 
   // Called when the <code>AutomationNode</code> for the page is available.

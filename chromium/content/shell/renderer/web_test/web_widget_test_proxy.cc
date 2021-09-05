@@ -5,10 +5,8 @@
 #include "content/shell/renderer/web_test/web_widget_test_proxy.h"
 
 #include "content/renderer/compositor/compositor_dependencies.h"
-#include "content/renderer/input/widget_input_handler_manager.h"
 #include "content/shell/renderer/web_test/blink_test_helpers.h"
 #include "content/shell/renderer/web_test/blink_test_runner.h"
-#include "content/shell/renderer/web_test/test_interfaces.h"
 #include "content/shell/renderer/web_test/test_runner.h"
 #include "content/shell/renderer/web_test/web_view_test_proxy.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
@@ -125,8 +123,7 @@ bool WebWidgetTestProxy::IsPointerLocked() {
   return event_sender_.IsPointerLocked();
 }
 
-void WebWidgetTestProxy::StartDragging(network::mojom::ReferrerPolicy policy,
-                                       const blink::WebDragData& data,
+void WebWidgetTestProxy::StartDragging(const blink::WebDragData& data,
                                        blink::WebDragOperationsMask mask,
                                        const SkBitmap& drag_image,
                                        const gfx::Point& image_offset) {
@@ -135,21 +132,6 @@ void WebWidgetTestProxy::StartDragging(network::mojom::ReferrerPolicy policy,
   // When running a test, we need to fake a drag drop operation otherwise
   // Windows waits for real mouse events to know when the drag is over.
   event_sender_.DoDragDrop(data, mask);
-}
-
-blink::WebScreenInfo WebWidgetTestProxy::GetScreenInfo() {
-  blink::WebScreenInfo info = RenderWidget::GetScreenInfo();
-
-  MockScreenOrientationClient* mock_client =
-      GetTestRunner()->GetMockScreenOrientationClient();
-
-  if (!mock_client->IsDisabled()) {
-    // Override screen orientation information with mock data.
-    info.orientation_type = mock_client->CurrentOrientationType();
-    info.orientation_angle = mock_client->CurrentOrientationAngle();
-  }
-
-  return info;
 }
 
 WebViewTestProxy* WebWidgetTestProxy::GetWebViewTestProxy() {
@@ -179,7 +161,7 @@ blink::WebFrameWidget* WebWidgetTestProxy::GetWebFrameWidget() {
 void WebWidgetTestProxy::Reset() {
   event_sender_.Reset();
   // Ends any synthetic gestures started in |event_sender_|.
-  widget_input_handler_manager()->InvokeInputProcessedCallback();
+  GetWebWidget()->FlushInputProcessedCallback();
 
   // Reset state in the RenderWidget base class.
   GetWebFrameWidget()->ClearEditCommands();
@@ -202,7 +184,7 @@ void WebWidgetTestProxy::SynchronouslyCompositeAfterTest() {
 }
 
 TestRunner* WebWidgetTestProxy::GetTestRunner() {
-  return GetWebViewTestProxy()->test_interfaces()->GetTestRunner();
+  return GetWebViewTestProxy()->GetTestRunner();
 }
 
 // static

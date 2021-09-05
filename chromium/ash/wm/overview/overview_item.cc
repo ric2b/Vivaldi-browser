@@ -48,7 +48,6 @@
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/compositor_extra/shadow.h"
-#include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/transform_util.h"
 #include "ui/views/controls/button/image_button.h"
@@ -264,7 +263,7 @@ void OverviewItem::PrepareForOverview() {
 }
 
 float OverviewItem::GetItemScale(const gfx::Size& size) {
-  gfx::SizeF inset_size(size.width(), size.height() - 2 * kWindowMargin);
+  gfx::SizeF inset_size(size.width(), size.height());
   return ScopedOverviewTransformWindow::GetItemScale(
       GetTargetBoundsInScreen().size(), inset_size,
       transform_window_.GetTopInset(), kHeaderHeightDp);
@@ -307,7 +306,6 @@ void OverviewItem::SetBounds(const gfx::RectF& target_bounds,
     item_widget_->GetNativeWindow()->layer()->GetAnimator()->StopAnimating();
 
     gfx::Rect minimized_bounds = ToStableSizeRoundedRect(target_bounds);
-    minimized_bounds.Inset(-kWindowMargin, -kWindowMargin);
     OverviewAnimationType minimized_animation_type =
         is_first_update ? OVERVIEW_ANIMATION_NONE : new_animation_type;
     SetWidgetBoundsAndMaybeAnimateTransform(
@@ -395,12 +393,9 @@ void OverviewItem::SetBounds(const gfx::RectF& target_bounds,
     }
   } else {
     gfx::RectF inset_bounds(target_bounds);
-    inset_bounds.Inset(kWindowMargin, kWindowMargin);
     SetItemBounds(inset_bounds, new_animation_type, is_first_update);
     UpdateHeaderLayout(is_first_update ? OVERVIEW_ANIMATION_NONE
                                        : new_animation_type);
-    if (is_first_update && !should_animate_when_entering_)
-      transform_window_.ClipHeaderIfNeeded(/*animate=*/false);
   }
 
   // Shadow is normally set after an animation is finished. In the case of no
@@ -737,7 +732,7 @@ void OverviewItem::SetShadowBounds(
   if (!shadow_)
     return;
 
-  if (bounds_in_screen == base::nullopt) {
+  if (!bounds_in_screen) {
     shadow_->layer()->SetVisible(false);
     return;
   }
@@ -745,11 +740,9 @@ void OverviewItem::SetShadowBounds(
   shadow_->layer()->SetVisible(true);
   gfx::Rect bounds_in_item =
       gfx::Rect(item_widget_->GetNativeWindow()->GetTargetBounds().size());
-  bounds_in_item.Inset(kOverviewMargin, kOverviewMargin);
   bounds_in_item.Inset(0, kHeaderHeightDp, 0, 0);
   bounds_in_item.ClampToCenteredSize(
       gfx::ToRoundedSize(bounds_in_screen->size()));
-
   shadow_->SetContentBounds(bounds_in_item);
 }
 
@@ -768,7 +761,7 @@ void OverviewItem::UpdateRoundedCornersAndShadow() {
     overview_item_view_->UpdatePreviewRoundedCorners(
         should_show_rounded_corners);
   } else {
-    transform_window_.UpdateRoundedCornersAndClip(should_show_rounded_corners);
+    transform_window_.UpdateRoundedCorners(should_show_rounded_corners);
   }
 
   // In addition, the shadow should be hidden if
@@ -782,11 +775,12 @@ void OverviewItem::UpdateRoundedCornersAndShadow() {
            ->GetAnimator()
            ->is_animating();
   if (should_show_shadow) {
-    const gfx::RectF shadow_bounds =
-        transform_window_.IsMinimized()
-            ? gfx::RectF(
-                  overview_item_view_->preview_view()->GetBoundsInScreen())
-            : transform_window_.GetTransformedBounds();
+    // The shadow should match the size of the transformed window or preview
+    // window if unclipped. If clipped, the shadow should match the size of the
+    // item minus the border and header.
+    const gfx::RectF shadow_bounds = unclipped_size_
+                                         ? GetWindowTargetBoundsWithInsets()
+                                         : GetUnclippedShadowBounds();
     SetShadowBounds(base::make_optional(shadow_bounds));
   } else {
     SetShadowBounds(base::nullopt);
@@ -1099,14 +1093,6 @@ void OverviewItem::OnPostWindowStateTypeChange(WindowState* window_state,
   item_widget_->GetLayer()->SetOpacity(1.f);
 
   overview_grid_->PositionWindows(/*animate=*/false);
-  // If |activate_on_unminimized_| is true, then this code path is from an
-  // unminimizing an ARC app async from |OverviewSession::SelectWindow|.
-  if (activate_on_unminimized_) {
-    activate_on_unminimized_ = false;
-    DCHECK(!minimized);
-    SetOpacity(1.f);
-    wm::ActivateWindow(GetWindow());
-  }
 }
 
 gfx::Rect OverviewItem::GetShadowBoundsForTesting() {
@@ -1121,6 +1107,13 @@ gfx::RectF OverviewItem::GetWindowTargetBoundsWithInsets() const {
   window_target_bounds.Inset(kWindowMargin, kWindowMargin);
   window_target_bounds.Inset(0, kHeaderHeightDp, 0, 0);
   return window_target_bounds;
+}
+
+gfx::RectF OverviewItem::GetUnclippedShadowBounds() const {
+  return transform_window_.IsMinimized()
+             ? gfx::RectF(
+                   overview_item_view_->preview_view()->GetBoundsInScreen())
+             : transform_window_.GetTransformedBounds();
 }
 
 void OverviewItem::OnWindowCloseAnimationCompleted() {
@@ -1222,6 +1215,11 @@ void OverviewItem::SetItemBounds(const gfx::RectF& target_bounds,
 
   const int top_view_inset = transform_window_.GetTopInset();
   gfx::RectF transformed_bounds = target_bounds;
+
+  // |target_bounds| are the bounds of the |item_widget|, which include a
+  // border.
+  transformed_bounds.Inset(kWindowMargin, kWindowMargin);
+
   // Update |transformed_bounds| to match the unclipped size of the window, so
   // we transform the window to the correct size.
   if (unclipped_size_)
@@ -1240,24 +1238,26 @@ void OverviewItem::SetItemBounds(const gfx::RectF& target_bounds,
     return;
   }
 
-  {
-    ScopedOverviewTransformWindow::ScopedAnimationSettings animation_settings;
-    transform_window_.BeginScopedAnimation(animation_type, &animation_settings);
-    if (animation_type ==
-            OVERVIEW_ANIMATION_LAYOUT_OVERVIEW_ITEMS_IN_OVERVIEW &&
-        !animation_settings.empty()) {
-      animation_settings.front()->AddObserver(new AnimationObserver{
-          base::BindOnce(&OverviewItem::OnItemBoundsAnimationStarted,
-                         weak_ptr_factory_.GetWeakPtr()),
-          base::BindOnce(&OverviewItem::OnItemBoundsAnimationEnded,
-                         weak_ptr_factory_.GetWeakPtr())});
-    }
-    SetTransform(window, transform);
+  ScopedOverviewTransformWindow::ScopedAnimationSettings animation_settings;
+  transform_window_.BeginScopedAnimation(animation_type, &animation_settings);
+  if (animation_type == OVERVIEW_ANIMATION_LAYOUT_OVERVIEW_ITEMS_IN_OVERVIEW &&
+      !animation_settings.empty()) {
+    animation_settings.front()->AddObserver(new AnimationObserver{
+        base::BindOnce(&OverviewItem::OnItemBoundsAnimationStarted,
+                       weak_ptr_factory_.GetWeakPtr()),
+        base::BindOnce(&OverviewItem::OnItemBoundsAnimationEnded,
+                       weak_ptr_factory_.GetWeakPtr())});
   }
+  SetTransform(window, transform);
 
-  transform_window_.SetClipping(unclipped_size_
-                                    ? GetWindowTargetBoundsWithInsets().size()
-                                    : gfx::SizeF());
+  using ClippingType = ScopedOverviewTransformWindow::ClippingType;
+  ScopedOverviewTransformWindow::ClippingData clipping_data{
+      ClippingType::kCustom, gfx::SizeF()};
+  if (unclipped_size_)
+    clipping_data.second = GetWindowTargetBoundsWithInsets().size();
+  else if (is_first_update)
+    clipping_data.first = ClippingType::kEnter;
+  transform_window_.SetClipping(clipping_data);
 }
 
 void OverviewItem::CreateItemWidget() {
@@ -1310,7 +1310,6 @@ void OverviewItem::UpdateHeaderLayout(OverviewAnimationType animation_type) {
   ::wm::TranslateRectFromScreen(root_window_, &item_bounds);
   const gfx::Point origin = gfx::ToRoundedPoint(item_bounds.origin());
   item_bounds.set_origin(gfx::PointF());
-  item_bounds.Inset(-kWindowMargin, -kWindowMargin);
   widget_window->SetBounds(ToStableSizeRoundedRect(item_bounds));
 
   gfx::Transform label_transform;

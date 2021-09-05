@@ -6,7 +6,7 @@
 
 #include "base/single_thread_task_runner.h"
 #include "media/base/limits.h"
-#include "third_party/blink/public/web/modules/mediastream/media_stream_video_track.h"
+#include "third_party/blink/renderer/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/renderer/modules/peerconnection/media_stream_remote_video_source.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_source.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
@@ -50,10 +50,9 @@ void RemoteVideoTrackAdapter::InitializeWebVideoTrack(
       std::make_unique<MediaStreamRemoteVideoSource>(std::move(observer));
   MediaStreamRemoteVideoSource* video_source = video_source_ptr.get();
   InitializeTrack(MediaStreamSource::kTypeVideo);
-  video_source_ptr->SetOwner(track()->Source());
   track()->Source()->SetPlatformSource(std::move(video_source_ptr));
 
-  WebMediaStreamSource::Capabilities capabilities;
+  MediaStreamSource::Capabilities capabilities;
   capabilities.device_id = id();
   track()->Source()->SetCapabilities(capabilities);
 
@@ -99,15 +98,13 @@ void RemoteAudioTrackAdapter::InitializeWebAudioTrack(
   auto source = std::make_unique<PeerConnectionRemoteAudioSource>(
       observed_track().get(), main_thread);
   auto* source_ptr = source.get();
-  source_ptr->SetOwner(track()->Source());
-  track()->Source()->SetPlatformSource(std::move(source));  // Takes ownership.
+  track()->Source()->SetPlatformSource(std::move(source));
 
-  WebMediaStreamSource::Capabilities capabilities;
+  MediaStreamSource::Capabilities capabilities;
   capabilities.device_id = id();
-  bool values[] = {false};
-  capabilities.echo_cancellation = WebVector<bool>(values, 1u);
-  capabilities.auto_gain_control = WebVector<bool>(values, 1u);
-  capabilities.noise_suppression = WebVector<bool>(values, 1u);
+  capabilities.echo_cancellation = Vector<bool>({false});
+  capabilities.auto_gain_control = Vector<bool>({false});
+  capabilities.noise_suppression = Vector<bool>({false});
   capabilities.sample_size = {
       media::SampleFormatToBitsPerChannel(media::kSampleFormatS16),  // min
       media::SampleFormatToBitsPerChannel(media::kSampleFormatS16)   // max

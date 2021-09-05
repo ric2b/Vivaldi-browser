@@ -144,6 +144,7 @@ OmniboxResult::OmniboxResult(Profile* profile,
   set_id(match_.stripped_destination_url.spec());
   SetResultType(ash::AppListSearchResultType::kOmnibox);
   set_result_subtype(static_cast<int>(match_.type));
+  SetMetricsType(GetSearchResultType());
 
   // Derive relevance from omnibox relevance and normalize it to [0, 1].
   // The magic number 1500 is the highest score of an omnibox result.
@@ -206,6 +207,8 @@ ash::SearchResultType OmniboxResult::GetSearchResultType() const {
       return ash::OMNIBOX_SEARCH_SUGGEST;
     case AutocompleteMatchType::SEARCH_SUGGEST_PERSONALIZED:
       return ash::OMNIBOX_SUGGEST_PERSONALIZED;
+    case AutocompleteMatchType::BOOKMARK_TITLE:
+      return ash::OMNIBOX_BOOKMARK;
 
     case AutocompleteMatchType::HISTORY_KEYWORD:
     case AutocompleteMatchType::NAVSUGGEST:
@@ -214,7 +217,6 @@ ash::SearchResultType OmniboxResult::GetSearchResultType() const {
     case AutocompleteMatchType::SEARCH_SUGGEST_PROFILE:
     case AutocompleteMatchType::SEARCH_OTHER_ENGINE:
     case AutocompleteMatchType::CONTACT_DEPRECATED:
-    case AutocompleteMatchType::BOOKMARK_TITLE:
     case AutocompleteMatchType::NAVSUGGEST_PERSONALIZED:
     case AutocompleteMatchType::CALCULATOR:
     case AutocompleteMatchType::CLIPBOARD_URL:
@@ -230,7 +232,8 @@ ash::SearchResultType OmniboxResult::GetSearchResultType() const {
     case AutocompleteMatchType::HISTORY_BODY:
     case AutocompleteMatchType::TILE_SUGGESTION:
     case AutocompleteMatchType::NUM_TYPES:
-      NOTREACHED();
+      // TODO(crbug.com/1028447): Add a NOTREACHED here once we are confident we
+      // know all possible types for this result.
       return ash::SEARCH_RESULT_TYPE_BOUNDARY;
   }
 }

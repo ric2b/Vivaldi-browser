@@ -18,13 +18,14 @@
 #include "chromecast/public/media/media_capabilities_shlib.h"
 #include "chromecast/renderer/cast_url_loader_throttle_provider.h"
 #include "chromecast/renderer/cast_websocket_handshake_throttle_provider.h"
+#include "chromecast/renderer/identification_settings_manager.h"
 #include "chromecast/renderer/js_channel_bindings.h"
 #include "chromecast/renderer/media/key_systems_cast.h"
 #include "chromecast/renderer/media/media_caps_observer_impl.h"
-#include "chromecast/renderer/on_load_script_injector.h"
 #include "chromecast/renderer/queryable_data_bindings.h"
 #include "components/media_control/renderer/media_playback_options.h"
 #include "components/network_hints/renderer/web_prescient_networking_impl.h"
+#include "components/on_load_script_injector/renderer/on_load_script_injector.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
@@ -34,7 +35,6 @@
 #include "media/remoting/receiver_controller.h"
 #include "media/remoting/remoting_constants.h"
 #include "media/remoting/stream_provider.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
@@ -187,8 +187,8 @@ void CastContentRendererClient::RenderFrameCreated(
   }
 
   // Add script injection support to the RenderFrame, used by Cast platform
-  // APIs. The objects' lifetimes are bound to the RenderFrame's lifetime.
-  new OnLoadScriptInjector(render_frame);
+  // APIs. The injector's lifetime is bound to the RenderFrame's lifetime.
+  new on_load_script_injector::OnLoadScriptInjector(render_frame);
 
   if (!app_media_capabilities_observer_receiver_.is_bound()) {
     mojo::Remote<mojom::ApplicationMediaCapabilities> app_media_capabilities;
@@ -207,12 +207,23 @@ void CastContentRendererClient::RenderFrameCreated(
   dispatcher->OnRenderFrameCreated(render_frame);
 #endif
 
-#if defined(OS_LINUX) && defined(USE_OZONE)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(USE_OZONE)
   // JsChannelBindings destroys itself when the RenderFrame is destroyed.
   JsChannelBindings::Create(render_frame);
 #endif
 
   activity_url_filter_manager_->OnRenderFrameCreated(render_frame);
+
+  // |base::Unretained| is safe here since the callback is triggered before the
+  // destruction of IdentificationSettingsManager by which point
+  // CastContentRendererClient should be alive.
+  settings_managers_.emplace(
+      render_frame->GetRoutingID(),
+      std::make_unique<IdentificationSettingsManager>(
+          render_frame,
+          base::BindOnce(&CastContentRendererClient::OnRenderFrameRemoved,
+                         base::Unretained(this),
+                         render_frame->GetRoutingID())));
 }
 
 content::BrowserPluginDelegate*
@@ -402,7 +413,7 @@ std::unique_ptr<content::URLLoaderThrottleProvider>
 CastContentRendererClient::CreateURLLoaderThrottleProvider(
     content::URLLoaderThrottleProviderType type) {
   return std::make_unique<CastURLLoaderThrottleProvider>(
-      type, activity_url_filter_manager_.get());
+      type, activity_url_filter_manager(), this);
 }
 
 base::Optional<::media::AudioRendererAlgorithmParameters>
@@ -418,6 +429,25 @@ CastContentRendererClient::GetAudioRendererAlgorithmParameters(
 #else
   return base::nullopt;
 #endif
+}
+
+IdentificationSettingsManager*
+CastContentRendererClient::GetSettingsManagerFromRenderFrameID(
+    int render_frame_id) {
+  const auto& it = settings_managers_.find(render_frame_id);
+  if (it == settings_managers_.end()) {
+    return nullptr;
+  }
+  return it->second.get();
+}
+
+void CastContentRendererClient::OnRenderFrameRemoved(int render_frame_id) {
+  size_t result = settings_managers_.erase(render_frame_id);
+  if (result != 1U) {
+    LOG(WARNING)
+        << "Can't find the identification settings manager for render frame: "
+        << render_frame_id;
+  }
 }
 
 }  // namespace shell

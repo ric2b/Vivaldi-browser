@@ -29,11 +29,11 @@
 #include <brotli/port.h>
 #include <brotli/types.h>
 
-#if defined(OS_LINUX) || defined(OS_CYGWIN)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_CYGWIN)
 #include <endian.h>
 #elif defined(OS_FREEBSD)
 #include <machine/endian.h>
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
 #include <machine/endian.h>
 /* Let's try and follow the Linux convention */
 #define BROTLI_X_BYTE_ORDER BYTE_ORDER

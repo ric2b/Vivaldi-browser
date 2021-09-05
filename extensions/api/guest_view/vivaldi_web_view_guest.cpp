@@ -77,6 +77,31 @@ namespace extensions {
 
 namespace {
 
+std::string WindowOpenDispositionToString(
+    WindowOpenDisposition window_open_disposition) {
+  switch (window_open_disposition) {
+    case WindowOpenDisposition::IGNORE_ACTION:
+      return "ignore";
+    case WindowOpenDisposition::SAVE_TO_DISK:
+      return "save_to_disk";
+    case WindowOpenDisposition::CURRENT_TAB:
+      return "current_tab";
+    case WindowOpenDisposition::NEW_BACKGROUND_TAB:
+      return "new_background_tab";
+    case WindowOpenDisposition::NEW_FOREGROUND_TAB:
+      return "new_foreground_tab";
+    case WindowOpenDisposition::NEW_WINDOW:
+      return "new_window";
+    case WindowOpenDisposition::NEW_POPUP:
+      return "new_popup";
+    case WindowOpenDisposition::OFF_THE_RECORD:
+      return "off_the_record";
+    default:
+      NOTREACHED() << "Unknown Window Open Disposition";
+      return "ignore";
+  }
+}
+
 void SetAllowRunningInsecureContent(content::RenderFrameHost* frame) {
   mojo::AssociatedRemote<content_settings::mojom::ContentSettingsAgent> renderer;
   frame->GetRemoteAssociatedInterfaces()->GetInterface(&renderer);
@@ -620,6 +645,34 @@ void WebViewGuest::OnContentBlocked(ContentSettingsType settings_type) {
   args->SetString("blockedType", ContentSettingsTypeToString(settings_type));
   DispatchEventToView(base::WrapUnique(
     new GuestViewEvent(webview::kEventContentBlocked, std::move(args))));
+}
+
+void WebViewGuest::OnWindowBlocked(
+    const GURL& window_target_url,
+    const std::string& frame_name,
+    WindowOpenDisposition disposition,
+    const blink::mojom::WindowFeatures& features) {
+
+  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
+  args->SetString(webview::kTargetURL, window_target_url.spec());
+  if (features.has_height) {
+    args->SetInteger(webview::kInitialHeight, features.height);
+  }
+  if (features.has_width) {
+    args->SetInteger(webview::kInitialWidth, features.width);
+  }
+  if (features.has_x) {
+    args->SetInteger(webview::kInitialLeft, features.x);
+  }
+  if (features.has_y) {
+    args->SetInteger(webview::kInitialTop, features.y);
+  }
+  args->SetString(webview::kName, frame_name);
+  args->SetString(webview::kWindowOpenDisposition,
+    WindowOpenDispositionToString(disposition));
+
+  DispatchEventToView(base::WrapUnique(
+    new GuestViewEvent(webview::kEventWindowBlocked, std::move(args))));
 }
 
 void WebViewGuest::AllowRunningInsecureContent() {

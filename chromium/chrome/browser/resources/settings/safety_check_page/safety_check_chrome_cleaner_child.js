@@ -10,8 +10,10 @@
 import {assertNotReached} from 'chrome://resources/js/assert.m.js';
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
 import {WebUIListenerBehavior} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {ChromeCleanupProxy, ChromeCleanupProxyImpl} from '../chrome_cleanup_page/chrome_cleanup_proxy.js';
 import {MetricsBrowserProxy, MetricsBrowserProxyImpl, SafetyCheckInteractions} from '../metrics_browser_proxy.js';
 import {routes} from '../route.js';
 import {Router} from '../router.m.js';
@@ -44,7 +46,7 @@ Polymer({
      */
     status_: {
       type: Number,
-      value: SafetyCheckChromeCleanerStatus.CHECKING,
+      value: SafetyCheckChromeCleanerStatus.HIDDEN,
     },
 
     /**
@@ -54,11 +56,15 @@ Polymer({
     displayString_: String,
   },
 
+  /** @private {?ChromeCleanupProxy} */
+  chromeCleanupBrowserProxy_: null,
+
   /** @private {?MetricsBrowserProxy} */
   metricsBrowserProxy_: null,
 
   /** @override */
   attached: function() {
+    this.chromeCleanupBrowserProxy_ = ChromeCleanupProxyImpl.getInstance();
     this.metricsBrowserProxy_ = MetricsBrowserProxyImpl.getInstance();
 
     // Register for safety check status updates.
@@ -76,31 +82,28 @@ Polymer({
     this.displayString_ = event.displayString;
   },
 
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  showChild_: function() {
+    return this.status_ !== SafetyCheckChromeCleanerStatus.HIDDEN &&
+        loadTimeData.valueExists('safetyCheckChromeCleanerChildEnabled') &&
+        loadTimeData.getBoolean('safetyCheckChromeCleanerChildEnabled');
+  },
+
   /**
    * @return {SafetyCheckIconStatus}
    * @private
    */
   getIconStatus_: function() {
     switch (this.status_) {
+      case SafetyCheckChromeCleanerStatus.HIDDEN:
       case SafetyCheckChromeCleanerStatus.CHECKING:
         return SafetyCheckIconStatus.RUNNING;
-      case SafetyCheckChromeCleanerStatus.INITIAL:
-      case SafetyCheckChromeCleanerStatus.REPORTER_FOUND_NOTHING:
-      case SafetyCheckChromeCleanerStatus.SCANNING_FOUND_NOTHING:
-      case SafetyCheckChromeCleanerStatus.CLEANING_SUCCEEDED:
-      case SafetyCheckChromeCleanerStatus.REPORTER_RUNNING:
-      case SafetyCheckChromeCleanerStatus.SCANNING:
-        return SafetyCheckIconStatus.SAFE;
-      case SafetyCheckChromeCleanerStatus.REPORTER_FAILED:
-      case SafetyCheckChromeCleanerStatus.SCANNING_FAILED:
-      case SafetyCheckChromeCleanerStatus.CONNECTION_LOST:
-      case SafetyCheckChromeCleanerStatus.CLEANING_FAILED:
-      case SafetyCheckChromeCleanerStatus.CLEANER_DOWNLOAD_FAILED:
-      case SafetyCheckChromeCleanerStatus.CLEANING:
       case SafetyCheckChromeCleanerStatus.REBOOT_REQUIRED:
-      case SafetyCheckChromeCleanerStatus.DISABLED_BY_ADMIN:
         return SafetyCheckIconStatus.INFO;
-      case SafetyCheckChromeCleanerStatus.USER_DECLINED_CLEANUP:
       case SafetyCheckChromeCleanerStatus.INFECTED:
         return SafetyCheckIconStatus.WARNING;
       default:
@@ -114,14 +117,7 @@ Polymer({
    */
   getButtonLabel_: function() {
     switch (this.status_) {
-      case SafetyCheckChromeCleanerStatus.REPORTER_FAILED:
-      case SafetyCheckChromeCleanerStatus.SCANNING_FAILED:
-      case SafetyCheckChromeCleanerStatus.CONNECTION_LOST:
-      case SafetyCheckChromeCleanerStatus.USER_DECLINED_CLEANUP:
-      case SafetyCheckChromeCleanerStatus.CLEANING_FAILED:
-      case SafetyCheckChromeCleanerStatus.CLEANER_DOWNLOAD_FAILED:
       case SafetyCheckChromeCleanerStatus.INFECTED:
-      case SafetyCheckChromeCleanerStatus.CLEANING:
         return this.i18n('safetyCheckReview');
       case SafetyCheckChromeCleanerStatus.REBOOT_REQUIRED:
         return this.i18n('chromeCleanupRestartButtonLabel');
@@ -136,14 +132,7 @@ Polymer({
    */
   getButtonAriaLabel_: function() {
     switch (this.status_) {
-      case SafetyCheckChromeCleanerStatus.REPORTER_FAILED:
-      case SafetyCheckChromeCleanerStatus.SCANNING_FAILED:
-      case SafetyCheckChromeCleanerStatus.CONNECTION_LOST:
-      case SafetyCheckChromeCleanerStatus.USER_DECLINED_CLEANUP:
-      case SafetyCheckChromeCleanerStatus.CLEANING_FAILED:
-      case SafetyCheckChromeCleanerStatus.CLEANER_DOWNLOAD_FAILED:
       case SafetyCheckChromeCleanerStatus.INFECTED:
-      case SafetyCheckChromeCleanerStatus.CLEANING:
         return this.i18n('safetyCheckChromeCleanerButtonAriaLabel');
       case SafetyCheckChromeCleanerStatus.REBOOT_REQUIRED:
         return this.i18n('chromeCleanupRestartButtonLabel');
@@ -158,7 +147,6 @@ Polymer({
    */
   getButtonClass_: function() {
     switch (this.status_) {
-      case SafetyCheckChromeCleanerStatus.USER_DECLINED_CLEANUP:
       case SafetyCheckChromeCleanerStatus.INFECTED:
       case SafetyCheckChromeCleanerStatus.REBOOT_REQUIRED:
         return 'action-button';
@@ -167,25 +155,36 @@ Polymer({
     }
   },
 
+  /**
+   * @param {!SafetyCheckInteractions} safetyCheckInteraction
+   * @param {!string} userAction
+   * @private
+   */
+  logUserInteraction_: function(safetyCheckInteraction, userAction) {
+    // Log user interaction both in user action and histogram.
+    this.metricsBrowserProxy_.recordSafetyCheckInteractionHistogram(
+        safetyCheckInteraction);
+    this.metricsBrowserProxy_.recordAction(userAction);
+  },
+
   /** @private */
   onButtonClick_: function() {
-    // TODO(crbug.com/1087263): Add metrics for safety check CCT child user
-    // actions.
     switch (this.status_) {
-      case SafetyCheckChromeCleanerStatus.REPORTER_FAILED:
-      case SafetyCheckChromeCleanerStatus.SCANNING_FAILED:
-      case SafetyCheckChromeCleanerStatus.CONNECTION_LOST:
-      case SafetyCheckChromeCleanerStatus.USER_DECLINED_CLEANUP:
-      case SafetyCheckChromeCleanerStatus.CLEANING_FAILED:
-      case SafetyCheckChromeCleanerStatus.CLEANER_DOWNLOAD_FAILED:
       case SafetyCheckChromeCleanerStatus.INFECTED:
-      case SafetyCheckChromeCleanerStatus.CLEANING:
+        this.logUserInteraction_(
+            SafetyCheckInteractions
+                .SAFETY_CHECK_CHROME_CLEANER_REVIEW_INFECTED_STATE,
+            'Settings.SafetyCheck.ChromeCleanerReviewInfectedState');
+        // Navigate to Chrome cleaner UI.
         Router.getInstance().navigateTo(
             routes.CHROME_CLEANUP,
             /* dynamicParams= */ null, /* removeSearch= */ true);
         break;
       case SafetyCheckChromeCleanerStatus.REBOOT_REQUIRED:
-        // TODO(crbug.com/1087263): Implement CCT-based reboot here.
+        this.logUserInteraction_(
+            SafetyCheckInteractions.SAFETY_CHECK_CHROME_CLEANER_REBOOT,
+            'Settings.SafetyCheck.ChromeCleanerReboot');
+        this.chromeCleanupBrowserProxy_.restartComputer();
         break;
       default:
         // This is a state without an action.

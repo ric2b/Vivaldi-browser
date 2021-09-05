@@ -21,6 +21,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.ChromeVersionInfo;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.animation.CompositorAnimationHandler;
 import org.chromium.chrome.browser.compositor.animation.CompositorAnimator;
@@ -32,11 +33,11 @@ import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilter;
 import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.compositor.scene_layer.TabListSceneLayer;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
+import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.widget.animation.Interpolators;
 import org.chromium.ui.resources.ResourceManager;
 
@@ -186,6 +187,14 @@ public class StartSurfaceLayout extends Layout implements StartSurface.OverviewM
         if (skipSlowZooming) {
             showShrinkingAnimation &= quick;
         }
+        if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
+            // Intentionally disable the shrinking animation when accessibility is enabled. During
+            // the shrinking animation, since the ComponsitorViewHolder is not focusable, I think
+            // we are in a temporary no "valid" focus target state, so the focus shifts to the
+            // omnibox and triggers an accessibility announcement of the URL and a keyboard hiding
+            // event. Disable the animation to avoid this temporary state.
+            showShrinkingAnimation &= !ChromeAccessibilityUtil.get().isAccessibilityEnabled();
+        }
 
         // Keep the current tab in mLayoutTabs even if we are not going to show the shrinking
         // animation so that thumbnail taking is not blocked.
@@ -200,7 +209,7 @@ public class StartSurfaceLayout extends Layout implements StartSurface.OverviewM
             return;
         }
 
-        shrinkTab(() -> mTabListDelegate.getThumbnailLocationOfCurrentTab(false));
+        shrinkTab(animate, () -> mTabListDelegate.getThumbnailLocationOfCurrentTab(false));
     }
 
     @Override
@@ -251,6 +260,9 @@ public class StartSurfaceLayout extends Layout implements StartSurface.OverviewM
 
     @Override
     public boolean onBackPressed() {
+        // Note(david@vivaldi.com): Select normal TabModel when current one is empty.
+        if (mTabModelSelector.getCurrentModel().getCount() == 0)
+            mTabModelSelector.selectModel(false);
         if (mTabModelSelector.getCurrentModel().getCount() == 0) return false;
         return mController.onBackPressed();
     }
@@ -290,11 +302,16 @@ public class StartSurfaceLayout extends Layout implements StartSurface.OverviewM
 
     /**
      * Animate shrinking a tab to a target {@link Rect} area.
+     * @param animate Whether to play an entry animation.
      * @param target The target {@link Rect} area.
      */
-    private void shrinkTab(Supplier<Rect> target) {
-        forceAnimationToFinish();
+    private void shrinkTab(boolean animate, Supplier<Rect> target) {
+        if (target.get() == null) {
+            mController.showOverview(animate);
+            return;
+        }
 
+        forceAnimationToFinish();
         LayoutTab sourceLayoutTab = mLayoutTabs[0];
         CompositorAnimationHandler handler = getAnimationHandler();
         Collection<Animator> animationList = new ArrayList<>(5);
@@ -463,13 +480,13 @@ public class StartSurfaceLayout extends Layout implements StartSurface.OverviewM
     @Override
     protected void updateSceneLayer(RectF viewport, RectF contentViewport,
             LayerTitleCache layerTitleCache, TabContentManager tabContentManager,
-            ResourceManager resourceManager, ChromeFullscreenManager fullscreenManager) {
+            ResourceManager resourceManager, BrowserControlsStateProvider browserControls) {
         super.updateSceneLayer(viewport, contentViewport, layerTitleCache, tabContentManager,
-                resourceManager, fullscreenManager);
+                resourceManager, browserControls);
         assert mSceneLayer != null;
         // The content viewport is intentionally sent as both params below.
         mSceneLayer.pushLayers(getContext(), contentViewport, contentViewport, this,
-                layerTitleCache, tabContentManager, resourceManager, fullscreenManager,
+                layerTitleCache, tabContentManager, resourceManager, browserControls,
                 TabUiFeatureUtilities.isTabToGtsAnimationEnabled()
                         ? mTabListDelegate.getResourceId()
                         : 0,
@@ -485,5 +502,17 @@ public class StartSurfaceLayout extends Layout implements StartSurface.OverviewM
     @Override
     public boolean onUpdateAnimation(long time, boolean jumpToEnd) {
         return mTabToSwitcherAnimation == null && !mIsAnimating;
+    }
+
+    @Override
+    public boolean canHostBeFocusable() {
+        if (TabUiFeatureUtilities.isLaunchPolishEnabled()
+                && ChromeAccessibilityUtil.get().isAccessibilityEnabled()) {
+            // We don't allow this layout to gain focus when accessibility is enabled so that the
+            // CompositorViewHolder doesn't steal focus when entering tab switcher.
+            // (crbug.com/1125185).
+            return false;
+        }
+        return super.canHostBeFocusable();
     }
 }

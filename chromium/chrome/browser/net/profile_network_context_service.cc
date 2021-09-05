@@ -35,8 +35,9 @@
 #include "chrome/common/pref_names.h"
 #include "components/certificate_transparency/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/embedder_support/pref_names.h"
+#include "components/language/core/browser/language_prefs.h"
 #include "components/language/core/browser/pref_names.h"
-#include "components/language/core/common/locale_util.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -83,9 +84,9 @@
 #include "net/ssl/client_cert_store_win.h"
 #endif  // defined(OS_WIN)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "net/ssl/client_cert_store_mac.h"
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
 #if BUILDFLAG(TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED)
 #include "chrome/browser/net/trial_comparison_cert_verifier_controller.h"
@@ -128,38 +129,6 @@ network::mojom::AdditionalCertificatesPtr GetAdditionalCertificates(
   return additional_certificates;
 }
 #endif  // defined (OS_CHROMEOS)
-
-void InitializeCorsExtraSafelistedRequestHeaderNamesForProfile(
-    Profile* profile,
-    std::vector<std::string>* extra_safelisted_request_header_names) {
-  PrefService* pref = profile->GetPrefs();
-  bool has_managed_mitigation_list =
-      pref->IsManagedPreference(prefs::kCorsMitigationList);
-
-  // Set default mitigation parameters managed by the server for normal users
-  // and enterprise users separately.
-  const char* const feature_param_name =
-      has_managed_mitigation_list
-          ? "extra-safelisted-request-headers-for-enterprise"
-          : "extra-safelisted-request-headers";
-  *extra_safelisted_request_header_names =
-      SplitString(base::GetFieldTrialParamValueByFeature(
-                      features::kExtraSafelistedRequestHeadersForOutOfBlinkCors,
-                      feature_param_name),
-                  ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-
-  // We trust and append |pref|'s values only when they are set by the managed
-  // policy. Chrome does not have any interface to set this preference manually.
-  if (!base::FeatureList::IsEnabled(
-          features::kHideCorsMitigationListPolicySupport) &&
-      has_managed_mitigation_list) {
-    for (const auto& header_name_value :
-         *pref->GetList(prefs::kCorsMitigationList)) {
-      extra_safelisted_request_header_names->push_back(
-          header_name_value.GetString());
-    }
-  }
-}
 
 // Tests allowing ambient authentication with default credentials based on the
 // profile type.
@@ -255,10 +224,10 @@ void UpdateStorageAccessSettings(Profile* profile) {
 ProfileNetworkContextService::ProfileNetworkContextService(Profile* profile)
     : profile_(profile), proxy_config_monitor_(profile) {
   PrefService* profile_prefs = profile->GetPrefs();
-  quic_allowed_.Init(
-      prefs::kQuicAllowed, profile_prefs,
-      base::Bind(&ProfileNetworkContextService::DisableQuicIfNotAllowed,
-                 base::Unretained(this)));
+  quic_allowed_.Init(prefs::kQuicAllowed, profile_prefs,
+                     base::BindRepeating(
+                         &ProfileNetworkContextService::DisableQuicIfNotAllowed,
+                         base::Unretained(this)));
   pref_accept_language_.Init(
       language::prefs::kAcceptLanguages, profile_prefs,
       base::BindRepeating(&ProfileNetworkContextService::UpdateAcceptLanguage,
@@ -295,13 +264,6 @@ ProfileNetworkContextService::ProfileNetworkContextService(Profile* profile)
       certificate_transparency::prefs::kCTExcludedLegacySPKIs,
       base::BindRepeating(&ProfileNetworkContextService::ScheduleUpdateCTPolicy,
                           base::Unretained(this)));
-
-  // Reflects CORS mitigation list policy updates dynamically.
-  pref_change_registrar_.Add(
-      prefs::kCorsMitigationList,
-      base::BindRepeating(
-          &ProfileNetworkContextService::UpdateCorsMitigationList,
-          base::Unretained(this)));
 
   pref_change_registrar_.Add(
       prefs::kGloballyScopeHTTPAuthCacheEnabled,
@@ -360,6 +322,9 @@ void ProfileNetworkContextService::UpdateAdditionalCertificates() {
 
 void ProfileNetworkContextService::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterBooleanPref(
+      embedder_support::kAlternateErrorPagesEnabled, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(prefs::kQuicAllowed, true);
   registry->RegisterBooleanPref(prefs::kGloballyScopeHTTPAuthCacheEnabled,
                                 false);
@@ -414,8 +379,9 @@ void ProfileNetworkContextService::OnThirdPartyCookieBlockingChanged(
 
 std::string ProfileNetworkContextService::ComputeAcceptLanguage() const {
   if (profile_->IsOffTheRecord()) {
+    // In incognito mode return only the first language.
     return ComputeAcceptLanguageFromPref(
-        g_browser_process->GetApplicationLocale());
+        language::GetFirstLanguage(pref_accept_language_.GetValue()));
   }
   return ComputeAcceptLanguageFromPref(pref_accept_language_.GetValue());
 }
@@ -480,23 +446,6 @@ void ProfileNetworkContextService::ScheduleUpdateCTPolicy() {
   ct_policy_update_timer_.Start(FROM_HERE, base::TimeDelta::FromSeconds(0),
                                 this,
                                 &ProfileNetworkContextService::UpdateCTPolicy);
-}
-
-void ProfileNetworkContextService::UpdateCorsMitigationList() {
-  std::vector<std::string> cors_extra_safelisted_request_header_names;
-  InitializeCorsExtraSafelistedRequestHeaderNamesForProfile(
-      profile_, &cors_extra_safelisted_request_header_names);
-
-  content::BrowserContext::ForEachStoragePartition(
-      profile_, base::BindRepeating(
-                    [](std::vector<std::string>*
-                           cors_extra_safelisted_request_header_names,
-                       content::StoragePartition* storage_partition) {
-                      storage_partition->GetNetworkContext()
-                          ->SetCorsExtraSafelistedRequestHeaderNames(
-                              *cors_extra_safelisted_request_header_names);
-                    },
-                    &cors_extra_safelisted_request_header_names));
 }
 
 bool ProfileNetworkContextService::ShouldSplitAuthCacheByNetworkIsolationKey()
@@ -627,15 +576,15 @@ ProfileNetworkContextService::CreateClientCertStore() {
 
   return std::make_unique<chromeos::ClientCertStoreChromeOS>(
       std::move(certificate_provider), use_system_key_slot, username_hash,
-      base::Bind(&CreateCryptoModuleBlockingPasswordDelegate,
-                 kCryptoModulePasswordClientAuth));
+      base::BindRepeating(&CreateCryptoModuleBlockingPasswordDelegate,
+                          kCryptoModulePasswordClientAuth));
 #elif defined(USE_NSS_CERTS)
   return std::make_unique<net::ClientCertStoreNSS>(
-      base::Bind(&CreateCryptoModuleBlockingPasswordDelegate,
-                 kCryptoModulePasswordClientAuth));
+      base::BindRepeating(&CreateCryptoModuleBlockingPasswordDelegate,
+                          kCryptoModulePasswordClientAuth));
 #elif defined(OS_WIN)
   return std::make_unique<net::ClientCertStoreWin>();
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   return std::make_unique<net::ClientCertStoreMac>();
 #elif defined(OS_ANDROID)
   // Android does not use the ClientCertStore infrastructure. On Android client
@@ -696,9 +645,6 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
         base::TimeDelta::FromMilliseconds(100);
   }
 
-  InitializeCorsExtraSafelistedRequestHeaderNamesForProfile(
-      profile_,
-      &network_context_params->cors_extra_safelisted_request_header_names);
   network_context_params->cors_mode =
       profile_->ShouldEnableOutOfBlinkCors()
           ? network::mojom::NetworkContextParams::CorsMode::kEnable

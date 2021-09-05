@@ -13,6 +13,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "media/base/audio_decoder.h"
+#include "media/base/callback_registry.h"
+#include "media/base/cdm_context.h"
 #include "media/base/decryptor.h"
 #include "media/base/demuxer_stream.h"
 
@@ -38,15 +40,17 @@ class MEDIA_EXPORT DecryptingAudioDecoder : public AudioDecoder {
       MediaLog* media_log);
   ~DecryptingAudioDecoder() override;
 
-  // AudioDecoder implementation.
+  // Decoder implementation
+  bool SupportsDecryption() const override;
   std::string GetDisplayName() const override;
+
+  // AudioDecoder implementation.
   void Initialize(const AudioDecoderConfig& config,
                   CdmContext* cdm_context,
                   InitCB init_cb,
                   const OutputCB& output_cb,
                   const WaitingCB& waiting_cb) override;
-  void Decode(scoped_refptr<DecoderBuffer> buffer,
-              const DecodeCB& decode_cb) override;
+  void Decode(scoped_refptr<DecoderBuffer> buffer, DecodeCB decode_cb) override;
   void Reset(base::OnceClosure closure) override;
 
  private:
@@ -77,9 +81,8 @@ class MEDIA_EXPORT DecryptingAudioDecoder : public AudioDecoder {
                     Decryptor::Status status,
                     const Decryptor::AudioFrames& frames);
 
-  // Callback for the |decryptor_| to notify this object that a new key has been
-  // added.
-  void OnKeyAdded();
+  // Callback for the CDM to notify |this|.
+  void OnCdmContextEvent(CdmContext::Event event);
 
   // Resets decoder and calls |reset_cb_|.
   void DoReset();
@@ -120,7 +123,9 @@ class MEDIA_EXPORT DecryptingAudioDecoder : public AudioDecoder {
   // clear content, we want to ensure this decoder remains used.
   bool support_clear_content_ = false;
 
-  base::WeakPtr<DecryptingAudioDecoder> weak_this_;
+  // To keep the CdmContext event callback registered.
+  std::unique_ptr<CallbackRegistration> event_cb_registration_;
+
   base::WeakPtrFactory<DecryptingAudioDecoder> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(DecryptingAudioDecoder);

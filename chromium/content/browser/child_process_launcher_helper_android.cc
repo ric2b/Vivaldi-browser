@@ -22,9 +22,10 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_launcher_utils.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/site_isolation_policy.h"
 #include "content/public/common/content_descriptors.h"
 #include "content/public/common/content_switches.h"
-#include "services/service_manager/sandbox/switches.h"
+#include "sandbox/policy/switches.h"
 
 using base::android::AttachCurrentThread;
 using base::android::JavaParamRef;
@@ -57,7 +58,7 @@ void ChildProcessLauncherHelper::BeforeLaunchOnClientThread() {
 
   // Non-sandboxed utility or renderer process are currently not supported.
   DCHECK(process_type == switches::kGpuProcess ||
-         !command_line()->HasSwitch(service_manager::switches::kNoSandbox));
+         !command_line()->HasSwitch(sandbox::policy::switches::kNoSandbox));
 }
 
 base::Optional<mojo::NamedPlatformChannel>
@@ -212,6 +213,15 @@ static void JNI_ChildProcessLauncherHelperImpl_SetTerminationInfo(
   info->remaining_process_with_waived_binding =
       remaining_process_with_waived_binding;
   info->best_effort_reverse_rank = reverse_rank;
+}
+
+static jboolean
+JNI_ChildProcessLauncherHelperImpl_ServiceGroupImportanceEnabled(JNIEnv* env) {
+  // Not this is called on the launcher thread, not UI thread.
+  return SiteIsolationPolicy::AreIsolatedOriginsEnabled() ||
+         SiteIsolationPolicy::UseDedicatedProcessesForAllSites() ||
+         SiteIsolationPolicy::AreDynamicIsolatedOriginsEnabled() ||
+         SiteIsolationPolicy::ArePreloadedIsolatedOriginsEnabled();
 }
 
 // static

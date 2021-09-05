@@ -6,29 +6,24 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_INLINE_NG_RUBY_UTILS_H_
 
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
+#include "third_party/blink/renderer/platform/text/writing_mode.h"
 
 namespace blink {
 
 class ComputedStyle;
 class NGLineInfo;
 class NGLogicalLineItems;
-class NGPhysicalBoxFragment;
+class ShapeResultView;
+struct FontHeight;
 struct NGInlineItemResult;
-struct NGLineHeightMetrics;
+struct PhysicalRect;
 
-// Returns the logical bottom offset of the last line text, relative to
-// |container| origin. This is used to decide ruby annotation box position.
-//
-// See NGBlockLayoutAlgorithm::LayoutRubyText().
-LayoutUnit LastLineTextLogicalBottom(const NGPhysicalBoxFragment& container,
-                                     LayoutUnit default_value);
-
-// Returns the logical top offset of the first line text, relative to
-// |container| origin. This is used to decide ruby annotation box position.
-//
-// See NGBlockLayoutAlgorithm::LayoutRubyText().
-LayoutUnit FirstLineTextLogicalTop(const NGPhysicalBoxFragment& container,
-                                   LayoutUnit default_value);
+// Adjust the specified |rect| of a text fragment for 'em' height.
+// This is called on computing scrollable overflow with kEmHeight.
+PhysicalRect AdjustTextRectForEmHeight(const PhysicalRect& rect,
+                                       const ComputedStyle& style,
+                                       const ShapeResultView* shape_view,
+                                       WritingMode writing_mode);
 
 struct NGAnnotationOverhang {
   LayoutUnit start;
@@ -76,7 +71,7 @@ struct NGAnnotationMetrics {
 // Compute over/under annotation overflow/space for the specified line.
 NGAnnotationMetrics ComputeAnnotationOverflow(
     const NGLogicalLineItems& logical_line,
-    const NGLineHeightMetrics& line_box_metrics,
+    const FontHeight& line_box_metrics,
     LayoutUnit line_over,
     const ComputedStyle& line_style);
 

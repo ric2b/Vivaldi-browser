@@ -2,8 +2,11 @@
 
 #include "components/datasource/vivaldi_data_url_utils.h"
 
+#include "base/files/file.h"
+#include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "url/gurl.h"
 
 #include "app/vivaldi_constants.h"
@@ -48,7 +51,7 @@ base::Optional<PathType> ParsePath(base::StringPiece path,
     // Check for old-style bookmark thumbnail links where the path
     // was a full http: URL.
     base::StringPiece prefix = kOldThumbnailFormatPrefix;
-    if (path.starts_with(prefix)) {
+    if (base::StartsWith(path, prefix)) {
       type = PathType::kThumbnail;
       data_piece = path.substr(prefix.length());
     } else {
@@ -82,7 +85,7 @@ base::Optional<PathType> ParseUrl(base::StringPiece url, std::string* data) {
     return base::nullopt;
 
   // Short-circuit relative resource URLs to avoid the warning below.
-  if (url.starts_with("/resources/"))
+  if (base::StartsWith(url, "/resources/"))
     return base::nullopt;
 
   GURL gurl(url);
@@ -108,7 +111,7 @@ std::string GetPathMimeType(base::StringPiece path) {
   base::Optional<PathType> type = ParsePath(path, &data);
   if (type == PathType::kCSSMod) {
     if (data == kCSSModsData ||
-        base::StringPiece(data).ends_with(kCSSModsExtension))
+        base::EndsWith(data, kCSSModsExtension))
       return "text/css";
   }
   return "image/png";
@@ -132,6 +135,47 @@ std::string MakeUrl(PathType type, base::StringPiece data) {
   url += '/';
   url.append(data.data(), data.length());
   return url;
+}
+
+bool ReadFileOnBlockingThread(const base::FilePath& file_path,
+                              std::vector<unsigned char>* buffer) {
+  base::File file(file_path, base::File::FLAG_READ | base::File::FLAG_OPEN);
+  if (!file.IsValid()) {
+    // Treat the file that does not exist as an empty file and do not log the
+    // error.
+    if (file.error_details() != base::File::FILE_ERROR_NOT_FOUND) {
+      LOG(ERROR) << "Failed to open file " << file_path.value()
+                 << " for reading";
+    }
+    return false;
+  }
+  int64_t len64 = file.GetLength();
+  if (len64 < 0 || len64 >= (static_cast<int64_t>(1) << 31)) {
+    LOG(ERROR) << "Unexpected file length for " << file_path.value() << " - "
+               << len64;
+    return false;
+  }
+  int len = static_cast<int>(len64);
+  if (len == 0)
+    return false;
+
+  buffer->resize(static_cast<size_t>(len));
+  int read_len = file.Read(0, reinterpret_cast<char*>(buffer->data()), len);
+  if (read_len != len) {
+    LOG(ERROR) << "Failed to read " << len << "bytes from "
+               << file_path.value();
+    return false;
+  }
+  return true;
+}
+
+scoped_refptr<base::RefCountedMemory> ReadFileOnBlockingThread(
+    const base::FilePath& file_path) {
+  std::vector<unsigned char> buffer;
+  if (ReadFileOnBlockingThread(file_path, &buffer)) {
+    return base::RefCountedBytes::TakeVector(&buffer);
+  }
+  return nullptr;
 }
 
 }  // vivaldi_data_url_utils

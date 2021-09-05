@@ -27,7 +27,8 @@ using content::BrowserThread;
 class StringTraceEndpoint
     : public content::TracingController::TraceDataEndpoint {
  public:
-  StringTraceEndpoint(std::string* result, const base::Closure& callback)
+  StringTraceEndpoint(std::string* result,
+                      const base::RepeatingClosure& callback)
       : result_(result), completion_callback_(callback) {}
 
   void ReceiveTraceChunk(std::unique_ptr<std::string> chunk) override {
@@ -46,7 +47,7 @@ class StringTraceEndpoint
   ~StringTraceEndpoint() override {}
 
   std::string* result_;
-  base::Closure completion_callback_;
+  base::RepeatingClosure completion_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(StringTraceEndpoint);
 };
@@ -65,7 +66,7 @@ class InProcessTraceController {
       tracing::StartTracingDoneCallback start_tracing_done_callback) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     return content::TracingController::GetInstance()->StartTracing(
-        trace_config, start_tracing_done_callback);
+        trace_config, std::move(start_tracing_done_callback));
   }
 
   bool EndTracing(std::string* json_trace_output) {
@@ -73,8 +74,9 @@ class InProcessTraceController {
     if (!content::TracingController::GetInstance()->StopTracing(
             new StringTraceEndpoint(
                 json_trace_output,
-                base::Bind(&InProcessTraceController::OnTracingComplete,
-                           base::Unretained(this))),
+                base::BindRepeating(
+                    &InProcessTraceController::OnTracingComplete,
+                    base::Unretained(this))),
             tracing::mojom::kChromeTraceEventLabel)) {
       return false;
     }
@@ -121,7 +123,7 @@ bool BeginTracingWithTraceConfig(
     const base::trace_event::TraceConfig& trace_config,
     tracing::StartTracingDoneCallback start_tracing_done_callback) {
   return InProcessTraceController::GetInstance()->BeginTracing(
-      trace_config, start_tracing_done_callback);
+      trace_config, std::move(start_tracing_done_callback));
 }
 
 bool EndTracing(std::string* json_trace_output) {

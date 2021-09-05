@@ -10,6 +10,22 @@
 
 namespace blink {
 
+ImeTextSpan::Type ConvertUiTypeToType(ui::ImeTextSpan::Type type) {
+  switch (type) {
+    case ui::ImeTextSpan::Type::kComposition:
+      return ImeTextSpan::Type::kComposition;
+    case ui::ImeTextSpan::Type::kSuggestion:
+      return ImeTextSpan::Type::kSuggestion;
+    case ui::ImeTextSpan::Type::kMisspellingSuggestion:
+      return ImeTextSpan::Type::kMisspellingSuggestion;
+    case ui::ImeTextSpan::Type::kAutocorrect:
+      return ImeTextSpan::Type::kAutocorrect;
+  }
+
+  NOTREACHED();
+  return ImeTextSpan::Type::kComposition;
+}
+
 ImeTextSpan::ImeTextSpan(Type type,
                          unsigned start_offset,
                          unsigned end_offset,
@@ -52,22 +68,6 @@ Vector<String> ConvertStdVectorOfStdStringsToVectorOfStrings(
   return output;
 }
 
-ImeTextSpan::Type ConvertUiTypeToType(ui::ImeTextSpan::Type type) {
-  switch (type) {
-    case ui::ImeTextSpan::Type::kComposition:
-      return ImeTextSpan::Type::kComposition;
-    case ui::ImeTextSpan::Type::kSuggestion:
-      return ImeTextSpan::Type::kSuggestion;
-    case ui::ImeTextSpan::Type::kMisspellingSuggestion:
-      return ImeTextSpan::Type::kMisspellingSuggestion;
-    case ui::ImeTextSpan::Type::kAutocorrect:
-      return ImeTextSpan::Type::kAutocorrect;
-  }
-
-  NOTREACHED();
-  return ImeTextSpan::Type::kComposition;
-}
-
 ui::mojom::ImeTextSpanThickness ConvertUiThicknessToThickness(
     ui::ImeTextSpan::Thickness thickness) {
   switch (thickness) {
@@ -102,6 +102,19 @@ ui::mojom::ImeTextSpanUnderlineStyle ConvertUiUnderlineToUnderline(
   return ui::mojom::ImeTextSpanUnderlineStyle::kNone;
 }
 
+ui::ImeTextSpan::Type ConvertImeTextSpanTypeToUiType(ImeTextSpan::Type type) {
+  switch (type) {
+    case ImeTextSpan::Type::kAutocorrect:
+      return ui::ImeTextSpan::Type::kAutocorrect;
+    case ImeTextSpan::Type::kComposition:
+      return ui::ImeTextSpan::Type::kComposition;
+    case ImeTextSpan::Type::kMisspellingSuggestion:
+      return ui::ImeTextSpan::Type::kMisspellingSuggestion;
+    case ImeTextSpan::Type::kSuggestion:
+      return ui::ImeTextSpan::Type::kSuggestion;
+  }
+}
+
 }  // namespace
 
 ImeTextSpan::ImeTextSpan(const ui::ImeTextSpan& ime_text_span)
@@ -118,4 +131,10 @@ ImeTextSpan::ImeTextSpan(const ui::ImeTextSpan& ime_text_span)
                   ime_text_span.interim_char_selection,
                   ConvertStdVectorOfStdStringsToVectorOfStrings(
                       ime_text_span.suggestions)) {}
+
+ui::ImeTextSpan ImeTextSpan::ToUiImeTextSpan() {
+  return ui::ImeTextSpan(ConvertImeTextSpanTypeToUiType(GetType()),
+                         StartOffset(), EndOffset());
+}
+
 }  // namespace blink

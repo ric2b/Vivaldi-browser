@@ -175,8 +175,7 @@ class TrayAccessibilityTest
       policy::PolicyMap policy_map;
       policy_map.Set(policy::key::kShowAccessibilityOptionsInSystemTrayMenu,
                      policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-                     policy::POLICY_SOURCE_CLOUD,
-                     std::make_unique<base::Value>(value), nullptr);
+                     policy::POLICY_SOURCE_CLOUD, base::Value(value), nullptr);
       provider_.UpdateChromePolicy(policy_map);
       base::RunLoop().RunUntilIdle();
     } else {
@@ -214,7 +213,7 @@ class TrayAccessibilityTest
 };
 
 // Fails on linux-chromeos-dbg see crbug/1027919.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_ShowMenu DISABLED_ShowMenu
 #else
 #define MAYBE_ShowMenu ShowMenu
@@ -379,7 +378,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, MAYBE_ShowMenu) {
 }
 
 // Fails on linux-chromeos-dbg see crbug/1027919.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_ShowMenuWithShowMenuOption DISABLED_ShowMenuWithShowMenuOption
 #else
 #define MAYBE_ShowMenuWithShowMenuOption ShowMenuWithShowMenuOption

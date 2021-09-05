@@ -7,7 +7,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
-#include "third_party/blink/public/web/modules/mediastream/media_stream_video_track.h"
+#include "third_party/blink/renderer/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_source.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_component.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_descriptor.h"
@@ -49,16 +49,14 @@ void MediaStreamUtils::CreateNativeAudioMediaStreamTrack(
     DVLOG(1) << "Creating WebAudio media stream source.";
     audio_source = new WebAudioMediaStreamSource(source, task_runner);
     // |source| takes ownership of |audio_source|.
-    audio_source->SetOwner(source);
     source->SetPlatformSource(
         base::WrapUnique(audio_source));  // Takes ownership.
 
-    WebMediaStreamSource::Capabilities capabilities;
+    MediaStreamSource::Capabilities capabilities;
     capabilities.device_id = source->Id();
-    // TODO(crbug.com/704136): Switch away from std::vector.
-    capabilities.echo_cancellation = std::vector<bool>({false});
-    capabilities.auto_gain_control = std::vector<bool>({false});
-    capabilities.noise_suppression = std::vector<bool>({false});
+    capabilities.echo_cancellation = Vector<bool>({false});
+    capabilities.auto_gain_control = Vector<bool>({false});
+    capabilities.noise_suppression = Vector<bool>({false});
     capabilities.sample_size = {
         media::SampleFormatToBitsPerChannel(media::kSampleFormatS16),  // min
         media::SampleFormatToBitsPerChannel(media::kSampleFormatS16)   // max

@@ -10,7 +10,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "components/browsing_data/content/local_shared_objects_container.h"
-#include "components/content_settings/browser/tab_specific_content_settings.h"
+#include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/browser/ui/cookie_controls_view.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
@@ -50,9 +50,11 @@ void CookieControlsController::Update(content::WebContents* web_contents) {
   if (!tab_observer_ || GetWebContents() != web_contents)
     tab_observer_ = std::make_unique<TabObserver>(this, web_contents);
   auto status = GetStatus(web_contents);
+  int allowed_cookies = GetAllowedCookieCount();
   int blocked_count = GetBlockedCookieCount();
   for (auto& observer : observers_)
-    observer.OnStatusChanged(status.first, status.second, blocked_count);
+    observer.OnStatusChanged(status.first, status.second, allowed_cookies,
+                             blocked_count);
 }
 
 std::pair<CookieControlsStatus, CookieControlsEnforcement>
@@ -105,21 +107,32 @@ void CookieControlsController::OnCookieBlockingEnabledForSite(
   }
 }
 
-int CookieControlsController::GetBlockedCookieCount() {
-  auto* tscs =
-      content_settings::TabSpecificContentSettings::GetForCurrentDocument(
+int CookieControlsController::GetAllowedCookieCount() {
+  auto* pscs =
+      content_settings::PageSpecificContentSettings::GetForCurrentDocument(
           tab_observer_->web_contents()->GetMainFrame());
-  if (tscs) {
-    return tscs->blocked_local_shared_objects().GetObjectCount();
+  if (pscs) {
+    return pscs->allowed_local_shared_objects().GetObjectCount();
+  } else {
+    return 0;
+  }
+}
+int CookieControlsController::GetBlockedCookieCount() {
+  auto* pscs =
+      content_settings::PageSpecificContentSettings::GetForCurrentDocument(
+          tab_observer_->web_contents()->GetMainFrame());
+  if (pscs) {
+    return pscs->blocked_local_shared_objects().GetObjectCount();
   } else {
     return 0;
   }
 }
 
 void CookieControlsController::PresentBlockedCookieCounter() {
+  int allowed_cookies = GetAllowedCookieCount();
   int blocked_cookies = GetBlockedCookieCount();
   for (auto& observer : observers_)
-    observer.OnBlockedCookiesCountChanged(blocked_cookies);
+    observer.OnCookiesCountChanged(allowed_cookies, blocked_cookies);
 }
 
 void CookieControlsController::OnThirdPartyCookieBlockingChanged(
@@ -150,7 +163,7 @@ void CookieControlsController::RemoveObserver(CookieControlsView* obs) {
 CookieControlsController::TabObserver::TabObserver(
     CookieControlsController* cookie_controls,
     content::WebContents* web_contents)
-    : content_settings::TabSpecificContentSettings::SiteDataObserver(
+    : content_settings::PageSpecificContentSettings::SiteDataObserver(
           web_contents),
       cookie_controls_(cookie_controls) {}
 

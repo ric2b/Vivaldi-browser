@@ -751,6 +751,30 @@ TEST_P(ScrollAnchorTest, SerializeAnchorVerticalWritingMode) {
   ValidateSerializedAnchor("html>body>.barbaz", LayoutPoint(-50, 0));
 }
 
+TEST_P(ScrollAnchorTest, RestoreAnchorVerticalRlWritingMode) {
+  SetBodyInnerHTML(R"HTML(
+      <style>
+      body {
+          height: 100px;
+          margin: 0;
+          writing-mode:
+          vertical-rl;
+        }
+        div.big { width: 800px; }
+        div { width: 100px; height: 100px; }
+      </style>
+      <div class='big'></div>
+      <div id='last'></div>
+      )HTML");
+
+  SerializedAnchor serialized_anchor("#last", LayoutPoint(0, 0));
+
+  EXPECT_TRUE(
+      GetScrollAnchor(LayoutViewport()).RestoreAnchor(serialized_anchor));
+  EXPECT_EQ(LayoutViewport()->ScrollOffsetInt().Width(), 0);
+  EXPECT_EQ(LayoutViewport()->ScrollOffsetInt().Height(), 0);
+}
+
 TEST_P(ScrollAnchorTest, SerializeAnchorQualifiedTagName) {
   SetBodyInnerHTML(R"HTML(
       <style>
@@ -999,7 +1023,7 @@ TEST_P(ScrollAnchorTest, ClampAdjustsAnchorAnimation) {
   GetDocument().getElementById("hidden")->setAttribute(html_names::kStyleAttr,
                                                        "display:block");
   GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kTest);
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   EXPECT_EQ(IntSize(0, 200), LayoutViewport()
                                  ->GetScrollAnimator()
                                  .ImplOnlyAnimationAdjustmentForTesting());

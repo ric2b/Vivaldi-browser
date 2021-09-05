@@ -18,6 +18,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/x/event.h"
 #include "ui/gfx/x/x11_types.h"
+#include "ui/gfx/x/xinput.h"
 
 namespace ui {
 
@@ -65,10 +66,6 @@ EVENTS_X_EXPORT float GetTouchAngleFromXEvent(const x11::Event& xev);
 // Gets the force from a native_event. Normalized to be [0, 1]. Default is 0.0.
 EVENTS_X_EXPORT float GetTouchForceFromXEvent(const x11::Event& xev);
 
-// Gets the pointer type from a native_event.
-EVENTS_X_EXPORT EventPointerType
-GetTouchPointerTypeFromXEvent(const x11::Event& xev);
-
 // Gets the pointer details from an x11::Event.
 EVENTS_X_EXPORT PointerDetails
 GetTouchPointerDetailsFromXEvent(const x11::Event& xev);
@@ -93,6 +90,10 @@ EVENTS_X_EXPORT bool GetFlingDataFromXEvent(const x11::Event& xev,
 
 // Uses the XModifierStateWatcher to determine if alt is pressed or not.
 EVENTS_X_EXPORT bool IsAltPressed();
+
+// Proxies the XModifierStateWatcher::state() to return the current state of
+// modifier keys.
+EVENTS_X_EXPORT int GetModifierKeyState();
 
 EVENTS_X_EXPORT void ResetTimestampRolloverCountersForTesting();
 

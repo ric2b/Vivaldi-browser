@@ -186,16 +186,11 @@ TEST_F(WebContentsViewAuraTest, WebContentsDestroyedDuringClick) {
                              0);
   ui::EventHandler* event_handler = GetView();
   event_handler->OnMouseEvent(&mouse_event);
-#if defined(USE_X11)
-  // The web-content is not activated during mouse-press on X11.
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+  // The web-content is not activated during mouse-press on Linux.
   // See comment in WebContentsViewAura::OnMouseEvent() for more details.
-  if (!features::IsUsingOzonePlatform()) {
-    EXPECT_NE(web_contents(), nullptr);
-  } else
+  EXPECT_NE(web_contents(), nullptr);
 #endif
-  {
-    EXPECT_EQ(web_contents(), nullptr);
-  }
 }
 
 TEST_F(WebContentsViewAuraTest, OccludeView) {
@@ -317,6 +312,11 @@ TEST_F(WebContentsViewAuraTest, DragDropFiles) {
 
 #if defined(OS_WIN) || defined(USE_X11)
 TEST_F(WebContentsViewAuraTest, DragDropFilesOriginateFromRenderer) {
+#if defined(USE_X11)
+  // TODO(https://crbug.com/1109695): enable for Ozone/Linux.
+  if (features::IsUsingOzonePlatform())
+    return;
+#endif
   WebContentsViewAura* view = GetView();
   auto data = std::make_unique<ui::OSExchangeData>();
 

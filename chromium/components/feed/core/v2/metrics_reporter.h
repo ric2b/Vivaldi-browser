@@ -24,7 +24,8 @@ enum class FeedEngagementType {
   kFeedEngaged = 0,
   kFeedEngagedSimple = 1,
   kFeedInteracted = 2,
-  kFeedScrolled = 3,
+  kDeprecatedFeedScrolled = 3,
+  kFeedScrolled = 4,
   kMaxValue = FeedEngagementType::kFeedScrolled,
 };
 
@@ -47,7 +48,9 @@ enum class FeedUserActionType {
   // User action not reported here. See Suggestions.SurfaceVisible.
   kOpenedFeedSurface = 10,
   kTappedOpenInNewIncognitoTab = 11,
-  kMaxValue = kTappedOpenInNewIncognitoTab,
+  kEphemeralChange = 12,
+  kEphemeralChangeRejected = 13,
+  kMaxValue = kEphemeralChangeRejected,
 };
 
 }  // namespace internal
@@ -65,7 +68,9 @@ class MetricsReporter {
   // User interactions. See |FeedStreamApi| for definitions.
 
   virtual void ContentSliceViewed(SurfaceId surface_id, int index_in_stream);
+  void FeedViewed(SurfaceId surface_id);
   void OpenAction(int index_in_stream);
+  void OpenVisitComplete(base::TimeDelta visit_time);
   void OpenInNewTabAction(int index_in_stream);
   void OpenInNewIncognitoTabAction();
   void SendFeedbackAction();
@@ -77,6 +82,9 @@ class MetricsReporter {
   void NotInterestedInAction();
   void ManageInterestsAction();
   void ContextMenuOpened();
+  void EphemeralStreamChange();
+  void EphemeralStreamChangeRejected();
+
   // Indicates the user scrolled the feed by |distance_dp| and then stopped
   // scrolling.
   void StreamScrolled(int distance_dp);
@@ -94,9 +102,10 @@ class MetricsReporter {
   // Stream events.
 
   virtual void OnLoadStream(LoadStreamStatus load_from_store_status,
-                            LoadStreamStatus final_status);
+                            LoadStreamStatus final_status,
+                            std::unique_ptr<LoadLatencyTimes> load_latencies);
   virtual void OnBackgroundRefresh(LoadStreamStatus final_status);
-  void OnLoadMoreBegin(SurfaceId surface_id);
+  virtual void OnLoadMoreBegin(SurfaceId surface_id);
   virtual void OnLoadMore(LoadStreamStatus final_status);
   virtual void OnClearAll(base::TimeDelta time_since_last_clear);
   // Called each time the surface receives new content.
@@ -104,9 +113,14 @@ class MetricsReporter {
   // Called when Chrome is entering the background.
   void OnEnterBackground();
 
+  static void OnImageFetched(int net_error_or_http_status);
+
   // Actions upload.
   static void OnUploadActionsBatch(UploadActionsBatchStatus status);
-  static void OnUploadActions(UploadActionsStatus status);
+  virtual void OnUploadActions(UploadActionsStatus status);
+
+  static void ActivityLoggingEnabled(bool response_has_logging_enabled);
+  static void NoticeCardFulfilled(bool response_has_notice_card);
 
  private:
   base::WeakPtr<MetricsReporter> GetWeakPtr() {
@@ -151,6 +165,9 @@ class MetricsReporter {
   base::Optional<base::TimeTicks> time_in_feed_start_;
   // For TimeSpentOnFeed.
   base::TimeDelta tracked_visit_time_in_feed_;
+  // Non-null only directly after a stream load.
+  std::unique_ptr<LoadLatencyTimes> load_latencies_;
+  bool load_latencies_recorded_ = false;
 
   base::WeakPtrFactory<MetricsReporter> weak_ptr_factory_{this};
 };

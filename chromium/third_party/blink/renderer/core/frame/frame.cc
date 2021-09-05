@@ -36,6 +36,7 @@
 #include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/public/web/web_remote_frame_client.h"
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy_manager.h"
+#include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/dom/document_type.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
@@ -79,6 +80,14 @@ Frame* Frame::ResolveFrame(const base::UnguessableToken& frame_token) {
   return nullptr;
 }
 
+// static
+Frame* Frame::ResolveFrame(const FrameToken& frame_token) {
+  if (frame_token.Is<RemoteFrameToken>())
+    return RemoteFrame::FromFrameToken(frame_token.GetAs<RemoteFrameToken>());
+  DCHECK(frame_token.Is<LocalFrameToken>());
+  return LocalFrame::FromFrameToken(frame_token.GetAs<LocalFrameToken>());
+}
+
 Frame::~Frame() {
   InstanceCounters::DecrementCounter(InstanceCounters::kFrameCounter);
   DCHECK(!owner_);
@@ -94,6 +103,8 @@ void Frame::Trace(Visitor* visitor) const {
   visitor->Trace(client_);
   visitor->Trace(navigation_rate_limiter_);
   visitor->Trace(window_agent_factory_);
+  visitor->Trace(opened_frame_tracker_);
+  visitor->Trace(opener_);
 }
 
 void Frame::Detach(FrameDetachType type) {
@@ -130,6 +141,7 @@ void Frame::Detach(FrameDetachType type) {
   // the frame tree. https://crbug.com/578349.
   DisconnectOwnerElement();
   page_ = nullptr;
+  embedding_token_ = base::nullopt;
 }
 
 void Frame::DisconnectOwnerElement() {
@@ -228,9 +240,11 @@ void Frame::DidChangeVisibilityState() {
     child_frames[i]->DidChangeVisibilityState();
 }
 
-void Frame::NotifyUserActivationInLocalTree() {
-  for (Frame* node = this; node; node = node->Tree().Parent())
-    node->user_activation_state_.Activate();
+void Frame::NotifyUserActivationInLocalTree(
+    mojom::blink::UserActivationNotificationType notification_type) {
+  for (Frame* node = this; node; node = node->Tree().Parent()) {
+    node->user_activation_state_.Activate(notification_type);
+  }
 
   // See the "Same-origin Visibility" section in |UserActivationState| class
   // doc.
@@ -246,7 +260,7 @@ void Frame::NotifyUserActivationInLocalTree() {
       if (local_frame_node &&
           security_origin->CanAccess(
               local_frame_node->GetSecurityContext()->GetSecurityOrigin())) {
-        node->user_activation_state_.Activate();
+        node->user_activation_state_.Activate(notification_type);
       }
     }
   }
@@ -280,15 +294,18 @@ void Frame::ClearUserActivationInLocalTree() {
   }
 }
 
-void Frame::TransferUserActivationFrom(Frame* other) {
-  if (other)
-    user_activation_state_.TransferFrom(other->user_activation_state_);
-}
-
 void Frame::SetOwner(FrameOwner* owner) {
   owner_ = owner;
   UpdateInertIfPossible();
   UpdateInheritedEffectiveTouchActionIfPossible();
+}
+
+bool Frame::IsAdSubframe() const {
+  return ad_frame_type_ != mojom::blink::AdFrameType::kNonAd;
+}
+
+bool Frame::IsAdRoot() const {
+  return ad_frame_type_ == mojom::blink::AdFrameType::kRootAd;
 }
 
 void Frame::UpdateInertIfPossible() {
@@ -336,6 +353,17 @@ const std::string& Frame::ToTraceValue() {
   if (!trace_value_)
     trace_value_ = devtools_frame_token_.ToString();
   return trace_value_.value();
+}
+
+void Frame::SetEmbeddingToken(const base::UnguessableToken& embedding_token) {
+  embedding_token_ = embedding_token;
+  if (auto* owner = DynamicTo<HTMLFrameOwnerElement>(Owner())) {
+    // The embedding token is also used as the AXTreeID to reference the child
+    // accessibility tree for an HTMLFrameOwnerElement, so we need to notify the
+    // AXObjectCache object whenever this changes, to get the AX tree updated.
+    if (AXObjectCache* cache = owner->GetDocument().ExistingAXObjectCache())
+      cache->EmbeddingTokenChanged(owner);
+  }
 }
 
 Frame::Frame(FrameClient* client,
@@ -429,10 +457,14 @@ void Frame::FocusPage(LocalFrame* originating_frame) {
   GetPage()->GetChromeClient().DidFocusPage();
 }
 
-STATIC_ASSERT_ENUM(FrameDetachType::kRemove,
-                   WebLocalFrameClient::DetachType::kRemove);
-STATIC_ASSERT_ENUM(FrameDetachType::kSwap,
-                   WebLocalFrameClient::DetachType::kSwap);
+void Frame::SetOpenerDoNotNotify(Frame* opener) {
+  if (opener_)
+    opener_->opened_frame_tracker_.Remove(this);
+  if (opener)
+    opener->opened_frame_tracker_.Add(this);
+  opener_ = opener;
+}
+
 STATIC_ASSERT_ENUM(FrameDetachType::kRemove,
                    WebRemoteFrameClient::DetachType::kRemove);
 STATIC_ASSERT_ENUM(FrameDetachType::kSwap,

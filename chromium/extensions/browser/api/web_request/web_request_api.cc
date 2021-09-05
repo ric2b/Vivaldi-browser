@@ -64,6 +64,7 @@
 #include "extensions/browser/guest_view/guest_view_events.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
+#include "extensions/browser/process_map.h"
 #include "extensions/browser/runtime_data.h"
 #include "extensions/browser/warning_service.h"
 #include "extensions/browser/warning_set.h"
@@ -214,9 +215,9 @@ ExtensionWebRequestEventRouter::EventTypes GetEventTypeFromEventName(
       strlen(webview::kWebViewEventPrefix);
 
   // Canonicalize the |event_name| to the request stage.
-  if (event_name.starts_with(kWebRequestEventPrefix))
+  if (base::StartsWith(event_name, kWebRequestEventPrefix))
     event_name.remove_prefix(kWebRequestEventPrefixLen);
-  else if (event_name.starts_with(webview::kWebViewEventPrefix))
+  else if (base::StartsWith(event_name, webview::kWebViewEventPrefix))
     event_name.remove_prefix(kWebViewEventPrefixLen);
   else
     return ExtensionWebRequestEventRouter::kInvalidEvent;
@@ -743,15 +744,13 @@ bool WebRequestAPI::MaybeProxyURLLoaderFactory(
          (browser_context->IsOffTheRecord() &&
           ExtensionsBrowserClient::Get()->GetOriginalContext(browser_context) ==
               browser_context_));
-  const ukm::SourceId ukm_source_id =
-      web_contents ? ukm::GetSourceIdForWebContentsDocument(web_contents)
-                   : ukm::kInvalidSourceId;
+  const int frame_id = frame ? frame->GetRoutingID() : MSG_ROUTING_NONE;
   WebRequestProxyingURLLoaderFactory::StartProxying(
-      browser_context, is_navigation ? -1 : render_process_id,
+      browser_context, is_navigation ? -1 : render_process_id, frame_id,
       &request_id_generator_, std::move(navigation_ui_data),
       std::move(navigation_id), std::move(proxied_receiver),
       std::move(target_factory_remote), std::move(header_client_receiver),
-      proxies_.get(), type, ukm_source_id);
+      proxies_.get(), type);
   return true;
 }
 

@@ -10,6 +10,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
@@ -33,16 +34,15 @@ bool IsInScope(content::NavigationEntry* entry, const std::string& scope_spec) {
                           base::CompareCase::SENSITIVE);
 }
 
-Browser* ReparentWebContentsWithBrowserCreateParams(
-    content::WebContents* contents,
-    const Browser::CreateParams& browser_params) {
+Browser* ReparentWebContentsIntoAppBrowser(content::WebContents* contents,
+                                           Browser* target_browser) {
+  DCHECK(target_browser->is_type_app());
   Browser* source_browser = chrome::FindBrowserWithWebContents(contents);
-  Browser* target_browser = Browser::Create(browser_params);
 
-  if (vivaldi::IsVivaldiRunning() && !browser_params.is_vivaldi) {
+  if (vivaldi::IsVivaldiRunning() && !target_browser->is_vivaldi()) {
     // If this is a non-vivaldi window, we cannot move the tab over due
     // to WebContentsChildFrame vs WebContentsView conflict.
-    content::WebContents::CreateParams params(browser_params.profile);
+    content::WebContents::CreateParams params(target_browser->profile());
     std::unique_ptr<content::WebContents> source_contents(
         content::WebContents::Create(params));
 
@@ -83,7 +83,7 @@ base::Optional<AppId> GetWebAppForActiveTab(Browser* browser) {
   if (!web_contents)
     return base::nullopt;
 
-  return provider->registrar().FindAppWithUrlInScope(
+  return provider->registrar().FindInstalledAppWithUrlInScope(
       web_contents->GetMainFrame()->GetLastCommittedURL());
 }
 
@@ -136,6 +136,13 @@ Browser* ReparentWebContentsIntoAppBrowser(content::WebContents* contents,
     PrunePreScopeNavigationHistory(*app_scope, contents);
   }
 
+  if (registrar.IsInExperimentalTabbedWindowMode(app_id)) {
+    for (Browser* browser : *BrowserList::GetInstance()) {
+      if (AppBrowserController::IsForWebAppBrowser(browser, app_id))
+        return ::ReparentWebContentsIntoAppBrowser(contents, browser);
+    }
+  }
+
   Browser::CreateParams browser_params(Browser::CreateParams::CreateForApp(
       GenerateApplicationNameFromAppId(app_id), true /* trusted_source */,
       gfx::Rect(), profile, true /* user_gesture */));
@@ -143,7 +150,9 @@ Browser* ReparentWebContentsIntoAppBrowser(content::WebContents* contents,
   // We're not using a Vivaldi popup for PWAs as we need full functionality.
   browser_params.is_vivaldi = false;
 
-  return ReparentWebContentsWithBrowserCreateParams(contents, browser_params);
+  return ::ReparentWebContentsIntoAppBrowser(
+      contents,
+      Browser::Create(browser_params));
 }
 
 Browser* ReparentWebContentsForFocusMode(content::WebContents* contents) {
@@ -156,7 +165,8 @@ Browser* ReparentWebContentsForFocusMode(content::WebContents* contents) {
       GenerateApplicationNameForFocusMode(), true /* trusted_source */,
       gfx::Rect(), profile, true /* user_gesture */));
   browser_params.is_focus_mode = true;
-  return ReparentWebContentsWithBrowserCreateParams(contents, browser_params);
+  return ::ReparentWebContentsIntoAppBrowser(contents,
+                                             Browser::Create(browser_params));
 }
 
 void SetAppPrefsForWebContents(content::WebContents* web_contents) {

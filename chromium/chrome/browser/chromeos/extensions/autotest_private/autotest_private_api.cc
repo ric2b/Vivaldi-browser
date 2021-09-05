@@ -46,6 +46,7 @@
 #include "base/json/json_reader.h"
 #include "base/lazy_instance.h"
 #include "base/no_destructor.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/scoped_observer.h"
@@ -85,7 +86,6 @@
 #include "chrome/browser/chromeos/printing/cups_printers_manager.h"
 #include "chrome/browser/chromeos/settings/stats_reporting_controller.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
-#include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/policy/chrome_policy_conversions_client.h"
@@ -95,6 +95,7 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/shelf_spinner_controller.h"
+#include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -131,6 +132,7 @@
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_action.h"
+#include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_function_registry.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
@@ -315,6 +317,8 @@ api::autotest_private::AppType GetAppType(apps::mojom::AppType type) {
       return api::autotest_private::AppType::APP_TYPE_MACNATIVE;
     case apps::mojom::AppType::kLacros:
       return api::autotest_private::AppType::APP_TYPE_LACROS;
+    case apps::mojom::AppType::kRemote:
+      return api::autotest_private::AppType::APP_TYPE_REMOTE;
   }
   NOTREACHED();
   return api::autotest_private::AppType::APP_TYPE_NONE;
@@ -548,6 +552,7 @@ display::Display::Rotation ToRotation(
       return display::Display::ROTATE_180;
     case api::autotest_private::RotationType::ROTATION_TYPE_ROTATE270:
       return display::Display::ROTATE_270;
+    case api::autotest_private::RotationType::ROTATION_TYPE_ROTATEANY:
     case api::autotest_private::RotationType::ROTATION_TYPE_NONE:
       break;
   }
@@ -733,8 +738,13 @@ void ForwardSmoothessAndReset(int64_t display_id, int smoothness) {
   auto it = infos->find(display_id);
   DCHECK(it != infos->end());
   DCHECK(it->second.callback);
-  std::move(it->second.callback).Run(smoothness);
+
+  // Moves the callback out and erases the mapping first to allow new tracking
+  // for |display_id| to start before |callback| run returns.
+  // See https://crbug.com/1098886.
+  auto callback = std::move(it->second.callback);
   infos->erase(it);
+  std::move(callback).Run(smoothness);
 }
 
 std::string ResolutionToString(
@@ -1745,7 +1755,7 @@ ExtensionFunction::ResponseAction
 AutotestPrivateGetClipboardTextDataFunction::Run() {
   base::string16 data;
   ui::Clipboard::GetForCurrentThread()->ReadText(
-      ui::ClipboardBuffer::kCopyPaste, &data);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &data);
   return RespondNow(
       OneArgument(base::Value::ToUniquePtrValue(base::Value(data))));
 }
@@ -1952,51 +1962,6 @@ void AutotestPrivateImportCrostiniFunction::CrostiniImported(
   } else {
     Respond(Error("Error importing crostini"));
   }
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// AutotestPrivateInstallPluginVMFunction
-///////////////////////////////////////////////////////////////////////////////
-
-AutotestPrivateInstallPluginVMFunction::
-    ~AutotestPrivateInstallPluginVMFunction() = default;
-
-ExtensionFunction::ResponseAction
-AutotestPrivateInstallPluginVMFunction::Run() {
-  std::unique_ptr<api::autotest_private::InstallPluginVM::Params> params(
-      api::autotest_private::InstallPluginVM::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params);
-  DVLOG(1) << "AutotestPrivateInstallPluginVMFunction " << params->image_url
-           << ", " << params->image_hash << ", " << params->license_key;
-
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  plugin_vm::PluginVmInstallerFactory::GetForProfile(profile)
-      ->SetFreeDiskSpaceForTesting(
-          plugin_vm::PluginVmInstallerFactory::GetForProfile(profile)
-              ->RequiredFreeDiskSpace());
-  plugin_vm::SetFakePluginVmPolicy(profile, params->image_url,
-                                   params->image_hash, params->license_key);
-
-  plugin_vm::ShowPluginVmInstallerView(profile);
-  auto* view = PluginVmInstallerView::GetActiveViewForTesting();
-  view->SetFinishedCallbackForTesting(base::BindOnce(
-      &AutotestPrivateInstallPluginVMFunction::OnInstallFinished, this));
-  // Start the installation.
-  view->AcceptDialog();
-
-  return RespondLater();
-}
-
-void AutotestPrivateInstallPluginVMFunction::OnInstallFinished(bool success) {
-  if (!success) {
-    Respond(Error("Error installing Plugin VM"));
-    return;
-  }
-
-  // Dismiss the dialog and start launching the VM.
-  PluginVmInstallerView::GetActiveViewForTesting()->AcceptDialog();
-
-  Respond(NoArguments());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2265,8 +2230,13 @@ ExtensionFunction::ResponseAction AutotestPrivateUpdatePrinterFunction::Run() {
   if (js_printer.printer_make_and_model)
     printer.set_make_and_model(*js_printer.printer_make_and_model);
 
-  if (js_printer.printer_uri)
-    printer.set_uri(*js_printer.printer_uri);
+  if (js_printer.printer_uri) {
+    std::string message;
+    if (!printer.SetUri(*js_printer.printer_uri, &message)) {
+      LOG(ERROR) << message;
+      return RespondNow(Error("Incorrect URI: " + message));
+    }
+  }
 
   if (js_printer.printer_ppd) {
     const GURL ppd =
@@ -2576,7 +2546,7 @@ class AssistantInteractionHelper
       const chromeos::assistant::AndroidAppInfo& app_info) override {
     result_.SetKey("openAppResponse", base::Value(app_info.package_name));
     CheckResponseIsValid(__FUNCTION__);
-    return true;
+    return false;
   }
 
   void OnSpeechRecognitionFinalResult(
@@ -2876,9 +2846,6 @@ AutotestPrivateGetAllInstalledAppsFunction::Run() {
   Profile* const profile = Profile::FromBrowserContext(browser_context());
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile);
-
-  if (!proxy)
-    return RespondNow(Error("App Service not available"));
 
   std::vector<api::autotest_private::App> installed_apps;
   proxy->AppRegistryCache().ForEachApp([&installed_apps](
@@ -3339,32 +3306,40 @@ AutotestPrivateWaitForDisplayRotationFunction::Run() {
   std::unique_ptr<api::autotest_private::WaitForDisplayRotation::Params> params(
       api::autotest_private::WaitForDisplayRotation::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
-  target_rotation_ = ToRotation(params->rotation);
-
   if (!base::StringToInt64(params->display_id, &display_id_)) {
     return RespondNow(Error(base::StrCat(
         {"Invalid display_id; expected string with numbers only, got ",
          params->display_id})));
   }
-  auto* root_window = ash::Shell::GetRootWindowForDisplayId(display_id_);
-  if (!root_window) {
-    return RespondNow(Error(base::StrCat(
-        {"Invalid display_id; no root window found for the display id ",
-         params->display_id})));
-  }
-  auto* animator = ash::ScreenRotationAnimator::GetForRootWindow(root_window);
-  if (!animator->IsRotating()) {
-    display::Display display;
-    display::Screen::GetScreen()->GetDisplayWithDisplayId(display_id_,
-                                                          &display);
-    // This should never fail.
-    DCHECK(display.is_valid());
-    return RespondNow(OneArgument(
-        std::make_unique<base::Value>(display.rotation() == target_rotation_)));
-  }
-  self_ = this;
 
-  animator->AddObserver(this);
+  if (params->rotation ==
+      api::autotest_private::RotationType::ROTATION_TYPE_ROTATEANY) {
+    display::Display display;
+    if (!display::Screen::GetScreen()->GetDisplayWithDisplayId(display_id_,
+                                                               &display)) {
+      return RespondNow(Error(base::StrCat(
+          {"Display is not found for display_id ", params->display_id})));
+    }
+    DCHECK(display.is_valid());
+    if (!display.IsInternal()) {
+      return RespondNow(
+          Error("RotateAny is valid only for the internal display"));
+    }
+    auto* screen_orientation_controller =
+        ash::Shell::Get()->screen_orientation_controller();
+    if (screen_orientation_controller->user_rotation_locked()) {
+      self_ = this;
+      screen_orientation_controller->AddObserver(this);
+      return RespondLater();
+    }
+    target_rotation_.reset();
+  } else {
+    target_rotation_ = ToRotation(params->rotation);
+  }
+
+  auto result = CheckScreenRotationAnimation();
+  if (result)
+    return RespondNow(std::move(result));
   return RespondLater();
 }
 
@@ -3379,8 +3354,49 @@ void AutotestPrivateWaitForDisplayRotationFunction::
   display::Display display;
   display::Screen::GetScreen()->GetDisplayWithDisplayId(display_id_, &display);
   Respond(OneArgument(std::make_unique<base::Value>(
-      display.is_valid() && display.rotation() == target_rotation_)));
+      display.is_valid() && (!target_rotation_.has_value() ||
+                             display.rotation() == *target_rotation_))));
   self_.reset();
+}
+
+void AutotestPrivateWaitForDisplayRotationFunction::
+    OnUserRotationLockChanged() {
+  auto* screen_orientation_controller =
+      ash::Shell::Get()->screen_orientation_controller();
+  if (screen_orientation_controller->user_rotation_locked())
+    return;
+  screen_orientation_controller->RemoveObserver(this);
+  self_.reset();
+  target_rotation_.reset();
+  auto result = CheckScreenRotationAnimation();
+  // Wait for the rotation if unlocking causes rotation.
+  if (result)
+    Respond(std::move(result));
+}
+
+ExtensionFunction::ResponseValue
+AutotestPrivateWaitForDisplayRotationFunction::CheckScreenRotationAnimation() {
+  auto* root_window = ash::Shell::GetRootWindowForDisplayId(display_id_);
+  if (!root_window) {
+    return Error(base::StringPrintf(
+        "Invalid display_id; no root window found for the display id %" PRId64,
+        display_id_));
+  }
+  auto* animator = ash::ScreenRotationAnimator::GetForRootWindow(root_window);
+  if (!animator->IsRotating()) {
+    display::Display display;
+    display::Screen::GetScreen()->GetDisplayWithDisplayId(display_id_,
+                                                          &display);
+    // This should never fail.
+    DCHECK(display.is_valid());
+    return OneArgument(
+        std::make_unique<base::Value>(!target_rotation_.has_value() ||
+                                      display.rotation() == *target_rotation_));
+  }
+  self_ = this;
+
+  animator->AddObserver(this);
+  return nullptr;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -4069,10 +4085,10 @@ ExtensionFunction::ResponseAction AutotestPrivateMouseMoveFunction::Run() {
   wm::ConvertPointFromScreen(root_window, &start_in_host);
   ConvertPointToHost(root_window, &start_in_host);
 
-  int64_t steps =
-      std::max(base::TimeDelta::FromMilliseconds(params->duration_in_ms) /
-                   event_generator_->interval(),
-               static_cast<int64_t>(1));
+  int64_t steps = std::max(
+      base::ClampFloor<int64_t>(params->duration_in_ms /
+                                event_generator_->interval().InMillisecondsF()),
+      static_cast<int64_t>(1));
   int flags = env->mouse_button_flags();
   ui::EventType type = (flags == 0) ? ui::ET_MOUSE_MOVED : ui::ET_MOUSE_DRAGGED;
   for (int64_t i = 1; i <= steps; ++i) {
@@ -4471,8 +4487,11 @@ AutotestPrivateStartSmoothnessTrackingFunction::Run() {
 
   auto tracker =
       root_window->layer()->GetCompositor()->RequestNewThroughputTracker();
+  // Exclude this tracker from data collection for animations since it is for
+  // the display as a whole rather than for an individual animation.
   tracker.Start(ash::metrics_util::ForSmoothness(
-      base::BindRepeating(&ForwardSmoothessAndReset, display_id)));
+      base::BindRepeating(&ForwardSmoothessAndReset, display_id),
+      /*exclude_from_data_collection=*/true));
   (*infos)[display_id].tracker = std::move(tracker);
   return RespondNow(NoArguments());
 }
@@ -4581,6 +4600,65 @@ AutotestPrivateDisableSwitchAccessDialogFunction::Run() {
   accessibility_controller
       ->DisableSwitchAccessDisableConfirmationDialogTesting();
   return RespondNow(NoArguments());
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateDisableAutomationFunction
+//////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateDisableAutomationFunction::
+    AutotestPrivateDisableAutomationFunction() = default;
+
+AutotestPrivateDisableAutomationFunction::
+    ~AutotestPrivateDisableAutomationFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateDisableAutomationFunction::Run() {
+  AutomationManagerAura::GetInstance()->Disable();
+  return RespondNow(NoArguments());
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateStartThroughputTrackerDataCollectionFunction
+//////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateStartThroughputTrackerDataCollectionFunction::
+    AutotestPrivateStartThroughputTrackerDataCollectionFunction() = default;
+
+AutotestPrivateStartThroughputTrackerDataCollectionFunction::
+    ~AutotestPrivateStartThroughputTrackerDataCollectionFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateStartThroughputTrackerDataCollectionFunction::Run() {
+  ash::metrics_util::StartDataCollection();
+  return RespondNow(NoArguments());
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateStopThroughputTrackerDataCollectionFunction
+//////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateStopThroughputTrackerDataCollectionFunction::
+    AutotestPrivateStopThroughputTrackerDataCollectionFunction() = default;
+
+AutotestPrivateStopThroughputTrackerDataCollectionFunction::
+    ~AutotestPrivateStopThroughputTrackerDataCollectionFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateStopThroughputTrackerDataCollectionFunction::Run() {
+  auto collected_data = ash::metrics_util::StopDataCollection();
+  std::vector<api::autotest_private::ThroughputTrackerAnimationData>
+      result_data;
+  for (const auto& data : collected_data) {
+    api::autotest_private::ThroughputTrackerAnimationData animation_data;
+    animation_data.frames_expected = data.frames_expected;
+    animation_data.frames_produced = data.frames_produced;
+    result_data.emplace_back(std::move(animation_data));
+  }
+
+  return RespondNow(
+      ArgumentList(api::autotest_private::StopThroughputTrackerDataCollection::
+                       Results::Create(result_data)));
 }
 
 ///////////////////////////////////////////////////////////////////////////////

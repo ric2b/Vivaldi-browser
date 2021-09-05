@@ -58,18 +58,20 @@ const float kEmphasisMarkFontSizeMultiplier = 0.5f;
 
 SimpleFontData::SimpleFontData(const FontPlatformData& platform_data,
                                scoped_refptr<CustomFontData> custom_data,
-                               bool subpixel_ascent_descent)
+                               bool subpixel_ascent_descent,
+                               const FontMetricsOverride& metrics_override)
     : max_char_width_(-1),
       avg_char_width_(-1),
       platform_data_(platform_data),
       custom_font_data_(std::move(custom_data)),
       visual_overflow_inflation_for_ascent_(0),
       visual_overflow_inflation_for_descent_(0) {
-  PlatformInit(subpixel_ascent_descent);
+  PlatformInit(subpixel_ascent_descent, metrics_override);
   PlatformGlyphInit();
 }
 
-void SimpleFontData::PlatformInit(bool subpixel_ascent_descent) {
+void SimpleFontData::PlatformInit(bool subpixel_ascent_descent,
+                                  const FontMetricsOverride& metrics_override) {
   if (!platform_data_.size()) {
     font_metrics_.Reset();
     avg_char_width_ = 0;
@@ -89,7 +91,8 @@ void SimpleFontData::PlatformInit(bool subpixel_ascent_descent) {
   FontMetrics::AscentDescentWithHacks(
       ascent, descent, visual_overflow_inflation_for_ascent_,
       visual_overflow_inflation_for_descent_, platform_data_, font_,
-      subpixel_ascent_descent);
+      subpixel_ascent_descent, metrics_override.ascent_override,
+      metrics_override.descent_override);
 
   font_metrics_.SetAscent(ascent);
   font_metrics_.SetDescent(descent);
@@ -103,7 +106,7 @@ void SimpleFontData::PlatformInit(bool subpixel_ascent_descent) {
   float x_height;
   if (metrics.fXHeight) {
     x_height = metrics.fXHeight;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     // Mac OS CTFontGetXHeight reports the bounding box height of x,
     // including parts extending below the baseline and apparently no x-height
     // value from the OS/2 table. However, the CSS ex unit
@@ -123,7 +126,12 @@ void SimpleFontData::PlatformInit(bool subpixel_ascent_descent) {
     font_metrics_.SetHasXHeight(false);
   }
 
-  float line_gap = SkScalarToFloat(metrics.fLeading);
+  float line_gap;
+  if (metrics_override.line_gap_override) {
+    line_gap = *metrics_override.line_gap_override * platform_data_.size();
+  } else {
+    line_gap = SkScalarToFloat(metrics.fLeading);
+  }
   font_metrics_.SetLineGap(line_gap);
   font_metrics_.SetLineSpacing(lroundf(ascent) + lroundf(descent) +
                                lroundf(line_gap));
@@ -139,7 +147,7 @@ void SimpleFontData::PlatformInit(bool subpixel_ascent_descent) {
   // arbitrary but comes pretty close to the expected value in most cases.
   if (max_char_width_ < 1)
     max_char_width_ = ascent * 2;
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   // FIXME: The current avg/max character width calculation is not ideal,
   // it should check either the OS2 table or, better yet, query FontMetrics.
   // Sadly FontMetrics provides incorrect data on Mac at the moment.
@@ -152,7 +160,7 @@ void SimpleFontData::PlatformInit(bool subpixel_ascent_descent) {
 
 #endif
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   if (metrics.fAvgCharWidth) {
     avg_char_width_ = SkScalarRoundToInt(metrics.fAvgCharWidth);
   } else {
@@ -162,7 +170,7 @@ void SimpleFontData::PlatformInit(bool subpixel_ascent_descent) {
     if (x_glyph) {
       avg_char_width_ = WidthForGlyph(x_glyph);
     }
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   }
 #endif
 
@@ -170,6 +178,11 @@ void SimpleFontData::PlatformInit(bool subpixel_ascent_descent) {
   DCHECK(face);
   if (int units_per_em = face->getUnitsPerEm())
     font_metrics_.SetUnitsPerEm(units_per_em);
+
+  if (metrics_override.advance_override) {
+    advance_override_ =
+        *metrics_override.advance_override * platform_data_.size();
+  }
 }
 
 void SimpleFontData::PlatformGlyphInit() {
@@ -235,6 +248,13 @@ scoped_refptr<SimpleFontData> SimpleFontData::CreateScaledFontData(
   return SimpleFontData::Create(
       FontPlatformData(platform_data_, scaled_size),
       IsCustomFont() ? CustomFontData::Create() : nullptr);
+}
+
+scoped_refptr<SimpleFontData> SimpleFontData::MetricsOverriddenFontData(
+    const FontMetricsOverride& metrics_override) const {
+  return base::AdoptRef(new SimpleFontData(platform_data_, custom_font_data_,
+                                           false /* subpixel_ascent_descent */,
+                                           metrics_override));
 }
 
 // Internal leadings can be distributed to ascent and descent.

@@ -96,8 +96,8 @@ bool CanOperateOnWindow(const ExtensionFunction* function,
     return false;
 
   Profile* profile = Profile::FromBrowserContext(function->browser_context());
-  return profile->HasOffTheRecordProfile() &&
-         profile->GetOffTheRecordProfile() == controller->profile();
+  return profile->HasPrimaryOTRProfile() &&
+         profile->GetPrimaryOTRProfile() == controller->profile();
 }
 
 }  // namespace windows_util

@@ -252,6 +252,16 @@ void MediaHistoryKeyedService::SavePlaybackSession(
   }
 }
 
+void MediaHistoryKeyedService::GetHighWatchTimeOrigins(
+    const base::TimeDelta& audio_video_watchtime_min,
+    base::OnceCallback<void(const std::vector<url::Origin>&)> callback) {
+  base::PostTaskAndReplyWithResult(
+      store_->GetForRead()->db_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&MediaHistoryStore::GetHighWatchTimeOrigins,
+                     store_->GetForRead(), audio_video_watchtime_min),
+      std::move(callback));
+}
+
 MediaHistoryKeyedService::GetMediaFeedItemsRequest
 MediaHistoryKeyedService::GetMediaFeedItemsRequest::CreateItemsForDebug(
     int64_t feed_id) {
@@ -265,23 +275,27 @@ MediaHistoryKeyedService::GetMediaFeedItemsRequest
 MediaHistoryKeyedService::GetMediaFeedItemsRequest::CreateItemsForFeed(
     int64_t feed_id,
     unsigned limit,
-    bool fetched_items_should_be_safe) {
+    bool fetched_items_should_be_safe,
+    base::Optional<media_feeds::mojom::MediaFeedItemType> filter_by_type) {
   GetMediaFeedItemsRequest request;
   request.type = Type::kItemsForFeed;
   request.limit = limit;
   request.feed_id = feed_id;
   request.fetched_items_should_be_safe = fetched_items_should_be_safe;
+  request.filter_by_type = filter_by_type;
   return request;
 }
 
 MediaHistoryKeyedService::GetMediaFeedItemsRequest MediaHistoryKeyedService::
     GetMediaFeedItemsRequest::CreateItemsForContinueWatching(
         unsigned limit,
-        bool fetched_items_should_be_safe) {
+        bool fetched_items_should_be_safe,
+        base::Optional<media_feeds::mojom::MediaFeedItemType> filter_by_type) {
   GetMediaFeedItemsRequest request;
   request.type = Type::kContinueWatching;
   request.limit = limit;
   request.fetched_items_should_be_safe = fetched_items_should_be_safe;
+  request.filter_by_type = filter_by_type;
   return request;
 }
 
@@ -392,15 +406,15 @@ MediaHistoryKeyedService::GetMediaFeedsRequest::CreateTopFeedsForFetch(
 MediaHistoryKeyedService::GetMediaFeedsRequest
 MediaHistoryKeyedService::GetMediaFeedsRequest::CreateTopFeedsForDisplay(
     unsigned limit,
-    base::TimeDelta audio_video_watchtime_min,
     int fetched_items_min,
-    bool fetched_items_min_should_be_safe) {
+    bool fetched_items_min_should_be_safe,
+    base::Optional<media_feeds::mojom::MediaFeedItemType> filter_by_type) {
   GetMediaFeedsRequest request;
   request.type = Type::kTopFeedsForDisplay;
   request.limit = limit;
-  request.audio_video_watchtime_min = audio_video_watchtime_min;
   request.fetched_items_min = fetched_items_min;
   request.fetched_items_min_should_be_safe = fetched_items_min_should_be_safe;
+  request.filter_by_type = filter_by_type;
   return request;
 }
 

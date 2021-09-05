@@ -788,7 +788,6 @@ chrome.networkingPrivate.VPNStateProperties;
  *   EAP: (!chrome.networkingPrivate.EAPProperties|undefined),
  *   Frequency: (number|undefined),
  *   FrequencyList: (!Array<number>|undefined),
- *   FTEnabled: (boolean|undefined),
  *   HexSSID: (string|undefined),
  *   HiddenSSID: (boolean|undefined),
  *   Passphrase: (string|undefined),
@@ -808,7 +807,6 @@ chrome.networkingPrivate.WiFiProperties;
  *   EAP: (!chrome.networkingPrivate.ManagedEAPProperties|undefined),
  *   Frequency: (number|undefined),
  *   FrequencyList: (!Array<number>|undefined),
- *   FTEnabled: (!chrome.networkingPrivate.ManagedBoolean|undefined),
  *   HexSSID: (!chrome.networkingPrivate.ManagedDOMString|undefined),
  *   HiddenSSID: (!chrome.networkingPrivate.ManagedBoolean|undefined),
  *   Passphrase: (!chrome.networkingPrivate.ManagedDOMString|undefined),
@@ -968,7 +966,7 @@ chrome.networkingPrivate.NetworkFilter;
  *   AllowOnlyPolicyNetworksToAutoconnect: (boolean|undefined),
  *   AllowOnlyPolicyNetworksToConnect: (boolean|undefined),
  *   AllowOnlyPolicyNetworksToConnectIfAvailable: (boolean|undefined),
- *   BlacklistedHexSSIDs: (!Array<string>|undefined)
+ *   BlockedHexSSIDs: (!Array<string>|undefined)
  * }}
  */
 chrome.networkingPrivate.GlobalPolicy;
@@ -1184,7 +1182,7 @@ chrome.networkingPrivate.verifyDestination = function(properties, callback) {};
 chrome.networkingPrivate.verifyAndEncryptData = function(properties, data, callback) {};
 
 /**
- * Enables TDLS for WiFi traffic with a specified peer if available.
+ * Deprecated. Enables TDLS for WiFi traffic with a specified peer if available.
  * @param {string} ip_or_mac_address The IP or MAC address of the peer with
  *     which to     enable a TDLS connection. |enabled| If true, enable TDLS,
  *     otherwise disable TDLS.
@@ -1194,17 +1192,17 @@ chrome.networkingPrivate.verifyAndEncryptData = function(properties, data, callb
  *     that the request failed     (e.g. MAC address lookup failed). 'Timeout'
  *     indicates that the lookup     timed out. Otherwise a valid status is
  *     returned (see     $(ref:getWifiTDLSStatus)).
- * @deprecated Use networking.castPrivate API.
+ * @deprecated True
  */
 chrome.networkingPrivate.setWifiTDLSEnabledState = function(ip_or_mac_address, enabled, callback) {};
 
 /**
- * Returns the current TDLS status for the specified peer.
+ * Deprecated. Returns the current TDLS status for the specified peer.
  * @param {string} ip_or_mac_address The IP or MAC address of the peer.
  * @param {function(string): void} callback A callback function that receives a
  *     string with the current     TDLS status which can be 'Connected',
  *     'Disabled', 'Disconnected',     'Nonexistent', or 'Unknown'.
- * @deprecated Use networking.castPrivate API.
+ * @deprecated True
  */
 chrome.networkingPrivate.getWifiTDLSStatus = function(ip_or_mac_address, callback) {};
 

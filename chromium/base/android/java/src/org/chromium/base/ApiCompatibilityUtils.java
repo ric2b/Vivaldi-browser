@@ -19,18 +19,19 @@ import android.content.res.Resources.NotFoundException;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
+import android.graphics.ImageDecoder;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.LayerDrawable;
-import android.graphics.drawable.TransitionDrawable;
 import android.hardware.display.DisplayManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.os.Process;
 import android.os.StrictMode;
 import android.os.UserManager;
+import android.provider.MediaStore;
 import android.provider.Settings;
 import android.text.Html;
 import android.text.Spanned;
@@ -59,12 +60,13 @@ import org.chromium.base.annotations.VerifiesOnO;
 import org.chromium.base.annotations.VerifiesOnP;
 import org.chromium.base.annotations.VerifiesOnQ;
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Utility class to use new APIs that were added after KitKat (API level 19).
+ * Utility class to use APIs not in all supported Android versions.
  *
  * Do not inline because we use many new APIs, and if they are inlined, they could cause dex
  * validation errors on low Android versions.
@@ -105,6 +107,10 @@ public class ApiCompatibilityUtils {
     private static class ApisP {
         static String getProcessName() {
             return Application.getProcessName();
+        }
+
+        static Bitmap getBitmapByUri(ContentResolver cr, Uri uri) throws IOException {
+            return ImageDecoder.decodeBitmap(ImageDecoder.createSource(cr, uri));
         }
     }
 
@@ -662,32 +668,6 @@ public class ApiCompatibilityUtils {
     }
 
     /**
-     * Creates regular LayerDrawable on Android L+. On older versions creates a helper class that
-     * fixes issues around {@link LayerDrawable#mutate()}. See https://crbug.com/890317 for details.
-     * See also {@link #createTransitionDrawable}.
-     * @param layers A list of drawables to use as layers in this new drawable.
-     */
-    public static LayerDrawable createLayerDrawable(@NonNull Drawable[] layers) {
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
-            return new LayerDrawableCompat(layers);
-        }
-        return new LayerDrawable(layers);
-    }
-
-    /**
-     * Creates regular TransitionDrawable on Android L+. On older versions creates a helper class
-     * that fixes issues around {@link TransitionDrawable#mutate()}. See https://crbug.com/892061
-     * for details. See also {@link #createLayerDrawable}.
-     * @param layers A list of drawables to use as layers in this new drawable.
-     */
-    public static TransitionDrawable createTransitionDrawable(@NonNull Drawable[] layers) {
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
-            return new TransitionDrawableCompat(layers);
-        }
-        return new TransitionDrawable(layers);
-    }
-
-    /**
      * Adds a content description to the provided EditText password field on versions of Android
      * where the hint text is not used for accessibility. Does nothing if the EditText field does
      * not have a password input type or the hint text is empty.  See https://crbug.com/911762.
@@ -734,77 +714,13 @@ public class ApiCompatibilityUtils {
         return false;
     }
 
-    private static class LayerDrawableCompat extends LayerDrawable {
-        private boolean mMutated;
-
-        LayerDrawableCompat(@NonNull Drawable[] layers) {
-            super(layers);
-        }
-
-        @NonNull
-        @Override
-        public Drawable mutate() {
-            // LayerDrawable in Android K loses bounds of layers, so this method works around that.
-            if (mMutated) {
-                // This object has already been mutated and shouldn't have any shared state.
-                return this;
-            }
-
-            Rect[] oldBounds = getLayersBounds(this);
-            Drawable superResult = super.mutate();
-            // LayerDrawable.mutate() always returns this, bail out if this isn't the case.
-            if (superResult != this) return superResult;
-            restoreLayersBounds(this, oldBounds);
-            mMutated = true;
-            return this;
-        }
-    }
-
-    private static class TransitionDrawableCompat extends TransitionDrawable {
-        private boolean mMutated;
-
-        TransitionDrawableCompat(@NonNull Drawable[] layers) {
-            super(layers);
-        }
-
-        @NonNull
-        @Override
-        public Drawable mutate() {
-            // LayerDrawable in Android K loses bounds of layers, so this method works around that.
-            if (mMutated) {
-                // This object has already been mutated and shouldn't have any shared state.
-                return this;
-            }
-            Rect[] oldBounds = getLayersBounds(this);
-            Drawable superResult = super.mutate();
-            // TransitionDrawable.mutate() always returns this, bail out if this isn't the case.
-            if (superResult != this) return superResult;
-            restoreLayersBounds(this, oldBounds);
-            mMutated = true;
-            return this;
-        }
-    }
-
     /**
-     * Helper for {@link LayerDrawableCompat#mutate} and {@link TransitionDrawableCompat#mutate}.
-     * Obtains the bounds of layers so they can be restored after a mutation.
+     * Retrieves an image for the given url as a Bitmap.
      */
-    private static Rect[] getLayersBounds(LayerDrawable layerDrawable) {
-        Rect[] result = new Rect[layerDrawable.getNumberOfLayers()];
-        for (int i = 0; i < layerDrawable.getNumberOfLayers(); i++) {
-            result[i] = layerDrawable.getDrawable(i).getBounds();
+    public static Bitmap getBitmapByUri(ContentResolver cr, Uri uri) throws IOException {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return ApisP.getBitmapByUri(cr, uri);
         }
-        return result;
-    }
-
-    /**
-     * Helper for {@link LayerDrawableCompat#mutate} and {@link TransitionDrawableCompat#mutate}.
-     * Restores the bounds of layers after a mutation.
-     */
-    private static void restoreLayersBounds(LayerDrawable layerDrawable, Rect[] oldBounds) {
-        assert layerDrawable.getNumberOfLayers() == oldBounds.length;
-        for (int i = 0; i < layerDrawable.getNumberOfLayers(); i++) {
-            layerDrawable.getDrawable(i).setBounds(oldBounds[i]);
-        }
+        return MediaStore.Images.Media.getBitmap(cr, uri);
     }
 }

@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Zonnebril</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Catalaans</translation>
+<translation id="1172970565351728681">Ongeveer <ph name="REMAINING_TIME" /> resterend</translation>
 <translation id="1173894706177603556">Naam wijzigen</translation>
 <translation id="117624967391683467"><ph name="FILE_NAME" /> kopiëren...</translation>
 <translation id="1178581264944972037">Onderbreken</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Er bestaat al een bestand met de naam '<ph name="FILENAME" />'. Wat wil je doen?</translation>
 <translation id="2121825465123208577">Formaat aanpassen</translation>
 <translation id="2136953289241069843">Transliteratie (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Kan '<ph name="PATH" />' niet openen: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Ongeldig teken: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Vietnamees toetsenbord (TCVN)</translation>
 <translation id="2168214441502403371">Perzisch toetsenbord</translation>
@@ -188,7 +188,7 @@
 <translation id="3088034400796962477">Transliteratie (salam ← سلام)</translation>
 <translation id="3116361045094675131">Brits toetsenbord</translation>
 <translation id="3126026824346185272">Ctrl</translation>
-<translation id="3144126448740580210">GEREED</translation>
+<translation id="3144126448740580210">KLAAR</translation>
 <translation id="3157729859914172001">Amerikaans toetsenbord (internationaal) (pc)</translation>
 <translation id="3187212781151025377">Hebreeuws toetsenbord</translation>
 <translation id="3188257591659621405">Mijn bestanden</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Eigendom wordt overgedragen aan <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">Iers</translation>
 <translation id="3245321423178950146">Onbekende artiest</translation>
+<translation id="3248185426436836442">In behandeling</translation>
 <translation id="3252266817569339921">Frans</translation>
 <translation id="3254434849914415189">Kies de standaardapp voor <ph name="FILE_TYPE" />-bestanden:</translation>
 <translation id="3264582393905923483">Context</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Opnamejaar</translation>
 <translation id="3338239663705455570">Sloveens toetsenbord</translation>
 <translation id="3353984535370177728">Een map voor uploaden selecteren</translation>
+<translation id="3356580349448036450">Voltooid</translation>
 <translation id="3399597614303179694">Macedonisch toetsenbord</translation>
 <translation id="3414856743105198592">Als je het verwisselbare medium formatteert, worden alle gegevens gewist. Wil je doorgaan?</translation>
 <translation id="3437801641691368414">Gemaakt op</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Je hebt geen rechten om bestanden te verplaatsen naar '<ph name="FOLDER_NAME" />'.</translation>
 <translation id="3786301125658655746">Je bent offline</translation>
 <translation id="3789841737615482174">Installeren</translation>
+<translation id="3793469551756281394">Ongeveer <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /> resterend</translation>
 <translation id="3798449238516105146">Versie</translation>
 <translation id="3801082500826908679">Faeröers</translation>
 <translation id="3809272675881623365">Konijn</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Deze map is gedeeld met Windows</translation>
 <translation id="4487088045714738411">Belgisch toetsenbord</translation>
 <translation id="4522570452068850558">Details</translation>
+<translation id="4542387084127299777">Kan '<ph name="PATH" />' niet openen</translation>
 <translation id="4552678318981539154">Meer opslagruimte kopen</translation>
 <translation id="4559767610552730302">Bokeh</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" />-bestand</translation>
@@ -512,6 +516,7 @@
 <translation id="6629841649550503054">Er is een back-up van alles gemaakt in <ph name="BEGIN_LINK" />Google Drive<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Wissen</translation>
 <translation id="6650726141019353908">Roze vlinder</translation>
+<translation id="6657585470893396449">Wachtwoord</translation>
 <translation id="6710213216561001401">Vorige</translation>
 <translation id="6718273304615422081">Inpakken...</translation>
 <translation id="6751256176799620176">1 map geselecteerd</translation>
@@ -552,7 +557,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Installatie mislukt.</translation>
 <translation id="7040138676081995583">Openen met...</translation>
-<translation id="7059566040011178088">Minder dan <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> items geselecteerd</translation>
 <translation id="7106346894903675391">Meer opslagruimte kopen...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;zoeken in Google Drive&lt;/em&gt;</translation>
@@ -663,7 +667,6 @@
 <translation id="8193175696669055101">Apparaatmodel</translation>
 <translation id="8208580316430297579">Kunst</translation>
 <translation id="8223479393428528563">Als je deze bestanden wilt opslaan voor offline gebruik, ga je weer online, klik je met de rechtermuisknop op de bestanden en selecteer je de optie <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Over <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Annuleren</translation>
 <translation id="8261506727792406068">Verwijderen</translation>
 <translation id="8269755669432358899">Feedbackvensters voor bestanden samenvouwen</translation>
@@ -726,6 +729,7 @@
 <translation id="9065203028668620118">Bewerken</translation>
 <translation id="9099674669267916096">Aantal pagina's</translation>
 <translation id="9110990317705400362">We zijn altijd op zoek naar manieren om het surfen veiliger te maken. Vroeger kon elke website je vragen een extensie toe te voegen aan je browser. In de nieuwste versies van Google Chrome moet je Chrome expliciet toestemming geven om deze extensies te installeren door ze toe te voegen via de pagina 'Extensies'. <ph name="BEGIN_LINK" />Meer informatie<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Ontgrendelen</translation>
 <translation id="912419004897138677">Codec</translation>
 <translation id="9129931661813833980">Map vastzetten</translation>
 <translation id="9130775360844693113">Leden van '<ph name="DESTINATION_NAME" />' krijgen toegang tot deze items.</translation>

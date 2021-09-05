@@ -12,18 +12,8 @@
 #include "notes/notes_model.h"
 #include "third_party/re2/src/re2/re2.h"
 
-NotesAttachmentDataClassHandler::NotesAttachmentDataClassHandler(
-    Profile* profile)
-    : profile_(profile) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK(profile_);
-}
-
-NotesAttachmentDataClassHandler::~NotesAttachmentDataClassHandler() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-}
-
 void NotesAttachmentDataClassHandler::GetData(
+    Profile* profile,
     const std::string& data_id,
     content::URLDataSource::GotDataCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -37,7 +27,7 @@ void NotesAttachmentDataClassHandler::GetData(
     int64_t int_id;
     if (base::StringToInt64(note_id, &int_id)) {
       const vivaldi::NotesModel* notes_model =
-          vivaldi::NotesModelFactory::GetForBrowserContext(profile_);
+          vivaldi::NotesModelFactory::GetForBrowserContext(profile);
       const vivaldi::NoteNode* note =
           vivaldi::GetNotesNodeByID(notes_model, int_id);
 

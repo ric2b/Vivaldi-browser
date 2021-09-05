@@ -71,8 +71,6 @@ constexpr auto kFlushDelay = base::TimeDelta::FromSeconds(1);
 class ImageResource::ImageResourceInfoImpl final
     : public GarbageCollected<ImageResourceInfoImpl>,
       public ImageResourceInfo {
-  USING_GARBAGE_COLLECTED_MIXIN(ImageResourceInfoImpl);
-
  public:
   explicit ImageResourceInfoImpl(ImageResource* resource)
       : resource_(resource) {
@@ -183,8 +181,10 @@ bool ImageResource::CanUseCacheValidator() const {
   return Resource::CanUseCacheValidator();
 }
 
-ImageResource* ImageResource::Create(const ResourceRequest& request) {
-  ResourceLoaderOptions options;
+ImageResource* ImageResource::Create(
+    const ResourceRequest& request,
+    scoped_refptr<const DOMWrapperWorld> world) {
+  ResourceLoaderOptions options(std::move(world));
   return MakeGarbageCollected<ImageResource>(
       request, options, ImageResourceContent::CreateNotStarted());
 }
@@ -199,7 +199,7 @@ ImageResource* ImageResource::CreateForTest(const KURL& url) {
       ReferrerPolicyResolveDefault(request.GetReferrerPolicy()));
   request.SetPriority(WebURLRequest::Priority::kLow);
 
-  return Create(request);
+  return Create(request, nullptr);
 }
 
 ImageResource::ImageResource(const ResourceRequest& resource_request,

@@ -11,7 +11,6 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "build/build_config.h"
 #include "components/viz/service/display_embedder/skia_output_device.h"
 #include "gpu/command_buffer/common/mailbox.h"
 
@@ -42,10 +41,6 @@ class SkiaOutputDeviceGL final : public SkiaOutputDevice {
       DidSwapBufferCompleteCallback did_swap_buffer_complete_callback);
   ~SkiaOutputDeviceGL() override;
 
-  bool supports_alpha() {
-    return supports_alpha_;
-  }
-
   // SkiaOutputDevice implementation:
   bool Reshape(const gfx::Size& size,
                float device_scale_factor,
@@ -61,10 +56,8 @@ class SkiaOutputDeviceGL final : public SkiaOutputDevice {
                            std::vector<ui::LatencyInfo> latency_info) override;
   bool SetDrawRectangle(const gfx::Rect& draw_rectangle) override;
   void SetGpuVSyncEnabled(bool enabled) override;
-#if defined(OS_WIN)
   void SetEnableDCLayers(bool enable) override;
   void ScheduleOverlays(SkiaOutputSurface::OverlayList overlays) override;
-#endif
   void EnsureBackbuffer() override;
   void DiscardBackbuffer() override;
   SkSurface* BeginPaint(

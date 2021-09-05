@@ -36,7 +36,6 @@
 #include "ui/base/ime/chromeos/input_method_manager.h"
 
 class Browser;
-class SwitchAccessEventHandlerDelegate;
 
 namespace ash {
 struct AccessibilityFocusRingInfo;
@@ -80,14 +79,12 @@ struct AccessibilityStatusEventDetails {
   bool enabled;
 };
 
-typedef base::Callback<void(const AccessibilityStatusEventDetails&)>
-    AccessibilityStatusCallback;
-
-typedef base::CallbackList<void(const AccessibilityStatusEventDetails&)>
-    AccessibilityStatusCallbackList;
-
-typedef AccessibilityStatusCallbackList::Subscription
-    AccessibilityStatusSubscription;
+using AccessibilityStatusCallbackList =
+    base::RepeatingCallbackList<void(const AccessibilityStatusEventDetails&)>;
+using AccessibilityStatusCallback =
+    AccessibilityStatusCallbackList::CallbackType;
+using AccessibilityStatusSubscription =
+    AccessibilityStatusCallbackList::Subscription;
 
 class AccessibilityPanelWidgetObserver;
 
@@ -266,7 +263,8 @@ class AccessibilityManager
 
   // Forward an accessibility gesture from the touch exploration controller
   // to ChromeVox.
-  void HandleAccessibilityGesture(ax::mojom::Gesture gesture);
+  void HandleAccessibilityGesture(ax::mojom::Gesture gesture,
+                                  gfx::PointF location);
 
   // Update the touch exploration controller so that synthesized
   // touch events are anchored at this point.
@@ -284,9 +282,6 @@ class AccessibilityManager
   const std::string& keyboard_listener_extension_id() {
     return keyboard_listener_extension_id_;
   }
-
-  // Set the keys to be captured by Switch Access.
-  void SetSwitchAccessKeys(const std::set<int>& key_codes);
 
   // Unloads Switch Access.
   void OnSwitchAccessDisabled();
@@ -349,6 +344,10 @@ class AccessibilityManager
       base::RepeatingCallback<void(const gfx::Rect&)> observer);
   void SetSwitchAccessKeysForTest(const std::vector<int>& keys);
 
+  const std::set<std::string>& GetAccessibilityCommonEnabledFeaturesForTest() {
+    return accessibility_common_enabled_features_;
+  }
+
  protected:
   AccessibilityManager();
   ~AccessibilityManager() override;
@@ -379,7 +378,7 @@ class AccessibilityManager
   void OnFocusHighlightChanged();
   void OnTapDraggingChanged();
   void OnSelectToSpeakChanged();
-  void OnAutoclickChanged();
+  void OnAccessibilityCommonChanged(const std::string& pref_name);
   void OnSwitchAccessChanged();
 
   void CheckBrailleState();
@@ -437,7 +436,10 @@ class AccessibilityManager
   bool spoken_feedback_enabled_ = false;
   bool select_to_speak_enabled_ = false;
   bool switch_access_enabled_ = false;
-  bool autoclick_enabled_ = false;
+
+  // A set of pref names of enabled accessibility features using the
+  // accessibility common extension.
+  std::set<std::string> accessibility_common_enabled_features_;
 
   AccessibilityStatusCallbackList callback_list_;
 
@@ -471,9 +473,6 @@ class AccessibilityManager
       select_to_speak_event_handler_delegate_;
 
   std::unique_ptr<AccessibilityExtensionLoader> switch_access_loader_;
-
-  std::unique_ptr<SwitchAccessEventHandlerDelegate>
-      switch_access_event_handler_delegate_;
 
   std::map<std::string, std::set<std::string>>
       focus_ring_names_for_extension_id_;

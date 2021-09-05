@@ -41,6 +41,16 @@ var EVENTS_PRIVATE = {
   'contentscreated': {
     evt: CreateEvent('webViewPrivate.onWebcontentsCreated')
   },
+  'windowblocked': {
+    evt: CreateEvent('webViewPrivate.onWindowBlocked'),
+    fields: [
+      'targetUrl',
+      'name',
+      'initialLeft',
+      'initialTop',
+      'initialWidth',
+      'initialHeight']
+  },
 };
 
 

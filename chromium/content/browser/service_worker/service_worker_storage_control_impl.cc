@@ -13,39 +13,17 @@ namespace content {
 
 namespace {
 
-void DidGetRegistrationsForOrigin(
-    ServiceWorkerStorageControlImpl::GetRegistrationsForOriginCallback callback,
-    storage::mojom::ServiceWorkerDatabaseStatus status,
-    std::unique_ptr<ServiceWorkerStorage::RegistrationList>
-        registration_data_list,
-    std::unique_ptr<std::vector<ServiceWorkerStorage::ResourceList>>
-        resources_list) {
-  DCHECK_EQ(registration_data_list->size(), resources_list->size());
-
-  std::vector<storage::mojom::SerializedServiceWorkerRegistrationPtr>
-      registrations;
-  for (size_t i = 0; i < registration_data_list->size(); ++i) {
-    registrations.push_back(
-        storage::mojom::SerializedServiceWorkerRegistration::New(
-            std::move((*registration_data_list)[i]),
-            std::move((*resources_list)[i])));
-  }
-
-  std::move(callback).Run(status, std::move(registrations));
-}
-
-void DidGetUserDataForAllRegistrations(
-    ServiceWorkerStorageControlImpl::GetUserDataForAllRegistrationsCallback
+void DidGetAllRegistrations(
+    ServiceWorkerStorageControlImpl::GetAllRegistrationsDeprecatedCallback
         callback,
-    const std::vector<std::pair<int64_t, std::string>>& user_data,
-    storage::mojom::ServiceWorkerDatabaseStatus status) {
-  // TODO(bashi): Change ServiceWorkerStorage::GetUserDataForAllRegistrations()
-  // to return base::flat_map.
-  base::flat_map<int64_t, std::string> values;
-  for (auto& entry : user_data) {
-    values[entry.first] = entry.second;
+    storage::mojom::ServiceWorkerDatabaseStatus status,
+    std::unique_ptr<ServiceWorkerStorage::RegistrationList> registrations) {
+  if (status != storage::mojom::ServiceWorkerDatabaseStatus::kOk) {
+    std::move(callback).Run(status, ServiceWorkerStorage::RegistrationList());
+    return;
   }
-  std::move(callback).Run(status, std::move(values));
+  DCHECK(registrations);
+  std::move(callback).Run(status, std::move(*registrations));
 }
 
 }  // namespace
@@ -71,9 +49,18 @@ class ServiceWorkerLiveVersionRefImpl
 
   void set_purgeable_resources(
       const std::vector<int64_t>& purgeable_resources) {
-    DCHECK(purgeable_resources_.empty());
+    if (!purgeable_resources_.empty()) {
+      // This setter method can be called multiple times but the resource ids
+      // should be the same.
+      DCHECK(std::set<int64_t>(purgeable_resources_.begin(),
+                               purgeable_resources_.end()) ==
+             std::set<int64_t>(purgeable_resources.begin(),
+                               purgeable_resources.end()));
+      return;
+    }
     purgeable_resources_ = purgeable_resources;
   }
+
   const std::vector<int64_t>& purgeable_resources() const {
     return purgeable_resources_;
   }
@@ -112,12 +99,27 @@ void ServiceWorkerStorageControlImpl::Bind(
 void ServiceWorkerStorageControlImpl::OnNoLiveVersion(int64_t version_id) {
   auto it = live_versions_.find(version_id);
   DCHECK(it != live_versions_.end());
-  storage_->PurgeResources(it->second->purgeable_resources());
+  if (it->second->purgeable_resources().size() > 0) {
+    storage_->PurgeResources(it->second->purgeable_resources());
+  }
   live_versions_.erase(it);
 }
 
 void ServiceWorkerStorageControlImpl::LazyInitializeForTest() {
   storage_->LazyInitializeForTest();
+}
+
+void ServiceWorkerStorageControlImpl::Disable() {
+  storage_->Disable();
+}
+
+void ServiceWorkerStorageControlImpl::Delete(DeleteCallback callback) {
+  storage_->DeleteAndStartOver(std::move(callback));
+}
+
+void ServiceWorkerStorageControlImpl::GetRegisteredOrigins(
+    GetRegisteredOriginsCallback callback) {
+  storage_->GetRegisteredOrigins(std::move(callback));
 }
 
 void ServiceWorkerStorageControlImpl::FindRegistrationForClientUrl(
@@ -140,20 +142,41 @@ void ServiceWorkerStorageControlImpl::FindRegistrationForScope(
 
 void ServiceWorkerStorageControlImpl::FindRegistrationForId(
     int64_t registration_id,
-    const GURL& origin,
+    const base::Optional<GURL>& origin,
     FindRegistrationForClientUrlCallback callback) {
-  storage_->FindRegistrationForId(
-      registration_id, origin,
-      base::BindOnce(&ServiceWorkerStorageControlImpl::DidFindRegistration,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  if (origin.has_value()) {
+    storage_->FindRegistrationForId(
+        registration_id, *origin,
+        base::BindOnce(&ServiceWorkerStorageControlImpl::DidFindRegistration,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  } else {
+    storage_->FindRegistrationForIdOnly(
+        registration_id,
+        base::BindOnce(&ServiceWorkerStorageControlImpl::DidFindRegistration,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  }
 }
 
 void ServiceWorkerStorageControlImpl::GetRegistrationsForOrigin(
-    const GURL& origin,
+    const url::Origin& origin,
     GetRegistrationsForOriginCallback callback) {
   storage_->GetRegistrationsForOrigin(
       origin,
-      base::BindOnce(&DidGetRegistrationsForOrigin, std::move(callback)));
+      base::BindOnce(
+          &ServiceWorkerStorageControlImpl::DidGetRegistrationsForOrigin,
+          weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void ServiceWorkerStorageControlImpl::GetUsageForOrigin(
+    const url::Origin& origin,
+    GetUsageForOriginCallback callback) {
+  storage_->GetUsageForOrigin(origin, std::move(callback));
+}
+
+void ServiceWorkerStorageControlImpl::GetAllRegistrationsDeprecated(
+    GetAllRegistrationsDeprecatedCallback callback) {
+  storage_->GetAllRegistrations(
+      base::BindOnce(&DidGetAllRegistrations, std::move(callback)));
 }
 
 void ServiceWorkerStorageControlImpl::StoreRegistration(
@@ -320,17 +343,14 @@ void ServiceWorkerStorageControlImpl::ClearUserDataByKeyPrefixes(
 void ServiceWorkerStorageControlImpl::GetUserDataForAllRegistrations(
     const std::string& key,
     GetUserDataForAllRegistrationsCallback callback) {
-  storage_->GetUserDataForAllRegistrations(
-      key,
-      base::BindOnce(&DidGetUserDataForAllRegistrations, std::move(callback)));
+  storage_->GetUserDataForAllRegistrations(key, std::move(callback));
 }
 
 void ServiceWorkerStorageControlImpl::GetUserDataForAllRegistrationsByKeyPrefix(
     const std::string& key_prefix,
     GetUserDataForAllRegistrationsByKeyPrefixCallback callback) {
-  storage_->GetUserDataForAllRegistrationsByKeyPrefix(
-      key_prefix,
-      base::BindOnce(&DidGetUserDataForAllRegistrations, std::move(callback)));
+  storage_->GetUserDataForAllRegistrationsByKeyPrefix(key_prefix,
+                                                      std::move(callback));
 }
 
 void ServiceWorkerStorageControlImpl::
@@ -341,6 +361,11 @@ void ServiceWorkerStorageControlImpl::
                                                         std::move(callback));
 }
 
+void ServiceWorkerStorageControlImpl::PerformStorageCleanup(
+    PerformStorageCleanupCallback callback) {
+  storage_->PerformStorageCleanup(std::move(callback));
+}
+
 void ServiceWorkerStorageControlImpl::ApplyPolicyUpdates(
     const std::vector<storage::mojom::LocalStoragePolicyUpdatePtr>
         policy_updates) {
@@ -349,30 +374,56 @@ void ServiceWorkerStorageControlImpl::ApplyPolicyUpdates(
 
 void ServiceWorkerStorageControlImpl::DidFindRegistration(
     base::OnceCallback<
-        void(storage::mojom::ServiceWorkerFindRegistrationResultPtr)> callback,
+        void(storage::mojom::ServiceWorkerDatabaseStatus status,
+             storage::mojom::ServiceWorkerFindRegistrationResultPtr)> callback,
     storage::mojom::ServiceWorkerRegistrationDataPtr data,
     std::unique_ptr<ResourceList> resources,
     storage::mojom::ServiceWorkerDatabaseStatus status) {
-  ResourceList resource_list =
-      resources ? std::move(*resources) : ResourceList();
-
-  mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>
-      remote_reference;
-  if (data &&
-      data->version_id != blink::mojom::kInvalidServiceWorkerVersionId) {
-    DCHECK_EQ(status, storage::mojom::ServiceWorkerDatabaseStatus::kOk);
-    auto it = live_versions_.find(data->version_id);
-    if (it == live_versions_.end()) {
-      remote_reference = CreateLiveVersionReference(data->version_id);
-    } else {
-      it->second->Add(remote_reference.InitWithNewPipeAndPassReceiver());
-    }
+  if (status != storage::mojom::ServiceWorkerDatabaseStatus::kOk) {
+    std::move(callback).Run(status, /*result=*/nullptr);
+    return;
   }
 
+  DCHECK(resources);
+  DCHECK(data);
+
+  ResourceList resource_list = std::move(*resources);
+  mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>
+      remote_reference = CreateLiveVersionReferenceRemote(data->version_id);
+
   std::move(callback).Run(
-      storage::mojom::ServiceWorkerFindRegistrationResult::New(
-          status, std::move(remote_reference), std::move(data),
-          std::move(resource_list)));
+      status, storage::mojom::ServiceWorkerFindRegistrationResult::New(
+                  std::move(remote_reference), std::move(data),
+                  std::move(resource_list)));
+}
+
+void ServiceWorkerStorageControlImpl::DidGetRegistrationsForOrigin(
+    GetRegistrationsForOriginCallback callback,
+    storage::mojom::ServiceWorkerDatabaseStatus status,
+    std::unique_ptr<ServiceWorkerStorage::RegistrationList>
+        registration_data_list,
+    std::unique_ptr<std::vector<ResourceList>> resources_list) {
+  if (status != storage::mojom::ServiceWorkerDatabaseStatus::kOk) {
+    std::move(callback).Run(
+        status,
+        std::vector<storage::mojom::ServiceWorkerFindRegistrationResultPtr>());
+    return;
+  }
+
+  DCHECK_EQ(registration_data_list->size(), resources_list->size());
+
+  std::vector<storage::mojom::ServiceWorkerFindRegistrationResultPtr>
+      registrations;
+  for (size_t i = 0; i < registration_data_list->size(); ++i) {
+    int64_t version_id = (*registration_data_list)[i]->version_id;
+    registrations.push_back(
+        storage::mojom::ServiceWorkerFindRegistrationResult::New(
+            CreateLiveVersionReferenceRemote(version_id),
+            std::move((*registration_data_list)[i]),
+            std::move((*resources_list)[i])));
+  }
+
+  std::move(callback).Run(status, std::move(registrations));
 }
 
 void ServiceWorkerStorageControlImpl::DidStoreRegistration(
@@ -381,7 +432,8 @@ void ServiceWorkerStorageControlImpl::DidStoreRegistration(
     int64_t deleted_version_id,
     const std::vector<int64_t>& newly_purgeable_resources) {
   MaybePurgeResources(deleted_version_id, newly_purgeable_resources);
-  std::move(callback).Run(status);
+  std::move(callback).Run(status, deleted_version_id,
+                          newly_purgeable_resources);
 }
 
 void ServiceWorkerStorageControlImpl::DidDeleteRegistration(
@@ -391,7 +443,8 @@ void ServiceWorkerStorageControlImpl::DidDeleteRegistration(
     int64_t deleted_version_id,
     const std::vector<int64_t>& newly_purgeable_resources) {
   MaybePurgeResources(deleted_version_id, newly_purgeable_resources);
-  std::move(callback).Run(status, origin_state);
+  std::move(callback).Run(status, origin_state, deleted_version_id,
+                          newly_purgeable_resources);
 }
 
 void ServiceWorkerStorageControlImpl::DidGetNewVersionId(
@@ -400,23 +453,27 @@ void ServiceWorkerStorageControlImpl::DidGetNewVersionId(
   mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>
       remote_reference;
   if (version_id != blink::mojom::kInvalidServiceWorkerVersionId) {
-    remote_reference = CreateLiveVersionReference(version_id);
+    remote_reference = CreateLiveVersionReferenceRemote(version_id);
   }
   std::move(callback).Run(version_id, std::move(remote_reference));
 }
 
 mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>
-ServiceWorkerStorageControlImpl::CreateLiveVersionReference(
+ServiceWorkerStorageControlImpl::CreateLiveVersionReferenceRemote(
     int64_t version_id) {
   DCHECK_NE(version_id, blink::mojom::kInvalidServiceWorkerVersionId);
-  DCHECK(!base::Contains(live_versions_, version_id));
 
   mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>
       remote_reference;
-  auto reference = std::make_unique<ServiceWorkerLiveVersionRefImpl>(
-      weak_ptr_factory_.GetWeakPtr(), version_id);
-  reference->Add(remote_reference.InitWithNewPipeAndPassReceiver());
-  live_versions_[version_id] = std::move(reference);
+  auto it = live_versions_.find(version_id);
+  if (it == live_versions_.end()) {
+    auto reference = std::make_unique<ServiceWorkerLiveVersionRefImpl>(
+        weak_ptr_factory_.GetWeakPtr(), version_id);
+    reference->Add(remote_reference.InitWithNewPipeAndPassReceiver());
+    live_versions_[version_id] = std::move(reference);
+  } else {
+    it->second->Add(remote_reference.InitWithNewPipeAndPassReceiver());
+  }
   return remote_reference;
 }
 
@@ -424,8 +481,9 @@ void ServiceWorkerStorageControlImpl::MaybePurgeResources(
     int64_t version_id,
     const std::vector<int64_t>& purgeable_resources) {
   if (version_id == blink::mojom::kInvalidServiceWorkerVersionId ||
-      purgeable_resources.size() == 0)
+      purgeable_resources.size() == 0) {
     return;
+  }
 
   if (base::Contains(live_versions_, version_id)) {
     live_versions_[version_id]->set_purgeable_resources(

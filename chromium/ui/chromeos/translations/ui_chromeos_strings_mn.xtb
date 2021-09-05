@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Нарны шил</translation>
 <translation id="115443833402798225">Хангыль Ahnmatae горим</translation>
 <translation id="1155759005174418845">Каталан</translation>
+<translation id="1172970565351728681">Ойролцоогоор <ph name="REMAINING_TIME" /> үлдсэн</translation>
 <translation id="1173894706177603556">Нэр солих</translation>
 <translation id="117624967391683467"><ph name="FILE_NAME" />-ийг хуулж байна...</translation>
 <translation id="1178581264944972037">Түр зогсоох</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">"<ph name="FILENAME" />" файл нь аль хэдийн байна. Та юу хийхийг хүсэж байна вэ?</translation>
 <translation id="2121825465123208577">Хэмжээг өөрчлөх</translation>
 <translation id="2136953289241069843">Хөрвүүлэлт (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">"<ph name="PATH" />"-г нээх боломжгүй байна: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Хүчингүй тэмдэгт: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Вьетнам хэлний гар (TCVN)</translation>
 <translation id="2168214441502403371">Перс хэлний гар</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Эзэмшигчийг <ph name="DESTINATION_DOMAIN" />-д шилжүүлнэ.</translation>
 <translation id="3241720467332021590">Ирланд хэл</translation>
 <translation id="3245321423178950146">Дуучны нэр мэдэгдэхгүй байна</translation>
+<translation id="3248185426436836442">Хүлээгдэж буй</translation>
 <translation id="3252266817569339921">Франц</translation>
 <translation id="3254434849914415189"><ph name="FILE_TYPE" /> файлуудад анхдагч аппликейшнийг сонгох:</translation>
 <translation id="3264582393905923483">Хам сэдэв</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Бүртгэсэн жил</translation>
 <translation id="3338239663705455570">Словени хэлний гар</translation>
 <translation id="3353984535370177728">Татаж оруулах хавтсыг сонгох</translation>
+<translation id="3356580349448036450">Бүрэн</translation>
 <translation id="3399597614303179694">Компьютерийн Македон гар</translation>
 <translation id="3414856743105198592">Зөөврийн хэрэгслийг форматлах нь бүх өгөгдлийг арилгана. Та үйлдлийг үргэжлүүлэх үү?</translation>
 <translation id="3437801641691368414">Үүсгэсэн цаг</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Танд '<ph name="FOLDER_NAME" />'-д файл зөөх зөвшөөрөл алга.</translation>
 <translation id="3786301125658655746">Та офлайн байна</translation>
 <translation id="3789841737615482174">Суулгах</translation>
+<translation id="3793469551756281394">Ойролцоогоор <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /> үлдсэн</translation>
 <translation id="3798449238516105146">Хувилбар</translation>
 <translation id="3801082500826908679">Фөриэс хэл</translation>
 <translation id="3809272675881623365">Туулай</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Энэ фолдерыг Windows-тай хуваалцсан байна</translation>
 <translation id="4487088045714738411">Бельги хэлний гар</translation>
 <translation id="4522570452068850558">дэлгэрэнгүй мэдээлэл</translation>
+<translation id="4542387084127299777">"<ph name="PATH" />"-г нээх боломжгүй байна</translation>
 <translation id="4552678318981539154">Нэмэлт мэдээлэл хадгах зай худалдан авах</translation>
 <translation id="4559767610552730302">Bokeh</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> файл</translation>
@@ -508,6 +512,7 @@
 <translation id="6629841649550503054">Бүх мэдээллийг <ph name="BEGIN_LINK" />Google Drive-д хадгална уу<ph name="END_LINK" />!</translation>
 <translation id="6643016212128521049">Цэвэрлэх</translation>
 <translation id="6650726141019353908">Ягаан эрвээхий</translation>
+<translation id="6657585470893396449">Нууц үг</translation>
 <translation id="6710213216561001401">Өмнөх</translation>
 <translation id="6718273304615422081">Зип болгож байна...</translation>
 <translation id="6751256176799620176">1 фолдер сонгосон</translation>
@@ -548,7 +553,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Суулгах ажиллагаа амжилтгүй боллоо.</translation>
 <translation id="7040138676081995583">Нээх программыг сонгох...</translation>
-<translation id="7059566040011178088"><ph name="REMAINING_TIME" />-с бага</translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> зүйлс сонгогдсон байна</translation>
 <translation id="7106346894903675391">Илүү их хадгалалтын санг худалдаж аваарай...</translation>
 <translation id="7126604456862387217">"&lt;b&gt; <ph name="SEARCH_STRING" /> &lt;/ б&gt; '- search &lt;em&gt; Drive &lt;/em&gt;</translation>
@@ -659,7 +663,6 @@
 <translation id="8193175696669055101">Төхөөрөмжийн загвар:</translation>
 <translation id="8208580316430297579">Урлагийн бүтээл</translation>
 <translation id="8223479393428528563">Эдгээр файлыг интернетэд холбогдоогүй байхдаа ашиглахаар хадгалахын тулд интернетэд холбогдсоныхоо дараагаар холбогдох файл дээр очин хулганын баруун талд даран <ph name="OFFLINE_CHECKBOX_NAME" /> сонголтыг сонгоно уу.</translation>
-<translation id="8231972167769262174"><ph name="REMAINING_TIME" />-н тухай</translation>
 <translation id="8249296373107784235">Цуцлах</translation>
 <translation id="8261506727792406068">Устгах</translation>
 <translation id="8269755669432358899">Файлын cанал хүсэлтийн түр зуурын самбарыг буулгах</translation>
@@ -722,6 +725,7 @@
 <translation id="9065203028668620118">Засварлах</translation>
 <translation id="9099674669267916096">Хуудасны тоо</translation>
 <translation id="9110990317705400362">Бид таны вэб хөтчийг илүү аюулгүй болгох аргыг үргэлж хайж байдаг. Өмнө нь ямар ч вэб сайт таны вэб хөтчид өргөтгөл нэмэхийг таниас хүсэж болдог байсан. Google Chrome-ийн сүүлийн үеийн хувилбаруудын тусламжтай та эдгээр өргөтгөлүүдийг Өргөтгөлийн хуудсанд нэмсэнээр суурьлуулж болох сонголтыг Chrome-д хийж болно. <ph name="BEGIN_LINK" />Дэлгэрэнгүй мэдээллийг<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Нээх</translation>
 <translation id="912419004897138677">Кодлогч</translation>
 <translation id="9129931661813833980">Фолдерийг тогтоох</translation>
 <translation id="9130775360844693113">'<ph name="DESTINATION_NAME" />'-н гишүүд эдгээр зүйлд хандах эрхтэй болно.</translation>

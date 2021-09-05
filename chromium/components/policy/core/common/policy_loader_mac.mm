@@ -134,7 +134,7 @@ std::unique_ptr<PolicyBundle> PolicyLoaderMac::Load() {
     std::unique_ptr<base::Value> policy = PropertyToValue(value);
     if (policy) {
       chrome_policy.Set(it.key(), level, POLICY_SCOPE_MACHINE,
-                        POLICY_SOURCE_PLATFORM, std::move(policy), nullptr);
+                        POLICY_SOURCE_PLATFORM, std::move(*policy), nullptr);
     } else {
       status.Add(POLICY_LOAD_STATUS_PARSE_ERROR);
     }
@@ -165,7 +165,7 @@ base::Time PolicyLoaderMac::LastModificationTime() {
   return file_info.last_modified;
 }
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
 
 base::FilePath PolicyLoaderMac::GetManagedPolicyPath(CFStringRef bundle_id) {
   // This constructs the path to the plist file in which Mac OS X stores the
@@ -234,7 +234,7 @@ void PolicyLoaderMac::LoadPolicyForComponent(
     std::unique_ptr<base::Value> policy_value = PropertyToValue(value);
     if (policy_value) {
       policy->Set(it.key(), level, POLICY_SCOPE_MACHINE, POLICY_SOURCE_PLATFORM,
-                  std::move(policy_value), nullptr);
+                  std::move(*policy_value), nullptr);
     }
   }
 }

@@ -34,12 +34,12 @@
 #include "chrome/common/crash_keys.h"
 #include "chrome/common/pdf_util.h"
 #include "chrome/common/pepper_permission_util.h"
-#include "chrome/common/prerender_url_loader_throttle.h"
 #include "chrome/common/privacy_budget/privacy_budget_settings_provider.h"
 #include "chrome/common/profiler/thread_profiler.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/common/secure_origin_allowlist.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/renderer_resources.h"
@@ -60,8 +60,6 @@
 #include "chrome/renderer/plugins/pdf_plugin_placeholder.h"
 #include "chrome/renderer/plugins/plugin_preroller.h"
 #include "chrome/renderer/plugins/plugin_uma.h"
-#include "chrome/renderer/prerender/prerender_helper.h"
-#include "chrome/renderer/prerender/prerenderer_client.h"
 #include "chrome/renderer/previews/resource_loading_hints_agent.h"
 #include "chrome/renderer/sync_encryption_keys_extension.h"
 #include "chrome/renderer/url_loader_throttle_provider_impl.h"
@@ -91,6 +89,11 @@
 #include "components/paint_preview/buildflags/buildflags.h"
 #include "components/pdf/renderer/pepper_pdf_host.h"
 #include "components/prerender/common/prerender_types.mojom.h"
+#include "components/prerender/common/prerender_url_loader_throttle.h"
+#include "components/prerender/renderer/prerender_helper.h"
+#include "components/prerender/renderer/prerender_render_frame_observer.h"
+#include "components/prerender/renderer/prerender_utils.h"
+#include "components/prerender/renderer/prerenderer_client.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/renderer/threat_dom_details.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
@@ -128,6 +131,7 @@
 #include "printing/buildflags/buildflags.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+#include "services/tracing/public/cpp/stack_sampling/tracing_sampler_profiler.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
@@ -301,31 +305,6 @@ bool IsStandaloneContentExtensionProcess() {
 #endif
 }
 
-// Defers media player loading in background pages until they're visible.
-class MediaLoadDeferrer : public content::RenderViewObserver {
- public:
-  MediaLoadDeferrer(content::RenderView* render_view,
-                    base::OnceClosure continue_loading_cb)
-      : content::RenderViewObserver(render_view),
-        continue_loading_cb_(std::move(continue_loading_cb)) {}
-  ~MediaLoadDeferrer() override {}
-
-  // content::RenderFrameObserver implementation:
-  void OnDestruct() override { delete this; }
-  void OnPageVisibilityChanged(
-      content::PageVisibilityState visibility_state) override {
-    if (visibility_state != content::PageVisibilityState::kVisible)
-      return;
-    std::move(continue_loading_cb_).Run();
-    delete this;
-  }
-
- private:
-  base::OnceClosure continue_loading_cb_;
-
-  DISALLOW_COPY_AND_ASSIGN(MediaLoadDeferrer);
-};
-
 std::unique_ptr<base::Unwinder> CreateV8Unwinder(v8::Isolate* isolate) {
   return std::make_unique<V8Unwinder>(isolate);
 }
@@ -347,9 +326,6 @@ ChromeContentRendererClient::ChromeContentRendererClient()
   for (const char* origin : kPredefinedAllowedCameraDeviceOrigins)
     allowed_camera_device_origins_.insert(origin);
 #endif
-
-  blink::IdentifiabilityStudySettings::SetGlobalProvider(
-      std::make_unique<PrivacyBudgetSettingsProvider>());
 }
 
 ChromeContentRendererClient::~ChromeContentRendererClient() {}
@@ -359,6 +335,11 @@ void ChromeContentRendererClient::RenderThreadStarted() {
 
   main_thread_profiler_->SetAuxUnwinderFactory(base::BindRepeating(
       &CreateV8Unwinder, base::Unretained(v8::Isolate::GetCurrent())));
+
+  // In the case of single process mode, the v8 unwinding will not work.
+  tracing::TracingSamplerProfiler::SetAuxUnwinderFactoryOnMainThread(
+      base::BindRepeating(&CreateV8Unwinder,
+                          base::Unretained(v8::Isolate::GetCurrent())));
 
   thread->SetRendererProcessType(
       IsStandaloneContentExtensionProcess()
@@ -404,6 +385,14 @@ void ChromeContentRendererClient::RenderThreadStarted() {
     thread->RegisterExtension(extensions_v8::BenchmarkingExtension::Get());
   if (command_line->HasSwitch(switches::kEnableNetBenchmarking))
     thread->RegisterExtension(extensions_v8::NetBenchmarkingExtension::Get());
+
+  // chrome: is also to be permitted to embeds https:// things and have them
+  // treated as first-party.
+  // See
+  // ChromeContentBrowserClient::ShouldTreatURLSchemeAsFirstPartyWhenTopLevel
+  WebString chrome_scheme(WebString::FromASCII(content::kChromeUIScheme));
+  WebSecurityPolicy::RegisterURLSchemeAsFirstPartyWhenTopLevelEmbeddingSecure(
+      chrome_scheme);
 
   // chrome-native: is a scheme used for placeholder navigations that allow
   // UIs to be drawn with platform native widgets instead of HTML.  These pages
@@ -469,6 +458,9 @@ void ChromeContentRendererClient::RenderThreadStarted() {
     thread->BindHostReceiver(collector.InitWithNewPipeAndPassReceiver());
     ThreadProfiler::SetCollectorForChildProcess(std::move(collector));
   }
+
+  blink::IdentifiabilityStudySettings::SetGlobalProvider(
+      std::make_unique<PrivacyBudgetSettingsProvider>());
 }
 
 void ChromeContentRendererClient::ExposeInterfacesToBrowser(
@@ -484,6 +476,8 @@ void ChromeContentRendererClient::RenderFrameCreated(
   ChromeRenderFrameObserver* render_frame_observer =
       new ChromeRenderFrameObserver(render_frame, web_cache_impl_.get());
   service_manager::BinderRegistry* registry = render_frame_observer->registry();
+
+  new prerender::PrerenderRenderFrameObserver(render_frame);
 
   bool should_whitelist_for_content_settings =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -766,21 +760,8 @@ bool ChromeContentRendererClient::DeferMediaLoad(
     content::RenderFrame* render_frame,
     bool has_played_media_before,
     base::OnceClosure closure) {
-  // Don't allow autoplay/autoload of media resources in a page that is hidden
-  // and has never played any media before.  We want to allow future loads even
-  // when hidden to allow playlist-like functionality.
-  //
-  // NOTE: This is also used to defer media loading for prerender.
-  if ((render_frame->GetRenderView()->GetWebView()->GetVisibilityState() !=
-           content::PageVisibilityState::kVisible &&
-       !has_played_media_before) ||
-      prerender::PrerenderHelper::IsPrerendering(render_frame)) {
-    new MediaLoadDeferrer(render_frame->GetRenderView(), std::move(closure));
-    return true;
-  }
-
-  std::move(closure).Run();
-  return false;
+  return prerender::DeferMediaLoad(render_frame, has_played_media_before,
+                                   std::move(closure));
 }
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -1098,7 +1079,7 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
       }
 
       case chrome::mojom::PluginStatus::kRestartRequired: {
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
         placeholder =
             create_blocked_plugin(IDR_BLOCKED_PLUGIN_HTML,
                                   l10n_util::GetStringFUTF16(
@@ -1234,14 +1215,6 @@ bool ChromeContentRendererClient::ShouldSuppressErrorPage(
     content::RenderFrame* render_frame,
     const GURL& url,
     int error_code) {
-  // Unit tests for ChromeContentRendererClient pass a NULL RenderFrame here.
-  // Unfortunately it's very difficult to construct a mock RenderView, so skip
-  // this functionality in this case.
-  if (render_frame && NetErrorHelper::Get(render_frame)
-                          ->ShouldSuppressErrorPage(url, error_code)) {
-    return true;
-  }
-
   // Do not flash an error page if the Instant new tab page fails to load.
   bool is_instant_ntp = false;
 #if !defined(OS_ANDROID)
@@ -1465,24 +1438,6 @@ ChromeContentRendererClient::CreateSpeechRecognitionClient(
 }
 #endif
 
-bool ChromeContentRendererClient::IsPluginAllowedToUseDevChannelAPIs() {
-#if BUILDFLAG(ENABLE_PLUGINS)
-  // Allow access for tests.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnablePepperTesting)) {
-    return true;
-  }
-
-  version_info::Channel channel = chrome::GetChannel();
-  // Allow dev channel APIs to be used on "Canary", "Dev", and "Unknown"
-  // releases of Chrome. Permitting "Unknown" allows these APIs to be used on
-  // Chromium builds as well.
-  return channel <= version_info::Channel::DEV;
-#else
-  return false;
-#endif
-}
-
 bool ChromeContentRendererClient::IsPluginAllowedToUseCameraDeviceAPI(
     const GURL& url) {
 #if BUILDFLAG(ENABLE_PLUGINS) && BUILDFLAG(ENABLE_EXTENSIONS)
@@ -1544,16 +1499,27 @@ void ChromeContentRendererClient::
   // embedder only.
   blink::WebRuntimeFeatures::EnablePerformanceManagerInstrumentation(true);
 
-// Web Share is shipped on Android, experimental otherwise. It is enabled here,
-// in chrome/, to avoid it being made available in other clients of content/
-// that do not have a Web Share Mojo implementation.
-#if defined(OS_ANDROID)
-  blink::WebRuntimeFeatures::EnableWebShare(true);
-  blink::WebRuntimeFeatures::EnableWebShareV2(true);
+  // Web Share is conditionally enabled here in chrome/, to avoid it being
+  // made available in other clients of content/ that do not have a Web Share
+  // Mojo implementation (e.g. WebView).  Web Share is shipped on Android.
+#if defined(OS_CHROMEOS) || defined(OS_WIN)
+  if (base::FeatureList::IsEnabled(features::kWebShare))
+#endif
+#if defined(OS_CHROMEOS) || defined(OS_WIN) || defined(OS_ANDROID)
+    blink::WebRuntimeFeatures::EnableWebShare(true);
 #endif
 
   if (base::FeatureList::IsEnabled(subresource_filter::kAdTagging))
     blink::WebRuntimeFeatures::EnableAdTagging(true);
+}
+
+bool ChromeContentRendererClient::AllowScriptExtensionForServiceWorker(
+    const url::Origin& script_origin) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  return script_origin.scheme() == extensions::kExtensionScheme;
+#else
+  return false;
+#endif
 }
 
 void ChromeContentRendererClient::
@@ -1675,8 +1641,49 @@ void ChromeContentRendererClient::DidSetUserAgent(
 }
 
 bool ChromeContentRendererClient::RequiresWebComponentsV0(const GURL& url) {
+  if (url.SchemeIs(content::kChromeUIScheme)) {
+    base::StringPiece host_piece = url.host_piece();
+    // TODO(crbug.com/1014322): Remove when migrated to Polymer3.
+    return host_piece == chrome::kChromeUIMdUserManagerHost ||
+           host_piece == content::kChromeUIResourcesHost ||
+           // TODO(crbug.com/1006778): Remove when chrome://tracing is fully
+           // removed.
+           host_piece == content::kChromeUITracingHost ||
+           // TODO(crbug.com/1110954): Remove when migrated away from HTML
+           // imports.
+           host_piece == chrome::kChromeUIBluetoothInternalsHost ||
+#if defined(OS_CHROMEOS)
+           // TODO(crbug.com/1111430): Remove when migrated to Polymer3.
+           host_piece == chrome::kChromeUIAccountManagerErrorHost ||
+           host_piece == chrome::kChromeUIAccountManagerWelcomeHost ||
+           host_piece == chrome::kChromeUIAccountMigrationWelcomeHost ||
+           // TODO(crbug.com/1111430): Remove when migrated to Polymer3.
+           host_piece == chrome::kChromeUIAddSupervisionHost ||
+           // TODO(crbug.com/1111849): Remove when migrated to Polymer3.
+           host_piece == chrome::kChromeUIAssistantOptInHost ||
+           // TODO(crbug.com/1111477): Remove when migrated to Polymer3.
+           host_piece == chrome::kChromeUICellularSetupHost ||
+           // TODO(crbug.com/1090884): Remove when migrated to Polymer3.
+           host_piece == chrome::kChromeUIInternetConfigDialogHost ||
+           // TODO(crbug.com/1090883): Remove when migrated to Polymer3.
+           host_piece == chrome::kChromeUIInternetDetailDialogHost ||
+           // TODO(crbug.com/1022196): Remove when migrated to Polymer3.
+           host_piece == chrome::kChromeUIMultiDeviceSetupHost ||
+           // TODO(crbug.com/1111852): Remove when migrated to Polymer3.
+           host_piece == chrome::kChromeUINetworkHost ||
+           // TODO(crbug.com/1111387): Remove when migrated away from HTML
+           // Imports.
+           host_piece == chrome::kChromeUIOobeHost ||
+           // TODO(crbug.com/1045266): Remove when migrated to Polymer3.
+           host_piece == chrome::kChromeUIOSSettingsHost ||
+           // TODO(crbug.com/1022192): Remove when migrated to Polymer3.
+           host_piece == chrome::kChromeUIPasswordChangeHost ||
+#endif
+           false;
+  }
+
   // TODO(1025782): For now, file:// URLs are allowed to access Web Components
   // v0 features. This will be removed once origin trials support file:// URLs
   // for this purpose.
-  return url.SchemeIs(content::kChromeUIScheme) || url.SchemeIs("file");
+  return url.SchemeIs("file");
 }

@@ -5,7 +5,7 @@
 #include "ash/app_list/views/assistant/assistant_privacy_info_view.h"
 
 #include "ash/app_list/app_list_view_delegate.h"
-#include "ash/app_list/views/search_result_page_view.h"
+#include "ash/app_list/views/privacy_container_view.h"
 #include "ash/assistant/util/i18n_util.h"
 #include "ash/public/cpp/assistant/controller/assistant_controller.h"
 #include "ui/strings/grit/ui_strings.h"
@@ -14,26 +14,20 @@ namespace ash {
 
 AssistantPrivacyInfoView::AssistantPrivacyInfoView(
     AppListViewDelegate* view_delegate,
-    SearchResultPageView* search_result_page_view)
+    PrivacyContainerView* container)
     : PrivacyInfoView(IDS_APP_LIST_ASSISTANT_PRIVACY_INFO,
                       IDS_APP_LIST_LEARN_MORE),
       view_delegate_(view_delegate),
-      search_result_page_view_(search_result_page_view) {}
+      container_(container) {}
 
 AssistantPrivacyInfoView::~AssistantPrivacyInfoView() = default;
 
-void AssistantPrivacyInfoView::ButtonPressed(views::Button* sender,
-                                             const ui::Event& event) {
-  if (!IsCloseButton(sender))
-    return;
-
+void AssistantPrivacyInfoView::CloseButtonPressed() {
   view_delegate_->MarkAssistantPrivacyInfoDismissed();
-  search_result_page_view_->OnPrivacyInfoViewCloseButtonPressed();
+  container_->Update();
 }
 
-void AssistantPrivacyInfoView::StyledLabelLinkClicked(views::StyledLabel* label,
-                                                      const gfx::Range& range,
-                                                      int event_flags) {
+void AssistantPrivacyInfoView::LinkClicked() {
   constexpr char url[] = "https://support.google.com/chromebook?p=assistant";
   AssistantController::Get()->OpenUrl(
       assistant::util::CreateLocalizedGURL(url));

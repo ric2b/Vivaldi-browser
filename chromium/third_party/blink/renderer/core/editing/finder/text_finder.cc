@@ -39,6 +39,7 @@
 #include "third_party/blink/public/web/web_view_client.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache_base.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
+#include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/range.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
@@ -58,6 +59,7 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
+#include "third_party/blink/renderer/core/layout/layout_shift_tracker.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/text_autosizer.h"
 #include "third_party/blink/renderer/core/page/page.h"
@@ -65,6 +67,21 @@
 #include "third_party/blink/renderer/platform/timer.h"
 
 namespace blink {
+
+namespace {
+
+// Returns the element which the beforematch event should be fired on given a
+// matching range.
+Element* GetBeforematchElement(const Range& range) {
+  // Find-in-page matches can't span multiple block-level elements (because
+  // the text will be broken by newlines between blocks), so first we find the
+  // block-level element which contains the match.
+  // This means we only need to traverse up from one node in the range, in
+  // this case we are traversing from the start position of the range.
+  return EnclosingBlock(range.StartPosition(), kCannotCrossEditingBoundary);
+}
+
+}  // namespace
 
 TextFinder::FindMatch::FindMatch(Range* range, int ordinal)
     : range_(range), ordinal_(ordinal) {}
@@ -76,32 +93,6 @@ void TextFinder::FindMatch::Trace(Visitor* visitor) const {
 static void ScrollToVisible(Range* match) {
   const EphemeralRangeInFlatTree range(match);
   const Node& first_node = *match->FirstNode();
-
-  if (RuntimeEnabledFeatures::BeforeMatchEventEnabled()) {
-    // Find-in-page matches can't span multiple block-level elements (because
-    // the text will be broken by newlines between blocks), so first we find the
-    // block-level element which contains the match.
-    // This means we only need to traverse up from one node in the range, in
-    // this case we are traversing from the start position of the range.
-    Element* enclosing_block =
-        EnclosingBlock(range.StartPosition(), kCannotCrossEditingBoundary);
-    DCHECK(enclosing_block);
-    // Note that we don't check the `range.EndPosition()` since we just activate
-    // the beginning of the range. In find-in-page cases, the end position is
-    // the same since the matches cannot cross block boundaries. However, in
-    // scroll-to-text, the range might be different, but we still just activate
-    // the beginning of the range. See
-    // https://github.com/WICG/display-locking/issues/125 for more details.
-    enclosing_block->DispatchEvent(
-        *Event::Create(event_type_names::kBeforematch));
-    // TODO(jarhar): Consider what to do based on DOM/style modifications made
-    // by the beforematch event here and write tests for it once we decide on a
-    // behavior here: https://github.com/WICG/display-locking/issues/150
-  }
-
-  // The beforematch event may detach the target element from the DOM.
-  if (!first_node.isConnected())
-    return;
 
   if (RuntimeEnabledFeatures::CSSContentVisibilityEnabled()) {
     // TODO(vmpstr): Rework this, since it is only used for bookkeeping.
@@ -135,6 +126,17 @@ bool TextFinder::Find(int identifier,
                       const mojom::blink::FindOptions& options,
                       bool wrap_within_frame,
                       bool* active_now) {
+  return FindInternal(identifier, search_text, options, wrap_within_frame,
+                      active_now);
+}
+
+bool TextFinder::FindInternal(int identifier,
+                              const WebString& search_text,
+                              const mojom::blink::FindOptions& options,
+                              bool wrap_within_frame,
+                              bool* active_now,
+                              Range* first_match,
+                              bool wrapped_around) {
   if (options.new_session) {
     // This find-in-page is redone due to the frame finishing loading.
     // If we can, just reuse the old active match;
@@ -175,7 +177,8 @@ bool TextFinder::Find(int identifier,
       (options.new_session ? kStartInSelection : 0);
   active_match_ = Editor::FindRangeOfString(
       *OwnerFrame().GetFrame()->GetDocument(), search_text,
-      EphemeralRangeInFlatTree(active_match_.Get()), find_options);
+      EphemeralRangeInFlatTree(active_match_.Get()), find_options,
+      &wrapped_around);
 
   if (!active_match_) {
     if (current_active_match_frame_ && options.new_session)
@@ -188,19 +191,52 @@ bool TextFinder::Find(int identifier,
     InvalidatePaintForTickmarks();
     return false;
   }
-  ScrollToVisible(active_match_);
 
-  // If the user is browsing a page with autosizing, adjust the zoom to the
-  // column where the next hit has been found. Doing this when autosizing is
-  // not set will result in a zoom reset on small devices.
-  if (OwnerFrame()
-          .GetFrame()
-          ->GetDocument()
-          ->GetTextAutosizer()
-          ->PageNeedsAutosizing()) {
-    OwnerFrame().LocalRoot()->FrameWidget()->ZoomToFindInPageRect(
-        OwnerFrame().GetFrameView()->ConvertToRootFrame(
-            ComputeTextRect(EphemeralRange(active_match_.Get()))));
+  // We don't want to search past the same position twice, so if the new match
+  // is past the original one and we have wrapped around, then stop now.
+  if (first_match && wrapped_around) {
+    if (options.forward) {
+      // If the start of the new match has gone past the start of the original
+      // match, then stop.
+      if (ComparePositions(first_match->StartPosition(),
+                           active_match_->StartPosition()) <= 0) {
+        return false;
+      }
+    } else {
+      // If the end of the new match has gone before the end of the original
+      // match, then stop.
+      if (ComparePositions(active_match_->EndPosition(),
+                           first_match->EndPosition()) <= 0) {
+        return false;
+      }
+    }
+  }
+
+  std::unique_ptr<AsyncScrollContext> scroll_context =
+      std::make_unique<AsyncScrollContext>();
+  scroll_context->identifier = identifier;
+  scroll_context->search_text = search_text;
+  scroll_context->options = options;
+  // Set new_session to false to make sure that subsequent searches are
+  // incremental instead of repeatedly finding the same match.
+  scroll_context->options.new_session = false;
+  scroll_context->wrap_within_frame = wrap_within_frame;
+  scroll_context->range = active_match_.Get();
+  scroll_context->first_match = first_match ? first_match : active_match_.Get();
+  scroll_context->wrapped_around = wrapped_around;
+  Element* beforematch_element = GetBeforematchElement(*active_match_);
+  scroll_context->was_match_hidden =
+      beforematch_element &&
+      DisplayLockUtilities::NearestHiddenMatchableInclusiveAncestor(
+          *beforematch_element);
+  if (options.run_synchronously_for_testing) {
+    FireBeforematchEvent(std::move(scroll_context));
+  } else {
+    scroll_task_.Reset(WTF::Bind(&TextFinder::FireBeforematchEvent,
+                                 WrapWeakPersistent(this),
+                                 std::move(scroll_context)));
+    GetFrame()->GetDocument()->EnqueueAnimationFrameTask(
+        scroll_task_.callback());
   }
 
   bool was_active_frame = current_active_match_frame_;
@@ -464,10 +500,17 @@ void TextFinder::DidFindMatch(int identifier,
           active_match_index_ + 1, identifier);
     }
   }
-  OwnerFrame().GetFrame()->GetDocument()->Markers().AddTextMatchMarker(
-      EphemeralRange(result_range),
-      found_active_match ? TextMatchMarker::MatchStatus::kActive
-                         : TextMatchMarker::MatchStatus::kInactive);
+  DocumentMarkerController& marker_controller =
+      OwnerFrame().GetFrame()->GetDocument()->Markers();
+  EphemeralRange ephemeral_result_range(result_range);
+  // Scroll() may have added a match marker to this range already.
+  if (!marker_controller.FirstMarkerIntersectingEphemeralRange(
+          ephemeral_result_range, DocumentMarker::MarkerTypes::TextMatch())) {
+    marker_controller.AddTextMatchMarker(
+        EphemeralRange(result_range),
+        found_active_match ? TextMatchMarker::MatchStatus::kActive
+                           : TextMatchMarker::MatchStatus::kInactive);
+  }
 
   find_matches_cache_.push_back(FindMatch(result_range, current_total_matches));
 }
@@ -767,6 +810,120 @@ void TextFinder::Trace(Visitor* visitor) const {
   visitor->Trace(find_task_controller_);
   visitor->Trace(active_match_);
   visitor->Trace(find_matches_cache_);
+}
+
+void TextFinder::FireBeforematchEvent(
+    std::unique_ptr<AsyncScrollContext> context) {
+  // During the async step, the match may have been removed from the dom.
+  if (context->range->collapsed()) {
+    // If the range we were going to scroll to was removed, then we should
+    // continue to search for the next match.
+    // We don't need to worry about the case where another Find has already been
+    // initiated, because if it was, then the task to run this would have been
+    // canceled.
+    active_match_ = context->range;
+    FindInternal(context->identifier, context->search_text, context->options,
+                 context->wrap_within_frame, /*active_now=*/nullptr,
+                 context->first_match, context->wrapped_around);
+    return;
+  }
+
+  if (RuntimeEnabledFeatures::BeforeMatchEventEnabled(
+          GetFrame()->GetDocument()->GetExecutionContext())) {
+    Element* beforematch_element = GetBeforematchElement(*context->range);
+    // Note that we don't check the `range.EndPosition()` since we just activate
+    // the beginning of the range. In find-in-page cases, the end position is
+    // the same since the matches cannot cross block boundaries. However, in
+    // scroll-to-text, the range might be different, but we still just activate
+    // the beginning of the range. See
+    // https://github.com/WICG/display-locking/issues/125 for more details.
+    if (beforematch_element) {
+      // If the beforematch event handler causes layout shift, then we should
+      // give it layout shift allowance because it is responding to the user
+      // initiated find-in-page.
+      OwnerFrame()
+          .GetFrameView()
+          ->GetLayoutShiftTracker()
+          .NotifyFindInPageInput();
+      beforematch_element->DispatchEvent(
+          *Event::CreateBubble(event_type_names::kBeforematch));
+    }
+    // TODO(jarhar): Consider what to do based on DOM/style modifications made
+    // by the beforematch event here and write tests for it once we decide on a
+    // behavior here: https://github.com/WICG/display-locking/issues/150
+  }
+
+  if (context->options.run_synchronously_for_testing) {
+    // We need to update style and layout to account for script modifying
+    // dom/style before scrolling when we are running synchronously.
+    GetFrame()->GetDocument()->UpdateStyleAndLayout(
+        DocumentUpdateReason::kFindInPage);
+    Scroll(std::move(context));
+  } else {
+    scroll_task_.Reset(WTF::Bind(&TextFinder::Scroll, WrapWeakPersistent(this),
+                                 std::move(context)));
+    GetFrame()->GetDocument()->EnqueueAnimationFrameTask(
+        scroll_task_.callback());
+  }
+}
+
+void TextFinder::Scroll(std::unique_ptr<AsyncScrollContext> context) {
+  // The beforematch event, as well as any other script that may have run during
+  // the async step, may have removed the matching text from the dom, in which
+  // case we shouldn't scroll to it.
+  // Likewise, if the target scroll element is display locked, then we shouldn't
+  // scroll to it.
+  Element* beforematch_element = GetBeforematchElement(*context->range);
+  if (context->range->collapsed() ||
+      (beforematch_element &&
+       DisplayLockUtilities::NearestHiddenMatchableInclusiveAncestor(
+           *beforematch_element))) {
+    // If the range we were going to scroll to was removed or display locked,
+    // then we should continue to search for the next match.
+    // We don't need to worry about the case where another Find has already been
+    // initiated, because if it was, then the task to run this would have been
+    // canceled.
+    // We also need to re-assign to active_match_ here in order to make sure the
+    // search starts from context->range. active_match_ may have been unassigned
+    // during the async steps.
+    active_match_ = context->range;
+    FindInternal(context->identifier, context->search_text, context->options,
+                 context->wrap_within_frame, /*active_now=*/nullptr,
+                 context->first_match, context->wrapped_around);
+    return;
+  }
+
+  if (context->was_match_hidden) {
+    GetFrame()
+        ->GetDocument()
+        ->MarkHasFindInPageBeforematchExpandedHiddenMatchable();
+  }
+
+  ScrollToVisible(context->range);
+
+  // If the user is browsing a page with autosizing, adjust the zoom to the
+  // column where the next hit has been found. Doing this when autosizing is
+  // not set will result in a zoom reset on small devices.
+  if (GetFrame()->GetDocument()->GetTextAutosizer()->PageNeedsAutosizing()) {
+    OwnerFrame().LocalRoot()->FrameWidget()->ZoomToFindInPageRect(
+        OwnerFrame().GetFrameView()->ConvertToRootFrame(
+            ComputeTextRect(EphemeralRange(context->range))));
+  }
+
+  // DidFindMatch will race against this to add a text match marker to this
+  // range. In the case where the match is hidden and the beforematch event (or
+  // anything else) reveals the range in between DidFindMatch and this function,
+  // we need to add the marker again or else it won't show up at all.
+  EphemeralRange ephemeral_range(context->range);
+  DocumentMarkerController& marker_controller =
+      OwnerFrame().GetFrame()->GetDocument()->Markers();
+  if (!context->options.run_synchronously_for_testing &&
+      !marker_controller.FirstMarkerIntersectingEphemeralRange(
+          ephemeral_range, DocumentMarker::MarkerTypes::TextMatch())) {
+    marker_controller.AddTextMatchMarker(ephemeral_range,
+                                         TextMatchMarker::MatchStatus::kActive);
+    SetMarkerActive(context->range, true);
+  }
 }
 
 }  // namespace blink

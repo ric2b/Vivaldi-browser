@@ -16,6 +16,7 @@
 #include "base/timer/timer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
+#include "components/safe_browsing/core/proto/csd.pb.h"
 #include "components/safe_browsing/core/proto/realtimeapi.pb.h"
 #include "url/gurl.h"
 
@@ -29,13 +30,19 @@ class SimpleURLLoader;
 class SharedURLLoaderFactory;
 }  // namespace network
 
+namespace syncer {
+class SyncService;
+}
+
+class PrefService;
+
 namespace safe_browsing {
 
 using RTLookupRequestCallback =
     base::OnceCallback<void(std::unique_ptr<RTLookupRequest>, std::string)>;
 
 using RTLookupResponseCallback =
-    base::OnceCallback<void(bool, std::unique_ptr<RTLookupResponse>)>;
+    base::OnceCallback<void(bool, bool, std::unique_ptr<RTLookupResponse>)>;
 
 class VerdictCacheManager;
 
@@ -45,7 +52,13 @@ class RealTimeUrlLookupServiceBase : public KeyedService {
  public:
   explicit RealTimeUrlLookupServiceBase(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      VerdictCacheManager* cache_manager);
+      VerdictCacheManager* cache_manager,
+      syncer::SyncService* sync_service,
+      PrefService* pref_service,
+      const ChromeUserPopulation::ProfileManagementStatus&
+          profile_management_status,
+      bool is_under_advanced_protection,
+      bool is_off_the_record);
   ~RealTimeUrlLookupServiceBase() override;
 
   // Returns true if |url|'s scheme can be checked.
@@ -60,6 +73,16 @@ class RealTimeUrlLookupServiceBase : public KeyedService {
   // too many prior errors. If this happens, the checking falls back to
   // local hash-based method.
   bool IsInBackoffMode() const;
+
+  // Start the full URL lookup for |url|, call |request_callback| on the same
+  // thread when request is sent, call |response_callback| on the same thread
+  // when response is received.
+  // Note that |request_callback| is not called if there's a valid entry in the
+  // cache for |url|.
+  // This function is overridden in unit tests.
+  virtual void StartLookup(const GURL& url,
+                           RTLookupRequestCallback request_callback,
+                           RTLookupResponseCallback response_callback);
 
   // Helper function to return a weak pointer.
   base::WeakPtr<RealTimeUrlLookupServiceBase> GetWeakPtr();
@@ -76,16 +99,6 @@ class RealTimeUrlLookupServiceBase : public KeyedService {
   // check is enabled.
   virtual bool CanCheckSafeBrowsingDb() const = 0;
 
-  // Start the full URL lookup for |url|, call |request_callback| on the same
-  // thread when request is sent, call |response_callback| on the same thread
-  // when response is received.
-  // Note that |request_callback| is not called if there's a valid entry in the
-  // cache for |url|.
-  // This function is overridden in unit tests.
-  virtual void StartLookup(const GURL& url,
-                           RTLookupRequestCallback request_callback,
-                           RTLookupResponseCallback response_callback) = 0;
-
   // KeyedService:
   // Called before the actual deletion of the object.
   void Shutdown() override;
@@ -96,16 +109,45 @@ class RealTimeUrlLookupServiceBase : public KeyedService {
   // sensitive.
   static GURL SanitizeURL(const GURL& url);
 
+  // Called to send the request to the Safe Browsing backend over the network.
+  // It also attached an auth header if |access_token_string| has a value.
+  void SendRequest(const GURL& url,
+                   base::Optional<std::string> access_token_string,
+                   RTLookupRequestCallback request_callback,
+                   RTLookupResponseCallback response_callback);
+
+ private:
+  using PendingRTLookupRequests =
+      base::flat_map<network::SimpleURLLoader*, RTLookupResponseCallback>;
+
+  // Returns the endpoint that the URL lookup will be sent to.
+  static GURL GetRealTimeLookupUrl();
+
   // Returns the traffic annotation tag that is attached in the simple URL
   // loader.
   virtual net::NetworkTrafficAnnotationTag GetTrafficAnnotationTag() const = 0;
 
-  // Returns the endpoint that the URL lookup will be sent to.
-  virtual GURL GetRealTimeLookupUrl() const = 0;
+  // Returns true if real time URL lookup with GAIA token is enabled.
+  virtual bool CanPerformFullURLLookupWithToken() const = 0;
+
+  // Gets access token, called if |CanPerformFullURLLookupWithToken| returns
+  // true.
+  virtual void GetAccessToken(const GURL& url,
+                              RTLookupRequestCallback request_callback,
+                              RTLookupResponseCallback response_callback) = 0;
+
+  // Gets a dm token string to be set in a request proto.
+  virtual base::Optional<std::string> GetDMTokenString() const = 0;
+
+  // Suffix for logging metrics.
+  virtual std::string GetMetricSuffix() const = 0;
+
+  // Returns whether real time URL requests should include credentials.
+  virtual bool ShouldIncludeCredentials() const = 0;
 
   // Returns the duration of the next backoff. Starts at
-  // |kMinBackOffResetDurationInSeconds| and increases exponentially until it
-  // reaches |kMaxBackOffResetDurationInSeconds|.
+  // |kMinBackOffResetDurationInSeconds| and increases exponentially until
+  // it reaches |kMaxBackOffResetDurationInSeconds|.
   size_t GetBackoffDurationInSeconds() const;
 
   // Called when the request to remote endpoint fails. May initiate or extend
@@ -138,10 +180,6 @@ class RealTimeUrlLookupServiceBase : public KeyedService {
       const GURL& url,
       RTLookupResponseCallback response_callback);
 
- private:
-  using PendingRTLookupRequests =
-      base::flat_map<network::SimpleURLLoader*, RTLookupResponseCallback>;
-
   // Called when the response from the real-time lookup remote endpoint is
   // received. |url_loader| is the unowned loader that was used to send the
   // request. |request_start_time| is the time when the request was sent.
@@ -151,6 +189,11 @@ class RealTimeUrlLookupServiceBase : public KeyedService {
                            network::SimpleURLLoader* url_loader,
                            base::TimeTicks request_start_time,
                            std::unique_ptr<std::string> response_body);
+
+  // Fills in fields in |RTLookupRequest|.
+  std::unique_ptr<RTLookupRequest> FillRequestProto(const GURL& url);
+
+  bool IsHistorySyncEnabled();
 
   // Count of consecutive failures to complete URL lookup requests. When it
   // reaches |kMaxFailuresToEnforceBackoff|, we enter the backoff mode. It gets
@@ -177,8 +220,27 @@ class RealTimeUrlLookupServiceBase : public KeyedService {
   // Unowned object used for getting and storing real time url check cache.
   VerdictCacheManager* cache_manager_;
 
+  // Unowned object used for checking sync status of the profile.
+  syncer::SyncService* sync_service_;
+
+  // Unowned object used for getting preference settings.
+  PrefService* pref_service_;
+
+  const ChromeUserPopulation::ProfileManagementStatus
+      profile_management_status_;
+
+  // Whether the profile is enrolled in  advanced protection.
+  bool is_under_advanced_protection_;
+
+  // A boolean indicates whether the profile associated with this
+  // |url_lookup_service| is an off the record profile.
+  bool is_off_the_record_;
+
   // All requests that are sent but haven't received a response yet.
   PendingRTLookupRequests pending_requests_;
+
+  friend class RealTimeUrlLookupServiceTest;
+  friend class ChromeEnterpriseRealTimeUrlLookupServiceTest;
 
   base::WeakPtrFactory<RealTimeUrlLookupServiceBase> weak_factory_{this};
 

@@ -17,6 +17,7 @@
 #include "extensions/browser/extension_registry_observer.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/ui_base_types.h"  // WindowShowState
+#include "ui/gfx/image/image_family.h"
 #include "ui/infobar_container_web_proxy.h"
 #include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
 #include "ui/vivaldi_ui_web_contents_delegate.h"
@@ -131,9 +132,9 @@ class VivaldiBrowserWindow final
 
   static base::TimeTicks GetFirstWindowCreationTime();
 
-  // Returns the BrowserView used for the specified Browser.
-  static VivaldiBrowserWindow* GetBrowserWindowForBrowser(
-      const Browser* browser);
+  // Return the Vivaldi Window that shows the given Browser. Return null when
+  // browser is null or is not held by a Vivaldi Window.
+  static VivaldiBrowserWindow* FromBrowser(const Browser* browser);
 
   // Create a new VivaldiBrowserWindow;
   static VivaldiBrowserWindow* CreateVivaldiBrowserWindow(
@@ -159,6 +160,8 @@ class VivaldiBrowserWindow final
 
   void LoadContents(const std::string& resource_relative_url);
 
+  void ContentsDidStartNavigation();
+
   // ExtensionRegistryObserver implementation.
   void OnExtensionUnloaded(
       content::BrowserContext* browser_context,
@@ -173,6 +176,8 @@ class VivaldiBrowserWindow final
   void InfoBarContainerStateChanged(bool is_animating) override;
 
   void HandleMouseChange(bool motion);
+
+  bool ConfirmWindowClose();
 
   //
   // BrowserWindow overrides
@@ -398,6 +403,10 @@ class VivaldiBrowserWindow final
 
   void OnDidFinishFirstNavigation();
 
+  void ShowCaretBrowsingDialog() override {}
+
+  void CreateTabSearchBubble() override {}
+
  private:
   class VivaldiManagePasswordsIconView : public ManagePasswordsIconView {
    public:
@@ -434,6 +443,7 @@ class VivaldiBrowserWindow final
   void MovePinnedTabsToOtherWindowIfNeeded();
 
   void UpdateActivation(bool is_active);
+  void OnIconImagesLoaded(gfx::ImageFamily image_family);
 
   // The Browser object we are associated with.
   std::unique_ptr<Browser> browser_;
@@ -447,6 +457,9 @@ class VivaldiBrowserWindow final
   // Force showing of the window, even if the document has not loaded. This
   // avoids situations where the document fails somehow and no window is shown.
   void ForceShow();
+
+  // VivaldiQuitConfirmationDialog::CloseCallback
+  void ContinueClose(bool quiting, bool close, bool stop_asking);
 
   std::unique_ptr<content::WebContents> web_contents_;
   std::unique_ptr<VivaldiNativeAppWindowViews> views_;
@@ -467,6 +480,9 @@ class VivaldiBrowserWindow final
   // Whether the window is active (focused) or not.
   bool is_active_ = false;
 
+  bool quit_dialog_shown_ = false;
+  bool close_dialog_shown_ = false;
+
   // The window type for this window.
   WindowType window_type_ = WindowType::NORMAL;
 
@@ -480,10 +496,10 @@ class VivaldiBrowserWindow final
 
   views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   // Last key code received in HandleKeyboardEvent(). For auto repeat detection.
   int last_key_code_ = -1;
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_MAC)
   bool last_motion_ = false;
   WindowStateData window_state_data_;
 
@@ -493,6 +509,7 @@ class VivaldiBrowserWindow final
   std::unique_ptr<VivaldiManagePasswordsIconView> icon_view_;
   std::unique_ptr<autofill::AutofillBubbleHandler> autofill_bubble_handler_;
 
+  base::WeakPtrFactory<VivaldiBrowserWindow> weak_ptr_factory_{this};
   DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserWindow);
 };
 

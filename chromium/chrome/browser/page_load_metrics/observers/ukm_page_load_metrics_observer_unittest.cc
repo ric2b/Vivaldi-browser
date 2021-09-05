@@ -8,7 +8,6 @@
 
 #include "base/metrics/metrics_hashes.h"
 #include "base/optional.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/trace_event_analyzer.h"
 #include "base/time/time.h"
@@ -21,7 +20,6 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/content_settings.h"
-#include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/page_load_metrics/browser/observers/largest_contentful_paint_handler.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
@@ -481,15 +479,50 @@ TEST_F(UkmPageLoadMetricsObserverTest,
   const ukm::mojom::UkmEntry* entry = merged_entries.begin()->second.get();
   EXPECT_FALSE(tester()->test_ukm_recorder().EntryHasMetric(
       entry, PageLoad::kPaintTiming_NavigationToLargestContentfulPaintName));
-  // Hidden before navigation, so PageEndReason should not be available.
-  EXPECT_FALSE(tester()->test_ukm_recorder().EntryHasMetric(
-      entry, PageLoad::kNavigation_PageEndReason2Name));
+  tester()->test_ukm_recorder().ExpectEntryMetric(
+      entry, PageLoad::kNavigation_PageEndReason2Name,
+      page_load_metrics::END_CLOSE);
 
   std::map<ukm::SourceId, ukm::mojom::UkmEntryPtr> internal_merged_entries =
       tester()->test_ukm_recorder().GetMergedEntriesByName(
           PageLoad_Internal::kEntryName);
   // RecordTimingMetrics() is not called in this test.
   EXPECT_EQ(0ul, internal_merged_entries.size());
+}
+
+TEST_F(UkmPageLoadMetricsObserverTest, AbortNeverForegrounded) {
+  std::unique_ptr<base::SimpleTestClock> mock_clock(
+      new base::SimpleTestClock());
+  mock_clock->SetNow(base::Time::NowFromSystemTime());
+
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
+  PopulateRequiredTimingFields(&timing);
+  // The duration between nav start and first background set to 1ms.
+  mock_clock->Advance(base::TimeDelta::FromMilliseconds(1));
+  web_contents()->WasHidden();
+  NavigateAndCommit(GURL(kTestUrl1));
+  tester()->SimulateTimingUpdate(timing);
+
+  // Simulate closing the tab.
+  DeleteContents();
+
+  std::map<ukm::SourceId, ukm::mojom::UkmEntryPtr> merged_entries =
+      tester()->test_ukm_recorder().GetMergedEntriesByName(
+          PageLoad::kEntryName);
+  EXPECT_EQ(1ul, merged_entries.size());
+  const ukm::mojom::UkmEntry* entry = merged_entries.begin()->second.get();
+  tester()->test_ukm_recorder().ExpectEntryMetric(
+      entry, PageLoad::kNavigation_PageEndReason2Name,
+      page_load_metrics::END_CLOSE);
+  tester()->test_ukm_recorder().ExpectEntryMetric(
+      entry, PageLoad::kExperimental_PageLoadTypeName,
+      static_cast<int64_t>(PageLoadType::kNeverForegrounded));
+  tester()->test_ukm_recorder().ExpectEntryMetric(
+      entry, PageLoad::kNavigation_PageTransitionName,
+      ui::PAGE_TRANSITION_LINK);
+  tester()->test_ukm_recorder().ExpectEntryMetric(
+      entry, PageLoad::kExperimental_TotalForegroundDurationName, 0);
 }
 
 TEST_F(UkmPageLoadMetricsObserverTest, FCPPlusPlus_DiscardBackgroundResult) {
@@ -521,9 +554,9 @@ TEST_F(UkmPageLoadMetricsObserverTest, FCPPlusPlus_DiscardBackgroundResult) {
   const ukm::mojom::UkmEntry* entry = merged_entries.begin()->second.get();
   EXPECT_FALSE(tester()->test_ukm_recorder().EntryHasMetric(
       entry, PageLoad::kPaintTiming_NavigationToLargestContentfulPaintName));
-  // Hidden before navigation, so PageEndReason should not be available.
-  EXPECT_FALSE(tester()->test_ukm_recorder().EntryHasMetric(
-      entry, PageLoad::kNavigation_PageEndReason2Name));
+  tester()->test_ukm_recorder().ExpectEntryMetric(
+      entry, PageLoad::kNavigation_PageEndReason2Name,
+      page_load_metrics::END_CLOSE);
 
   std::map<ukm::SourceId, ukm::mojom::UkmEntryPtr> internal_merged_entries =
       tester()->test_ukm_recorder().GetMergedEntriesByName(
@@ -1353,13 +1386,13 @@ TEST_F(UkmPageLoadMetricsObserverTest, ImageMediaSizeMetrics) {
     // 30 KB for all images, 20 KB for subframe images, and 50 KB for media.
     tester()->test_ukm_recorder().ExpectEntryMetric(
         kv.second.get(), "Net.ImageBytes",
-        ukm::GetExponentialBucketMin(30 * 1024, 1.3));
+        ukm::GetExponentialBucketMin(30 * 1024, 1.15));
     tester()->test_ukm_recorder().ExpectEntryMetric(
         kv.second.get(), "Net.ImageSubframeBytes",
-        ukm::GetExponentialBucketMin(20 * 1024, 1.3));
+        ukm::GetExponentialBucketMin(20 * 1024, 1.15));
     tester()->test_ukm_recorder().ExpectEntryMetric(
         kv.second.get(), "Net.MediaBytes",
-        ukm::GetExponentialBucketMin(50 * 1024, 1.3));
+        ukm::GetExponentialBucketMin(50 * 1024, 1.15));
   }
 }
 
@@ -1421,46 +1454,34 @@ TEST_F(UkmPageLoadMetricsObserverTest, LayoutInstability) {
         100);
     ukm_recorder.ExpectEntryMetric(kv.second.get(),
                                    PageLoad::kNavigation_PageEndReason2Name,
-                                   page_load_metrics::END_HIDDEN);
+                                   page_load_metrics::END_CLOSE);
   }
 
   EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
                   "PageLoad.LayoutInstability.CumulativeShiftScore"),
               testing::ElementsAre(base::Bucket(25, 1)));
-
-  tester()->histogram_tester().ExpectTotalCount(
-      "PageLoad.Clients.FontPreload.LayoutInstability."
-      "CumulativeShiftScore",
-      0);
 }
 
 TEST_F(UkmPageLoadMetricsObserverTest,
-       UpdateAfterHide_RecordsLayoutInstabilityWithFontPreload) {
+       PerfectHeuristicsDelayaAsyncScriptExecution) {
   NavigateAndCommit(GURL(kTestUrl1));
 
   page_load_metrics::mojom::FrameMetadata metadata;
   metadata.behavior_flags |= blink::LoadingBehaviorFlag::
-      kLoadingBehaviorFontPreloadStartedBeforeRendering;
+      kLoadingBehaviorAsyncScriptReadyBeforeDocumentFinishedParsing;
   tester()->SimulateMetadataUpdate(metadata, web_contents()->GetMainFrame());
-
-  page_load_metrics::mojom::FrameRenderDataUpdate render_data(1.0, 1.0, 0, 0, 0,
-                                                              0);
-  tester()->SimulateRenderDataUpdate(render_data);
-
-  // Simulate hiding the tab (the report should include shifts after hide).
-  web_contents()->WasHidden();
-
-  render_data.layout_shift_delta = 1.5;
-  render_data.layout_shift_delta_before_input_or_scroll = 0.0;
-  tester()->SimulateRenderDataUpdate(render_data);
 
   // Simulate closing the tab.
   DeleteContents();
 
-  EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
-                  "PageLoad.Clients.FontPreload.LayoutInstability."
-                  "CumulativeShiftScore"),
-              testing::ElementsAre(base::Bucket(25, 1)));
+  auto entries = tester()->test_ukm_recorder().GetEntriesByName(
+      ukm::builders::PerfectHeuristics::kEntryName);
+  EXPECT_EQ(1ul, entries.size());
+  tester()->test_ukm_recorder().ExpectEntryMetric(
+      entries.front(),
+      ukm::builders::PerfectHeuristics::
+          kdelay_async_script_execution_before_finished_parsingName,
+      1);
 }
 
 TEST_F(UkmPageLoadMetricsObserverTest, MHTMLNotTracked) {
@@ -1527,8 +1548,6 @@ TEST_F(UkmPageLoadMetricsObserverTest, LayoutInstabilitySubframeAggregation) {
 }
 
 TEST_F(UkmPageLoadMetricsObserverTest, ThirdPartyCookieBlockingDisabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(content_settings::kImprovedCookieControls);
   profile()->GetPrefs()->SetInteger(
       prefs::kCookieControlsMode,
       static_cast<int>(content_settings::CookieControlsMode::kOff));
@@ -1552,36 +1571,7 @@ TEST_F(UkmPageLoadMetricsObserverTest, ThirdPartyCookieBlockingDisabled) {
   }
 }
 
-TEST_F(UkmPageLoadMetricsObserverTest,
-       ThirdPartyCookieBlockingFeatureDisabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(content_settings::kImprovedCookieControls);
-  profile()->GetPrefs()->SetInteger(
-      prefs::kCookieControlsMode,
-      static_cast<int>(content_settings::CookieControlsMode::kBlockThirdParty));
-
-  NavigateAndCommit(GURL(kTestUrl1));
-
-  // Simulate closing the tab.
-  DeleteContents();
-
-  std::map<ukm::SourceId, ukm::mojom::UkmEntryPtr> merged_entries =
-      tester()->test_ukm_recorder().GetMergedEntriesByName(
-          PageLoad::kEntryName);
-  EXPECT_EQ(1ul, merged_entries.size());
-
-  for (const auto& kv : merged_entries) {
-    tester()->test_ukm_recorder().ExpectEntrySourceHasUrl(kv.second.get(),
-                                                          GURL(kTestUrl1));
-    EXPECT_FALSE(tester()->test_ukm_recorder().EntryHasMetric(
-        kv.second.get(),
-        PageLoad::kThirdPartyCookieBlockingEnabledForSiteName));
-  }
-}
-
 TEST_F(UkmPageLoadMetricsObserverTest, ThirdPartyCookieBlockingEnabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(content_settings::kImprovedCookieControls);
   profile()->GetPrefs()->SetInteger(
       prefs::kCookieControlsMode,
       static_cast<int>(content_settings::CookieControlsMode::kBlockThirdParty));
@@ -1607,8 +1597,6 @@ TEST_F(UkmPageLoadMetricsObserverTest, ThirdPartyCookieBlockingEnabled) {
 
 TEST_F(UkmPageLoadMetricsObserverTest,
        ThirdPartyCookieBlockingDisabledForSite) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(content_settings::kImprovedCookieControls);
   profile()->GetPrefs()->SetInteger(
       prefs::kCookieControlsMode,
       static_cast<int>(content_settings::CookieControlsMode::kBlockThirdParty));
@@ -1749,11 +1737,11 @@ TEST_F(UkmPageLoadMetricsObserverTest, NoLargestContentfulPaint) {
 class TestOfflinePreviewsUkmPageLoadMetricsObserver
     : public UkmPageLoadMetricsObserver {
  public:
-  TestOfflinePreviewsUkmPageLoadMetricsObserver(
+  explicit TestOfflinePreviewsUkmPageLoadMetricsObserver(
       MockNetworkQualityProvider* network_quality_provider)
       : UkmPageLoadMetricsObserver(network_quality_provider) {}
 
-  ~TestOfflinePreviewsUkmPageLoadMetricsObserver() override {}
+  ~TestOfflinePreviewsUkmPageLoadMetricsObserver() override = default;
 
   bool IsOfflinePreview(content::WebContents* web_contents) const override {
     return true;

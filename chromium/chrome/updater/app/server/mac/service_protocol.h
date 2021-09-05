@@ -25,10 +25,6 @@
 // Protocol for the XPC update checking service.
 @protocol CRUUpdateChecking <NSObject>
 
-// Checks for the version of the Updater. Returns the result in the reply block.
-- (void)getUpdaterVersionWithReply:
-    (void (^_Nonnull)(NSString* _Nonnull version))reply;
-
 // Checks for updates and returns the result in the reply block.
 - (void)checkForUpdatesWithUpdateState:
             (CRUUpdateStateObserver* _Nonnull)updateState
@@ -49,18 +45,14 @@
                existenceCheckerPath:(NSString* _Nullable)existenceCheckerPath
                               reply:(void (^_Nonnull)(int rc))reply;
 
-// Checks if |version| is newer. Returns the result in the reply block.
-- (void)haltForUpdateToVersion:(NSString* _Nonnull)version
-                         reply:(void (^_Nonnull)(BOOL shouldUpdate))reply;
-
 @end
 
-// Protocol for the XPC administration tasks of the Updater.
-@protocol CRUAdministering <NSObject>
+// Protocol for the XPC control tasks of the Updater.
+@protocol CRUControlling <NSObject>
 
-// Performs the admin task (activate service, uninstall service, or no opp) that
-// is relevant to the state of the Updater.
-- (void)performAdminTasks;
+// Performs the control task (activate service, uninstall service, or no-op)
+// that is relevant to the state of the Updater.
+- (void)performControlTasksWithReply:(void (^_Nullable)(void))reply;
 
 @end
 
@@ -70,9 +62,9 @@ namespace updater {
 // CRUUpdateStateObserving protocols.
 NSXPCInterface* _Nonnull GetXPCUpdateCheckingInterface();
 
-// Constructs an NSXPCInterface for a connection using CRUAdministering
+// Constructs an NSXPCInterface for a connection using CRUControlling
 // protocol.
-NSXPCInterface* _Nonnull GetXPCAdministeringInterface();
+NSXPCInterface* _Nonnull GetXPCControllingInterface();
 
 }  // namespace updater
 

@@ -90,14 +90,21 @@ void ThreadHeapStatsCollector::DecreaseAllocatedSpace(size_t bytes) {
   });
 }
 
+ThreadHeapStatsCollector::Event::Event() {
+  static std::atomic<size_t> counter{0};
+  unique_id = counter.fetch_add(1);
+}
+
 void ThreadHeapStatsCollector::NotifyMarkingStarted(
     BlinkGC::CollectionType collection_type,
-    BlinkGC::GCReason reason) {
+    BlinkGC::GCReason reason,
+    bool is_forced_gc) {
   DCHECK(!is_started_);
   DCHECK(current_.marking_time().is_zero());
   is_started_ = true;
   current_.reason = reason;
   current_.collection_type = collection_type;
+  current_.is_forced_gc = is_forced_gc;
 }
 
 void ThreadHeapStatsCollector::NotifyMarkingCompleted(size_t marked_bytes) {
@@ -158,7 +165,12 @@ base::TimeDelta ThreadHeapStatsCollector::Event::incremental_marking_time()
 
 base::TimeDelta
 ThreadHeapStatsCollector::Event::worklist_processing_time_foreground() const {
-  return scope_data[kMarkProcessWorklist];
+  return scope_data[kMarkProcessWorklists];
+}
+
+base::TimeDelta ThreadHeapStatsCollector::Event::flushing_v8_references_time()
+    const {
+  return scope_data[kMarkFlushV8References];
 }
 
 base::TimeDelta ThreadHeapStatsCollector::Event::atomic_marking_time() const {
@@ -186,12 +198,6 @@ base::TimeDelta ThreadHeapStatsCollector::Event::background_marking_time()
 
 base::TimeDelta ThreadHeapStatsCollector::Event::marking_time() const {
   return foreground_marking_time() + background_marking_time();
-}
-
-double ThreadHeapStatsCollector::Event::marking_time_in_bytes_per_second()
-    const {
-  return marked_bytes ? marking_time().InMillisecondsF() / 1000 / marked_bytes
-                      : 0.0;
 }
 
 base::TimeDelta ThreadHeapStatsCollector::Event::gc_cycle_time() const {
@@ -236,6 +242,10 @@ base::TimeDelta ThreadHeapStatsCollector::marking_time_so_far() const {
 base::TimeDelta ThreadHeapStatsCollector::worklist_processing_time_foreground()
     const {
   return current_.worklist_processing_time_foreground();
+}
+
+base::TimeDelta ThreadHeapStatsCollector::flushing_v8_references_time() const {
+  return current_.flushing_v8_references_time();
 }
 
 size_t ThreadHeapStatsCollector::allocated_space_bytes() const {

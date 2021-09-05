@@ -56,6 +56,7 @@ enum class ResourceType : uint8_t;
 class ClientHintsPreferences;
 class FeaturePolicy;
 class KURL;
+struct ResourceLoaderOptions;
 class ResourceTimingInfo;
 class WebScopedVirtualTimePauser;
 
@@ -136,7 +137,7 @@ class PLATFORM_EXPORT FetchContext : public GarbageCollected<FetchContext> {
                                        const ClientHintsPreferences&,
                                        const FetchParameters::ResourceWidth&,
                                        ResourceRequest&,
-                                       const FetchInitiatorInfo&);
+                                       const ResourceLoaderOptions&);
 
   // Called when the underlying context is detached. Note that some
   // FetchContexts continue working after detached (e.g., for fetch() operations
@@ -157,8 +158,8 @@ class PLATFORM_EXPORT FetchContext : public GarbageCollected<FetchContext> {
     return false;
   }
 
-  virtual WebURLRequest::PreviewsState previews_state() const {
-    return WebURLRequest::kPreviewsUnspecified;
+  virtual PreviewsState previews_state() const {
+    return PreviewsTypes::kPreviewsUnspecified;
   }
 
   // Returns a receiver corresponding to a request with |request_id|.

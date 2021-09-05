@@ -84,7 +84,7 @@ void CreditCardAccessManager::UpdateCreditCardFormEventLogger() {
     // If any masked server card has valid nickname, we will set to true no
     // matter the flag is enabled or not.
     if (credit_card->record_type() == CreditCard::MASKED_SERVER_CARD &&
-        credit_card->HasValidNickname()) {
+        credit_card->HasNonEmptyValidNickname()) {
       has_server_nickname = true;
     }
 
@@ -375,6 +375,10 @@ void CreditCardAccessManager::OnSettingsPageFIDOAuthToggled(bool opt_in) {
   // TODO(crbug/949269): Add a rate limiter to counter spam clicking.
   FIDOAuthOptChange(opt_in);
 #endif
+}
+
+void CreditCardAccessManager::SignalCanFetchUnmaskDetails() {
+  can_fetch_unmask_details_.Signal();
 }
 
 void CreditCardAccessManager::CacheUnmaskedCardInfo(const CreditCard& card,
@@ -721,10 +725,6 @@ void CreditCardAccessManager::HandleDialogUserResponse(
   }
 }
 #endif
-
-void CreditCardAccessManager::SignalCanFetchUnmaskDetails() {
-  can_fetch_unmask_details_.Signal();
-}
 
 void CreditCardAccessManager::AdditionallyPerformFidoAuth(
     const CreditCardCVCAuthenticator::CVCAuthenticationResponse& response,

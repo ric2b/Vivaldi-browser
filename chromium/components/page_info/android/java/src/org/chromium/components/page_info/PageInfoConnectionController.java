@@ -6,18 +6,29 @@ package org.chromium.components.page_info;
 
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
+
+import org.chromium.content_public.browser.WebContents;
 
 /**
  * Class for controlling the page info connection section.
  */
-public class PageInfoConnectionController implements PageInfoSubpageController {
-    private PageInfoController mMainController;
-    private PageInfoViewV2 mView;
+public class PageInfoConnectionController
+        implements PageInfoSubpageController, ConnectionInfoView.ConnectionInfoDelegate {
+    private PageInfoMainPageController mMainController;
+    private final WebContents mWebContents;
+    private final VrHandler mVrHandler;
+    private PageInfoRowView mRowView;
     private String mTitle;
+    private ConnectionInfoView mInfoView;
+    private ViewGroup mContainer;
 
-    public PageInfoConnectionController(PageInfoController mainController, PageInfoViewV2 view) {
+    public PageInfoConnectionController(PageInfoMainPageController mainController,
+            PageInfoRowView view, WebContents webContents, VrHandler vrHandler) {
         mMainController = mainController;
-        mView = view;
+        mWebContents = webContents;
+        mVrHandler = vrHandler;
+        mRowView = view;
     }
 
     private void launchSubpage() {
@@ -31,12 +42,20 @@ public class PageInfoConnectionController implements PageInfoSubpageController {
 
     @Override
     public View createViewForSubpage(ViewGroup parent) {
-        // TODO(crbug.com/1077766): Create and set the connection specific view.
-        return null;
+        mContainer = new FrameLayout(mRowView.getContext());
+        mInfoView =
+                ConnectionInfoView.create(mRowView.getContext(), mWebContents, this, mVrHandler);
+        return mContainer;
     }
 
     @Override
-    public void willRemoveSubpage() {}
+    public void onSubPageAttached() {}
+
+    @Override
+    public void onSubpageRemoved() {
+        mContainer = null;
+        mInfoView.onDismiss();
+    }
 
     public void setConnectionInfo(PageInfoView.ConnectionInfoParams params) {
         mTitle = params.summary != null ? params.summary.toString() : null;
@@ -45,6 +64,18 @@ public class PageInfoConnectionController implements PageInfoSubpageController {
         rowParams.subtitle = params.message != null ? params.message.toString() : null;
         rowParams.visible = rowParams.title != null || rowParams.subtitle != null;
         rowParams.clickCallback = this::launchSubpage;
-        mView.getConnectionRowView().setParams(rowParams);
+        mRowView.setParams(rowParams);
+    }
+
+    @Override
+    public void onReady(ConnectionInfoView infoView) {
+        if (mContainer != null) {
+            mContainer.addView(infoView.getView());
+        }
+    }
+
+    @Override
+    public void dismiss(int actionOnContent) {
+        mMainController.exitSubpage();
     }
 }

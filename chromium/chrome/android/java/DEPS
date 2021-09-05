@@ -2,7 +2,7 @@ include_rules = [
   "-chrome/android/features/keyboard_accessory/internal",
 
   "+chrome/browser/android/lifecycle",
-  "+chrome/browser/android/thin_webview/java",
+  "+chrome/browser/privacy",
   "+chrome/browser/profiles/android/java",
   "+chrome/browser/share/android",
   "+chrome/browser/tab",
@@ -14,6 +14,8 @@ include_rules = [
   "+chrome/browser/ui/messages/android/java",
   "+chrome/browser/download/android/java",
   "+chrome/browser/image_fetcher/android/java",
+  "+chrome/browser/paint_preview/android/java",
+  "+chrome/browser/password_check/android",
   "+chrome/browser/performance_hints/android/java",
   "+chrome/browser/settings/android/java",
   "+chrome/browser/tabmodel/android/java",
@@ -46,6 +48,7 @@ include_rules = [
   "+components/security_state/content/android/java",
   "+components/sync/android/java/src/org/chromium/components/sync",
   "+components/query_tiles/android/java",
+  "+components/thin_webview/java",
 
   "-content/public/android",
   "+content/public/android/java/src/org/chromium/content_public",

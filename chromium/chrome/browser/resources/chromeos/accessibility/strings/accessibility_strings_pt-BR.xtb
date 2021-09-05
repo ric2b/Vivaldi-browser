@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Item da lista</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Deslize para a direita usando dois dedos</translation>
+<translation id="1016393160682012902">Pressione uma tecla do QWERTY, uma tecla de braille atualizável ou faça um gesto de toque para aprender a função relacionada. Pressione control mais w ou escape para sair.</translation>
 <translation id="1022586497894531524">Está usando o feedback falado do ChromeVox pela primeira vez? Este tutorial rápido explica os fundamentos para começar a usar o ChromeVox.</translation>
 <translation id="1025074108959230262">Modo aderente desativado</translation>
 <translation id="1031961866430398710">e depois</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Link interno</translation>
 <translation id="4909019435900810068">Recuar uma palavra</translation>
 <translation id="4911349081560453449">Nenhuma caixa de seleção anterior</translation>
-<translation id="4915087353619183190">Iniciando o modo de aprendizado. Pressione uma tecla do QWERTY, tecla de braille atualizável ou um gesto de toque para aprender a função relacionada. Pressione Control com W ou ESC para sair.</translation>
 <translation id="492295894462528572">Prefácio</translation>
 <translation id="495046168593986294">Rolar para cima</translation>
 <translation id="495170559598752135">Ações</translation>
@@ -647,12 +647,13 @@
 <translation id="6017514345406065928">Verde</translation>
 <translation id="602001110135236999">Rolar para a esquerda</translation>
 <translation id="6034000775414344507">Cinza-claro</translation>
+<translation id="6036135911048686884">Toque para explorar</translation>
 <translation id="6037602951055904232">Mover para a frente</translation>
 <translation id="6044160928851315051">Escurece a tela</translation>
 <translation id="6082768461603900813">Navegação básica</translation>
 <translation id="609281021724813947">Nenhum controle deslizante anterior</translation>
 <translation id="6100239002225743044">Subir uma linha</translation>
-<translation id="6118126368611144850">Apps para Android no Chrome. Se a Play Store estiver instalada no seu dispositivo, dê uma olhada no ChromeVox com aplicativos para Android. Teste o suporte experimental fazendo o download do Google Chrome Canary na Play Store.</translation>
+<translation id="6118126368611144850">Apps Android no Chrome. Se a Play Store estiver instalada no seu dispositivo, dê uma olhada no ChromeVox com aplicativos para Android. Teste o suporte experimental fazendo o download do Google Chrome Canary na Play Store.</translation>
 <translation id="611827076493383239">vtd</translation>
 <translation id="6122013438240733403">btn</translation>
 <translation id="6132506484792346370">Uma caixa de listagem ou uma caixa de combinação</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{sinal de cerquilha}one{# indicadores de cerquilha}other{# indicadores de cerquilha}}</translation>
 <translation id="8378855320830505539">Região</translation>
 <translation id="8382679411218029383">Preenchimento automático em linha e lista</translation>
+<translation id="8394908167088220973">Reproduzir/pausar mídia</translation>
 <translation id="8428213095426709021">Configurações</translation>
 <translation id="8428603554127842284">nível <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">sai de conteúdo estruturado, como tabelas</translation>
 <translation id="8779057862865475116">Nenhum link anterior</translation>
 <translation id="8796411681063377102">Próximo cabeçalho de nível 3</translation>
+<translation id="8823311177246872527">Página <ph name="CURRENTPAGE" /> de <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8882002077197914455">Cabeçalho de linha</translation>

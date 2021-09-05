@@ -16,7 +16,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/values.h"
-#include "chrome/browser/chromeos/login/demo_mode/demo_mode_detector.h"
 #include "chrome/browser/chromeos/login/help_app_launcher.h"
 #include "chrome/browser/chromeos/login/oobe_configuration.h"
 #include "chrome/browser/chromeos/login/version_info_updater.h"
@@ -68,9 +67,6 @@ class CoreOobeView {
   virtual void SetDialogPaddingMode(DialogPaddingMode mode) = 0;
   virtual void ShowDeviceResetScreen() = 0;
   virtual void ShowEnableAdbSideloadingScreen() = 0;
-  virtual void ShowEnableDebuggingScreen() = 0;
-  virtual void InitDemoModeDetection() = 0;
-  virtual void StopDemoModeDetection() = 0;
   virtual void UpdateKeyboardState() = 0;
 };
 
@@ -144,10 +140,7 @@ class CoreOobeHandler : public BaseWebUIHandler,
   void SetDialogPaddingMode(CoreOobeView::DialogPaddingMode mode) override;
   void ShowDeviceResetScreen() override;
   void ShowEnableAdbSideloadingScreen() override;
-  void ShowEnableDebuggingScreen() override;
 
-  void InitDemoModeDetection() override;
-  void StopDemoModeDetection() override;
   void UpdateKeyboardState() override;
 
   // ash::TabletModeObserver:
@@ -160,20 +153,16 @@ class CoreOobeHandler : public BaseWebUIHandler,
   // Handlers for JS WebUI messages.
   void HandleHideOobeDialog();
   void HandleInitialized();
-  void HandleSkipUpdateEnrollAfterEula();
   void HandleUpdateCurrentScreen(const std::string& screen);
   void HandleSetDeviceRequisition(const std::string& requisition);
   void HandleSkipToLoginForTesting();
   void HandleSkipToUpdateForTesting();
   void HandleLaunchHelpApp(double help_topic_id);
   void HandleToggleResetScreen();
-  void HandleEnableDebuggingScreen();
-  void HandleSetOobeBootstrappingSlave();
   void HandleGetPrimaryDisplayNameForTesting(const base::ListValue* args);
   void GetPrimaryDisplayNameCallback(
       const base::Value& callback_id,
       std::vector<ash::mojom::DisplayUnitInfoPtr> info_list);
-  void HandleSetupDemoMode();
   // Handles demo mode setup for tests. Accepts 'online' and 'offline' as
   // |demo_config|.
   void HandleStartDemoModeSetupForTesting(const std::string& demo_config);
@@ -209,8 +198,6 @@ class CoreOobeHandler : public BaseWebUIHandler,
 
   // Help application used for help dialogs.
   scoped_refptr<HelpAppLauncher> help_app_;
-
-  DemoModeDetector demo_mode_detector_;
 
   mojo::Remote<ash::mojom::CrosDisplayConfigController> cros_display_config_;
 
